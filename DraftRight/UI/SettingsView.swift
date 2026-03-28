@@ -30,6 +30,15 @@ struct SettingsView: View {
                 }
             }
 
+            Section(header: Text("Translation")) {
+                Picker("Target Language", selection: $appModel.translateLanguage) {
+                    ForEach(Self.languages, id: \.self) { lang in
+                        Text(lang).tag(lang)
+                    }
+                }
+                .help("Language used by the Translate tone option")
+            }
+
             Section(header: Text("General")) {
                 Toggle("Launch at Login", isOn: $appModel.launchAtLogin)
             }
@@ -51,4 +60,13 @@ struct SettingsView: View {
             tempApiKey = appModel.apiKey
         }
     }
+
+    private static let languages = [
+        "Arabic", "Chinese (Simplified)", "Chinese (Traditional)",
+        "Czech", "Danish", "Dutch", "English", "Finnish", "French",
+        "German", "Greek", "Hebrew", "Hindi", "Hungarian",
+        "Indonesian", "Italian", "Japanese", "Korean", "Malay",
+        "Norwegian", "Polish", "Portuguese", "Romanian", "Russian",
+        "Spanish", "Swedish", "Thai", "Turkish", "Ukrainian", "Vietnamese"
+    ]
 }

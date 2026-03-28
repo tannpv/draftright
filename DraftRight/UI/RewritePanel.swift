@@ -204,6 +204,7 @@ struct RewritePanel: View {
         case .polished: return "sparkles"
         case .concise: return "arrow.down.right.and.arrow.up.left"
         case .technical: return "wrench.and.screwdriver"
+        case .translate: return "globe"
         }
     }
 }

@@ -61,7 +61,8 @@ final class ServiceProvider: NSObject {
                         let result = try await self.aiClient.rewrite(
                             text: text, tone: newTone,
                             apiKey: self.appModel.apiKey, endpoint: self.appModel.endpoint,
-                            model: self.appModel.model, temperature: self.appModel.temperature
+                            model: self.appModel.model, temperature: self.appModel.temperature,
+                            targetLanguage: self.appModel.translateLanguage
                         )
                         self.diffWindow.model.setResult(result)
                     } catch {
@@ -90,7 +91,8 @@ final class ServiceProvider: NSObject {
                 let rewritten = try await aiClient.rewrite(
                     text: text, tone: tone,
                     apiKey: appModel.apiKey, endpoint: appModel.endpoint,
-                    model: appModel.model, temperature: appModel.temperature
+                    model: appModel.model, temperature: appModel.temperature,
+                    targetLanguage: appModel.translateLanguage
                 )
                 diffWindow.model.setResult(rewritten)
             } catch {

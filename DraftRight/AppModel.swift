@@ -18,6 +18,9 @@ final class AppModel: ObservableObject {
     @Published var launchAtLogin: Bool {
         didSet { defaults.set(launchAtLogin, forKey: Keys.launchAtLogin) }
     }
+    @Published var translateLanguage: String {
+        didSet { defaults.set(translateLanguage, forKey: Keys.translateLanguage) }
+    }
     @Published var isRewriting: Bool = false
 
     private let defaults = UserDefaults.standard
@@ -27,6 +30,7 @@ final class AppModel: ObservableObject {
         static let model = "draftright.model"
         static let temperature = "draftright.temperature"
         static let launchAtLogin = "draftright.launchAtLogin"
+        static let translateLanguage = "draftright.translateLanguage"
     }
 
     init() {
@@ -35,5 +39,6 @@ final class AppModel: ObservableObject {
         self.model = defaults.string(forKey: Keys.model) ?? "gpt-4o-mini"
         self.temperature = defaults.object(forKey: Keys.temperature) as? Double ?? 0.3
         self.launchAtLogin = defaults.bool(forKey: Keys.launchAtLogin)
+        self.translateLanguage = defaults.string(forKey: Keys.translateLanguage) ?? "Vietnamese"
     }
 }

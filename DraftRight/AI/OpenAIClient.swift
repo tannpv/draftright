@@ -46,13 +46,13 @@ final class OpenAIClient {
         self.session = URLSession(configuration: config)
     }
 
-    func rewrite(text: String, tone: Tone, apiKey: String, endpoint: String, model: String, temperature: Double) async throws -> String {
+    func rewrite(text: String, tone: Tone, apiKey: String, endpoint: String, model: String, temperature: Double, targetLanguage: String = "English") async throws -> String {
         guard !apiKey.isEmpty else { throw OpenAIClientError.missingAPIKey }
         guard let url = URL(string: endpoint) else { throw OpenAIClientError.invalidEndpoint }
 
         let inputText = String(text.prefix(3000))
         let messages = [
-            AIMessage(role: "system", content: tone.systemPrompt),
+            AIMessage(role: "system", content: tone.systemPrompt(targetLanguage: targetLanguage)),
             AIMessage(role: "user", content: inputText)
         ]
 

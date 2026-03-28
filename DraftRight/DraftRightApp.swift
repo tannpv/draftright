@@ -55,7 +55,8 @@ struct DraftRightApp: App {
                                 apiKey: appModel.apiKey,
                                 endpoint: appModel.endpoint,
                                 model: appModel.model,
-                                temperature: appModel.temperature
+                                temperature: appModel.temperature,
+                                targetLanguage: appModel.translateLanguage
                             )
                             diffWindow.model.setResult(rewritten)
                         } catch {

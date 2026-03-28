@@ -6,6 +6,7 @@ enum Tone: String, CaseIterable, Identifiable {
     case polished
     case concise
     case technical
+    case translate
 
     var id: String { rawValue }
 
@@ -16,10 +17,11 @@ enum Tone: String, CaseIterable, Identifiable {
         case .polished: return "More Polished"
         case .concise: return "Concise"
         case .technical: return "Technical"
+        case .translate: return "Translate"
         }
     }
 
-    var systemPrompt: String {
+    func systemPrompt(targetLanguage: String = "English") -> String {
         switch self {
         case .simple:
             return "Rewrite the following text using simple, easy-to-understand language. Use short sentences and common words. Preserve the original meaning. Return only the rewritten text, no explanations."
@@ -31,6 +33,8 @@ enum Tone: String, CaseIterable, Identifiable {
             return "Rewrite the following text to be as concise as possible. Remove unnecessary words, redundancy, and filler while preserving the key meaning. Return only the rewritten text, no explanations."
         case .technical:
             return "Rewrite the following text in a technical specification style. Use precise, unambiguous language suitable for documentation, specs, or technical communication. Preserve the original meaning. Return only the rewritten text, no explanations."
+        case .translate:
+            return "Translate the following text into \(targetLanguage). If the text is already in \(targetLanguage), translate it into English instead. Preserve the original meaning and tone. Return only the translated text, no explanations."
         }
     }
 }

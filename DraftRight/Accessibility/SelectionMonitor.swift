@@ -55,14 +55,20 @@ final class SelectionMonitor {
 
         case .leftMouseUp:
             if isDragging {
+                // Drag selection
                 isDragging = false
                 let endPoint = NSEvent.mouseLocation
-                // Bottom-left of the selection: leftmost X, lowest Y
                 let leftX = min(dragStartPoint.x, endPoint.x)
                 let bottomY = min(dragStartPoint.y, endPoint.y)
                 let position = CGPoint(x: leftX, y: bottomY)
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
                     self?.showTriggerAt(position)
+                }
+            } else if event.clickCount >= 2 {
+                // Double-click (word) or triple-click (line/paragraph)
+                let pos = NSEvent.mouseLocation
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+                    self?.showTriggerAt(pos)
                 }
             }
 
@@ -91,20 +97,13 @@ final class SelectionMonitor {
 
         let buttonSize = CGSize(width: 32, height: 32)
 
-        // Try to position at the bottom-left of the focused text field (like Grammarly)
-        let origin: CGPoint
-        if let frame = axService.focusedElementFrame() {
-            origin = CGPoint(
-                x: frame.minX + 6,
-                y: frame.minY + 6
-            )
-        } else {
-            // Fallback: at the selection point
-            origin = CGPoint(
-                x: point.x,
-                y: point.y
-            )
+        // Use drag coordinates; try AX selection bounds for better X position
+        var originX = point.x
+        var originY = point.y
+        if let selBounds = axService.selectedTextBounds(), selBounds.minX > 0 {
+            originX = selBounds.minX
         }
+        let origin = CGPoint(x: originX, y: originY)
 
         let button = TriggerButtonView { [weak self] in
             // Save the trigger window's actual screen position right before opening panel
