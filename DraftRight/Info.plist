@@ -12,6 +12,8 @@
     <string>1</string>
     <key>CFBundleShortVersionString</key>
     <string>1.0.0</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>CFBundleExecutable</key>
     <string>DraftRight</string>
     <key>CFBundlePackageType</key>
@@ -28,10 +30,10 @@
             <key>NSMenuItem</key>
             <dict>
                 <key>default</key>
-                <string>DraftRight: Professional</string>
+                <string>DraftRight: Simple</string>
             </dict>
             <key>NSMessage</key>
-            <string>rewriteProfessional</string>
+            <string>rewriteSimple</string>
             <key>NSPortName</key>
             <string>DraftRight</string>
             <key>NSSendTypes</key>
@@ -43,10 +45,10 @@
             <key>NSMenuItem</key>
             <dict>
                 <key>default</key>
-                <string>DraftRight: Casual</string>
+                <string>DraftRight: More Natural</string>
             </dict>
             <key>NSMessage</key>
-            <string>rewriteCasual</string>
+            <string>rewriteNatural</string>
             <key>NSPortName</key>
             <string>DraftRight</string>
             <key>NSSendTypes</key>
@@ -58,10 +60,10 @@
             <key>NSMenuItem</key>
             <dict>
                 <key>default</key>
-                <string>DraftRight: Fix Grammar</string>
+                <string>DraftRight: More Polished</string>
             </dict>
             <key>NSMessage</key>
-            <string>rewriteGrammar</string>
+            <string>rewritePolished</string>
             <key>NSPortName</key>
             <string>DraftRight</string>
             <key>NSSendTypes</key>
@@ -73,10 +75,10 @@
             <key>NSMenuItem</key>
             <dict>
                 <key>default</key>
-                <string>DraftRight: Shorter</string>
+                <string>DraftRight: Concise</string>
             </dict>
             <key>NSMessage</key>
-            <string>rewriteShorter</string>
+            <string>rewriteConcise</string>
             <key>NSPortName</key>
             <string>DraftRight</string>
             <key>NSSendTypes</key>
@@ -88,10 +90,10 @@
             <key>NSMenuItem</key>
             <dict>
                 <key>default</key>
-                <string>DraftRight: Longer</string>
+                <string>DraftRight: Technical</string>
             </dict>
             <key>NSMessage</key>
-            <string>rewriteLonger</string>
+            <string>rewriteTechnical</string>
             <key>NSPortName</key>
             <string>DraftRight</string>
             <key>NSSendTypes</key>

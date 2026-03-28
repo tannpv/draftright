@@ -8,7 +8,15 @@ let package = Package(
         .executableTarget(
             name: "DraftRight",
             path: "DraftRight",
-            exclude: ["Info.plist"]
+            exclude: ["Info.plist"],
+            linkerSettings: [
+                .unsafeFlags([
+                    "-Xlinker", "-sectcreate",
+                    "-Xlinker", "__TEXT",
+                    "-Xlinker", "__info_plist",
+                    "-Xlinker", "DraftRight/Info.plist"
+                ])
+            ]
         )
     ]
 )

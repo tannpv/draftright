@@ -15,24 +15,24 @@ final class ServiceProvider: NSObject {
 
     // MARK: - Service selectors (one per tone, matching Info.plist NSMessage values)
 
-    @objc func rewriteProfessional(_ pasteboard: NSPasteboard, userData: String?, error: AutoreleasingUnsafeMutablePointer<NSString>) {
-        handleRewrite(pasteboard: pasteboard, tone: .professional, error: error)
+    @objc func rewriteSimple(_ pasteboard: NSPasteboard, userData: String?, error: AutoreleasingUnsafeMutablePointer<NSString>) {
+        handleRewrite(pasteboard: pasteboard, tone: .simple, error: error)
     }
 
-    @objc func rewriteCasual(_ pasteboard: NSPasteboard, userData: String?, error: AutoreleasingUnsafeMutablePointer<NSString>) {
-        handleRewrite(pasteboard: pasteboard, tone: .casual, error: error)
+    @objc func rewriteNatural(_ pasteboard: NSPasteboard, userData: String?, error: AutoreleasingUnsafeMutablePointer<NSString>) {
+        handleRewrite(pasteboard: pasteboard, tone: .natural, error: error)
     }
 
-    @objc func rewriteGrammar(_ pasteboard: NSPasteboard, userData: String?, error: AutoreleasingUnsafeMutablePointer<NSString>) {
-        handleRewrite(pasteboard: pasteboard, tone: .grammar, error: error)
+    @objc func rewritePolished(_ pasteboard: NSPasteboard, userData: String?, error: AutoreleasingUnsafeMutablePointer<NSString>) {
+        handleRewrite(pasteboard: pasteboard, tone: .polished, error: error)
     }
 
-    @objc func rewriteShorter(_ pasteboard: NSPasteboard, userData: String?, error: AutoreleasingUnsafeMutablePointer<NSString>) {
-        handleRewrite(pasteboard: pasteboard, tone: .shorter, error: error)
+    @objc func rewriteConcise(_ pasteboard: NSPasteboard, userData: String?, error: AutoreleasingUnsafeMutablePointer<NSString>) {
+        handleRewrite(pasteboard: pasteboard, tone: .concise, error: error)
     }
 
-    @objc func rewriteLonger(_ pasteboard: NSPasteboard, userData: String?, error: AutoreleasingUnsafeMutablePointer<NSString>) {
-        handleRewrite(pasteboard: pasteboard, tone: .longer, error: error)
+    @objc func rewriteTechnical(_ pasteboard: NSPasteboard, userData: String?, error: AutoreleasingUnsafeMutablePointer<NSString>) {
+        handleRewrite(pasteboard: pasteboard, tone: .technical, error: error)
     }
 
     // MARK: - Core rewrite logic
@@ -49,38 +49,54 @@ final class ServiceProvider: NSObject {
         }
 
         appModel.isRewriting = true
-        diffWindow.showLoading(tone: tone)
 
+        // Open the panel pre-set to this tone
+        diffWindow.presentPanel(
+            original: text,
+            onToneSelected: { [weak self] newTone in
+                guard let self = self else { return }
+                self.diffWindow.model.startLoading(tone: newTone)
+                Task {
+                    do {
+                        let result = try await self.aiClient.rewrite(
+                            text: text, tone: newTone,
+                            apiKey: self.appModel.apiKey, endpoint: self.appModel.endpoint,
+                            model: self.appModel.model, temperature: self.appModel.temperature
+                        )
+                        self.diffWindow.model.setResult(result)
+                    } catch {
+                        self.diffWindow.model.setError(error.localizedDescription)
+                    }
+                    self.appModel.isRewriting = false
+                }
+            },
+            onReplace: { rewritten in
+                if !AXTextService().replaceSelectedText(with: rewritten) {
+                    ClipboardHelper.copy(text: rewritten)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        ClipboardHelper.pasteFromClipboard()
+                    }
+                }
+            },
+            onCopy: { rewritten in
+                ClipboardHelper.copy(text: rewritten)
+            }
+        )
+
+        // Auto-select the tone from the service
+        diffWindow.model.startLoading(tone: tone)
         Task {
             do {
                 let rewritten = try await aiClient.rewrite(
-                    text: text,
-                    tone: tone,
-                    apiKey: appModel.apiKey,
-                    endpoint: appModel.endpoint,
-                    model: appModel.model,
-                    temperature: appModel.temperature
+                    text: text, tone: tone,
+                    apiKey: appModel.apiKey, endpoint: appModel.endpoint,
+                    model: appModel.model, temperature: appModel.temperature
                 )
-
-                diffWindow.present(
-                    tone: tone,
-                    original: text,
-                    rewritten: rewritten,
-                    replaceHandler: {
-                        ClipboardHelper.copy(text: rewritten)
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                            ClipboardHelper.pasteFromClipboard()
-                        }
-                    },
-                    copyHandler: {
-                        ClipboardHelper.copy(text: rewritten)
-                    }
-                )
+                diffWindow.model.setResult(rewritten)
             } catch {
-                diffWindow.close()
+                diffWindow.model.setError(error.localizedDescription)
                 showNotification("Rewrite failed: \(error.localizedDescription)")
             }
-
             appModel.isRewriting = false
         }
     }
