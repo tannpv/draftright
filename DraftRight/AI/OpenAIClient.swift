@@ -47,7 +47,6 @@ final class OpenAIClient {
     }
 
     func rewrite(text: String, tone: Tone, apiKey: String, endpoint: String, model: String, temperature: Double, targetLanguage: String = "English") async throws -> String {
-        guard !apiKey.isEmpty else { throw OpenAIClientError.missingAPIKey }
         guard let url = URL(string: endpoint) else { throw OpenAIClientError.invalidEndpoint }
 
         let inputText = String(text.prefix(3000))
@@ -60,7 +59,9 @@ final class OpenAIClient {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.addValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        if !apiKey.isEmpty {
+            request.addValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        }
         request.httpBody = try JSONEncoder().encode(body)
 
         let (data, response): (Data, URLResponse)

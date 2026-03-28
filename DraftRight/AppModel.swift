@@ -1,8 +1,18 @@
 import Foundation
 import SwiftUI
 
+enum AIProvider: String, CaseIterable, Identifiable {
+    case openai = "OpenAI"
+    case custom = "Custom Server"
+
+    var id: String { rawValue }
+}
+
 @MainActor
 final class AppModel: ObservableObject {
+    @Published var aiProvider: AIProvider {
+        didSet { defaults.set(aiProvider.rawValue, forKey: Keys.aiProvider) }
+    }
     @Published var apiKey: String {
         didSet { KeychainHelper.save(apiKey) }
     }
@@ -26,6 +36,7 @@ final class AppModel: ObservableObject {
     private let defaults = UserDefaults.standard
 
     private enum Keys {
+        static let aiProvider = "draftright.aiProvider"
         static let endpoint = "draftright.endpoint"
         static let model = "draftright.model"
         static let temperature = "draftright.temperature"
@@ -34,11 +45,13 @@ final class AppModel: ObservableObject {
     }
 
     init() {
+        let providerRaw = UserDefaults.standard.string(forKey: Keys.aiProvider) ?? AIProvider.openai.rawValue
+        self.aiProvider = AIProvider(rawValue: providerRaw) ?? .openai
         self.apiKey = KeychainHelper.load() ?? ""
-        self.endpoint = defaults.string(forKey: Keys.endpoint) ?? "https://api.openai.com/v1/chat/completions"
-        self.model = defaults.string(forKey: Keys.model) ?? "gpt-4o-mini"
-        self.temperature = defaults.object(forKey: Keys.temperature) as? Double ?? 0.3
-        self.launchAtLogin = defaults.bool(forKey: Keys.launchAtLogin)
-        self.translateLanguage = defaults.string(forKey: Keys.translateLanguage) ?? "Vietnamese"
+        self.endpoint = UserDefaults.standard.string(forKey: Keys.endpoint) ?? "https://api.openai.com/v1/chat/completions"
+        self.model = UserDefaults.standard.string(forKey: Keys.model) ?? "gpt-4o-mini"
+        self.temperature = UserDefaults.standard.object(forKey: Keys.temperature) as? Double ?? 0.3
+        self.launchAtLogin = UserDefaults.standard.bool(forKey: Keys.launchAtLogin)
+        self.translateLanguage = UserDefaults.standard.string(forKey: Keys.translateLanguage) ?? "Vietnamese"
     }
 }

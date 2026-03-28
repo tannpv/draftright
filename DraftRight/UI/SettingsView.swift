@@ -6,17 +6,44 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
-            Section(header: Text("OpenAI API")) {
-                SecureField("API Key", text: Binding(
-                    get: { tempApiKey },
-                    set: {
-                        tempApiKey = $0
-                        appModel.apiKey = $0
+            Section(header: Text("AI Provider")) {
+                Picker("Provider", selection: $appModel.aiProvider) {
+                    ForEach(AIProvider.allCases) { provider in
+                        Text(provider.rawValue).tag(provider)
                     }
-                ))
-                .help("Stored securely in macOS Keychain")
+                }
+                .onChange(of: appModel.aiProvider) { newValue in
+                    if newValue == .openai {
+                        appModel.endpoint = "https://api.openai.com/v1/chat/completions"
+                        appModel.model = "gpt-4o-mini"
+                    } else {
+                        appModel.endpoint = "http://localhost:11434/v1/chat/completions"
+                        appModel.model = "llama3"
+                    }
+                }
 
-                TextField("Endpoint", text: $appModel.endpoint)
+                if appModel.aiProvider == .openai {
+                    SecureField("API Key", text: Binding(
+                        get: { tempApiKey },
+                        set: {
+                            tempApiKey = $0
+                            appModel.apiKey = $0
+                        }
+                    ))
+                    .help("Stored securely in macOS Keychain")
+                } else {
+                    SecureField("API Key (optional)", text: Binding(
+                        get: { tempApiKey },
+                        set: {
+                            tempApiKey = $0
+                            appModel.apiKey = $0
+                        }
+                    ))
+                    .help("Leave empty if your server doesn't require auth")
+                }
+
+                TextField("Server URL", text: $appModel.endpoint)
+                    .help("OpenAI API or Ollama-compatible endpoint")
 
                 TextField("Model", text: $appModel.model)
 
