@@ -7,17 +7,19 @@ import android.inputmethodservice.InputMethodService
 import android.os.Handler
 import android.os.Looper
 import android.view.View
+import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.ExtractedTextRequest
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 
-class DraftRightIME : InputMethodService() {
+class DraftRightIME : InputMethodService(), KeyboardActionListener {
 
     private lateinit var settings: SharedSettings
     private val aiClient = OpenAIClient()
     private val mainHandler = Handler(Looper.getMainLooper())
     private var toolbar: ToolbarView? = null
+    private var keyboard: QwertyKeyboardView? = null
     private var diffSheet: DiffSheetView? = null
     private var rootLayout: LinearLayout? = null
     private var originalText: String? = null
@@ -36,9 +38,48 @@ class DraftRightIME : InputMethodService() {
         toolbar = tb
         root.addView(tb)
 
+        val kb = QwertyKeyboardView(this, this)
+        keyboard = kb
+        root.addView(kb)
+
         rootLayout = root
         return root
     }
+
+    // --- KeyboardActionListener ---
+
+    override fun onCharTyped(char: String) {
+        currentInputConnection?.commitText(char, 1)
+    }
+
+    override fun onBackspace() {
+        currentInputConnection?.deleteSurroundingText(1, 0)
+    }
+
+    override fun onEnter() {
+        val ic = currentInputConnection ?: return
+        val ei = currentInputEditorInfo
+        if (ei != null && ei.imeOptions and EditorInfo.IME_FLAG_NO_ENTER_ACTION == 0) {
+            val action = ei.imeOptions and EditorInfo.IME_MASK_ACTION
+            if (action != EditorInfo.IME_ACTION_NONE && action != EditorInfo.IME_ACTION_UNSPECIFIED) {
+                ic.performEditorAction(action)
+                return
+            }
+        }
+        ic.commitText("\n", 1)
+    }
+
+    override fun onSpace() {
+        currentInputConnection?.commitText(" ", 1)
+    }
+
+    @Suppress("DEPRECATION")
+    override fun onSwitchKeyboard() {
+        val imeManager = getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+        imeManager.switchToNextInputMethod(window.window?.attributes?.token, false)
+    }
+
+    // --- Existing tone/rewrite logic (unchanged) ---
 
     private fun readFullText(): String {
         val ic = currentInputConnection ?: return ""
