@@ -32,6 +32,10 @@ class SettingsService extends ChangeNotifier {
     } catch (_) {
       _apiKey = '';
     }
+    // Sync API key to SharedPreferences for keyboard extension (IME) access
+    if (_apiKey.isNotEmpty) {
+      await _prefs.setString('draftright.apiKey', _apiKey);
+    }
   }
 
   Future<void> setAiProvider(String value) async {
@@ -43,6 +47,8 @@ class SettingsService extends ChangeNotifier {
   Future<void> setApiKey(String value) async {
     _apiKey = value;
     await _secure.write(key: 'draftright.apiKey', value: value);
+    // Also write to SharedPreferences so the keyboard extension (IME) can read it
+    await _prefs.setString('draftright.apiKey', value);
     notifyListeners();
   }
 
