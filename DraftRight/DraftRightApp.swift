@@ -15,13 +15,29 @@ struct DraftRightApp: App {
     }
 
     var body: some Scene {
-        MenuBarExtra("DraftRight", systemImage: "pencil.and.outline") {
-            MenuBarView()
-                .environmentObject(appModel)
+        MenuBarExtra("DraftRight V2", systemImage: "pencil.and.outline") {
+            Button(appModel.isRewriting ? "Rewriting..." : "Ready") {}
+                .disabled(true)
+            Divider()
+            Button("Settings...") {
+                NSApp.activate(ignoringOtherApps: true)
+                if #available(macOS 14.0, *) {
+                    NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+                } else {
+                    NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
+                }
+            }
+            .keyboardShortcut(",", modifiers: .command)
+            Divider()
+            Button("Quit DraftRight V2") {
+                NSApp.terminate(nil)
+            }
+            .keyboardShortcut("q", modifiers: .command)
         }
         Settings {
             SettingsView()
                 .environmentObject(appModel)
+                .frame(minWidth: 450, minHeight: 350)
         }
     }
 
