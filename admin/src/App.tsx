@@ -7,6 +7,7 @@ import UsersPage from './pages/UsersPage';
 import UserDetailPage from './pages/UserDetailPage';
 import PlansPage from './pages/PlansPage';
 import ProvidersPage from './pages/ProvidersPage';
+import ProfilePage from './pages/ProfilePage';
 
 function ProtectedRoute() {
   if (!isAuthenticated()) {
@@ -27,6 +28,7 @@ export default function App() {
             <Route path="/users/:id" element={<UserDetailPage />} />
             <Route path="/plans" element={<PlansPage />} />
             <Route path="/providers" element={<ProvidersPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
           </Route>
         </Route>
         {/* Fallback */}
