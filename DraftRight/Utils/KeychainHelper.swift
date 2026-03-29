@@ -3,12 +3,11 @@ import Security
 
 enum KeychainHelper {
     private static let service = "com.draftright.app"
-    private static let account = "apiKey"
 
     @discardableResult
-    static func save(_ key: String) -> Bool {
-        delete()
-        guard let data = key.data(using: .utf8) else { return false }
+    static func save(_ value: String, forKey account: String = "apiKey") -> Bool {
+        delete(forKey: account)
+        guard let data = value.data(using: .utf8) else { return false }
 
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -21,7 +20,7 @@ enum KeychainHelper {
         return SecItemAdd(query as CFDictionary, nil) == errSecSuccess
     }
 
-    static func load() -> String? {
+    static func load(forKey account: String = "apiKey") -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -37,7 +36,7 @@ enum KeychainHelper {
     }
 
     @discardableResult
-    static func delete() -> Bool {
+    static func delete(forKey account: String = "apiKey") -> Bool {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,

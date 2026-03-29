@@ -10,6 +10,8 @@ enum Tone: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
+    var apiValue: String { rawValue }
+
     var displayName: String {
         switch self {
         case .simple: return "Simple"

@@ -34,11 +34,12 @@ struct DraftRightApp: App {
         NSUpdateDynamicServices()
 
         let monitor = SelectionMonitor()
-        let aiClient = OpenAIClient()
+        let aiClient = BackendClient()
         let diffWindow = DiffWindow.shared
+
         // When user clicks pencil icon, open the rewrite panel with the selected text
         monitor.start { text in
-            guard !appModel.apiKey.isEmpty else { return }
+            guard appModel.isLoggedIn, !appModel.accessToken.isEmpty else { return }
 
             diffWindow.presentPanel(
                 original: text,
@@ -52,10 +53,8 @@ struct DraftRightApp: App {
                             let rewritten = try await aiClient.rewrite(
                                 text: text,
                                 tone: tone,
-                                apiKey: appModel.apiKey,
-                                endpoint: appModel.endpoint,
-                                model: appModel.model,
-                                temperature: appModel.temperature,
+                                accessToken: appModel.accessToken,
+                                backendUrl: appModel.backendUrl,
                                 targetLanguage: appModel.translateLanguage
                             )
                             diffWindow.model.setResult(rewritten)

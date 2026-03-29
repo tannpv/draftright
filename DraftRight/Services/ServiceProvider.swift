@@ -5,7 +5,7 @@ import UserNotifications
 final class ServiceProvider: NSObject {
     let appModel: AppModel
 
-    private let aiClient = OpenAIClient()
+    private let aiClient = BackendClient()
     private let diffWindow = DiffWindow.shared
 
     init(appModel: AppModel) {
@@ -43,8 +43,8 @@ final class ServiceProvider: NSObject {
             return
         }
 
-        guard !appModel.apiKey.isEmpty else {
-            showNotification("API key not set. Open DraftRight settings to configure.")
+        guard appModel.isLoggedIn, !appModel.accessToken.isEmpty else {
+            showNotification("Not signed in. Open DraftRight settings to sign in.")
             return
         }
 
@@ -60,8 +60,8 @@ final class ServiceProvider: NSObject {
                     do {
                         let result = try await self.aiClient.rewrite(
                             text: text, tone: newTone,
-                            apiKey: self.appModel.apiKey, endpoint: self.appModel.endpoint,
-                            model: self.appModel.model, temperature: self.appModel.temperature,
+                            accessToken: self.appModel.accessToken,
+                            backendUrl: self.appModel.backendUrl,
                             targetLanguage: self.appModel.translateLanguage
                         )
                         self.diffWindow.model.setResult(result)
@@ -90,8 +90,8 @@ final class ServiceProvider: NSObject {
             do {
                 let rewritten = try await aiClient.rewrite(
                     text: text, tone: tone,
-                    apiKey: appModel.apiKey, endpoint: appModel.endpoint,
-                    model: appModel.model, temperature: appModel.temperature,
+                    accessToken: appModel.accessToken,
+                    backendUrl: appModel.backendUrl,
                     targetLanguage: appModel.translateLanguage
                 )
                 diffWindow.model.setResult(rewritten)

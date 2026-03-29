@@ -26,7 +26,7 @@ services:
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-ONLY", "pg_isready", "-U", "draftright"]
+      test: ["CMD", "pg_isready", "-U", "draftright"]
       interval: 5s
       timeout: 3s
       retries: 5

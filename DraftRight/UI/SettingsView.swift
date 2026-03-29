@@ -2,59 +2,53 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject var appModel: AppModel
-    @State private var tempApiKey: String = ""
+    @State private var loginEmail: String = ""
+    @State private var loginPassword: String = ""
+    @State private var isLoggingIn: Bool = false
+    @State private var loginError: String? = nil
 
     var body: some View {
         Form {
-            Section(header: Text("AI Provider")) {
-                Picker("Provider", selection: $appModel.aiProvider) {
-                    ForEach(AIProvider.allCases) { provider in
-                        Text(provider.rawValue).tag(provider)
-                    }
-                }
-                .onChange(of: appModel.aiProvider) { newValue in
-                    if newValue == .openai {
-                        appModel.endpoint = "https://api.openai.com/v1/chat/completions"
-                        appModel.model = "gpt-4o-mini"
-                    } else {
-                        appModel.endpoint = "http://localhost:11434/v1/chat/completions"
-                        appModel.model = "llama3"
-                    }
-                }
-
-                if appModel.aiProvider == .openai {
-                    SecureField("API Key", text: Binding(
-                        get: { tempApiKey },
-                        set: {
-                            tempApiKey = $0
-                            appModel.apiKey = $0
+            Section(header: Text("Account")) {
+                if appModel.isLoggedIn {
+                    HStack {
+                        Image(systemName: "checkmark.seal.fill")
+                            .foregroundColor(.green)
+                        Text("Signed in")
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Button("Sign Out", role: .destructive) {
+                            appModel.logout()
                         }
-                    ))
-                    .help("Stored securely in macOS Keychain")
+                    }
                 } else {
-                    SecureField("API Key (optional)", text: Binding(
-                        get: { tempApiKey },
-                        set: {
-                            tempApiKey = $0
-                            appModel.apiKey = $0
+                    VStack(alignment: .leading, spacing: 8) {
+                        TextField("Email", text: $loginEmail)
+                            .textContentType(.emailAddress)
+                        SecureField("Password", text: $loginPassword)
+                        if let error = loginError {
+                            Text(error)
+                                .font(.caption)
+                                .foregroundColor(.red)
                         }
-                    ))
-                    .help("Leave empty if your server doesn't require auth")
+                        HStack {
+                            Spacer()
+                            Button("Sign In") {
+                                Task { await signIn() }
+                            }
+                            .disabled(loginEmail.isEmpty || loginPassword.isEmpty || isLoggingIn)
+                            if isLoggingIn {
+                                ProgressView()
+                                    .scaleEffect(0.7)
+                            }
+                        }
+                    }
                 }
+            }
 
-                TextField("Server URL", text: $appModel.endpoint)
-                    .help("OpenAI API or Ollama-compatible endpoint")
-
-                TextField("Model", text: $appModel.model)
-
-                HStack {
-                    Text("Temperature")
-                    Slider(value: $appModel.temperature, in: 0...1)
-                    Text(String(format: "%.2f", appModel.temperature))
-                        .font(.footnote)
-                        .foregroundColor(.secondary)
-                        .frame(width: 30)
-                }
+            Section(header: Text("Backend Server")) {
+                TextField("Backend URL", text: $appModel.backendUrl)
+                    .help("Leave default unless self-hosting")
             }
 
             Section(header: Text("Translation")) {
@@ -83,9 +77,24 @@ struct SettingsView: View {
         }
         .padding(12)
         .frame(width: 480)
-        .onAppear {
-            tempApiKey = appModel.apiKey
+    }
+
+    private func signIn() async {
+        isLoggingIn = true
+        loginError = nil
+        do {
+            let (access, refresh) = try await AuthNetworking.login(
+                email: loginEmail,
+                password: loginPassword,
+                backendUrl: appModel.backendUrl
+            )
+            appModel.storeTokens(access: access, refresh: refresh)
+            loginEmail = ""
+            loginPassword = ""
+        } catch {
+            loginError = error.localizedDescription
         }
+        isLoggingIn = false
     }
 
     private static let languages = [
@@ -96,4 +105,37 @@ struct SettingsView: View {
         "Norwegian", "Polish", "Portuguese", "Romanian", "Russian",
         "Spanish", "Swedish", "Thai", "Turkish", "Ukrainian", "Vietnamese"
     ]
+}
+
+// Lightweight auth networking for the macOS settings panel
+enum AuthNetworking {
+    static func login(email: String, password: String, backendUrl: String) async throws -> (String, String) {
+        let base = backendUrl.hasSuffix("/") ? String(backendUrl.dropLast()) : backendUrl
+        guard let url = URL(string: "\(base)/auth/login") else {
+            throw NSError(domain: "AuthNetworking", code: -1,
+                          userInfo: [NSLocalizedDescriptionKey: "Invalid backend URL"])
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: [
+            "email": email, "password": password
+        ])
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode >= 400 {
+            let bodyText = String(data: data, encoding: .utf8) ?? "Unknown error"
+            throw NSError(domain: "AuthNetworking", code: httpResponse.statusCode,
+                          userInfo: [NSLocalizedDescriptionKey: "HTTP \(httpResponse.statusCode): \(bodyText)"])
+        }
+
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let access = json["access_token"] as? String,
+              let refresh = json["refresh_token"] as? String else {
+            throw NSError(domain: "AuthNetworking", code: -2,
+                          userInfo: [NSLocalizedDescriptionKey: "Invalid server response"])
+        }
+        return (access, refresh)
+    }
 }
