@@ -24,7 +24,6 @@ struct SettingsView: View {
                 } else {
                     VStack(alignment: .leading, spacing: 8) {
                         TextField("Email", text: $loginEmail)
-                            .textContentType(.emailAddress)
                         SecureField("Password", text: $loginPassword)
                         if let error = loginError {
                             Text(error)
