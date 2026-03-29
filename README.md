@@ -1,17 +1,32 @@
-# draftright_mobile
+# DraftRight Mobile
 
-A new Flutter project.
+AI-powered text rewriting keyboard for iOS and Android. Adds a rewrite toolbar above your system keyboard with tone options: Simple, More Natural, More Polished, Concise, Technical, Translate.
 
-## Getting Started
+## Project Structure
 
-This project is a starting point for a Flutter application.
+- `lib/` — Flutter app (settings, onboarding, playground)
+- `ios/DraftRightKeyboard/` — iOS keyboard extension (Swift) — Plan 2
+- `android/keyboard/` — Android keyboard extension (Kotlin) — Plan 3
 
-A few resources to get you started if this is your first Flutter project:
+## Building
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+### Flutter App
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+```bash
+flutter pub get
+flutter run
+```
+
+### Run Tests
+
+```bash
+flutter test
+```
+
+## Setup
+
+1. Install and open the app
+2. Follow onboarding to enable the DraftRight keyboard
+3. Enter your OpenAI API key (or configure a custom server) in Settings
+4. Use the Playground to test rewrites
+5. Switch to any messaging app — the DraftRight toolbar appears above your keyboard
