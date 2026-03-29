@@ -6,7 +6,6 @@ import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.widget.HorizontalScrollView
-import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -17,7 +16,7 @@ class ToolbarView(
     private val onUndo: () -> Unit
 ) : LinearLayout(context) {
 
-    private val toneButtons = mutableMapOf<Tone, ImageButton>()
+    private val toneButtons = mutableMapOf<Tone, TextView>()
     private var undoButton: TextView? = null
     private var loadingTone: Tone? = null
     private var spinnerView: ProgressBar? = null
@@ -41,15 +40,17 @@ class ToolbarView(
         }
 
         for (tone in Tone.values()) {
-            val btn = ImageButton(context).apply {
-                // Use a simple text label since we can't easily load Material icons in an IME
-                val tv = TextView(context).apply {
-                    text = tone.displayName.take(3)
-                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
-                    gravity = Gravity.CENTER
+            val btn = TextView(context).apply {
+                text = when (tone) {
+                    Tone.SIMPLE -> "\u270E"        // ✎ pencil
+                    Tone.NATURAL -> "\uD83D\uDCAC" // 💬 speech bubble
+                    Tone.POLISHED -> "\u2728"       // ✨ sparkles
+                    Tone.CONCISE -> "\u2296"        // ⊖ compact
+                    Tone.TECHNICAL -> "\uD83D\uDD27" // 🔧 wrench
+                    Tone.TRANSLATE -> "\uD83C\uDF10" // 🌐 globe
                 }
-                // Actually, use ImageButton with content description
-                contentDescription = tone.displayName
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+                gravity = Gravity.CENTER
                 setBackgroundResource(android.R.drawable.btn_default)
                 val dp36 = dpToPx(36)
                 layoutParams = LayoutParams(dpToPx(44), dp36).apply {

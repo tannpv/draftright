@@ -72,11 +72,11 @@ class QwertyKeyboardView(
             KeyDef("j", KeyCode.CHAR), KeyDef("k", KeyCode.CHAR), KeyDef("l", KeyCode.CHAR)
         ),
         listOf(
-            KeyDef("\u21E7", KeyCode.SHIFT, 1.5f),
+            KeyDef("\u2B06", KeyCode.SHIFT, 1.5f),
             KeyDef("z", KeyCode.CHAR), KeyDef("x", KeyCode.CHAR), KeyDef("c", KeyCode.CHAR),
             KeyDef("v", KeyCode.CHAR), KeyDef("b", KeyCode.CHAR), KeyDef("n", KeyCode.CHAR),
             KeyDef("m", KeyCode.CHAR),
-            KeyDef("\u232B", KeyCode.BACKSPACE, 1.5f)
+            KeyDef("\u2190", KeyCode.BACKSPACE, 1.5f)
         ),
         listOf(
             KeyDef("?123", KeyCode.SYMBOLS, 1.5f),
@@ -84,7 +84,7 @@ class QwertyKeyboardView(
             KeyDef(",", KeyCode.CHAR, 1.0f),
             KeyDef(" ", KeyCode.SPACE, 5.0f),
             KeyDef(".", KeyCode.CHAR, 1.0f),
-            KeyDef("\u23CE", KeyCode.ENTER, 1.5f)
+            KeyDef("\u21B5", KeyCode.ENTER, 1.5f)
         )
     )
 
@@ -105,7 +105,7 @@ class QwertyKeyboardView(
             KeyDef("!", KeyCode.CHAR), KeyDef("\"", KeyCode.CHAR), KeyDef("'", KeyCode.CHAR),
             KeyDef(":", KeyCode.CHAR), KeyDef(";", KeyCode.CHAR), KeyDef("/", KeyCode.CHAR),
             KeyDef("?", KeyCode.CHAR),
-            KeyDef("\u232B", KeyCode.BACKSPACE, 1.5f)
+            KeyDef("\u2190", KeyCode.BACKSPACE, 1.5f)
         ),
         listOf(
             KeyDef("ABC", KeyCode.ALPHA, 1.5f),
@@ -113,7 +113,7 @@ class QwertyKeyboardView(
             KeyDef(",", KeyCode.CHAR, 1.0f),
             KeyDef(" ", KeyCode.SPACE, 5.0f),
             KeyDef(".", KeyCode.CHAR, 1.0f),
-            KeyDef("\u23CE", KeyCode.ENTER, 1.5f)
+            KeyDef("\u21B5", KeyCode.ENTER, 1.5f)
         )
     )
 
@@ -134,7 +134,7 @@ class QwertyKeyboardView(
             KeyDef("\u00A9", KeyCode.CHAR), KeyDef("\u00AE", KeyCode.CHAR), KeyDef("\u2122", KeyCode.CHAR),
             KeyDef("\\", KeyCode.CHAR), KeyDef("<", KeyCode.CHAR), KeyDef(">", KeyCode.CHAR),
             KeyDef("=", KeyCode.CHAR),
-            KeyDef("\u232B", KeyCode.BACKSPACE, 1.5f)
+            KeyDef("\u2190", KeyCode.BACKSPACE, 1.5f)
         ),
         listOf(
             KeyDef("ABC", KeyCode.ALPHA, 1.5f),
@@ -142,7 +142,7 @@ class QwertyKeyboardView(
             KeyDef(",", KeyCode.CHAR, 1.0f),
             KeyDef(" ", KeyCode.SPACE, 5.0f),
             KeyDef(".", KeyCode.CHAR, 1.0f),
-            KeyDef("\u23CE", KeyCode.ENTER, 1.5f)
+            KeyDef("\u21B5", KeyCode.ENTER, 1.5f)
         )
     )
 
@@ -228,7 +228,7 @@ class QwertyKeyboardView(
             keyDef.code == KeyCode.CHAR && currentLayer == 0 && shiftState != ShiftState.OFF ->
                 keyDef.label.uppercase()
             keyDef.code == KeyCode.SPACE -> ""
-            keyDef.code == KeyCode.SHIFT && shiftState == ShiftState.CAPS_LOCK -> "\u21EA"
+            keyDef.code == KeyCode.SHIFT && shiftState == ShiftState.CAPS_LOCK -> "\u2B06\uFE0F"
             else -> keyDef.label
         }
 
