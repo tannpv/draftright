@@ -4,7 +4,7 @@ struct SharedSettings {
     private let defaults: UserDefaults?
 
     init() {
-        defaults = UserDefaults(suiteName: "group.com.draftright.app")
+        defaults = UserDefaults(suiteName: "group.com.draftright.v2")
     }
 
     var accessToken: String {
