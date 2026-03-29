@@ -154,21 +154,23 @@ class QwertyKeyboardView(
 
     init {
         orientation = VERTICAL
-        val tv = TypedValue()
-        val theme = context.theme
 
-        keyTextColor = if (theme.resolveAttribute(android.R.attr.colorForeground, tv, true)) tv.data else Color.BLACK
-        keyboardBgColor = if (theme.resolveAttribute(android.R.attr.colorBackground, tv, true)) tv.data else Color.parseColor("#ECEFF1")
+        // Detect dark mode via UI_MODE flag (theme attrs are unreliable in IME context)
+        val uiMode = context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK
+        val isDark = uiMode == android.content.res.Configuration.UI_MODE_NIGHT_YES
 
-        val isDark = Color.luminance(keyboardBgColor) < 0.5f
         if (isDark) {
+            keyboardBgColor = Color.parseColor("#1B1B1F")
             keyColor = Color.parseColor("#4A4A4A")
             keyColorSpecial = Color.parseColor("#363636")
             keyColorPressed = Color.parseColor("#5A5A5A")
+            keyTextColor = Color.WHITE
         } else {
+            keyboardBgColor = Color.parseColor("#ECEFF1")
             keyColor = Color.WHITE
             keyColorSpecial = Color.parseColor("#B0BEC5")
             keyColorPressed = Color.parseColor("#D6D6D6")
+            keyTextColor = Color.parseColor("#212121")
         }
 
         setBackgroundColor(keyboardBgColor)
