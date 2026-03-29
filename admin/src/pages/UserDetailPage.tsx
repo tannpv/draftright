@@ -19,6 +19,21 @@ interface Subscription {
   expires_at?: string;
 }
 
+interface Transaction {
+  id: string;
+  user_email: string;
+  user_name: string;
+  user_id: string;
+  plan_name: string;
+  price_cents: number;
+  store_type: string;
+  store_transaction_id: string | null;
+  status: string;
+  started_at: string;
+  expires_at: string | null;
+  created_at: string;
+}
+
 interface UserEntity {
   id: string;
   email: string;
@@ -76,6 +91,34 @@ function InfoCard({ title, children }: { title: string; children: React.ReactNod
   );
 }
 
+function storeBadge(store_type: string) {
+  const map: Record<string, { label: string; color: string; bg: string }> = {
+    google_play:   { label: 'Google Play',   color: '#13deb9', bg: 'rgba(19,222,185,0.12)' },
+    apple_iap:     { label: 'Apple IAP',     color: '#49beff', bg: 'rgba(73,190,255,0.12)' },
+    admin_granted: { label: 'Admin Granted', color: '#ffae1f', bg: 'rgba(255,174,31,0.12)' },
+  };
+  const s = map[store_type] || { label: store_type, color: '#7c8fac', bg: 'rgba(124,143,172,0.12)' };
+  return (
+    <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600, background: s.bg, color: s.color }}>
+      {s.label}
+    </span>
+  );
+}
+
+function statusBadge(status: string) {
+  const map: Record<string, { color: string; bg: string }> = {
+    active:    { color: '#13deb9', bg: 'rgba(19,222,185,0.12)' },
+    cancelled: { color: '#fa896b', bg: 'rgba(250,137,107,0.12)' },
+    expired:   { color: '#7c8fac', bg: 'rgba(124,143,172,0.12)' },
+  };
+  const s = map[status] || { color: '#7c8fac', bg: 'rgba(124,143,172,0.12)' };
+  return (
+    <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600, background: s.bg, color: s.color, textTransform: 'capitalize' }}>
+      {status}
+    </span>
+  );
+}
+
 export default function UserDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -90,6 +133,7 @@ export default function UserDetailPage() {
   const [grantPlanId, setGrantPlanId] = useState('');
   const [plans, setPlans] = useState<{ id: string; name: string }[]>([]);
   const [saving, setSaving] = useState(false);
+  const [txHistory, setTxHistory] = useState<Transaction[]>([]);
 
   const fetchUser = useCallback(async () => {
     setLoading(true);
@@ -112,10 +156,24 @@ export default function UserDetailPage() {
     } catch (_) { /* ignore */ }
   }, []);
 
+  const fetchTxHistory = useCallback(async (email: string) => {
+    try {
+      const params = new URLSearchParams({ search: email, limit: '50' });
+      const data = await apiFetch(`/admin/transactions?${params.toString()}`) as { transactions: Transaction[]; total: number };
+      setTxHistory(data.transactions);
+    } catch (_) { /* ignore */ }
+  }, []);
+
   useEffect(() => {
     fetchUser();
     fetchPlans();
   }, [fetchUser, fetchPlans]);
+
+  useEffect(() => {
+    if (data?.user?.email) {
+      fetchTxHistory(data.user.email);
+    }
+  }, [data?.user?.email, fetchTxHistory]);
 
   const user = data?.user;
 
@@ -316,6 +374,53 @@ export default function UserDetailPage() {
         ) : (
           <p style={{ padding: '32px 22px', color: '#7c8fac', fontSize: 13, textAlign: 'center', margin: 0 }}>
             No usage logs found.
+          </p>
+        )}
+      </div>
+
+      {/* Transaction History */}
+      <div style={{ background: '#2a3547', borderRadius: 7, overflow: 'hidden', marginTop: 20 }}>
+        <div style={{ padding: '16px 22px', borderBottom: '1px solid #333f55' }}>
+          <h3 style={{ color: '#eaeff4', fontSize: 15, fontWeight: 600, margin: 0 }}>
+            Transaction History ({txHistory.length})
+          </h3>
+        </div>
+
+        {txHistory.length > 0 ? (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ borderBottom: '2px solid #333f55' }}>
+                  {['Plan', 'Amount', 'Store', 'Status', 'Started', 'Expires'].map(h => (
+                    <th key={h} style={{ padding: '12px 22px', textAlign: 'left', color: '#7c8fac', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {txHistory.map(tx => (
+                  <tr key={tx.id} style={{ borderBottom: '1px solid #333f55' }}>
+                    <td style={{ padding: '13px 22px', color: '#eaeff4', fontSize: 14, fontWeight: 500 }}>{tx.plan_name}</td>
+                    <td style={{ padding: '13px 22px', color: tx.price_cents === 0 ? '#7c8fac' : '#13deb9', fontSize: 14, fontWeight: 600 }}>
+                      {tx.price_cents === 0 ? 'Free' : `$${(tx.price_cents / 100).toFixed(2)}`}
+                    </td>
+                    <td style={{ padding: '13px 22px' }}>{storeBadge(tx.store_type)}</td>
+                    <td style={{ padding: '13px 22px' }}>{statusBadge(tx.status)}</td>
+                    <td style={{ padding: '13px 22px', color: '#7c8fac', fontSize: 13, whiteSpace: 'nowrap' }}>
+                      {new Date(tx.started_at).toLocaleDateString()}
+                    </td>
+                    <td style={{ padding: '13px 22px', color: '#7c8fac', fontSize: 13, whiteSpace: 'nowrap' }}>
+                      {tx.expires_at ? new Date(tx.expires_at).toLocaleDateString() : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p style={{ padding: '32px 22px', color: '#7c8fac', fontSize: 13, textAlign: 'center', margin: 0 }}>
+            No transaction history.
           </p>
         )}
       </div>

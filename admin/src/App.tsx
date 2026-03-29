@@ -8,6 +8,8 @@ import UserDetailPage from './pages/UserDetailPage';
 import PlansPage from './pages/PlansPage';
 import ProvidersPage from './pages/ProvidersPage';
 import ProfilePage from './pages/ProfilePage';
+import AnalyticsPage from './pages/AnalyticsPage';
+import TransactionsPage from './pages/TransactionsPage';
 
 function ProtectedRoute() {
   if (!isAuthenticated()) {
@@ -29,6 +31,8 @@ export default function App() {
             <Route path="/plans" element={<PlansPage />} />
             <Route path="/providers" element={<ProvidersPage />} />
             <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/analytics" element={<AnalyticsPage />} />
+            <Route path="/transactions" element={<TransactionsPage />} />
           </Route>
         </Route>
         {/* Fallback */}
