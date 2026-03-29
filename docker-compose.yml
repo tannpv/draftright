@@ -5,6 +5,7 @@ services:
       - "3000:3000"
     environment:
       - DATABASE_URL=postgresql://draftright:password@postgres:5432/draftright
+      - REDIS_URL=redis://redis:6379
       - JWT_SECRET=${JWT_SECRET}
       - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
@@ -13,6 +14,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_started
     restart: unless-stopped
 
   postgres:
@@ -30,6 +33,12 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
 
 volumes:
   pgdata:
