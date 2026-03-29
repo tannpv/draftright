@@ -3,11 +3,11 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleName</key>
-    <string>DraftRight</string>
+    <string>DraftRight V2</string>
     <key>CFBundleDisplayName</key>
-    <string>DraftRight</string>
+    <string>DraftRight V2</string>
     <key>CFBundleIdentifier</key>
-    <string>com.draftright.app</string>
+    <string>com.draftright.app.v2</string>
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>CFBundleShortVersionString</key>
@@ -30,12 +30,12 @@
             <key>NSMenuItem</key>
             <dict>
                 <key>default</key>
-                <string>DraftRight: Simple</string>
+                <string>DraftRight V2: Simple</string>
             </dict>
             <key>NSMessage</key>
             <string>rewriteSimple</string>
             <key>NSPortName</key>
-            <string>DraftRight</string>
+            <string>DraftRight V2</string>
             <key>NSSendTypes</key>
             <array><string>NSStringPboardType</string></array>
             <key>NSReturnTypes</key>
@@ -45,12 +45,12 @@
             <key>NSMenuItem</key>
             <dict>
                 <key>default</key>
-                <string>DraftRight: More Natural</string>
+                <string>DraftRight V2: More Natural</string>
             </dict>
             <key>NSMessage</key>
             <string>rewriteNatural</string>
             <key>NSPortName</key>
-            <string>DraftRight</string>
+            <string>DraftRight V2</string>
             <key>NSSendTypes</key>
             <array><string>NSStringPboardType</string></array>
             <key>NSReturnTypes</key>
@@ -60,12 +60,12 @@
             <key>NSMenuItem</key>
             <dict>
                 <key>default</key>
-                <string>DraftRight: More Polished</string>
+                <string>DraftRight V2: More Polished</string>
             </dict>
             <key>NSMessage</key>
             <string>rewritePolished</string>
             <key>NSPortName</key>
-            <string>DraftRight</string>
+            <string>DraftRight V2</string>
             <key>NSSendTypes</key>
             <array><string>NSStringPboardType</string></array>
             <key>NSReturnTypes</key>
@@ -75,12 +75,12 @@
             <key>NSMenuItem</key>
             <dict>
                 <key>default</key>
-                <string>DraftRight: Concise</string>
+                <string>DraftRight V2: Concise</string>
             </dict>
             <key>NSMessage</key>
             <string>rewriteConcise</string>
             <key>NSPortName</key>
-            <string>DraftRight</string>
+            <string>DraftRight V2</string>
             <key>NSSendTypes</key>
             <array><string>NSStringPboardType</string></array>
             <key>NSReturnTypes</key>
@@ -90,12 +90,12 @@
             <key>NSMenuItem</key>
             <dict>
                 <key>default</key>
-                <string>DraftRight: Technical</string>
+                <string>DraftRight V2: Technical</string>
             </dict>
             <key>NSMessage</key>
             <string>rewriteTechnical</string>
             <key>NSPortName</key>
-            <string>DraftRight</string>
+            <string>DraftRight V2</string>
             <key>NSSendTypes</key>
             <array><string>NSStringPboardType</string></array>
             <key>NSReturnTypes</key>

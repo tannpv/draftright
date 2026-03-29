@@ -2,7 +2,7 @@ import Foundation
 import Security
 
 enum KeychainHelper {
-    private static let service = "com.draftright.app"
+    private static let service = "com.draftright.app.v2"
 
     @discardableResult
     static func save(_ value: String, forKey account: String = "apiKey") -> Bool {
