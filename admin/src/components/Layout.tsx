@@ -63,6 +63,7 @@ const navItems = [
 export default function Layout() {
   const email = getAdminEmail() ?? '';
   const [collapsed, setCollapsed] = useState(false);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
   const sidebarWidth = collapsed ? 0 : 270;
 
   return (
@@ -280,8 +281,9 @@ export default function Layout() {
             </button>
             <span style={{ color: '#7c8fac', fontSize: 13, marginLeft: 4 }}>DraftRight Admin</span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <div
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={() => setShowProfileMenu(!showProfileMenu)}
               style={{
                 width: 34,
                 height: 34,
@@ -293,10 +295,62 @@ export default function Layout() {
                 fontSize: 13,
                 fontWeight: 700,
                 color: '#fff',
+                border: 'none',
+                cursor: 'pointer',
               }}
             >
               {email.charAt(0).toUpperCase()}
-            </div>
+            </button>
+            {showProfileMenu && (
+              <>
+                <div
+                  onClick={() => setShowProfileMenu(false)}
+                  style={{ position: 'fixed', inset: 0, zIndex: 199 }}
+                />
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 44,
+                    right: 0,
+                    width: 220,
+                    background: '#2a3547',
+                    border: '1px solid #333f55',
+                    borderRadius: 7,
+                    padding: 8,
+                    zIndex: 200,
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
+                  }}
+                >
+                  <div style={{ padding: '8px 10px', borderBottom: '1px solid #333f55', marginBottom: 4 }}>
+                    <p style={{ color: '#eaeff4', fontSize: 13, fontWeight: 600, margin: 0 }}>Admin</p>
+                    <p style={{ color: '#7c8fac', fontSize: 11, margin: '2px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{email}</p>
+                  </div>
+                  <button
+                    onClick={logout}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      width: '100%',
+                      padding: '8px 10px',
+                      borderRadius: 5,
+                      border: 'none',
+                      background: 'transparent',
+                      color: '#fa896b',
+                      fontSize: 13,
+                      cursor: 'pointer',
+                      fontFamily: 'inherit',
+                      transition: 'background 0.15s',
+                    }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(250,137,107,0.1)'; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
+                  >
+                    <IconLogout />
+                    Sign Out
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </header>
 
