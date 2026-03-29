@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:draftright_mobile/models/tone.dart';
-import 'package:draftright_mobile/services/openai_client.dart';
+import 'package:draftright_mobile/services/auth_service.dart';
+import 'package:draftright_mobile/services/backend_client.dart';
 import 'package:draftright_mobile/services/settings_service.dart';
 
 class PlaygroundScreen extends StatefulWidget {
@@ -14,7 +15,6 @@ class PlaygroundScreen extends StatefulWidget {
 
 class _PlaygroundScreenState extends State<PlaygroundScreen> {
   final TextEditingController _textController = TextEditingController();
-  final OpenAIClient _client = OpenAIClient();
   Tone? _selectedTone;
   String? _result;
   bool _isLoading = false;
@@ -30,6 +30,7 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
     final text = _textController.text.trim();
     if (text.isEmpty) return;
 
+    final auth = context.read<AuthService>();
     final settings = context.read<SettingsService>();
 
     setState(() {
@@ -40,18 +41,24 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
     });
 
     try {
-      final result = await _client.rewrite(
+      final client = BackendClient(
+        auth: auth,
+        getBaseUrl: () => settings.backendUrl,
+      );
+      final result = await client.rewrite(
         text: text,
         tone: tone,
-        apiKey: settings.apiKey,
-        endpoint: settings.endpoint,
-        model: settings.model,
-        temperature: settings.temperature,
-        targetLanguage: settings.translateLanguage,
+        targetLanguage: tone == Tone.translate ? settings.translateLanguage : null,
       );
-      setState(() { _result = result; _isLoading = false; });
+      setState(() {
+        _result = result.rewrittenText;
+        _isLoading = false;
+      });
     } catch (e) {
-      setState(() { _error = e.toString(); _isLoading = false; });
+      setState(() {
+        _error = e.toString().replaceFirst('Exception: ', '');
+        _isLoading = false;
+      });
     }
   }
 
@@ -94,7 +101,13 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
               child: _isLoading
                   ? const Center(child: CircularProgressIndicator())
                   : _error != null
-                      ? Center(child: Text(_error!, style: const TextStyle(color: Colors.red), textAlign: TextAlign.center))
+                      ? Center(
+                          child: Text(
+                            _error!,
+                            style: const TextStyle(color: Colors.red),
+                            textAlign: TextAlign.center,
+                          ),
+                        )
                       : _result != null
                           ? Container(
                               padding: const EdgeInsets.all(12),
@@ -107,7 +120,12 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
                                 child: SelectableText(_result!, style: const TextStyle(fontSize: 15)),
                               ),
                             )
-                          : const Center(child: Text('Pick a tone to rewrite your text', style: TextStyle(color: Colors.grey))),
+                          : const Center(
+                              child: Text(
+                                'Pick a tone to rewrite your text',
+                                style: TextStyle(color: Colors.grey),
+                              ),
+                            ),
             ),
             if (_result != null)
               Padding(

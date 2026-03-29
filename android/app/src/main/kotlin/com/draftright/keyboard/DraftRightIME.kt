@@ -16,7 +16,7 @@ import android.widget.Toast
 class DraftRightIME : InputMethodService(), KeyboardActionListener {
 
     private lateinit var settings: SharedSettings
-    private val aiClient = OpenAIClient()
+    private val aiClient = BackendClient()
     private val mainHandler = Handler(Looper.getMainLooper())
     private var toolbar: ToolbarView? = null
     private var keyboard: QwertyKeyboardView? = null
@@ -79,7 +79,7 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
         imeManager.switchToNextInputMethod(window.window?.attributes?.token, false)
     }
 
-    // --- Existing tone/rewrite logic (unchanged) ---
+    // --- Existing tone/rewrite logic ---
 
     private fun readFullText(): String {
         val ic = currentInputConnection ?: return ""
@@ -99,8 +99,8 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
         val text = readFullText().trim()
         if (text.isEmpty()) return
 
-        if (settings.aiProvider == "openai" && settings.apiKey.isEmpty()) {
-            showBanner("Open DraftRight app to set up API key")
+        if (settings.accessToken.isEmpty()) {
+            showBanner("Please login in DraftRight app")
             return
         }
 

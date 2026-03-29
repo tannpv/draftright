@@ -1,6 +1,5 @@
 package com.draftright.keyboard
 
-import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -8,7 +7,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import kotlin.concurrent.thread
 
-class OpenAIClient {
+class BackendClient {
 
     fun rewrite(
         text: String,
@@ -18,31 +17,30 @@ class OpenAIClient {
     ) {
         thread {
             try {
-                val inputText = if (text.length > 3000) text.substring(0, 3000) else text
-                val messages = JSONArray().apply {
-                    put(JSONObject().put("role", "system").put("content", tone.systemPrompt(settings.translateLanguage)))
-                    put(JSONObject().put("role", "user").put("content", inputText))
+                val accessToken = settings.accessToken
+                if (accessToken.isEmpty()) {
+                    onResult(Result.failure(Exception("Please login in DraftRight app")))
+                    return@thread
                 }
+
+                val inputText = if (text.length > 3000) text.substring(0, 3000) else text
 
                 val body = JSONObject().apply {
-                    put("model", settings.model)
-                    put("messages", messages)
-                    put("temperature", settings.temperature)
-                    put("max_tokens", 1024)
+                    put("text", inputText)
+                    put("tone", tone.apiValue)
+                    if (tone == Tone.TRANSLATE) {
+                        put("target_language", settings.translateLanguage)
+                    }
                 }
 
-                val url = URL(settings.endpoint)
+                val endpoint = settings.backendUrl.trimEnd('/') + "/rewrite"
+                val url = URL(endpoint)
                 val conn = url.openConnection() as HttpURLConnection
                 conn.requestMethod = "POST"
                 conn.setRequestProperty("Content-Type", "application/json")
+                conn.setRequestProperty("Authorization", "Bearer $accessToken")
                 conn.connectTimeout = 15000
                 conn.readTimeout = 15000
-
-                val apiKey = settings.apiKey
-                if (apiKey.isNotEmpty()) {
-                    conn.setRequestProperty("Authorization", "Bearer $apiKey")
-                }
-
                 conn.doOutput = true
                 conn.outputStream.use { it.write(body.toString().toByteArray()) }
 
@@ -55,14 +53,8 @@ class OpenAIClient {
 
                 val responseBody = BufferedReader(InputStreamReader(conn.inputStream)).readText()
                 val json = JSONObject(responseBody)
-                val choices = json.getJSONArray("choices")
-                if (choices.length() == 0) {
-                    onResult(Result.failure(Exception("No response from AI")))
-                    return@thread
-                }
-
-                val content = choices.getJSONObject(0).getJSONObject("message").getString("content").trim()
-                onResult(Result.success(content))
+                val rewrittenText = json.getString("rewritten_text").trim()
+                onResult(Result.success(rewrittenText))
             } catch (e: Exception) {
                 onResult(Result.failure(e))
             }

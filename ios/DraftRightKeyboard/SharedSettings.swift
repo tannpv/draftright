@@ -7,24 +7,12 @@ struct SharedSettings {
         defaults = UserDefaults(suiteName: "group.com.draftright.app")
     }
 
-    var aiProvider: String {
-        defaults?.string(forKey: "draftright.aiProvider") ?? "openai"
+    var accessToken: String {
+        defaults?.string(forKey: "draftright.accessToken") ?? ""
     }
 
-    var apiKey: String {
-        defaults?.string(forKey: "draftright.apiKey") ?? ""
-    }
-
-    var endpoint: String {
-        defaults?.string(forKey: "draftright.endpoint") ?? "https://api.openai.com/v1/chat/completions"
-    }
-
-    var model: String {
-        defaults?.string(forKey: "draftright.model") ?? "gpt-4o-mini"
-    }
-
-    var temperature: Double {
-        defaults?.double(forKey: "draftright.temperature") ?? 0.3
+    var backendUrl: String {
+        defaults?.string(forKey: "draftright.backendUrl") ?? "https://api.draftright.app"
     }
 
     var translateLanguage: String {

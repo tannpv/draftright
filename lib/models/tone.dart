@@ -28,6 +28,17 @@ enum Tone {
     }
   }
 
+  String get apiValue {
+    switch (this) {
+      case Tone.simple: return 'simple';
+      case Tone.natural: return 'natural';
+      case Tone.polished: return 'polished';
+      case Tone.concise: return 'concise';
+      case Tone.technical: return 'technical';
+      case Tone.translate: return 'translate';
+    }
+  }
+
   String systemPrompt({String targetLanguage = 'English'}) {
     switch (this) {
       case Tone.simple:

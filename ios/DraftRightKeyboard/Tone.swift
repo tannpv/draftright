@@ -30,6 +30,8 @@ enum Tone: String, CaseIterable {
         }
     }
 
+    var apiValue: String { rawValue }
+
     func systemPrompt(targetLanguage: String = "English") -> String {
         switch self {
         case .simple:

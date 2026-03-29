@@ -21,7 +21,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final pages = [_buildWelcomePage(), _buildEnableKeyboardPage(), _buildSetupApiPage()];
+    final pages = [_buildWelcomePage(), _buildEnableKeyboardPage(), _buildLoginPage()];
 
     return Scaffold(
       body: SafeArea(
@@ -138,20 +138,26 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
-  Widget _buildSetupApiPage() {
+  Widget _buildLoginPage() {
     return const Padding(
       padding: EdgeInsets.all(32),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.vpn_key, size: 60, color: Colors.blue),
+          Icon(Icons.account_circle_outlined, size: 60, color: Colors.blue),
           SizedBox(height: 24),
-          Text('Set Up AI', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+          Text('Sign In', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
           SizedBox(height: 16),
           Text(
-            'After enabling the keyboard, open Settings in this app to enter your OpenAI API key or configure a custom server.',
+            'Create a free DraftRight account or sign in. Your account securely connects the keyboard to the DraftRight AI service.',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 16, color: Colors.grey),
+          ),
+          SizedBox(height: 16),
+          Text(
+            'After finishing setup, use the Settings tab to sign in or create your account.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 14, color: Colors.grey),
           ),
         ],
       ),

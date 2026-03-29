@@ -13,6 +13,10 @@ dependencies:
   flutter_secure_storage: ^9.0.0
   http: ^1.1.0
   provider: ^6.0.0
+  system_tray: ^2.0.0
+  hotkey_manager: ^0.2.0
+  window_manager: ^0.3.0
+  screen_retriever: ^0.1.0
 
 dev_dependencies:
   flutter_test:
@@ -25,7 +29,7 @@ flutter_launcher_icons:
   ios: true
   image_path: "assets/icon.png"
   adaptive_icon_background: "#1A40F2"
-  adaptive_icon_foreground: "assets/icon.png"
+  adaptive_icon_foreground: "assets/icon_foreground.png"
 
 flutter:
   uses-material-design: true

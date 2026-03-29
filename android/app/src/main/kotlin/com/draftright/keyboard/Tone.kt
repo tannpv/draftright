@@ -11,6 +11,15 @@ enum class Tone(
     TECHNICAL("Technical", "build"),
     TRANSLATE("Translate", "language");
 
+    val apiValue: String get() = when (this) {
+        SIMPLE -> "simple"
+        NATURAL -> "natural"
+        POLISHED -> "polished"
+        CONCISE -> "concise"
+        TECHNICAL -> "technical"
+        TRANSLATE -> "translate"
+    }
+
     fun systemPrompt(targetLanguage: String = "English"): String = when (this) {
         SIMPLE -> "Rewrite the following text using simple, easy-to-understand language. Use short sentences and common words. Preserve the original meaning. Return only the rewritten text, no explanations."
         NATURAL -> "Rewrite the following text to sound more natural and conversational, as if spoken by a real person. Remove awkward phrasing and make it flow smoothly. Preserve the original meaning. Return only the rewritten text, no explanations."

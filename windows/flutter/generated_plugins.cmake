@@ -4,6 +4,10 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   flutter_secure_storage_windows
+  hotkey_manager_windows
+  screen_retriever
+  system_tray
+  window_manager
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST

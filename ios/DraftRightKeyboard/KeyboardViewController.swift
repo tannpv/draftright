@@ -3,7 +3,7 @@ import UIKit
 class KeyboardViewController: UIInputViewController {
 
     private let toolbar = ToolbarView()
-    private let aiClient = OpenAIClient()
+    private let aiClient = BackendClient()
     private let settings = SharedSettings()
     private var diffSheet: DiffSheetView?
     private var originalText: String?
@@ -104,8 +104,8 @@ extension KeyboardViewController: ToolbarViewDelegate {
         let text = readFullText().trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
 
-        if settings.aiProvider == "openai" && settings.apiKey.isEmpty {
-            showBanner("Open DraftRight app to set up API key", color: .systemOrange)
+        if settings.accessToken.isEmpty {
+            showBanner("Please login in DraftRight app", color: .systemOrange)
             return
         }
 
