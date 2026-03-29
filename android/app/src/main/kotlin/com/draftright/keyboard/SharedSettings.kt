@@ -12,6 +12,19 @@ class SharedSettings(context: Context) {
     val apiKey: String get() = prefs.getString("flutter.draftright.apiKey", "") ?: ""
     val endpoint: String get() = prefs.getString("flutter.draftright.endpoint", "https://api.openai.com/v1/chat/completions") ?: "https://api.openai.com/v1/chat/completions"
     val model: String get() = prefs.getString("flutter.draftright.model", "gpt-4o-mini") ?: "gpt-4o-mini"
-    val temperature: Double get() = prefs.getFloat("flutter.draftright.temperature", 0.3f).toDouble()
+    val temperature: Double get() {
+        return try {
+            prefs.getFloat("flutter.draftright.temperature", 0.3f).toDouble()
+        } catch (_: ClassCastException) {
+            try {
+                // Flutter shared_preferences stores doubles as Long bits
+                val bits = prefs.getLong("flutter.draftright.temperature", (0.3).toRawBits())
+                Double.fromBits(bits)
+            } catch (_: ClassCastException) {
+                // Fallback: stored as string
+                prefs.getString("flutter.draftright.temperature", "0.3")?.toDoubleOrNull() ?: 0.3
+            }
+        }
+    }
     val translateLanguage: String get() = prefs.getString("flutter.draftright.translateLanguage", "Vietnamese") ?: "Vietnamese"
 }

@@ -52,10 +52,10 @@ class ToolbarView(
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
                 gravity = Gravity.CENTER
                 setBackgroundResource(android.R.drawable.btn_default)
-                val dp36 = dpToPx(36)
-                layoutParams = LayoutParams(dpToPx(44), dp36).apply {
+                layoutParams = LayoutParams(dpToPx(44), dpToPx(40)).apply {
                     marginEnd = dpToPx(2)
                 }
+                includeFontPadding = false
                 setOnClickListener { onToneSelected(tone) }
             }
             toneButtons[tone] = btn
