@@ -3,10 +3,10 @@ import StatCard from '../components/StatCard';
 import { apiFetch } from '../api';
 
 interface Stats {
-  totalUsers: number;
-  activeSubscriptions: number;
-  rewritesToday: number;
-  rewritesThisMonth: number;
+  total_users: number;
+  active_subscriptions: number;
+  rewrites_today: number;
+  rewrites_this_month: number;
 }
 
 export default function DashboardPage() {
@@ -57,25 +57,25 @@ export default function DashboardPage() {
         <StatCard
           icon="👥"
           label="Total Users"
-          value={stats?.totalUsers ?? '—'}
+          value={stats?.total_users ?? '—'}
           color="blue"
         />
         <StatCard
           icon="✅"
           label="Active Subscriptions"
-          value={stats?.activeSubscriptions ?? '—'}
+          value={stats?.active_subscriptions ?? '—'}
           color="green"
         />
         <StatCard
           icon="✏️"
           label="Rewrites Today"
-          value={stats?.rewritesToday ?? '—'}
+          value={stats?.rewrites_today ?? '—'}
           color="purple"
         />
         <StatCard
           icon="📊"
           label="Rewrites This Month"
-          value={stats?.rewritesThisMonth ?? '—'}
+          value={stats?.rewrites_this_month ?? '—'}
           color="orange"
         />
       </div>

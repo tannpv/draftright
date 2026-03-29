@@ -7,18 +7,17 @@ interface User {
   id: string;
   email: string;
   name: string;
+  role: string;
   plan: string;
-  usageToday: number;
-  status: string;
-  createdAt: string;
+  is_active: boolean;
+  usage_today: number;
+  created_at: string;
   [key: string]: unknown;
 }
 
 interface UsersResponse {
   users: User[];
   total: number;
-  page: number;
-  limit: number;
 }
 
 const LIMIT = 20;
@@ -74,26 +73,26 @@ export default function UsersPage() {
     },
     {
       header: 'Usage Today',
-      key: 'usageToday',
+      key: 'usage_today',
       render: (row: User) => (
-        <span style={{ color: '#7c8fac' }}>{String(row.usageToday ?? 0)}</span>
+        <span style={{ color: '#7c8fac' }}>{String(row.usage_today ?? 0)}</span>
       ),
     },
     {
       header: 'Status',
-      key: 'status',
+      key: 'is_active',
       render: (row: User) => (
-        <span className={`badge ${row.status === 'active' ? 'badge-success' : 'badge-muted'}`}>
-          {row.status}
+        <span className={`badge ${row.is_active ? 'badge-success' : 'badge-muted'}`}>
+          {row.is_active ? 'Active' : 'Inactive'}
         </span>
       ),
     },
     {
       header: 'Joined',
-      key: 'createdAt',
+      key: 'created_at',
       render: (row: User) => (
         <span style={{ color: '#7c8fac' }}>
-          {row.createdAt ? new Date(row.createdAt).toLocaleDateString() : '—'}
+          {row.created_at ? new Date(row.created_at).toLocaleDateString() : '—'}
         </span>
       ),
     },

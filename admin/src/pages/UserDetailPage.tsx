@@ -6,30 +6,36 @@ import { apiFetch } from '../api';
 
 interface UsageLog {
   id: string;
-  createdAt: string;
-  type: string;
-  tokensUsed?: number;
+  created_at: string;
+  tone: string;
+  input_length: number;
+  output_length: number;
+  response_time_ms: number;
 }
 
 interface Subscription {
-  plan: string;
+  plan: { name: string; daily_limit: number; billing_period: string };
   status: string;
-  expiresAt?: string;
+  expires_at?: string;
 }
 
-interface UserDetail {
+interface UserEntity {
   id: string;
   email: string;
   name: string;
   role: string;
-  active: boolean;
-  createdAt: string;
-  usageToday: number;
-  subscription?: Subscription;
-  usageLogs?: UsageLog[];
+  is_active: boolean;
+  created_at: string;
 }
 
-interface Toast {
+interface UserDetailResponse {
+  user: UserEntity;
+  subscription: Subscription | null;
+  usage_today: number;
+  recent_usage: UsageLog[];
+}
+
+interface ToastState {
   message: string;
   type: 'success' | 'error';
 }
@@ -73,24 +79,24 @@ function InfoCard({ title, children }: { title: string; children: React.ReactNod
 export default function UserDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [user, setUser] = useState<UserDetail | null>(null);
+  const [data, setData] = useState<UserDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [toast, setToast] = useState<Toast | null>(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
 
   const [showRoleModal, setShowRoleModal] = useState(false);
   const [showGrantModal, setShowGrantModal] = useState(false);
   const [newRole, setNewRole] = useState('');
-  const [grantPlan, setGrantPlan] = useState('');
-  const [grantDays, setGrantDays] = useState('30');
+  const [grantPlanId, setGrantPlanId] = useState('');
+  const [plans, setPlans] = useState<{ id: string; name: string }[]>([]);
   const [saving, setSaving] = useState(false);
 
   const fetchUser = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await apiFetch(`/admin/users/${id}`) as UserDetail;
-      setUser(data);
-      setNewRole(data.role);
+      const resp = await apiFetch(`/admin/users/${id}`) as UserDetailResponse;
+      setData(resp);
+      setNewRole(resp.user.role);
       setError('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load user');
@@ -99,9 +105,19 @@ export default function UserDetailPage() {
     }
   }, [id]);
 
+  const fetchPlans = useCallback(async () => {
+    try {
+      const p = await apiFetch('/admin/plans') as { id: string; name: string }[];
+      setPlans(p);
+    } catch (_) { /* ignore */ }
+  }, []);
+
   useEffect(() => {
     fetchUser();
-  }, [fetchUser]);
+    fetchPlans();
+  }, [fetchUser, fetchPlans]);
+
+  const user = data?.user;
 
   async function toggleActive() {
     if (!user) return;
@@ -109,9 +125,9 @@ export default function UserDetailPage() {
     try {
       await apiFetch(`/admin/users/${id}`, {
         method: 'PATCH',
-        body: JSON.stringify({ active: !user.active }),
+        body: JSON.stringify({ is_active: !user.is_active }),
       });
-      setToast({ message: `User ${user.active ? 'deactivated' : 'activated'} successfully.`, type: 'success' });
+      setToast({ message: `User ${user.is_active ? 'deactivated' : 'activated'} successfully.`, type: 'success' });
       fetchUser();
     } catch (err) {
       setToast({ message: err instanceof Error ? err.message : 'Failed to update user', type: 'error' });
@@ -142,7 +158,7 @@ export default function UserDetailPage() {
     try {
       await apiFetch('/admin/subscriptions/grant', {
         method: 'POST',
-        body: JSON.stringify({ userId: id, plan: grantPlan, days: Number(grantDays) }),
+        body: JSON.stringify({ user_id: id, plan_id: grantPlanId }),
       });
       setToast({ message: 'Subscription granted successfully.', type: 'success' });
       setShowGrantModal(false);
@@ -166,6 +182,10 @@ export default function UserDetailPage() {
     return <div className="alert-error">{error || 'User not found'}</div>;
   }
 
+  const sub = data?.subscription;
+  const recentUsage = data?.recent_usage || [];
+  const usageToday = data?.usage_today || 0;
+
   return (
     <div style={{ maxWidth: 860 }}>
 
@@ -173,18 +193,9 @@ export default function UserDetailPage() {
       <button
         onClick={() => navigate('/users')}
         style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          background: 'transparent',
-          border: 'none',
-          color: '#7c8fac',
-          fontSize: 13,
-          cursor: 'pointer',
-          padding: 0,
-          marginBottom: 20,
-          fontFamily: 'inherit',
-          transition: 'color 0.15s',
+          display: 'flex', alignItems: 'center', gap: 6, background: 'transparent',
+          border: 'none', color: '#7c8fac', fontSize: 13, cursor: 'pointer',
+          padding: 0, marginBottom: 20, fontFamily: 'inherit', transition: 'color 0.15s',
         }}
         onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = '#5d87ff'; }}
         onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = '#7c8fac'; }}
@@ -203,8 +214,8 @@ export default function UserDetailPage() {
           </h1>
           <p style={{ color: '#7c8fac', fontSize: 13, margin: 0 }}>{user.email}</p>
         </div>
-        <span className={`badge ${user.active ? 'badge-success' : 'badge-muted'}`} style={{ marginTop: 4 }}>
-          {user.active ? 'Active' : 'Inactive'}
+        <span className={`badge ${user.is_active ? 'badge-success' : 'badge-muted'}`} style={{ marginTop: 4 }}>
+          {user.is_active ? 'Active' : 'Inactive'}
         </span>
       </div>
 
@@ -214,22 +225,23 @@ export default function UserDetailPage() {
           <InfoRow label="Email">{user.email}</InfoRow>
           <InfoRow label="Name">{user.name || '—'}</InfoRow>
           <InfoRow label="Role"><span style={{ textTransform: 'capitalize' }}>{user.role}</span></InfoRow>
-          <InfoRow label="Joined">{new Date(user.createdAt).toLocaleDateString()}</InfoRow>
-          <InfoRow label="Usage Today">{user.usageToday} rewrites</InfoRow>
+          <InfoRow label="Joined">{new Date(user.created_at).toLocaleDateString()}</InfoRow>
+          <InfoRow label="Usage Today">{usageToday} rewrites</InfoRow>
         </InfoCard>
 
         <InfoCard title="Subscription">
-          {user.subscription ? (
+          {sub ? (
             <>
-              <InfoRow label="Plan"><span style={{ textTransform: 'capitalize' }}>{user.subscription.plan}</span></InfoRow>
+              <InfoRow label="Plan"><span style={{ textTransform: 'capitalize' }}>{sub.plan?.name || '—'}</span></InfoRow>
+              <InfoRow label="Daily Limit">{sub.plan?.daily_limit === -1 ? 'Unlimited' : sub.plan?.daily_limit}</InfoRow>
               <InfoRow label="Status">
-                <span className={`badge ${user.subscription.status === 'active' ? 'badge-success' : 'badge-muted'}`}>
-                  {user.subscription.status}
+                <span className={`badge ${sub.status === 'active' ? 'badge-success' : 'badge-muted'}`}>
+                  {sub.status}
                 </span>
               </InfoRow>
-              {user.subscription.expiresAt && (
+              {sub.expires_at && (
                 <InfoRow label="Expires">
-                  {new Date(user.subscription.expiresAt).toLocaleDateString()}
+                  {new Date(sub.expires_at).toLocaleDateString()}
                 </InfoRow>
               )}
             </>
@@ -246,10 +258,10 @@ export default function UserDetailPage() {
           <button
             onClick={toggleActive}
             disabled={saving}
-            className={`btn btn-sm ${user.active ? 'btn-danger' : 'btn-primary'}`}
-            style={{ background: user.active ? 'rgba(250,137,107,0.12)' : 'rgba(19,222,185,0.12)', color: user.active ? '#fa896b' : '#13deb9', border: `1px solid ${user.active ? 'rgba(250,137,107,0.25)' : 'rgba(19,222,185,0.25)'}` }}
+            className={`btn btn-sm ${user.is_active ? 'btn-danger' : 'btn-primary'}`}
+            style={{ background: user.is_active ? 'rgba(250,137,107,0.12)' : 'rgba(19,222,185,0.12)', color: user.is_active ? '#fa896b' : '#13deb9', border: `1px solid ${user.is_active ? 'rgba(250,137,107,0.25)' : 'rgba(19,222,185,0.25)'}` }}
           >
-            {user.active ? 'Deactivate User' : 'Activate User'}
+            {user.is_active ? 'Deactivate User' : 'Activate User'}
           </button>
           <button
             onClick={() => setShowRoleModal(true)}
@@ -274,37 +286,28 @@ export default function UserDetailPage() {
           <h3 style={{ color: '#eaeff4', fontSize: 15, fontWeight: 600, margin: 0 }}>Recent Usage (last 20)</h3>
         </div>
 
-        {user.usageLogs && user.usageLogs.length > 0 ? (
+        {recentUsage.length > 0 ? (
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ borderBottom: '2px solid #333f55' }}>
-                  {['Date', 'Type', 'Tokens'].map((h) => (
-                    <th
-                      key={h}
-                      style={{
-                        padding: '12px 22px',
-                        textAlign: 'left',
-                        color: '#7c8fac',
-                        fontSize: 12,
-                        fontWeight: 700,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.05em',
-                      }}
-                    >
+                  {['Date', 'Tone', 'Input', 'Output', 'Time'].map((h) => (
+                    <th key={h} style={{ padding: '12px 22px', textAlign: 'left', color: '#7c8fac', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                       {h}
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {user.usageLogs.map((log) => (
+                {recentUsage.map((log) => (
                   <tr key={log.id} style={{ borderBottom: '1px solid #333f55' }}>
                     <td style={{ padding: '13px 22px', color: '#7c8fac', fontSize: 13 }}>
-                      {new Date(log.createdAt).toLocaleString()}
+                      {new Date(log.created_at).toLocaleString()}
                     </td>
-                    <td style={{ padding: '13px 22px', color: '#eaeff4', fontSize: 14 }}>{log.type}</td>
-                    <td style={{ padding: '13px 22px', color: '#7c8fac', fontSize: 13 }}>{log.tokensUsed ?? '—'}</td>
+                    <td style={{ padding: '13px 22px', color: '#eaeff4', fontSize: 14, textTransform: 'capitalize' }}>{log.tone}</td>
+                    <td style={{ padding: '13px 22px', color: '#7c8fac', fontSize: 13 }}>{log.input_length} chars</td>
+                    <td style={{ padding: '13px 22px', color: '#7c8fac', fontSize: 13 }}>{log.output_length} chars</td>
+                    <td style={{ padding: '13px 22px', color: '#7c8fac', fontSize: 13 }}>{log.response_time_ms}ms</td>
                   </tr>
                 ))}
               </tbody>
@@ -353,33 +356,24 @@ export default function UserDetailPage() {
           footer={
             <>
               <button onClick={() => setShowGrantModal(false)} className="btn btn-ghost btn-sm">Cancel</button>
-              <button onClick={grantSubscription} disabled={saving || !grantPlan} className="btn btn-primary btn-sm">
+              <button onClick={grantSubscription} disabled={saving || !grantPlanId} className="btn btn-primary btn-sm">
                 {saving ? 'Granting...' : 'Grant'}
               </button>
             </>
           }
         >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div>
-              <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Plan Name</label>
-              <input
-                type="text"
-                value={grantPlan}
-                onChange={(e) => setGrantPlan(e.target.value)}
-                placeholder="e.g. pro"
-                className="dark-input"
-              />
-            </div>
-            <div>
-              <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Duration (days)</label>
-              <input
-                type="number"
-                value={grantDays}
-                onChange={(e) => setGrantDays(e.target.value)}
-                min="1"
-                className="dark-input"
-              />
-            </div>
+          <div>
+            <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Plan</label>
+            <select
+              value={grantPlanId}
+              onChange={(e) => setGrantPlanId(e.target.value)}
+              className="dark-input"
+            >
+              <option value="">Select a plan...</option>
+              {plans.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
           </div>
         </Modal>
       )}
