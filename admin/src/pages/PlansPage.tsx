@@ -7,10 +7,10 @@ import { apiFetch } from '../api';
 interface Plan {
   id: string;
   name: string;
-  dailyLimit: number;
-  price: number;
-  billingPeriod: string;
-  active: boolean;
+  daily_limit: number;
+  price_cents: number;
+  billing_period: string;
+  is_active: boolean;
   [key: string]: unknown;
 }
 
@@ -21,10 +21,10 @@ interface ToastState {
 
 const emptyForm = {
   name: '',
-  dailyLimit: '',
-  price: '',
-  billingPeriod: 'monthly',
-  active: true,
+  daily_limit: '',
+  price_cents: '',
+  billing_period: 'monthly',
+  is_active: true,
 };
 
 export default function PlansPage() {
@@ -65,10 +65,10 @@ export default function PlansPage() {
     setEditingPlan(plan);
     setForm({
       name: plan.name,
-      dailyLimit: String(plan.dailyLimit),
-      price: String(plan.price),
-      billingPeriod: plan.billingPeriod,
-      active: plan.active,
+      daily_limit: String(plan.daily_limit),
+      price_cents: String(plan.price_cents),
+      billing_period: plan.billing_period,
+      is_active: plan.is_active,
     });
     setShowModal(true);
   }
@@ -77,10 +77,10 @@ export default function PlansPage() {
     setSaving(true);
     const payload = {
       name: form.name,
-      dailyLimit: Number(form.dailyLimit),
-      price: Number(form.price),
-      billingPeriod: form.billingPeriod,
-      active: form.active,
+      daily_limit: Number(form.daily_limit),
+      price_cents: Number(form.price_cents),
+      billing_period: form.billing_period,
+      is_active: form.is_active,
     };
     try {
       if (editingPlan) {
@@ -124,27 +124,27 @@ export default function PlansPage() {
     },
     {
       header: 'Daily Limit',
-      key: 'dailyLimit',
-      render: (row: Plan) => <span style={{ color: '#7c8fac' }}>{row.dailyLimit}</span>,
+      key: 'daily_limit',
+      render: (row: Plan) => <span style={{ color: '#7c8fac' }}>{row.daily_limit === -1 ? 'Unlimited' : row.daily_limit}</span>,
     },
     {
       header: 'Price',
-      key: 'price',
+      key: 'price_cents',
       render: (row: Plan) => (
-        <span style={{ color: '#eaeff4', fontWeight: 600 }}>${Number(row.price).toFixed(2)}</span>
+        <span style={{ color: '#eaeff4', fontWeight: 600 }}>${(row.price_cents / 100).toFixed(2)}</span>
       ),
     },
     {
       header: 'Billing Period',
-      key: 'billingPeriod',
-      render: (row: Plan) => <span style={{ color: '#7c8fac', textTransform: 'capitalize' }}>{row.billingPeriod}</span>,
+      key: 'billing_period',
+      render: (row: Plan) => <span style={{ color: '#7c8fac', textTransform: 'capitalize' as const }}>{row.billing_period}</span>,
     },
     {
       header: 'Active',
-      key: 'active',
+      key: 'is_active',
       render: (row: Plan) => (
-        <span className={`badge ${row.active ? 'badge-success' : 'badge-muted'}`}>
-          {row.active ? 'Yes' : 'No'}
+        <span className={`badge ${row.is_active ? 'badge-success' : 'badge-muted'}`}>
+          {row.is_active ? 'Yes' : 'No'}
         </span>
       ),
     },
@@ -223,49 +223,48 @@ export default function PlansPage() {
               />
             </div>
             <div>
-              <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Daily Limit</label>
+              <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Daily Limit (-1 = unlimited)</label>
               <input
                 type="number"
-                value={form.dailyLimit}
-                onChange={(e) => setForm({ ...form, dailyLimit: e.target.value })}
+                value={form.daily_limit}
+                onChange={(e) => setForm({ ...form, daily_limit: e.target.value })}
                 placeholder="e.g. 100"
-                min="0"
+                min="-1"
                 className="dark-input"
               />
             </div>
             <div>
-              <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Price ($)</label>
+              <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Price (cents)</label>
               <input
                 type="number"
-                value={form.price}
-                onChange={(e) => setForm({ ...form, price: e.target.value })}
-                placeholder="e.g. 9.99"
+                value={form.price_cents}
+                onChange={(e) => setForm({ ...form, price_cents: e.target.value })}
+                placeholder="e.g. 999 for $9.99"
                 min="0"
-                step="0.01"
                 className="dark-input"
               />
             </div>
             <div>
               <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Billing Period</label>
               <select
-                value={form.billingPeriod}
-                onChange={(e) => setForm({ ...form, billingPeriod: e.target.value })}
+                value={form.billing_period}
+                onChange={(e) => setForm({ ...form, billing_period: e.target.value })}
                 className="dark-input"
               >
+                <option value="none">None (Free)</option>
                 <option value="monthly">Monthly</option>
-                <option value="annual">Annual</option>
-                <option value="lifetime">Lifetime</option>
+                <option value="yearly">Yearly</option>
               </select>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <input
                 type="checkbox"
-                id="active"
-                checked={form.active}
-                onChange={(e) => setForm({ ...form, active: e.target.checked })}
+                id="is_active"
+                checked={form.is_active}
+                onChange={(e) => setForm({ ...form, is_active: e.target.checked })}
                 style={{ width: 16, height: 16, accentColor: '#5d87ff', cursor: 'pointer' }}
               />
-              <label htmlFor="active" style={{ color: '#eaeff4', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>Active</label>
+              <label htmlFor="is_active" style={{ color: '#eaeff4', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>Active</label>
             </div>
           </div>
         </Modal>
