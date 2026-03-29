@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { logout, getAdminEmail } from '../auth';
 
@@ -61,9 +62,14 @@ const navItems = [
 
 export default function Layout() {
   const email = getAdminEmail() ?? '';
+  const [collapsed, setCollapsed] = useState(false);
+  const sidebarWidth = collapsed ? 0 : 270;
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: '#202936' }}>
+
+      {/* ── Overlay (mobile/collapsed) ──────────────────── */}
+      {!collapsed ? null : null}
 
       {/* ── Sidebar ─────────────────────────────────────── */}
       <aside
@@ -79,6 +85,8 @@ export default function Layout() {
           flexDirection: 'column',
           zIndex: 100,
           overflowY: 'auto',
+          transform: collapsed ? 'translateX(-270px)' : 'translateX(0)',
+          transition: 'transform 0.25s ease',
         }}
       >
         {/* Logo */}
@@ -226,14 +234,14 @@ export default function Layout() {
       </aside>
 
       {/* ── Right side ──────────────────────────────────── */}
-      <div style={{ marginLeft: 270, flex: 1, display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+      <div style={{ marginLeft: sidebarWidth, flex: 1, display: 'flex', flexDirection: 'column', minHeight: '100vh', transition: 'margin-left 0.25s ease' }}>
 
         {/* Header */}
         <header
           style={{
             position: 'fixed',
             top: 0,
-            left: 270,
+            left: sidebarWidth,
             right: 0,
             height: 70,
             background: '#202936',
@@ -243,14 +251,33 @@ export default function Layout() {
             justifyContent: 'space-between',
             padding: '0 28px',
             zIndex: 99,
+            transition: 'left 0.25s ease',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7c8fac" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="3" y1="6" x2="21" y2="6" />
-              <line x1="3" y1="12" x2="21" y2="12" />
-              <line x1="3" y1="18" x2="21" y2="18" />
-            </svg>
+            <button
+              onClick={() => setCollapsed(!collapsed)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                padding: 6,
+                borderRadius: 6,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'background 0.15s',
+              }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(93,135,255,0.1)'; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
+              title={collapsed ? 'Show sidebar' : 'Hide sidebar'}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7c8fac" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="3" y1="6" x2="21" y2="6" />
+                <line x1="3" y1="12" x2="21" y2="12" />
+                <line x1="3" y1="18" x2="21" y2="18" />
+              </svg>
+            </button>
             <span style={{ color: '#7c8fac', fontSize: 13, marginLeft: 4 }}>DraftRight Admin</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
