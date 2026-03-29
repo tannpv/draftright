@@ -25,12 +25,11 @@ struct MenuBarView: View {
 
             Divider()
 
-            if #available(macOS 14.0, *) {
-                SettingsLink {
-                    Text("Settings...")
-                }
-            } else {
-                Button("Settings...") {
+            Button("Settings...") {
+                NSApp.activate(ignoringOtherApps: true)
+                if #available(macOS 14.0, *) {
+                    NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+                } else {
                     NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
                 }
             }
