@@ -1,0 +1,47 @@
+enum Tone {
+  simple,
+  natural,
+  polished,
+  concise,
+  technical,
+  translate;
+
+  String get displayName {
+    switch (this) {
+      case Tone.simple: return 'Simple';
+      case Tone.natural: return 'More Natural';
+      case Tone.polished: return 'More Polished';
+      case Tone.concise: return 'Concise';
+      case Tone.technical: return 'Technical';
+      case Tone.translate: return 'Translate';
+    }
+  }
+
+  String get iconName {
+    switch (this) {
+      case Tone.simple: return 'text_fields';
+      case Tone.natural: return 'chat_bubble_outline';
+      case Tone.polished: return 'auto_awesome';
+      case Tone.concise: return 'compress';
+      case Tone.technical: return 'build';
+      case Tone.translate: return 'language';
+    }
+  }
+
+  String systemPrompt({String targetLanguage = 'English'}) {
+    switch (this) {
+      case Tone.simple:
+        return 'Rewrite the following text using simple, easy-to-understand language. Use short sentences and common words. Preserve the original meaning. Return only the rewritten text, no explanations.';
+      case Tone.natural:
+        return 'Rewrite the following text to sound more natural and conversational, as if spoken by a real person. Remove awkward phrasing and make it flow smoothly. Preserve the original meaning. Return only the rewritten text, no explanations.';
+      case Tone.polished:
+        return 'Rewrite the following text to be more polished and professional. Improve grammar, word choice, and sentence structure for a refined, workplace-appropriate tone. Preserve the original meaning. Return only the rewritten text, no explanations.';
+      case Tone.concise:
+        return 'Rewrite the following text to be as concise as possible. Remove unnecessary words, redundancy, and filler while preserving the key meaning. Return only the rewritten text, no explanations.';
+      case Tone.technical:
+        return 'Rewrite the following text in a technical specification style. Use precise, unambiguous language suitable for documentation, specs, or technical communication. Preserve the original meaning. Return only the rewritten text, no explanations.';
+      case Tone.translate:
+        return 'Translate the following text into $targetLanguage. If the text is already in $targetLanguage, translate it into English instead. Preserve the original meaning and tone. Return only the translated text, no explanations.';
+    }
+  }
+}
