@@ -126,4 +126,59 @@ export class AdminController {
     const expiresAt = dto.expires_at ? new Date(dto.expires_at) : undefined;
     return this.subscriptionsService.grant(dto.user_id, dto.plan_id, expiresAt);
   }
+
+  @Get('analytics')
+  async getAnalytics() {
+    const breakdown = await this.subscriptionsService.getPlansBreakdown();
+    const monthlyStats = await this.subscriptionsService.getMonthlyStats(12);
+
+    // Calculate MRR: monthly subs * price + yearly subs * price/12
+    let mrr = 0;
+    const plansAll = await this.plansService.findAll();
+    for (const b of breakdown) {
+      const plan = plansAll.find(p => p.name === b.plan_name);
+      if (plan && plan.price_cents > 0) {
+        if (plan.billing_period === 'monthly') {
+          mrr += b.active_count * plan.price_cents;
+        } else if (plan.billing_period === 'yearly') {
+          mrr += b.active_count * Math.round(plan.price_cents / 12);
+        }
+      }
+    }
+
+    const total_revenue = monthlyStats.reduce((sum, m) => sum + m.revenue_cents, 0);
+
+    return {
+      mrr,
+      total_revenue,
+      plans_breakdown: breakdown,
+      monthly_stats: monthlyStats,
+    };
+  }
+
+  @Get('transactions')
+  async listTransactions(@Query('search') search?: string, @Query('page') page?: string, @Query('limit') limit?: string) {
+    const result = await this.subscriptionsService.findAllPaginated({
+      search,
+      page: page ? parseInt(page) : 1,
+      limit: limit ? parseInt(limit) : 20,
+    });
+
+    const transactions = result.subscriptions.map(sub => ({
+      id: sub.id,
+      user_email: sub.user?.email || '—',
+      user_name: sub.user?.name || '—',
+      user_id: sub.user_id,
+      plan_name: sub.plan?.name || '—',
+      price_cents: sub.plan?.price_cents || 0,
+      store_type: sub.store_type,
+      store_transaction_id: sub.store_transaction_id,
+      status: sub.status,
+      started_at: sub.started_at,
+      expires_at: sub.expires_at,
+      created_at: sub.created_at,
+    }));
+
+    return { transactions, total: result.total };
+  }
 }
