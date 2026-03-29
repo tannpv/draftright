@@ -4,8 +4,8 @@ import { login } from '../auth';
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('admin@draftright.com');
+  const [password, setPassword] = useState('DraftRight2026');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
