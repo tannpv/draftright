@@ -31,18 +31,29 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-gray-500 text-sm mt-1">Overview of your DraftRight platform</p>
+      {/* Page header */}
+      <div style={{ marginBottom: 24 }}>
+        <h1 style={{ color: '#eaeff4', fontSize: 22, fontWeight: 700, margin: '0 0 4px' }}>Dashboard</h1>
+        <p style={{ color: '#7c8fac', fontSize: 13, margin: 0 }}>
+          Overview of your DraftRight platform
+        </p>
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3 mb-6">
+        <div className="alert-error" style={{ marginBottom: 20 }}>
           {error}
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
+      {/* Stat cards */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+          gap: 20,
+          marginBottom: 24,
+        }}
+      >
         <StatCard
           icon="👥"
           label="Total Users"
@@ -69,7 +80,9 @@ export default function DashboardPage() {
         />
       </div>
 
-      <p className="text-xs text-gray-400 mt-6">Auto-refreshes every 30 seconds</p>
+      <p style={{ color: '#333f55', fontSize: 12, margin: 0 }}>
+        Auto-refreshes every 30 seconds
+      </p>
     </div>
   );
 }

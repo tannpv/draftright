@@ -7,26 +7,70 @@ interface ToastProps {
   duration?: number;
 }
 
-export default function Toast({ message, type, onClose, duration = 3000 }: ToastProps) {
+export default function Toast({ message, type, onClose, duration = 3500 }: ToastProps) {
   useEffect(() => {
     const timer = setTimeout(onClose, duration);
     return () => clearTimeout(timer);
   }, [duration, onClose]);
 
+  const isSuccess = type === 'success';
+
   return (
-    <div className="fixed bottom-4 right-4 z-50 animate-fade-in">
+    <div
+      style={{
+        position: 'fixed',
+        bottom: 24,
+        right: 24,
+        zIndex: 999,
+      }}
+    >
       <div
-        className={`flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg text-white text-sm font-medium ${
-          type === 'success' ? 'bg-green-600' : 'bg-red-600'
-        }`}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          padding: '12px 18px',
+          borderRadius: 7,
+          background: '#2a3547',
+          border: `1px solid ${isSuccess ? 'rgba(19,222,185,0.3)' : 'rgba(250,137,107,0.3)'}`,
+          boxShadow: '0 8px 30px rgba(0,0,0,0.3)',
+          minWidth: 260,
+          maxWidth: 380,
+        }}
       >
-        <span>
-          {type === 'success' ? '✓' : '✕'}
-        </span>
-        <span>{message}</span>
+        {/* Icon */}
+        <div
+          style={{
+            width: 30,
+            height: 30,
+            borderRadius: '50%',
+            background: isSuccess ? 'rgba(19,222,185,0.15)' : 'rgba(250,137,107,0.15)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+            color: isSuccess ? '#13deb9' : '#fa896b',
+            fontSize: 14,
+            fontWeight: 700,
+          }}
+        >
+          {isSuccess ? '✓' : '✕'}
+        </div>
+
+        <span style={{ color: '#eaeff4', fontSize: 13, fontWeight: 500, flex: 1 }}>{message}</span>
+
         <button
           onClick={onClose}
-          className="ml-2 opacity-70 hover:opacity-100 transition-opacity"
+          style={{
+            background: 'transparent',
+            border: 'none',
+            color: '#7c8fac',
+            cursor: 'pointer',
+            fontSize: 16,
+            lineHeight: 1,
+            padding: 2,
+            flexShrink: 0,
+          }}
         >
           ×
         </button>

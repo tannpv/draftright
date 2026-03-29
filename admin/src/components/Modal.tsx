@@ -17,29 +17,89 @@ export default function Modal({ title, children, onClose, footer }: ModalProps) 
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center">
-      {/* Overlay */}
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 200,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '16px',
+      }}
+    >
+      {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-black bg-opacity-40"
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background: 'rgba(0,0,0,0.55)',
+          backdropFilter: 'blur(2px)',
+        }}
         onClick={onClose}
       />
+
       {/* Dialog */}
-      <div className="relative bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 z-10">
+      <div
+        style={{
+          position: 'relative',
+          background: '#2a3547',
+          border: '1px solid #333f55',
+          borderRadius: 7,
+          width: '100%',
+          maxWidth: 520,
+          boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
+          zIndex: 10,
+        }}
+      >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '18px 22px',
+            borderBottom: '1px solid #333f55',
+          }}
+        >
+          <h2 style={{ color: '#eaeff4', fontSize: 16, fontWeight: 600, margin: 0 }}>{title}</h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: '#7c8fac',
+              cursor: 'pointer',
+              fontSize: 20,
+              lineHeight: 1,
+              padding: '0 4px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: 5,
+              transition: 'color 0.15s',
+            }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = '#eaeff4'; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = '#7c8fac'; }}
           >
             &times;
           </button>
         </div>
+
         {/* Body */}
-        <div className="px-6 py-4">{children}</div>
+        <div style={{ padding: '20px 22px' }}>{children}</div>
+
         {/* Footer */}
         {footer && (
-          <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-200">
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: 10,
+              padding: '14px 22px',
+              borderTop: '1px solid #333f55',
+            }}
+          >
             {footer}
           </div>
         )}

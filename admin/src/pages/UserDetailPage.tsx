@@ -34,6 +34,42 @@ interface Toast {
   type: 'success' | 'error';
 }
 
+/* ── Reusable info row ──────────────────────────────────── */
+function InfoRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: '10px 0',
+        borderBottom: '1px solid #333f55',
+        fontSize: 14,
+      }}
+    >
+      <span style={{ color: '#7c8fac' }}>{label}</span>
+      <span style={{ color: '#eaeff4', fontWeight: 500 }}>{children}</span>
+    </div>
+  );
+}
+
+/* ── Info card ──────────────────────────────────────────── */
+function InfoCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div style={{ background: '#2a3547', borderRadius: 7 }}>
+      <div
+        style={{
+          padding: '16px 22px',
+          borderBottom: '1px solid #333f55',
+        }}
+      >
+        <h3 style={{ color: '#eaeff4', fontSize: 15, fontWeight: 600, margin: 0 }}>{title}</h3>
+      </div>
+      <div style={{ padding: '4px 22px 12px' }}>{children}</div>
+    </div>
+  );
+}
+
 export default function UserDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -42,7 +78,6 @@ export default function UserDetailPage() {
   const [error, setError] = useState('');
   const [toast, setToast] = useState<Toast | null>(null);
 
-  // Modal states
   const [showRoleModal, setShowRoleModal] = useState(false);
   const [showGrantModal, setShowGrantModal] = useState(false);
   const [newRole, setNewRole] = useState('');
@@ -121,135 +156,112 @@ export default function UserDetailPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20 text-gray-400">Loading...</div>
-    );
-  }
-
-  if (error || !user) {
-    return (
-      <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3">
-        {error || 'User not found'}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '80px 0', color: '#7c8fac', gap: 10 }}>
+        Loading user...
       </div>
     );
   }
 
+  if (error || !user) {
+    return <div className="alert-error">{error || 'User not found'}</div>;
+  }
+
   return (
-    <div className="max-w-4xl">
-      {/* Back */}
+    <div style={{ maxWidth: 860 }}>
+
+      {/* Back button */}
       <button
         onClick={() => navigate('/users')}
-        className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 mb-6"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          background: 'transparent',
+          border: 'none',
+          color: '#7c8fac',
+          fontSize: 13,
+          cursor: 'pointer',
+          padding: 0,
+          marginBottom: 20,
+          fontFamily: 'inherit',
+          transition: 'color 0.15s',
+        }}
+        onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = '#5d87ff'; }}
+        onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = '#7c8fac'; }}
       >
-        ← Back to Users
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="15 18 9 12 15 6" />
+        </svg>
+        Back to Users
       </button>
 
-      <div className="mb-6 flex items-start justify-between">
+      {/* Page title */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">{user.name || user.email}</h1>
-          <p className="text-gray-500 text-sm mt-1">{user.email}</p>
+          <h1 style={{ color: '#eaeff4', fontSize: 22, fontWeight: 700, margin: '0 0 4px' }}>
+            {user.name || user.email}
+          </h1>
+          <p style={{ color: '#7c8fac', fontSize: 13, margin: 0 }}>{user.email}</p>
         </div>
-        <span
-          className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${
-            user.active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
-          }`}
-        >
+        <span className={`badge ${user.active ? 'badge-success' : 'badge-muted'}`} style={{ marginTop: 4 }}>
           {user.active ? 'Active' : 'Inactive'}
         </span>
       </div>
 
       {/* Info cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-        {/* User Info */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h3 className="font-semibold text-gray-900 mb-4">User Info</h3>
-          <dl className="space-y-3 text-sm">
-            <div className="flex justify-between">
-              <dt className="text-gray-500">Email</dt>
-              <dd className="text-gray-900 font-medium">{user.email}</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-gray-500">Name</dt>
-              <dd className="text-gray-900 font-medium">{user.name || '—'}</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-gray-500">Role</dt>
-              <dd className="text-gray-900 font-medium capitalize">{user.role}</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-gray-500">Joined</dt>
-              <dd className="text-gray-900 font-medium">
-                {new Date(user.createdAt).toLocaleDateString()}
-              </dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-gray-500">Usage Today</dt>
-              <dd className="text-gray-900 font-medium">{user.usageToday} rewrites</dd>
-            </div>
-          </dl>
-        </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
+        <InfoCard title="User Info">
+          <InfoRow label="Email">{user.email}</InfoRow>
+          <InfoRow label="Name">{user.name || '—'}</InfoRow>
+          <InfoRow label="Role"><span style={{ textTransform: 'capitalize' }}>{user.role}</span></InfoRow>
+          <InfoRow label="Joined">{new Date(user.createdAt).toLocaleDateString()}</InfoRow>
+          <InfoRow label="Usage Today">{user.usageToday} rewrites</InfoRow>
+        </InfoCard>
 
-        {/* Subscription */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h3 className="font-semibold text-gray-900 mb-4">Subscription</h3>
+        <InfoCard title="Subscription">
           {user.subscription ? (
-            <dl className="space-y-3 text-sm">
-              <div className="flex justify-between">
-                <dt className="text-gray-500">Plan</dt>
-                <dd className="text-gray-900 font-medium capitalize">{user.subscription.plan}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-gray-500">Status</dt>
-                <dd>
-                  <span
-                    className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
-                      user.subscription.status === 'active'
-                        ? 'bg-green-100 text-green-700'
-                        : 'bg-gray-100 text-gray-600'
-                    }`}
-                  >
-                    {user.subscription.status}
-                  </span>
-                </dd>
-              </div>
+            <>
+              <InfoRow label="Plan"><span style={{ textTransform: 'capitalize' }}>{user.subscription.plan}</span></InfoRow>
+              <InfoRow label="Status">
+                <span className={`badge ${user.subscription.status === 'active' ? 'badge-success' : 'badge-muted'}`}>
+                  {user.subscription.status}
+                </span>
+              </InfoRow>
               {user.subscription.expiresAt && (
-                <div className="flex justify-between">
-                  <dt className="text-gray-500">Expires</dt>
-                  <dd className="text-gray-900 font-medium">
-                    {new Date(user.subscription.expiresAt).toLocaleDateString()}
-                  </dd>
-                </div>
+                <InfoRow label="Expires">
+                  {new Date(user.subscription.expiresAt).toLocaleDateString()}
+                </InfoRow>
               )}
-            </dl>
+            </>
           ) : (
-            <p className="text-sm text-gray-400">No active subscription</p>
+            <p style={{ color: '#7c8fac', fontSize: 13, padding: '16px 0' }}>No active subscription</p>
           )}
-        </div>
+        </InfoCard>
       </div>
 
-      {/* Actions */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
-        <h3 className="font-semibold text-gray-900 mb-4">Actions</h3>
-        <div className="flex flex-wrap gap-3">
+      {/* Actions card */}
+      <div style={{ background: '#2a3547', borderRadius: 7, padding: '18px 22px', marginBottom: 20 }}>
+        <h3 style={{ color: '#eaeff4', fontSize: 15, fontWeight: 600, margin: '0 0 14px' }}>Actions</h3>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
           <button
             onClick={toggleActive}
             disabled={saving}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-60 ${
-              user.active
-                ? 'bg-red-50 text-red-700 hover:bg-red-100 border border-red-200'
-                : 'bg-green-50 text-green-700 hover:bg-green-100 border border-green-200'
-            }`}
+            className={`btn btn-sm ${user.active ? 'btn-danger' : 'btn-primary'}`}
+            style={{ background: user.active ? 'rgba(250,137,107,0.12)' : 'rgba(19,222,185,0.12)', color: user.active ? '#fa896b' : '#13deb9', border: `1px solid ${user.active ? 'rgba(250,137,107,0.25)' : 'rgba(19,222,185,0.25)'}` }}
           >
             {user.active ? 'Deactivate User' : 'Activate User'}
           </button>
           <button
             onClick={() => setShowRoleModal(true)}
-            className="px-4 py-2 rounded-lg text-sm font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 transition-colors"
+            className="btn btn-sm"
+            style={{ background: 'rgba(93,135,255,0.1)', color: '#5d87ff', border: '1px solid rgba(93,135,255,0.25)' }}
           >
             Change Role
           </button>
           <button
             onClick={() => setShowGrantModal(true)}
-            className="px-4 py-2 rounded-lg text-sm font-medium bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 transition-colors"
+            className="btn btn-sm"
+            style={{ background: 'rgba(73,190,255,0.1)', color: '#49beff', border: '1px solid rgba(73,190,255,0.25)' }}
           >
             Grant Subscription
           </button>
@@ -257,33 +269,51 @@ export default function UserDetailPage() {
       </div>
 
       {/* Recent Usage */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h3 className="font-semibold text-gray-900">Recent Usage (last 20)</h3>
+      <div style={{ background: '#2a3547', borderRadius: 7, overflow: 'hidden' }}>
+        <div style={{ padding: '16px 22px', borderBottom: '1px solid #333f55' }}>
+          <h3 style={{ color: '#eaeff4', fontSize: 15, fontWeight: 600, margin: 0 }}>Recent Usage (last 20)</h3>
         </div>
+
         {user.usageLogs && user.usageLogs.length > 0 ? (
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Date</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Type</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Tokens</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {user.usageLogs.map((log) => (
-                <tr key={log.id}>
-                  <td className="px-6 py-3 text-sm text-gray-700">
-                    {new Date(log.createdAt).toLocaleString()}
-                  </td>
-                  <td className="px-6 py-3 text-sm text-gray-700">{log.type}</td>
-                  <td className="px-6 py-3 text-sm text-gray-700">{log.tokensUsed ?? '—'}</td>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ borderBottom: '2px solid #333f55' }}>
+                  {['Date', 'Type', 'Tokens'].map((h) => (
+                    <th
+                      key={h}
+                      style={{
+                        padding: '12px 22px',
+                        textAlign: 'left',
+                        color: '#7c8fac',
+                        fontSize: 12,
+                        fontWeight: 700,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em',
+                      }}
+                    >
+                      {h}
+                    </th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {user.usageLogs.map((log) => (
+                  <tr key={log.id} style={{ borderBottom: '1px solid #333f55' }}>
+                    <td style={{ padding: '13px 22px', color: '#7c8fac', fontSize: 13 }}>
+                      {new Date(log.createdAt).toLocaleString()}
+                    </td>
+                    <td style={{ padding: '13px 22px', color: '#eaeff4', fontSize: 14 }}>{log.type}</td>
+                    <td style={{ padding: '13px 22px', color: '#7c8fac', fontSize: 13 }}>{log.tokensUsed ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         ) : (
-          <p className="px-6 py-8 text-sm text-gray-400 text-center">No usage logs found.</p>
+          <p style={{ padding: '32px 22px', color: '#7c8fac', fontSize: 13, textAlign: 'center', margin: 0 }}>
+            No usage logs found.
+          </p>
         )}
       </div>
 
@@ -294,28 +324,19 @@ export default function UserDetailPage() {
           onClose={() => setShowRoleModal(false)}
           footer={
             <>
-              <button
-                onClick={() => setShowRoleModal(false)}
-                className="px-4 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={changeRole}
-                disabled={saving}
-                className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60"
-              >
+              <button onClick={() => setShowRoleModal(false)} className="btn btn-ghost btn-sm">Cancel</button>
+              <button onClick={changeRole} disabled={saving} className="btn btn-primary btn-sm">
                 {saving ? 'Saving...' : 'Save'}
               </button>
             </>
           }
         >
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Role</label>
+            <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Role</label>
             <select
               value={newRole}
               onChange={(e) => setNewRole(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="dark-input"
             >
               <option value="user">User</option>
               <option value="admin">Admin</option>
@@ -331,41 +352,32 @@ export default function UserDetailPage() {
           onClose={() => setShowGrantModal(false)}
           footer={
             <>
-              <button
-                onClick={() => setShowGrantModal(false)}
-                className="px-4 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={grantSubscription}
-                disabled={saving || !grantPlan}
-                className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60"
-              >
+              <button onClick={() => setShowGrantModal(false)} className="btn btn-ghost btn-sm">Cancel</button>
+              <button onClick={grantSubscription} disabled={saving || !grantPlan} className="btn btn-primary btn-sm">
                 {saving ? 'Granting...' : 'Grant'}
               </button>
             </>
           }
         >
-          <div className="space-y-4">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Plan Name</label>
+              <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Plan Name</label>
               <input
                 type="text"
                 value={grantPlan}
                 onChange={(e) => setGrantPlan(e.target.value)}
                 placeholder="e.g. pro"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="dark-input"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Duration (days)</label>
+              <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Duration (days)</label>
               <input
                 type="number"
                 value={grantDays}
                 onChange={(e) => setGrantDays(e.target.value)}
                 min="1"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="dark-input"
               />
             </div>
           </div>

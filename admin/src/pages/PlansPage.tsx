@@ -117,23 +117,33 @@ export default function PlansPage() {
   }
 
   const columns = [
-    { header: 'Name', key: 'name' },
-    { header: 'Daily Limit', key: 'dailyLimit' },
+    {
+      header: 'Name',
+      key: 'name',
+      render: (row: Plan) => <span style={{ color: '#eaeff4', fontWeight: 600 }}>{row.name}</span>,
+    },
+    {
+      header: 'Daily Limit',
+      key: 'dailyLimit',
+      render: (row: Plan) => <span style={{ color: '#7c8fac' }}>{row.dailyLimit}</span>,
+    },
     {
       header: 'Price',
       key: 'price',
-      render: (row: Plan) => `$${Number(row.price).toFixed(2)}`,
+      render: (row: Plan) => (
+        <span style={{ color: '#eaeff4', fontWeight: 600 }}>${Number(row.price).toFixed(2)}</span>
+      ),
     },
-    { header: 'Billing Period', key: 'billingPeriod' },
+    {
+      header: 'Billing Period',
+      key: 'billingPeriod',
+      render: (row: Plan) => <span style={{ color: '#7c8fac', textTransform: 'capitalize' }}>{row.billingPeriod}</span>,
+    },
     {
       header: 'Active',
       key: 'active',
       render: (row: Plan) => (
-        <span
-          className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
-            row.active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
-          }`}
-        >
+        <span className={`badge ${row.active ? 'badge-success' : 'badge-muted'}`}>
           {row.active ? 'Yes' : 'No'}
         </span>
       ),
@@ -142,16 +152,18 @@ export default function PlansPage() {
       header: 'Actions',
       key: 'actions',
       render: (row: Plan) => (
-        <div className="flex gap-2">
+        <div style={{ display: 'flex', gap: 8 }}>
           <button
             onClick={(e) => { e.stopPropagation(); openEdit(row); }}
-            className="text-xs px-3 py-1 rounded border border-blue-300 text-blue-600 hover:bg-blue-50"
+            className="btn btn-sm"
+            style={{ background: 'rgba(93,135,255,0.1)', color: '#5d87ff', border: '1px solid rgba(93,135,255,0.2)' }}
           >
             Edit
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); deletePlan(row); }}
-            className="text-xs px-3 py-1 rounded border border-red-300 text-red-600 hover:bg-red-50"
+            className="btn btn-sm"
+            style={{ background: 'rgba(250,137,107,0.1)', color: '#fa896b', border: '1px solid rgba(250,137,107,0.2)' }}
           >
             Delete
           </button>
@@ -162,24 +174,18 @@ export default function PlansPage() {
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
+      {/* Page header */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Plans</h1>
-          <p className="text-gray-500 text-sm mt-1">Manage subscription plans</p>
+          <h1 style={{ color: '#eaeff4', fontSize: 22, fontWeight: 700, margin: '0 0 4px' }}>Plans</h1>
+          <p style={{ color: '#7c8fac', fontSize: 13, margin: 0 }}>Manage subscription plans</p>
         </div>
-        <button
-          onClick={openCreate}
-          className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-        >
+        <button onClick={openCreate} className="btn btn-primary">
           + Create Plan
         </button>
       </div>
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3 mb-4">
-          {error}
-        </div>
-      )}
+      {error && <div className="alert-error" style={{ marginBottom: 16 }}>{error}</div>}
 
       <DataTable<Plan>
         columns={columns}
@@ -194,46 +200,41 @@ export default function PlansPage() {
           onClose={() => setShowModal(false)}
           footer={
             <>
-              <button
-                onClick={() => setShowModal(false)}
-                className="px-4 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50"
-              >
-                Cancel
-              </button>
+              <button onClick={() => setShowModal(false)} className="btn btn-ghost btn-sm">Cancel</button>
               <button
                 onClick={savePlan}
                 disabled={saving || !form.name}
-                className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60"
+                className="btn btn-primary btn-sm"
               >
                 {saving ? 'Saving...' : editingPlan ? 'Update' : 'Create'}
               </button>
             </>
           }
         >
-          <div className="space-y-4">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+              <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Name</label>
               <input
                 type="text"
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
                 placeholder="e.g. Pro"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="dark-input"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Daily Limit</label>
+              <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Daily Limit</label>
               <input
                 type="number"
                 value={form.dailyLimit}
                 onChange={(e) => setForm({ ...form, dailyLimit: e.target.value })}
                 placeholder="e.g. 100"
                 min="0"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="dark-input"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Price ($)</label>
+              <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Price ($)</label>
               <input
                 type="number"
                 value={form.price}
@@ -241,30 +242,30 @@ export default function PlansPage() {
                 placeholder="e.g. 9.99"
                 min="0"
                 step="0.01"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="dark-input"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Billing Period</label>
+              <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Billing Period</label>
               <select
                 value={form.billingPeriod}
                 onChange={(e) => setForm({ ...form, billingPeriod: e.target.value })}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="dark-input"
               >
                 <option value="monthly">Monthly</option>
                 <option value="annual">Annual</option>
                 <option value="lifetime">Lifetime</option>
               </select>
             </div>
-            <div className="flex items-center gap-2">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <input
                 type="checkbox"
                 id="active"
                 checked={form.active}
                 onChange={(e) => setForm({ ...form, active: e.target.checked })}
-                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                style={{ width: 16, height: 16, accentColor: '#5d87ff', cursor: 'pointer' }}
               />
-              <label htmlFor="active" className="text-sm font-medium text-gray-700">Active</label>
+              <label htmlFor="active" style={{ color: '#eaeff4', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>Active</label>
             </div>
           </div>
         </Modal>

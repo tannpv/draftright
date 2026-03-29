@@ -138,30 +138,45 @@ export default function ProvidersPage() {
   }
 
   const columns = [
-    { header: 'Name', key: 'name' },
-    { header: 'Type', key: 'type' },
-    { header: 'Endpoint', key: 'endpoint' },
-    { header: 'Model', key: 'model' },
+    {
+      header: 'Name',
+      key: 'name',
+      render: (row: Provider) => <span style={{ color: '#eaeff4', fontWeight: 600 }}>{row.name}</span>,
+    },
+    {
+      header: 'Type',
+      key: 'type',
+      render: (row: Provider) => <span style={{ color: '#7c8fac', textTransform: 'capitalize' }}>{row.type}</span>,
+    },
+    {
+      header: 'Endpoint',
+      key: 'endpoint',
+      render: (row: Provider) => (
+        <span style={{ color: '#7c8fac', fontSize: 12, fontFamily: 'monospace', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', display: 'inline-block' }}>
+          {row.endpoint}
+        </span>
+      ),
+    },
+    {
+      header: 'Model',
+      key: 'model',
+      render: (row: Provider) => (
+        <span style={{ color: '#49beff', fontSize: 12, fontFamily: 'monospace' }}>{row.model}</span>
+      ),
+    },
     {
       header: 'Default',
       key: 'isDefault',
-      render: (row: Provider) => (
-        row.isDefault ? (
-          <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
-            Default
-          </span>
-        ) : <span className="text-gray-400">—</span>
-      ),
+      render: (row: Provider) =>
+        row.isDefault
+          ? <span className="badge badge-primary">Default</span>
+          : <span style={{ color: '#333f55' }}>—</span>,
     },
     {
       header: 'Active',
       key: 'active',
       render: (row: Provider) => (
-        <span
-          className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
-            row.active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
-          }`}
-        >
+        <span className={`badge ${row.active ? 'badge-success' : 'badge-muted'}`}>
           {row.active ? 'Yes' : 'No'}
         </span>
       ),
@@ -170,23 +185,26 @@ export default function ProvidersPage() {
       header: 'Actions',
       key: 'actions',
       render: (row: Provider) => (
-        <div className="flex gap-2 flex-wrap">
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button
             onClick={(e) => { e.stopPropagation(); testConnection(row); }}
             disabled={testingId === row.id}
-            className="text-xs px-3 py-1 rounded border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+            className="btn btn-sm"
+            style={{ background: 'rgba(124,143,172,0.1)', color: '#7c8fac', border: '1px solid #333f55', opacity: testingId === row.id ? 0.5 : 1 }}
           >
             {testingId === row.id ? 'Testing...' : 'Test'}
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); openEdit(row); }}
-            className="text-xs px-3 py-1 rounded border border-blue-300 text-blue-600 hover:bg-blue-50"
+            className="btn btn-sm"
+            style={{ background: 'rgba(93,135,255,0.1)', color: '#5d87ff', border: '1px solid rgba(93,135,255,0.2)' }}
           >
             Edit
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); deleteProvider(row); }}
-            className="text-xs px-3 py-1 rounded border border-red-300 text-red-600 hover:bg-red-50"
+            className="btn btn-sm"
+            style={{ background: 'rgba(250,137,107,0.1)', color: '#fa896b', border: '1px solid rgba(250,137,107,0.2)' }}
           >
             Delete
           </button>
@@ -197,24 +215,18 @@ export default function ProvidersPage() {
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
+      {/* Page header */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">AI Providers</h1>
-          <p className="text-gray-500 text-sm mt-1">Manage AI provider configurations</p>
+          <h1 style={{ color: '#eaeff4', fontSize: 22, fontWeight: 700, margin: '0 0 4px' }}>AI Providers</h1>
+          <p style={{ color: '#7c8fac', fontSize: 13, margin: 0 }}>Manage AI provider configurations</p>
         </div>
-        <button
-          onClick={openCreate}
-          className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-        >
+        <button onClick={openCreate} className="btn btn-primary">
           + Add Provider
         </button>
       </div>
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3 mb-4">
-          {error}
-        </div>
-      )}
+      {error && <div className="alert-error" style={{ marginBottom: 16 }}>{error}</div>}
 
       <DataTable<Provider>
         columns={columns}
@@ -229,39 +241,34 @@ export default function ProvidersPage() {
           onClose={() => setShowModal(false)}
           footer={
             <>
-              <button
-                onClick={() => setShowModal(false)}
-                className="px-4 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50"
-              >
-                Cancel
-              </button>
+              <button onClick={() => setShowModal(false)} className="btn btn-ghost btn-sm">Cancel</button>
               <button
                 onClick={saveProvider}
                 disabled={saving || !form.name || !form.model}
-                className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60"
+                className="btn btn-primary btn-sm"
               >
                 {saving ? 'Saving...' : editingProvider ? 'Update' : 'Create'}
               </button>
             </>
           }
         >
-          <div className="space-y-4">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+              <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Name</label>
               <input
                 type="text"
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
                 placeholder="e.g. OpenAI GPT-4"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="dark-input"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+              <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Type</label>
               <select
                 value={form.type}
                 onChange={(e) => setForm({ ...form, type: e.target.value })}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="dark-input"
               >
                 <option value="openai">OpenAI</option>
                 <option value="anthropic">Anthropic</option>
@@ -270,57 +277,57 @@ export default function ProvidersPage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Endpoint</label>
+              <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Endpoint</label>
               <input
                 type="text"
                 value={form.endpoint}
                 onChange={(e) => setForm({ ...form, endpoint: e.target.value })}
                 placeholder="e.g. https://api.openai.com/v1"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="dark-input"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Model</label>
+              <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Model</label>
               <input
                 type="text"
                 value={form.model}
                 onChange={(e) => setForm({ ...form, model: e.target.value })}
                 placeholder="e.g. gpt-4o"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="dark-input"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                API Key {editingProvider && <span className="text-gray-400">(leave blank to keep existing)</span>}
+              <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>
+                API Key{editingProvider && <span style={{ color: '#7c8fac', fontWeight: 400 }}> (leave blank to keep existing)</span>}
               </label>
               <input
                 type="password"
                 value={form.apiKey}
                 onChange={(e) => setForm({ ...form, apiKey: e.target.value })}
                 placeholder="sk-..."
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="dark-input"
               />
             </div>
-            <div className="flex gap-6">
-              <div className="flex items-center gap-2">
+            <div style={{ display: 'flex', gap: 24 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <input
                   type="checkbox"
                   id="isDefault"
                   checked={form.isDefault}
                   onChange={(e) => setForm({ ...form, isDefault: e.target.checked })}
-                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  style={{ width: 16, height: 16, accentColor: '#5d87ff', cursor: 'pointer' }}
                 />
-                <label htmlFor="isDefault" className="text-sm font-medium text-gray-700">Default</label>
+                <label htmlFor="isDefault" style={{ color: '#eaeff4', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>Default</label>
               </div>
-              <div className="flex items-center gap-2">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <input
                   type="checkbox"
                   id="providerActive"
                   checked={form.active}
                   onChange={(e) => setForm({ ...form, active: e.target.checked })}
-                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  style={{ width: 16, height: 16, accentColor: '#5d87ff', cursor: 'pointer' }}
                 />
-                <label htmlFor="providerActive" className="text-sm font-medium text-gray-700">Active</label>
+                <label htmlFor="providerActive" style={{ color: '#eaeff4', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>Active</label>
               </div>
             </div>
           </div>

@@ -55,7 +55,6 @@ export default function UsersPage() {
     fetchUsers();
   }, [fetchUsers]);
 
-  // Reset page on search change
   const handleSearch = (value: string) => {
     setSearch(value);
     setPage(1);
@@ -66,23 +65,25 @@ export default function UsersPage() {
   const columns = [
     { header: 'Email', key: 'email' },
     { header: 'Name', key: 'name' },
-    { header: 'Plan', key: 'plan' },
+    {
+      header: 'Plan',
+      key: 'plan',
+      render: (row: User) => (
+        <span className="badge badge-primary">{row.plan || '—'}</span>
+      ),
+    },
     {
       header: 'Usage Today',
       key: 'usageToday',
-      render: (row: User) => String(row.usageToday ?? 0),
+      render: (row: User) => (
+        <span style={{ color: '#7c8fac' }}>{String(row.usageToday ?? 0)}</span>
+      ),
     },
     {
       header: 'Status',
       key: 'status',
       render: (row: User) => (
-        <span
-          className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
-            row.status === 'active'
-              ? 'bg-green-100 text-green-700'
-              : 'bg-gray-100 text-gray-600'
-          }`}
-        >
+        <span className={`badge ${row.status === 'active' ? 'badge-success' : 'badge-muted'}`}>
           {row.status}
         </span>
       ),
@@ -90,35 +91,54 @@ export default function UsersPage() {
     {
       header: 'Joined',
       key: 'createdAt',
-      render: (row: User) =>
-        row.createdAt ? new Date(row.createdAt).toLocaleDateString() : '—',
+      render: (row: User) => (
+        <span style={{ color: '#7c8fac' }}>
+          {row.createdAt ? new Date(row.createdAt).toLocaleDateString() : '—'}
+        </span>
+      ),
     },
   ];
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
+      {/* Page header */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Users</h1>
-          <p className="text-gray-500 text-sm mt-1">{total} total users</p>
+          <h1 style={{ color: '#eaeff4', fontSize: 22, fontWeight: 700, margin: '0 0 4px' }}>Users</h1>
+          <p style={{ color: '#7c8fac', fontSize: 13, margin: 0 }}>{total} total users</p>
         </div>
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3 mb-4">
-          {error}
-        </div>
+        <div className="alert-error" style={{ marginBottom: 16 }}>{error}</div>
       )}
 
-      {/* Search */}
-      <div className="mb-4">
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => handleSearch(e.target.value)}
-          placeholder="Search by email or name..."
-          className="w-full max-w-md border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
+      {/* Search bar */}
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ position: 'relative', display: 'inline-block' }}>
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="#7c8fac"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}
+          >
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => handleSearch(e.target.value)}
+            placeholder="Search by email or name..."
+            className="dark-input"
+            style={{ paddingLeft: 36, width: 320 }}
+          />
+        </div>
       </div>
 
       <DataTable<User>

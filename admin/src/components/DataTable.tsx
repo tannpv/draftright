@@ -31,36 +31,56 @@ export default function DataTable<T = AnyRow>({
   emptyMessage = 'No data found.',
 }: DataTableProps<T>) {
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
+    <div style={{ background: '#2a3547', borderRadius: 7, overflow: 'hidden' }}>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+
+          {/* Head */}
+          <thead>
+            <tr style={{ borderBottom: '2px solid #333f55' }}>
               {columns.map((col) => (
                 <th
                   key={String(col.key)}
-                  className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider"
+                  style={{
+                    padding: '13px 20px',
+                    textAlign: 'left',
+                    color: '#7c8fac',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    whiteSpace: 'nowrap',
+                  }}
                 >
                   {col.header}
                 </th>
               ))}
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+
+          {/* Body */}
+          <tbody>
             {loading ? (
               <tr>
                 <td
                   colSpan={columns.length}
-                  className="px-6 py-10 text-center text-gray-400 text-sm"
+                  style={{ padding: '40px 20px', textAlign: 'center', color: '#7c8fac', fontSize: 14 }}
                 >
-                  Loading...
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5d87ff" strokeWidth="2" strokeLinecap="round">
+                      <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83">
+                        <animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="1s" repeatCount="indefinite" />
+                      </path>
+                    </svg>
+                    Loading...
+                  </div>
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
                 <td
                   colSpan={columns.length}
-                  className="px-6 py-10 text-center text-gray-400 text-sm"
+                  style={{ padding: '40px 20px', textAlign: 'center', color: '#7c8fac', fontSize: 14 }}
                 >
                   {emptyMessage}
                 </td>
@@ -70,12 +90,29 @@ export default function DataTable<T = AnyRow>({
                 <tr
                   key={i}
                   onClick={() => onRowClick?.(row)}
-                  className={onRowClick ? 'cursor-pointer hover:bg-blue-50 transition-colors' : ''}
+                  style={{
+                    borderBottom: '1px solid #333f55',
+                    cursor: onRowClick ? 'pointer' : 'default',
+                    transition: 'background 0.15s',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (onRowClick) {
+                      (e.currentTarget as HTMLTableRowElement).style.background = 'rgba(93,135,255,0.05)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLTableRowElement).style.background = 'transparent';
+                  }}
                 >
                   {columns.map((col) => (
                     <td
                       key={String(col.key)}
-                      className="px-6 py-4 whitespace-nowrap text-sm text-gray-700"
+                      style={{
+                        padding: '14px 20px',
+                        whiteSpace: 'nowrap',
+                        fontSize: 14,
+                        color: '#eaeff4',
+                      }}
                     >
                       {col.render
                         ? col.render(row)
@@ -91,22 +128,50 @@ export default function DataTable<T = AnyRow>({
 
       {/* Pagination */}
       {totalPages > 1 && onPageChange && (
-        <div className="flex items-center justify-between px-6 py-3 border-t border-gray-200 bg-gray-50">
-          <p className="text-sm text-gray-500">
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '12px 20px',
+            borderTop: '1px solid #333f55',
+          }}
+        >
+          <p style={{ color: '#7c8fac', fontSize: 13, margin: 0 }}>
             Page {page} of {totalPages}
           </p>
-          <div className="flex gap-2">
+          <div style={{ display: 'flex', gap: 8 }}>
             <button
               onClick={() => onPageChange(page - 1)}
               disabled={page <= 1}
-              className="px-3 py-1 rounded text-sm border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              style={{
+                padding: '5px 14px',
+                borderRadius: 7,
+                fontSize: 13,
+                border: '1px solid #333f55',
+                background: 'transparent',
+                color: page <= 1 ? '#333f55' : '#7c8fac',
+                cursor: page <= 1 ? 'not-allowed' : 'pointer',
+                fontFamily: 'inherit',
+                transition: 'all 0.15s',
+              }}
             >
               Previous
             </button>
             <button
               onClick={() => onPageChange(page + 1)}
               disabled={page >= totalPages}
-              className="px-3 py-1 rounded text-sm border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              style={{
+                padding: '5px 14px',
+                borderRadius: 7,
+                fontSize: 13,
+                border: '1px solid #333f55',
+                background: 'transparent',
+                color: page >= totalPages ? '#333f55' : '#7c8fac',
+                cursor: page >= totalPages ? 'not-allowed' : 'pointer',
+                fontFamily: 'inherit',
+                transition: 'all 0.15s',
+              }}
             >
               Next
             </button>
