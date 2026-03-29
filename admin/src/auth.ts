@@ -1,10 +1,11 @@
 import { apiFetch } from './api';
 
 interface LoginResponse {
-  token: string;
+  access_token: string;
+  refresh_token: string;
   user?: {
     email: string;
-    role: string;
+    name: string;
   };
 }
 
@@ -14,11 +15,12 @@ export async function login(email: string, password: string): Promise<void> {
     body: JSON.stringify({ email, password }),
   }) as LoginResponse;
 
-  if (!data.token) {
+  if (!data.access_token) {
     throw new Error('No token received');
   }
 
-  localStorage.setItem('token', data.token);
+  localStorage.setItem('token', data.access_token);
+  localStorage.setItem('refresh_token', data.refresh_token);
 
   if (data.user?.email) {
     localStorage.setItem('adminEmail', data.user.email);
