@@ -20,12 +20,7 @@ struct DraftRightApp: App {
                 .disabled(true)
             Divider()
             Button("Settings...") {
-                NSApp.activate(ignoringOtherApps: true)
-                if #available(macOS 14.0, *) {
-                    NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-                } else {
-                    NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
-                }
+                Self.openSettingsWindow(appModel: appModel)
             }
             .keyboardShortcut(",", modifiers: .command)
             Divider()
@@ -34,11 +29,29 @@ struct DraftRightApp: App {
             }
             .keyboardShortcut("q", modifiers: .command)
         }
-        Settings {
-            SettingsView()
-                .environmentObject(appModel)
-                .frame(minWidth: 450, minHeight: 350)
+    }
+
+    @MainActor
+    static func openSettingsWindow(appModel: AppModel) {
+        // Reuse existing window if open
+        for window in NSApp.windows where window.title == "DraftRight V2 Settings" {
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
         }
+
+        let settingsView = SettingsView()
+            .environmentObject(appModel)
+            .frame(minWidth: 450, minHeight: 350)
+
+        let hostingController = NSHostingController(rootView: settingsView)
+        let window = NSWindow(contentViewController: hostingController)
+        window.title = "DraftRight V2 Settings"
+        window.styleMask = [.titled, .closable, .resizable]
+        window.setContentSize(NSSize(width: 500, height: 400))
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     @MainActor
