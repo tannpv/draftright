@@ -1,0 +1,69 @@
+import { Injectable, OnModuleDestroy } from '@nestjs/common';
+import Redis from 'ioredis';
+import { createHash } from 'crypto';
+
+const CACHE_TTL = 300; // 5 minutes in seconds
+
+@Injectable()
+export class RewriteCacheService implements OnModuleDestroy {
+  private readonly redis: Redis;
+
+  constructor() {
+    this.redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
+      lazyConnect: true,
+      maxRetriesPerRequest: 1,
+    });
+    this.redis.connect().catch(() => {
+      // Redis unavailable — degrade gracefully
+    });
+  }
+
+  onModuleDestroy() {
+    this.redis.disconnect();
+  }
+
+  async get(userId: string, text: string, tone: string): Promise<string | null> {
+    try {
+      return await this.redis.get(this.resultKey(userId, text, tone));
+    } catch {
+      return null;
+    }
+  }
+
+  async set(userId: string, text: string, tone: string, result: string): Promise<void> {
+    try {
+      await this.redis.set(this.resultKey(userId, text, tone), result, 'EX', CACHE_TTL);
+    } catch {
+      // Redis unavailable — skip caching
+    }
+  }
+
+  async isBatchStarted(userId: string, text: string): Promise<boolean> {
+    try {
+      const val = await this.redis.get(this.batchKey(userId, text));
+      return val === '1';
+    } catch {
+      return false;
+    }
+  }
+
+  async markBatchStarted(userId: string, text: string): Promise<void> {
+    try {
+      await this.redis.set(this.batchKey(userId, text), '1', 'EX', CACHE_TTL);
+    } catch {
+      // Redis unavailable — skip
+    }
+  }
+
+  private hashText(text: string): string {
+    return createHash('sha256').update(text).digest('hex').substring(0, 16);
+  }
+
+  private resultKey(userId: string, text: string, tone: string): string {
+    return `rewrite:${userId}:${this.hashText(text)}:${tone}`;
+  }
+
+  private batchKey(userId: string, text: string): string {
+    return `batch:${userId}:${this.hashText(text)}`;
+  }
+}
