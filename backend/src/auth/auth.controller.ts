@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards, Request } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Request, Get } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
@@ -25,9 +25,24 @@ export class AuthController {
     return this.authService.refresh(body.refresh_token);
   }
 
+  @Post('social')
+  async socialLogin(@Body() body: { provider: string; id_token: string; name?: string; email?: string; avatar_url?: string }) {
+    return this.authService.socialLogin(body.provider, body.id_token, {
+      name: body.name,
+      email: body.email,
+      avatar_url: body.avatar_url,
+    });
+  }
+
   @UseGuards(JwtAuthGuard)
   @Post('change-password')
   async changePassword(@Request() req: any, @Body() body: { current_password: string; new_password: string }) {
     return this.authService.changePassword(req.user.id, body.current_password, body.new_password);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('me')
+  async me(@Request() req: any) {
+    return { id: req.user.id, email: req.user.email, role: req.user.role };
   }
 }
