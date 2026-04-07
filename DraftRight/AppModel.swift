@@ -108,6 +108,10 @@ final class AppModel: ObservableObject {
         isLoggedIn = true
     }
 
+    nonisolated deinit {
+        healthTimer?.invalidate()
+    }
+
     func startHealthCheck() {
         // Check immediately on launch
         Task { @MainActor in
@@ -128,6 +132,9 @@ final class AppModel: ObservableObject {
             backendUrl: backendUrl,
             accessToken: accessToken.isEmpty ? nil : accessToken
         )
+        if backendStatus != status {
+            DRLogger.log("Health status: \(backendStatus) → \(status)", category: .api)
+        }
         backendStatus = status
         // Sync login state with health check result
         if status == .connected && !isLoggedIn {
