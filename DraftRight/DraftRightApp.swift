@@ -14,9 +14,25 @@ struct DraftRightApp: App {
         }
     }
 
+    private var statusColor: Color {
+        switch appModel.backendStatus {
+        case .connected: return .green
+        case .notLoggedIn: return .yellow
+        case .offline: return .red
+        }
+    }
+
+    private var statusLabel: String {
+        switch appModel.backendStatus {
+        case .connected: return "Connected"
+        case .notLoggedIn: return "Not Logged In"
+        case .offline: return "Offline"
+        }
+    }
+
     var body: some Scene {
-        MenuBarExtra("DraftRight V2", systemImage: "pencil.and.outline") {
-            Button(appModel.isRewriting ? "Rewriting..." : "Ready") {}
+        MenuBarExtra {
+            Button(appModel.isRewriting ? "Rewriting..." : statusLabel) {}
                 .disabled(true)
             Divider()
             Button("Settings...") {
@@ -28,6 +44,10 @@ struct DraftRightApp: App {
                 NSApp.terminate(nil)
             }
             .keyboardShortcut("q", modifiers: .command)
+        } label: {
+            Image(systemName: "pencil.and.outline")
+                .symbolRenderingMode(.palette)
+                .foregroundStyle(statusColor)
         }
     }
 
@@ -63,12 +83,25 @@ struct DraftRightApp: App {
         NSUpdateDynamicServices()
 
         let monitor = SelectionMonitor()
+        monitor.hotkeyString = appModel.hotkeyString
         let aiClient = BackendClient()
         let diffWindow = DiffWindow.shared
 
-        // When user clicks pencil icon, open the rewrite panel with the selected text
+        // Sync hotkey changes from settings to monitor
+        appModel.$hotkeyString.sink { newValue in
+            Task { @MainActor in
+                monitor.hotkeyString = newValue
+            }
+        }.store(in: &appModel.cancellables)
+
+        // When user clicks pencil icon or presses hotkey, open the rewrite panel
         monitor.start { text in
-            guard appModel.isLoggedIn, !appModel.accessToken.isEmpty else { return }
+            DRLogger.log("onTextSelected fired, isLoggedIn=\(appModel.isLoggedIn) hasToken=\(!appModel.accessToken.isEmpty)", category: .app)
+            guard appModel.isLoggedIn, !appModel.accessToken.isEmpty else {
+                DRLogger.log("BLOCKED: not logged in — panel will not show", category: .app)
+                return
+            }
+            DRLogger.log("Opening panel with text: '\(text.prefix(30))'", category: .app)
 
             diffWindow.presentPanel(
                 original: text,
