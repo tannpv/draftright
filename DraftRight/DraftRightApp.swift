@@ -19,6 +19,7 @@ struct DraftRightApp: App {
         case .connected: return .green
         case .notLoggedIn: return .yellow
         case .offline: return .red
+        case .wrongServer: return .purple
         }
     }
 
@@ -27,6 +28,7 @@ struct DraftRightApp: App {
         case .connected: return "Connected"
         case .notLoggedIn: return "Not Logged In"
         case .offline: return "Offline"
+        case .wrongServer: return "Wrong Server"
         }
     }
 

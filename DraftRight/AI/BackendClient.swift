@@ -34,6 +34,13 @@ enum BackendStatus {
     case connected
     case notLoggedIn
     case offline
+    case wrongServer
+}
+
+private struct HealthResponse: Codable {
+    let app: String
+    let version: String
+    let status: String
 }
 
 final class BackendClient {
@@ -99,19 +106,44 @@ final class BackendClient {
 
     func checkHealth(backendUrl: String, accessToken: String?) async -> BackendStatus {
         let base = backendUrl.hasSuffix("/") ? String(backendUrl.dropLast()) : backendUrl
-        guard let url = URL(string: "\(base)/auth/me") else {
+
+        // Step 1: Check /health for app identity
+        guard let healthUrl = URL(string: "\(base)/health") else {
             return .offline
         }
 
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.timeoutInterval = 5
+        var healthRequest = URLRequest(url: healthUrl)
+        healthRequest.httpMethod = "GET"
+        healthRequest.timeoutInterval = 5
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: healthRequest)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                return .offline
+            }
+
+            let health = try JSONDecoder().decode(HealthResponse.self, from: data)
+            guard health.app == "draftright" else {
+                return .wrongServer
+            }
+        } catch {
+            return .offline
+        }
+
+        // Step 2: Check /auth/me for login state
+        guard let authUrl = URL(string: "\(base)/auth/me") else {
+            return .offline
+        }
+
+        var authRequest = URLRequest(url: authUrl)
+        authRequest.httpMethod = "GET"
+        authRequest.timeoutInterval = 5
         if let token = accessToken, !token.isEmpty {
-            request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            authRequest.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
 
         do {
-            let (_, response) = try await URLSession.shared.data(for: request)
+            let (_, response) = try await URLSession.shared.data(for: authRequest)
             guard let http = response as? HTTPURLResponse else { return .offline }
             switch http.statusCode {
             case 200:
