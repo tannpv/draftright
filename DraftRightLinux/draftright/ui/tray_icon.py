@@ -132,7 +132,7 @@ class TrayIcon:
         """Update the status menu item label.
 
         Args:
-            status: One of 'connected', 'not_logged_in', 'offline'.
+            status: One of 'connected', 'not_logged_in', 'offline', 'wrong_server'.
         """
         if self._status_item is None:
             return
@@ -140,5 +140,6 @@ class TrayIcon:
             "connected": "Connected",
             "not_logged_in": "Not Logged In",
             "offline": "Offline",
+            "wrong_server": "Wrong Server",
         }
         self._status_item.set_label(labels.get(status, "Offline"))

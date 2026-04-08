@@ -124,7 +124,23 @@ class APIClient:
         return self._handle_response(resp)
 
     def check_health(self) -> str:
-        """GET /auth/me — returns 'connected', 'not_logged_in', or 'offline'."""
+        """GET /health then /auth/me — returns 'connected', 'not_logged_in', 'offline', or 'wrong_server'."""
+        # Step 1: Check /health for app identity
+        try:
+            resp = requests.get(
+                self._url("/health"),
+                headers={"Accept": "application/json"},
+                timeout=5,
+            )
+            if resp.status_code != 200:
+                return "offline"
+            body = resp.json()
+            if body.get("app") != "draftright":
+                return "wrong_server"
+        except Exception:
+            return "offline"
+
+        # Step 2: Check /auth/me for login state
         try:
             resp = requests.get(
                 self._url("/auth/me"),
