@@ -25,3 +25,17 @@ export async function apiFetch(path: string, options?: RequestInit): Promise<unk
   const text = await res.text();
   return text ? JSON.parse(text) : null;
 }
+
+export async function verifyBackend(): Promise<'ok' | 'wrong_server' | 'unreachable'> {
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+  try {
+    const res = await fetch(`${API_URL}/health`, {
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) return 'unreachable';
+    const data = await res.json();
+    return data.app === 'draftright' ? 'ok' : 'wrong_server';
+  } catch {
+    return 'unreachable';
+  }
+}

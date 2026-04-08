@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
+import { verifyBackend } from '../api';
 import { logout, getAdminEmail } from '../auth';
 
 /* ── SVG Icons (inline, no external deps) ───────────────── */
@@ -63,6 +64,33 @@ function IconTransactions() {
     </svg>
   );
 }
+function IconPayments() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="4" width="20" height="16" rx="2" />
+      <path d="M2 10h20" />
+      <path d="M6 16h4" />
+      <path d="M14 16h4" />
+    </svg>
+  );
+}
+function IconSettings() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </svg>
+  );
+}
+function IconAdminUsers() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+      <circle cx="12" cy="10" r="3" />
+      <path d="M7 20.662V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.662" />
+    </svg>
+  );
+}
 function IconLogout() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -80,12 +108,28 @@ const navItems = [
   { path: '/providers',     label: 'AI Providers',  icon: <IconProviders />,     exact: false },
   { path: '/analytics',     label: 'Analytics',     icon: <IconAnalytics />,     exact: false },
   { path: '/transactions',  label: 'Transactions',  icon: <IconTransactions />,  exact: false },
+  { path: '/payments',      label: 'Payments',      icon: <IconPayments />,      exact: false },
+  { path: '/settings',      label: 'Settings',      icon: <IconSettings />,      exact: false },
+  { path: '/admin-users',   label: 'Admin Users',   icon: <IconAdminUsers />,    exact: false },
 ];
 
 export default function Layout() {
   const email = getAdminEmail() ?? '';
   const [collapsed, setCollapsed] = useState(false);
   const sidebarWidth = collapsed ? 0 : 270;
+  const [backendWarning, setBackendWarning] = useState<string | null>(null);
+
+  useEffect(() => {
+    verifyBackend().then((result) => {
+      if (result === 'wrong_server') {
+        const url = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+        setBackendWarning(`Connected to wrong backend -- expected DraftRight API on ${url}`);
+      } else if (result === 'unreachable') {
+        const url = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+        setBackendWarning(`Backend unreachable at ${url}`);
+      }
+    });
+  }, []);
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: '#202936' }}>
@@ -328,6 +372,20 @@ export default function Layout() {
 
         {/* Page content */}
         <main style={{ flex: 1, padding: '28px 28px 40px', marginTop: 70, overflowY: 'auto' }}>
+          {backendWarning && (
+            <div style={{
+              padding: '12px 20px',
+              marginBottom: 20,
+              borderRadius: 8,
+              background: 'rgba(250,137,107,0.15)',
+              border: '1px solid #fa896b',
+              color: '#fa896b',
+              fontSize: 14,
+              fontWeight: 500,
+            }}>
+              {backendWarning}
+            </div>
+          )}
           <Outlet />
         </main>
       </div>
