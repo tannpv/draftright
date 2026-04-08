@@ -115,6 +115,7 @@ public class App : Application
             {
                 BackendStatus.Connected => "Connected",
                 BackendStatus.NotLoggedIn => "Not Logged In",
+                BackendStatus.WrongServer => "Wrong Server",
                 _ => "Offline"
             };
 

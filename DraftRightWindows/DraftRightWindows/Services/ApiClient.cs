@@ -8,7 +8,7 @@ using DraftRightWindows.Models;
 
 namespace DraftRightWindows.Services;
 
-public enum BackendStatus { Connected, NotLoggedIn, Offline }
+public enum BackendStatus { Connected, NotLoggedIn, Offline, WrongServer }
 
 /// <summary>
 /// HttpClient wrapper for the DraftRight backend API.
@@ -92,13 +92,28 @@ public sealed class ApiClient : IDisposable
     {
         try
         {
-            using var request = new HttpRequestMessage(HttpMethod.Get, $"{_baseUrl}/auth/me");
-            request.Headers.Authorization = _http.DefaultRequestHeaders.Authorization;
-
+            // Step 1: Check /health for app identity
             using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(5));
-            using var response = await _http.SendAsync(request, cts.Token);
 
-            return response.StatusCode switch
+            using var healthRequest = new HttpRequestMessage(HttpMethod.Get, $"{_baseUrl}/health");
+            using var healthResponse = await _http.SendAsync(healthRequest, cts.Token);
+
+            if (!healthResponse.IsSuccessStatusCode)
+                return BackendStatus.Offline;
+
+            var healthBody = await healthResponse.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(healthBody);
+            var app = doc.RootElement.TryGetProperty("app", out var appProp) ? appProp.GetString() : null;
+
+            if (app != "draftright")
+                return BackendStatus.WrongServer;
+
+            // Step 2: Check /auth/me for login state
+            using var authRequest = new HttpRequestMessage(HttpMethod.Get, $"{_baseUrl}/auth/me");
+            authRequest.Headers.Authorization = _http.DefaultRequestHeaders.Authorization;
+            using var authResponse = await _http.SendAsync(authRequest, cts.Token);
+
+            return authResponse.StatusCode switch
             {
                 System.Net.HttpStatusCode.OK => BackendStatus.Connected,
                 System.Net.HttpStatusCode.Unauthorized => BackendStatus.NotLoggedIn,
