@@ -67,14 +67,10 @@ struct DraftRightApp: App {
             .environmentObject(appModel)
 
         let hostingController = NSHostingController(rootView: settingsView)
-        let fittingSize = hostingController.view.fittingSize
         let window = NSWindow(contentViewController: hostingController)
         window.title = "DraftRight V2 Settings"
         window.styleMask = [.titled, .closable]
-        window.setContentSize(NSSize(
-            width: max(fittingSize.width, 480),
-            height: max(fittingSize.height, 300)
-        ))
+        window.setContentSize(NSSize(width: 480, height: 420))
         window.center()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
