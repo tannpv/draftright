@@ -76,6 +76,30 @@ struct SettingsView: View {
                 }
             }
 
+            Section(header: Text("Mode")) {
+                Picker("Interaction Mode", selection: $appModel.appMode) {
+                    ForEach(AppMode.allCases) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                if appModel.appMode == .oneClick {
+                    Picker("One-Click Tone", selection: $appModel.oneClickTone) {
+                        ForEach(Tone.allCases) { tone in
+                            Text(tone.displayName).tag(tone)
+                        }
+                    }
+                    Text("A pencil appears when you select text. Click it to rewrite with the selected tone — no preview, no confirmation.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                } else {
+                    Text("Select text, then click the pencil (or use your hotkey) to open the rewrite panel with all tones.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+
             Section(header: Text("Backend Server")) {
                 TextField("Backend URL", text: $appModel.backendUrl)
                     .help("Leave default unless self-hosting")
