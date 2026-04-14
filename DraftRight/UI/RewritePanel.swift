@@ -40,8 +40,7 @@ struct RewritePanel: View {
                         selectTone(tone)
                     }) {
                         HStack(spacing: 4) {
-                            Image(systemName: iconName(for: tone))
-                                .font(.caption2)
+                            toneIcon(for: tone)
                             Text(tone.displayName)
                                 .font(.caption)
                         }
@@ -197,14 +196,16 @@ struct RewritePanel: View {
         return result
     }
 
-    private func iconName(for tone: Tone) -> String {
-        switch tone {
-        case .simple: return "text.word.spacing"
-        case .natural: return "bubble.left"
-        case .polished: return "sparkles"
-        case .concise: return "arrow.down.right.and.arrow.up.left"
-        case .technical: return "wrench.and.screwdriver"
-        case .translate: return "globe"
+    @ViewBuilder
+    private func toneIcon(for tone: Tone) -> some View {
+        if tone == .claude, let img = NSImage.claudeIcon {
+            Image(nsImage: img)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 12, height: 12)
+        } else {
+            Image(systemName: tone.sfSymbol)
+                .font(.caption2)
         }
     }
 }

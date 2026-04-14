@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Toast from '../components/Toast';
 import { apiFetch } from '../api';
 import { getAdminEmail } from '../auth';
@@ -9,12 +9,24 @@ interface ToastState {
 }
 
 export default function ProfilePage() {
-  const email = getAdminEmail();
+  const [adminName, setAdminName] = useState('Admin');
+  const [adminEmail, setAdminEmail] = useState(getAdminEmail());
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<ToastState | null>(null);
+
+  useEffect(() => {
+    apiFetch('/admin/auth/me')
+      .then((data: any) => {
+        if (data.name) setAdminName(data.name);
+        if (data.email) setAdminEmail(data.email);
+      })
+      .catch(() => {
+        // fall back to localStorage values
+      });
+  }, []);
 
   async function handleChangePassword() {
     if (newPassword !== confirmPassword) {
@@ -27,7 +39,7 @@ export default function ProfilePage() {
     }
     setSaving(true);
     try {
-      await apiFetch('/auth/change-password', {
+      await apiFetch('/admin/auth/change-password', {
         method: 'POST',
         body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
       });
@@ -67,11 +79,11 @@ export default function ProfilePage() {
               flexShrink: 0,
             }}
           >
-            {email.charAt(0).toUpperCase()}
+            {adminEmail.charAt(0).toUpperCase()}
           </div>
           <div>
-            <p style={{ color: '#eaeff4', fontSize: 16, fontWeight: 600, margin: 0 }}>Admin</p>
-            <p style={{ color: '#7c8fac', fontSize: 13, margin: '2px 0 0' }}>{email}</p>
+            <p style={{ color: '#eaeff4', fontSize: 16, fontWeight: 600, margin: 0 }}>{adminName}</p>
+            <p style={{ color: '#7c8fac', fontSize: 13, margin: '2px 0 0' }}>{adminEmail}</p>
             <span className="badge badge-primary" style={{ marginTop: 6, display: 'inline-block' }}>Administrator</span>
           </div>
         </div>

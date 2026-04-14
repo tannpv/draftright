@@ -51,6 +51,7 @@ body {
 .card {
   background: var(--card);
   border-radius: var(--radius);
+  padding: 24px;
 }
 
 .text-primary-color { color: var(--text); }

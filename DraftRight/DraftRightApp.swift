@@ -64,13 +64,16 @@ struct DraftRightApp: App {
 
         let settingsView = SettingsView()
             .environmentObject(appModel)
-            .frame(minWidth: 450, minHeight: 350)
 
         let hostingController = NSHostingController(rootView: settingsView)
+        let fittingSize = hostingController.view.fittingSize
         let window = NSWindow(contentViewController: hostingController)
         window.title = "DraftRight V2 Settings"
-        window.styleMask = [.titled, .closable, .resizable]
-        window.setContentSize(NSSize(width: 500, height: 400))
+        window.styleMask = [.titled, .closable]
+        window.setContentSize(NSSize(
+            width: max(fittingSize.width, 480),
+            height: max(fittingSize.height, 300)
+        ))
         window.center()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -107,6 +110,8 @@ struct DraftRightApp: App {
 
             diffWindow.presentPanel(
                 original: text,
+                visibleTones: appModel.visibleTones,
+                autoRunTone: appModel.autoRunTone,
                 onToneSelected: { tone in
                     // User picked a tone inside the panel → call API
                     diffWindow.model.startLoading(tone: tone)
@@ -121,7 +126,7 @@ struct DraftRightApp: App {
                                 backendUrl: appModel.backendUrl,
                                 targetLanguage: appModel.translateLanguage
                             )
-                            diffWindow.model.setResult(rewritten)
+                            diffWindow.model.handleRewriteResponse(rewritten, tone: tone)
                         } catch {
                             diffWindow.model.setError(error.localizedDescription)
                         }

@@ -1,20 +1,18 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { UsersService } from './users/users.service';
 import { PlansService } from './plans/plans.service';
-import { SubscriptionsService } from './subscriptions/subscriptions.service';
 import { AiProvidersService } from './ai-providers/ai-providers.service';
 import { AiProviderType } from './ai-providers/entities/ai-provider.entity';
 import { BillingPeriod } from './plans/entities/plan.entity';
-import { UserRole } from './users/entities/user.entity';
-import * as bcrypt from 'bcrypt';
+import { AdminUser } from './admin/entities/admin-user.entity';
+import { DataSource } from 'typeorm';
+import * as bcrypt from 'bcryptjs';
 
 async function seed() {
   const app = await NestFactory.createApplicationContext(AppModule);
 
-  const usersService = app.get(UsersService);
+  const dataSource = app.get(DataSource);
   const plansService = app.get(PlansService);
-  const subscriptionsService = app.get(SubscriptionsService);
   const aiProvidersService = app.get(AiProvidersService);
 
   // 1. Create Free plan if not exists
@@ -33,22 +31,23 @@ async function seed() {
     console.log('Free plan already exists');
   }
 
-  // 2. Create admin user if not exists
+  // 2. Create admin user in admin_users table if not exists
   const adminEmail = process.env.ADMIN_EMAIL || 'admin@draftright.com';
   const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
-  const existingAdmin = await usersService.findByEmail(adminEmail);
+  const adminUserRepo = dataSource.getRepository(AdminUser);
+  const existingAdmin = await adminUserRepo.findOne({ where: { email: adminEmail } });
   if (!existingAdmin) {
     const password_hash = await bcrypt.hash(adminPassword, 10);
-    const admin = await usersService.create({
+    const admin = adminUserRepo.create({
       email: adminEmail,
       password_hash,
       name: 'Admin',
-      role: UserRole.ADMIN,
+      role: 'admin',
     });
-    await subscriptionsService.createFreeSubscription(admin.id, freePlan.id);
-    console.log(`Created admin user: ${adminEmail}`);
+    await adminUserRepo.save(admin);
+    console.log(`Created admin user in admin_users: ${adminEmail}`);
   } else {
-    console.log('Admin user already exists');
+    console.log('Admin user already exists in admin_users');
   }
 
   // 3. Create default AI provider if none exists

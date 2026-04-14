@@ -3,6 +3,8 @@ services:
     build: ./backend
     ports:
       - "3000:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       - DATABASE_URL=postgresql://draftright:password@postgres:5432/draftright
       - REDIS_URL=redis://redis:6379
@@ -39,6 +41,13 @@ services:
     ports:
       - "6379:6379"
     restart: unless-stopped
+
+  website:
+    build: ./website
+    ports:
+      - "4000:80"
+    depends_on:
+      - backend
 
 volumes:
   pgdata:

@@ -82,8 +82,8 @@ export default function LoginPage() {
               <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
             </svg>
           </div>
-          <h1 style={{ color: '#eaeff4', fontSize: 22, fontWeight: 700, margin: '0 0 4px' }}>DraftRight Admin</h1>
-          <p style={{ color: '#7c8fac', fontSize: 13, margin: 0 }}>Sign in to your admin portal</p>
+          <h1 style={{ color: '#eaeff4', fontSize: 22, fontWeight: 700, margin: '0 0 4px' }}>Admin Portal</h1>
+          <p style={{ color: '#7c8fac', fontSize: 13, margin: 0 }}>Sign in to DraftRight administration</p>
         </div>
 
         <form onSubmit={handleSubmit}>

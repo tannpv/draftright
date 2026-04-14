@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { User, UserRole } from './entities/user.entity';
+import { User, UserRole, AuthProvider } from './entities/user.entity';
 
 @Injectable()
 export class UsersService {
@@ -18,9 +18,14 @@ export class UsersService {
     return this.usersRepo.findOne({ where: { id } });
   }
 
-  async create(data: { email: string; password_hash: string; name: string; role?: UserRole }): Promise<User> {
+  async create(data: { email: string; password_hash?: string; name: string; role?: UserRole; auth_provider?: AuthProvider; google_id?: string; facebook_id?: string; tiktok_id?: string; avatar_url?: string }): Promise<User> {
     const user = this.usersRepo.create(data);
     return this.usersRepo.save(user);
+  }
+
+  async findBySocialId(provider: AuthProvider, socialId: string): Promise<User | null> {
+    const column = `${provider}_id`;
+    return this.usersRepo.findOne({ where: { [column]: socialId } });
   }
 
   async update(id: string, data: Partial<User>): Promise<User> {

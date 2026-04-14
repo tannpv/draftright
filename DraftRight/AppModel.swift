@@ -25,6 +25,26 @@ final class AppModel: ObservableObject {
     }
     /// True when a hotkey is configured — pencil trigger is disabled, hotkey is active
     var hotkeyEnabled: Bool { !hotkeyString.isEmpty }
+    /// Which tones are enabled in the panel
+    @Published var enabledTones: Set<Tone> {
+        didSet { defaults.set(enabledTones.map { $0.rawValue }, forKey: Keys.enabledTones) }
+    }
+    /// Default tone that auto-runs when panel opens
+    @Published var defaultTone: Tone? {
+        didSet { defaults.set(defaultTone?.rawValue ?? "", forKey: Keys.defaultTab) }
+    }
+
+    /// Tones visible in the panel, in display order
+    var visibleTones: [Tone] {
+        Tone.allCases.filter { enabledTones.contains($0) }
+    }
+
+    /// The tone to auto-run when panel opens
+    var autoRunTone: Tone? {
+        guard let tone = defaultTone, enabledTones.contains(tone) else { return nil }
+        return tone
+    }
+
     @Published var isRewriting: Bool = false
     @Published var isLoggedIn: Bool = false
     @Published var backendStatus: BackendStatus = .offline
@@ -33,12 +53,15 @@ final class AppModel: ObservableObject {
     private let defaults = UserDefaults.standard
     private let healthClient = BackendClient()
     private var healthTimer: Timer?
+    var updateService: UpdateService?
 
     private enum Keys {
         static let backendUrl = "draftright.backendUrl"
         static let launchAtLogin = "draftright.launchAtLogin"
         static let translateLanguage = "draftright.translateLanguage"
         static let hotkey = "draftright.hotkey"
+        static let enabledTones = "draftright.enabledTones"
+        static let defaultTab = "draftright.defaultTab"
     }
 
     init() {
@@ -46,6 +69,15 @@ final class AppModel: ObservableObject {
         self.launchAtLogin = UserDefaults.standard.bool(forKey: Keys.launchAtLogin)
         self.translateLanguage = UserDefaults.standard.string(forKey: Keys.translateLanguage) ?? "Vietnamese"
         self.hotkeyString = UserDefaults.standard.string(forKey: Keys.hotkey) ?? ""
+        let allTones = Set(Tone.allCases)
+        let savedToneStrings = UserDefaults.standard.stringArray(forKey: Keys.enabledTones)
+        if let strings = savedToneStrings {
+            self.enabledTones = Set(strings.compactMap { Tone(rawValue: $0) })
+        } else {
+            self.enabledTones = allTones
+        }
+        let savedDefault = UserDefaults.standard.string(forKey: Keys.defaultTab) ?? ""
+        self.defaultTone = Tone(rawValue: savedDefault)
         self.accessToken = KeychainHelper.load(forKey: "accessToken") ?? ""
         self.refreshToken = KeychainHelper.load(forKey: "refreshToken") ?? ""
         self.isLoggedIn = !self.accessToken.isEmpty
@@ -60,11 +92,20 @@ final class AppModel: ObservableObject {
         #endif
 
         startHealthCheck()
+
+        // Start update check — 10 seconds after launch
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
+        updateService = UpdateService(currentVersion: version, backendUrl: backendUrl)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
+            Task { @MainActor in
+                await self?.updateService?.checkIfNeeded()
+            }
+        }
     }
 
     #if DEBUG
     private func autoLoginForDev() async {
-        let base = backendUrl.hasSuffix("/") ? String(backendUrl.dropLast()) : backendUrl
+        let base = backendUrl.strippingTrailingSlash
         DRLogger.log("autoLoginForDev: attempting login to \(base)/auth/login", category: .auth)
         guard let url = URL(string: "\(base)/auth/login") else {
             DRLogger.log("autoLoginForDev: invalid URL", category: .auth)
@@ -126,6 +167,8 @@ final class AppModel: ObservableObject {
         }
     }
 
+    private var lastAutoRecoveryAttempt: Date = .distantPast
+
     private func performHealthCheck() async {
         guard !isRewriting else { return }
         let status = await healthClient.checkHealth(
@@ -141,6 +184,45 @@ final class AppModel: ObservableObject {
             isLoggedIn = true
         } else if status == .notLoggedIn && isLoggedIn {
             isLoggedIn = false
+        }
+
+        // Auto-recovery: if offline and targeting localhost, try to start the backend
+        if status == .offline && backendUrl.contains("localhost") {
+            attemptAutoRecovery()
+        }
+    }
+
+    /// Run start-server.sh to bring up Docker services when backend is offline.
+    /// Throttled to at most once every 2 minutes to avoid spamming.
+    private func attemptAutoRecovery() {
+        let now = Date()
+        guard now.timeIntervalSince(lastAutoRecoveryAttempt) > 120 else { return }
+        lastAutoRecoveryAttempt = now
+
+        let scriptPath = Bundle.main.bundleURL
+            .deletingLastPathComponent()  // .app/Contents/MacOS/
+            .deletingLastPathComponent()  // .app/Contents/
+            .deletingLastPathComponent()  // .app/
+            .deletingLastPathComponent()  // project root (dev) or parent dir
+            .appendingPathComponent("start-server.sh")
+            .path
+
+        guard FileManager.default.isExecutableFile(atPath: scriptPath) else {
+            DRLogger.log("Auto-recovery: start-server.sh not found at \(scriptPath)", category: .app)
+            return
+        }
+
+        DRLogger.log("Auto-recovery: running start-server.sh", category: .app)
+        DispatchQueue.global(qos: .utility).async {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/bin/bash")
+            process.arguments = [scriptPath]
+            process.environment = [
+                "PATH": "/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin"
+            ]
+            try? process.run()
+            process.waitUntilExit()
+            DRLogger.log("Auto-recovery: start-server.sh exited with code \(process.terminationStatus)", category: .app)
         }
     }
 }

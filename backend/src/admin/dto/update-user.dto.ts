@@ -7,9 +7,9 @@ export class UpdateUserDto {
   @IsBoolean()
   is_active?: boolean;
 
-  @ApiPropertyOptional({ enum: ['user', 'admin'] })
+  @ApiPropertyOptional({ enum: ['user'] })
   @IsOptional()
-  @IsIn(['user', 'admin'])
+  @IsIn(['user'])
   role?: string;
 
   @ApiPropertyOptional()

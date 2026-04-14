@@ -53,6 +53,7 @@ final class ServiceProvider: NSObject {
         // Open the panel pre-set to this tone
         diffWindow.presentPanel(
             original: text,
+            visibleTones: appModel.visibleTones,
             onToneSelected: { [weak self] newTone in
                 guard let self = self else { return }
                 self.diffWindow.model.startLoading(tone: newTone)
@@ -64,7 +65,7 @@ final class ServiceProvider: NSObject {
                             backendUrl: self.appModel.backendUrl,
                             targetLanguage: self.appModel.translateLanguage
                         )
-                        self.diffWindow.model.setResult(result)
+                        self.diffWindow.model.handleRewriteResponse(result, tone: newTone)
                     } catch {
                         self.diffWindow.model.setError(error.localizedDescription)
                     }
@@ -94,7 +95,7 @@ final class ServiceProvider: NSObject {
                     backendUrl: appModel.backendUrl,
                     targetLanguage: appModel.translateLanguage
                 )
-                diffWindow.model.setResult(rewritten)
+                diffWindow.model.handleRewriteResponse(rewritten, tone: tone)
             } catch {
                 diffWindow.model.setError(error.localizedDescription)
                 showNotification("Rewrite failed: \(error.localizedDescription)")

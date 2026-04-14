@@ -1,5 +1,11 @@
 import Foundation
 
+extension String {
+    var strippingTrailingSlash: String {
+        hasSuffix("/") ? String(dropLast()) : self
+    }
+}
+
 struct BackendRewriteRequest: Codable {
     let text: String
     let tone: String
@@ -65,7 +71,7 @@ final class BackendClient {
             throw BackendClientError.notLoggedIn
         }
 
-        let base = backendUrl.hasSuffix("/") ? String(backendUrl.dropLast()) : backendUrl
+        let base = backendUrl.strippingTrailingSlash
         guard let url = URL(string: "\(base)/rewrite") else {
             DRLogger.log("rewrite FAILED: invalid URL", category: .api)
             throw BackendClientError.invalidURL
@@ -99,13 +105,22 @@ final class BackendClient {
             throw BackendClientError.httpError(httpResponse.statusCode, bodyText)
         }
 
+        // Check if this is a grammar check response
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let grammarDict = json["grammar"] {
+            let grammarData = try JSONSerialization.data(withJSONObject: grammarDict)
+            let jsonString = String(data: grammarData, encoding: .utf8) ?? "{}"
+            DRLogger.log("rewrite SUCCESS: HTTP \(httpStatus) grammarCheck resultLen=\(jsonString.count)", category: .api)
+            return jsonString
+        }
+
         let decoded = try JSONDecoder().decode(BackendRewriteResponse.self, from: data)
         DRLogger.log("rewrite SUCCESS: HTTP \(httpStatus) resultLen=\(decoded.rewritten_text.count)", category: .api)
         return decoded.rewritten_text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     func checkHealth(backendUrl: String, accessToken: String?) async -> BackendStatus {
-        let base = backendUrl.hasSuffix("/") ? String(backendUrl.dropLast()) : backendUrl
+        let base = backendUrl.strippingTrailingSlash
 
         // Step 1: Check /health for app identity
         guard let healthUrl = URL(string: "\(base)/health") else {

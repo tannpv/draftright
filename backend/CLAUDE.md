@@ -52,4 +52,4 @@ npx ts-node src/seed.ts  # Alternative seed command
 
 ## Tone System Prompts
 
-Defined in `src/rewrite/rewrite.service.ts` — 6 tones: simple, natural, polished, concise, technical, translate.
+Defined in `src/rewrite/rewrite.service.ts` — 7 tones: simple, natural, polished, concise, technical, claude, translate.

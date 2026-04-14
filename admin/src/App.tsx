@@ -10,6 +10,9 @@ import ProvidersPage from './pages/ProvidersPage';
 import ProfilePage from './pages/ProfilePage';
 import AnalyticsPage from './pages/AnalyticsPage';
 import TransactionsPage from './pages/TransactionsPage';
+import PaymentsPage from './pages/PaymentsPage';
+import SettingsPage from './pages/SettingsPage';
+import AdminUsersPage from './pages/AdminUsersPage';
 
 function ProtectedRoute() {
   if (!isAuthenticated()) {
@@ -33,6 +36,9 @@ export default function App() {
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/analytics" element={<AnalyticsPage />} />
             <Route path="/transactions" element={<TransactionsPage />} />
+            <Route path="/payments" element={<PaymentsPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/admin-users" element={<AdminUsersPage />} />
           </Route>
         </Route>
         {/* Fallback */}

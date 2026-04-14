@@ -4,7 +4,13 @@ import {
 
 export enum UserRole {
   USER = 'user',
-  ADMIN = 'admin',
+}
+
+export enum AuthProvider {
+  LOCAL = 'local',
+  GOOGLE = 'google',
+  FACEBOOK = 'facebook',
+  TIKTOK = 'tiktok',
 }
 
 @Entity('users')
@@ -15,7 +21,7 @@ export class User {
   @Column({ type: 'varchar', length: 255, unique: true })
   email: string;
 
-  @Column({ type: 'varchar', length: 255 })
+  @Column({ type: 'varchar', length: 255, nullable: true })
   password_hash: string;
 
   @Column({ type: 'varchar', length: 255 })
@@ -26,6 +32,21 @@ export class User {
 
   @Column({ type: 'enum', enum: UserRole, default: UserRole.USER })
   role: UserRole;
+
+  @Column({ type: 'enum', enum: AuthProvider, default: AuthProvider.LOCAL })
+  auth_provider: AuthProvider;
+
+  @Column({ type: 'varchar', length: 255, nullable: true, unique: true })
+  google_id: string;
+
+  @Column({ type: 'varchar', length: 255, nullable: true, unique: true })
+  facebook_id: string;
+
+  @Column({ type: 'varchar', length: 255, nullable: true, unique: true })
+  tiktok_id: string;
+
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  avatar_url: string;
 
   @CreateDateColumn()
   created_at: Date;

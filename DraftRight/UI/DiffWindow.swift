@@ -9,12 +9,14 @@ final class RewritePanelModel: ObservableObject {
     @Published var isLoading: Bool = false
     @Published var errorMessage: String? = nil
     @Published var selectedTone: Tone? = nil
+    @Published var grammarResult: GrammarResult? = nil
 
     func startLoading(tone: Tone) {
         selectedTone = tone
         isLoading = true
         rewritten = nil
         errorMessage = nil
+        grammarResult = nil
     }
 
     func setResult(_ text: String) {
@@ -34,6 +36,23 @@ final class RewritePanelModel: ObservableObject {
         isLoading = false
         errorMessage = nil
         selectedTone = nil
+        grammarResult = nil
+    }
+
+    func setGrammarResult(_ result: GrammarResult) {
+        grammarResult = result
+        isLoading = false
+        errorMessage = nil
+    }
+
+    func handleRewriteResponse(_ text: String, tone: Tone) {
+        if tone == .grammarCheck,
+           let data = text.data(using: .utf8),
+           let grammar = try? JSONDecoder().decode(GrammarResult.self, from: data) {
+            setGrammarResult(grammar)
+        } else {
+            setResult(text)
+        }
     }
 }
 
@@ -54,10 +73,13 @@ final class DiffWindow {
 
     func presentPanel(
         original: String,
+        visibleTones: [Tone]? = nil,
+        autoRunTone: Tone? = nil,
         onToneSelected: @escaping (Tone) -> Void,
         onReplace: @escaping (String) -> Void,
         onCopy: @escaping (String) -> Void
     ) {
+        DRLogger.log("presentPanel called, original length=\(original.count)", category: .panel)
         close()
         model.reset()
 
@@ -67,6 +89,8 @@ final class DiffWindow {
         let panel = RewritePanelContainer(
             original: original,
             model: model,
+            visibleTones: visibleTones ?? Tone.allCases.map { $0 },
+            autoRunTone: autoRunTone,
             onToneSelected: { tone in
                 onToneSelected(tone)
             },
@@ -88,7 +112,11 @@ final class DiffWindow {
         )
 
         let hosting = NSHostingView(rootView: panel)
-        let size = CGSize(width: 500, height: 420)
+        let fittingSize = hosting.fittingSize
+        let size = CGSize(
+            width: max(fittingSize.width, 520),
+            height: max(fittingSize.height, 420)
+        )
         hosting.frame = CGRect(origin: .zero, size: size)
 
         let screen = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
@@ -122,9 +150,10 @@ final class DiffWindow {
         nsPanel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         nsPanel.contentView = hosting
         nsPanel.isMovableByWindowBackground = true
-        nsPanel.minSize = NSSize(width: 400, height: 250)
+        nsPanel.minSize = NSSize(width: 450, height: 350)
         nsPanel.makeKeyAndOrderFront(nil)
         self.window = nsPanel
+        DRLogger.log("Panel shown at x=\(x) y=\(y) size=\(size)", category: .panel)
 
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             if event.keyCode == UInt16(kVK_Escape) {
@@ -136,6 +165,7 @@ final class DiffWindow {
     }
 
     func close() {
+        DRLogger.log("Panel closing", category: .panel)
         if let keyMonitor {
             NSEvent.removeMonitor(keyMonitor)
             self.keyMonitor = nil
@@ -164,6 +194,8 @@ final class DiffWindow {
 struct RewritePanelContainer: View {
     let original: String
     @ObservedObject var model: RewritePanelModel
+    let visibleTones: [Tone]
+    let autoRunTone: Tone?
     let onToneSelected: (Tone) -> Void
     let onReplace: (String) -> Void
     let onCopy: (String) -> Void
@@ -171,50 +203,80 @@ struct RewritePanelContainer: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Single toolbar row: tone icons | spacer | action buttons + close
-            HStack(spacing: 2) {
-                ForEach(Tone.allCases) { tone in
-                    Button(action: { onToneSelected(tone) }) {
-                        Image(systemName: iconName(for: tone))
-                            .font(.system(size: 12))
-                            .frame(width: 28, height: 24)
-                            .background(model.selectedTone == tone ? Color.accentColor.opacity(0.2) : Color.clear)
-                            .foregroundColor(model.selectedTone == tone ? .accentColor : .secondary)
-                            .cornerRadius(4)
-                    }
-                    .buttonStyle(.plain)
-                    .help(tone.displayName)
-                }
-
+            // Header: title + close
+            HStack {
+                Image(systemName: "pencil.and.outline")
+                    .foregroundColor(.accentColor)
+                    .font(.system(size: 14))
+                Text("DraftRight")
+                    .font(.system(size: 13, weight: .semibold))
                 Spacer()
 
                 if model.rewritten != nil {
-                    Button("Replace") { onReplace(model.rewritten!) }
-                        .font(.caption)
-                        .keyboardShortcut(.defaultAction)
-                    Button("Copy") { onCopy(model.rewritten!) }
-                        .font(.caption)
+                    Button(action: { onReplace(model.rewritten!) }) {
+                        Label("Replace", systemImage: "arrow.right.doc.on.clipboard")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                    .keyboardShortcut(.defaultAction)
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+
+                    Button(action: { onCopy(model.rewritten!) }) {
+                        Label("Copy", systemImage: "doc.on.doc")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
                 }
 
                 Button(action: onCancel) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 10))
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 14))
                         .foregroundColor(.secondary)
-                        .frame(width: 20, height: 20)
                 }
                 .buttonStyle(.borderless)
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
+            .padding(.horizontal, 12)
+            .padding(.top, 10)
+            .padding(.bottom, 6)
+
+            // Tone picker row with labels
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 4) {
+                    ForEach(visibleTones) { tone in
+                        Button(action: { onToneSelected(tone) }) {
+                            HStack(spacing: 4) {
+                                toneIcon(for: tone)
+                                Text(tone.displayName)
+                                    .font(.system(size: 11))
+                                    .lineLimit(1)
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 5)
+                            .background(
+                                model.selectedTone == tone
+                                    ? Color.accentColor.opacity(0.2)
+                                    : Color.primary.opacity(0.05)
+                            )
+                            .foregroundColor(model.selectedTone == tone ? .accentColor : .secondary)
+                            .cornerRadius(6)
+                        }
+                        .buttonStyle(.plain)
+                        .help(tone.displayName)
+                    }
+                }
+                .padding(.horizontal, 12)
+            }
+            .padding(.bottom, 8)
 
             // Content fills the rest
             if model.isLoading {
                 HStack {
                     Spacer()
-                    VStack(spacing: 6) {
-                        ProgressView().scaleEffect(0.7)
-                        Text("Rewriting...")
-                            .font(.caption2)
+                    VStack(spacing: 8) {
+                        ProgressView().scaleEffect(0.8)
+                        Text("Rewriting with \(model.selectedTone?.displayName ?? "AI")...")
+                            .font(.system(size: 12))
                             .foregroundColor(.secondary)
                     }
                     Spacer()
@@ -230,49 +292,75 @@ struct RewritePanelContainer: View {
                             .font(.caption2)
                             .foregroundColor(.secondary)
                             .multilineTextAlignment(.center)
+                            .textSelection(.enabled)
+                        Button("Copy Error") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(error, forType: .string)
+                        }
+                        .font(.caption2)
                     }
                     Spacer()
                 }
                 .frame(maxHeight: .infinity)
                 .padding(.horizontal, 10)
+            } else if let grammarResult = model.grammarResult {
+                GrammarCheckView(
+                    originalText: original,
+                    result: grammarResult,
+                    onReplace: onReplace,
+                    onCopy: onCopy
+                )
             } else if let rewritten = model.rewritten {
-                HStack(alignment: .top, spacing: 1) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Original").font(.caption2).foregroundColor(.secondary).fontWeight(.semibold)
+                HStack(alignment: .top, spacing: 2) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 4) {
+                            Circle().fill(Color.red.opacity(0.6)).frame(width: 6, height: 6)
+                            Text("Original").font(.system(size: 11, weight: .semibold)).foregroundColor(.secondary)
+                        }
                         ScrollView {
                             diffText(tokens: WordDiff.diff(old: original, new: rewritten).oldTokens, highlightKind: .deleted, color: .red)
-                                .font(.system(size: 12))
+                                .font(.system(size: 13))
+                                .lineSpacing(3)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .textSelection(.enabled)
                         }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .padding(6)
+                    .padding(10)
                     .background(Color.red.opacity(0.03))
-                    .cornerRadius(4)
+                    .cornerRadius(6)
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Rewritten").font(.caption2).foregroundColor(.secondary).fontWeight(.semibold)
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 4) {
+                            Circle().fill(Color.green.opacity(0.6)).frame(width: 6, height: 6)
+                            Text("Rewritten").font(.system(size: 11, weight: .semibold)).foregroundColor(.secondary)
+                        }
                         ScrollView {
                             diffText(tokens: WordDiff.diff(old: original, new: rewritten).newTokens, highlightKind: .inserted, color: .green)
-                                .font(.system(size: 12))
+                                .font(.system(size: 13))
+                                .lineSpacing(3)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .textSelection(.enabled)
                         }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .padding(6)
+                    .padding(10)
                     .background(Color.green.opacity(0.03))
-                    .cornerRadius(4)
+                    .cornerRadius(6)
                 }
-                .padding(.horizontal, 8)
-                .padding(.bottom, 8)
+                .padding(.horizontal, 10)
+                .padding(.bottom, 10)
             } else {
                 HStack {
                     Spacer()
-                    Text("Pick a tone to rewrite")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
+                    VStack(spacing: 6) {
+                        Image(systemName: "hand.tap")
+                            .font(.system(size: 24))
+                            .foregroundColor(.secondary.opacity(0.5))
+                        Text("Pick a tone above to rewrite your text")
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+                    }
                     Spacer()
                 }
                 .frame(maxHeight: .infinity)
@@ -280,6 +368,12 @@ struct RewritePanelContainer: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(.ultraThickMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .onAppear {
+            // Auto-run the default tab when panel opens
+            if let tone = autoRunTone, model.selectedTone == nil {
+                onToneSelected(tone)
+            }
+        }
     }
 
     private func diffText(tokens: [DiffToken], highlightKind: DiffKind, color: Color) -> Text {
@@ -298,14 +392,32 @@ struct RewritePanelContainer: View {
         return result
     }
 
-    private func iconName(for tone: Tone) -> String {
-        switch tone {
-        case .simple: return "text.word.spacing"
-        case .natural: return "bubble.left"
-        case .polished: return "sparkles"
-        case .concise: return "arrow.down.right.and.arrow.up.left"
-        case .technical: return "wrench.and.screwdriver"
-        case .translate: return "globe"
+    @ViewBuilder
+    private func toneIcon(for tone: Tone) -> some View {
+        if tone == .claude, let img = NSImage.claudeIcon {
+            Image(nsImage: img)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 14, height: 14)
+        } else {
+            Image(systemName: tone.sfSymbol)
+                .font(.system(size: 12))
         }
     }
+}
+
+// MARK: - Shared tone icon helper
+
+extension NSImage {
+    static let claudeIcon: NSImage? = {
+        if let img = NSImage(named: "claude-icon") { return img }
+        // SPM bundles resources in Bundle.module
+        if let url = Bundle.module.url(forResource: "claude-icon", withExtension: "png") {
+            return NSImage(contentsOf: url)
+        }
+        if let path = Bundle.main.path(forResource: "claude-icon", ofType: "png") {
+            return NSImage(contentsOfFile: path)
+        }
+        return nil
+    }()
 }

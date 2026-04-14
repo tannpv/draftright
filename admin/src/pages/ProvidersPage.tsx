@@ -8,12 +8,21 @@ interface Provider {
   id: string;
   name: string;
   type: string;
-  endpoint: string;
+  endpoint_url: string;
   model: string;
-  isDefault: boolean;
-  active: boolean;
+  api_key: string;
+  temperature: number;
+  is_default: boolean;
+  is_active: boolean;
   [key: string]: unknown;
 }
+
+const PROVIDER_PRESETS: Record<string, { endpoint: string; model: string; needsKey: boolean }> = {
+  openai: { endpoint: 'https://api.openai.com/v1/chat/completions', model: 'gpt-4o-mini', needsKey: true },
+  anthropic: { endpoint: 'https://api.anthropic.com/v1/messages', model: 'claude-sonnet-4-20250514', needsKey: true },
+  ollama: { endpoint: 'http://localhost:11434/v1/chat/completions', model: 'llama3.2:latest', needsKey: false },
+  custom: { endpoint: '', model: '', needsKey: true },
+};
 
 interface ToastState {
   message: string;
@@ -23,11 +32,11 @@ interface ToastState {
 const emptyForm = {
   name: '',
   type: 'openai',
-  endpoint: '',
-  model: '',
-  apiKey: '',
-  isDefault: false,
-  active: true,
+  endpoint_url: 'https://api.openai.com/v1/chat/completions',
+  model: 'gpt-4o-mini',
+  api_key: '',
+  is_default: false,
+  is_active: true,
 };
 
 export default function ProvidersPage() {
@@ -70,13 +79,23 @@ export default function ProvidersPage() {
     setForm({
       name: provider.name,
       type: provider.type,
-      endpoint: provider.endpoint,
+      endpoint_url: provider.endpoint_url,
       model: provider.model,
-      apiKey: '',
-      isDefault: provider.isDefault,
-      active: provider.active,
+      api_key: '',
+      is_default: provider.is_default,
+      is_active: provider.is_active,
     });
     setShowModal(true);
+  }
+
+  function handleTypeChange(newType: string) {
+    const preset = PROVIDER_PRESETS[newType];
+    setForm({
+      ...form,
+      type: newType,
+      endpoint_url: preset?.endpoint || form.endpoint_url,
+      model: preset?.model || form.model,
+    });
   }
 
   async function saveProvider() {
@@ -84,12 +103,12 @@ export default function ProvidersPage() {
     const payload: Record<string, unknown> = {
       name: form.name,
       type: form.type,
-      endpoint: form.endpoint,
+      endpoint_url: form.endpoint_url,
       model: form.model,
-      isDefault: form.isDefault,
-      active: form.active,
+      is_default: form.is_default,
+      is_active: form.is_active,
     };
-    if (form.apiKey) payload.apiKey = form.apiKey;
+    if (form.api_key) payload.api_key = form.api_key;
 
     try {
       if (editingProvider) {
@@ -150,10 +169,10 @@ export default function ProvidersPage() {
     },
     {
       header: 'Endpoint',
-      key: 'endpoint',
+      key: 'endpoint_url',
       render: (row: Provider) => (
         <span style={{ color: '#7c8fac', fontSize: 12, fontFamily: 'monospace', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', display: 'inline-block' }}>
-          {row.endpoint}
+          {row.endpoint_url}
         </span>
       ),
     },
@@ -166,18 +185,18 @@ export default function ProvidersPage() {
     },
     {
       header: 'Default',
-      key: 'isDefault',
+      key: 'is_default',
       render: (row: Provider) =>
-        row.isDefault
+        row.is_default
           ? <span className="badge badge-primary">Default</span>
           : <span style={{ color: '#333f55' }}>—</span>,
     },
     {
       header: 'Active',
-      key: 'active',
+      key: 'is_active',
       render: (row: Provider) => (
-        <span className={`badge ${row.active ? 'badge-success' : 'badge-muted'}`}>
-          {row.active ? 'Yes' : 'No'}
+        <span className={`badge ${row.is_active ? 'badge-success' : 'badge-muted'}`}>
+          {row.is_active ? 'Yes' : 'No'}
         </span>
       ),
     },
@@ -267,22 +286,22 @@ export default function ProvidersPage() {
               <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Type</label>
               <select
                 value={form.type}
-                onChange={(e) => setForm({ ...form, type: e.target.value })}
+                onChange={(e) => handleTypeChange(e.target.value)}
                 className="dark-input"
               >
                 <option value="openai">OpenAI</option>
-                <option value="anthropic">Anthropic</option>
-                <option value="ollama">Ollama</option>
+                <option value="anthropic">Anthropic (Claude)</option>
+                <option value="ollama">Ollama (Local)</option>
                 <option value="custom">Custom</option>
               </select>
             </div>
             <div>
-              <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Endpoint</label>
+              <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Endpoint URL</label>
               <input
                 type="text"
-                value={form.endpoint}
-                onChange={(e) => setForm({ ...form, endpoint: e.target.value })}
-                placeholder="e.g. https://api.openai.com/v1"
+                value={form.endpoint_url}
+                onChange={(e) => setForm({ ...form, endpoint_url: e.target.value })}
+                placeholder="e.g. https://api.openai.com/v1/chat/completions"
                 className="dark-input"
               />
             </div>
@@ -299,12 +318,13 @@ export default function ProvidersPage() {
             <div>
               <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>
                 API Key{editingProvider && <span style={{ color: '#7c8fac', fontWeight: 400 }}> (leave blank to keep existing)</span>}
+                {form.type === 'ollama' && <span style={{ color: '#13deb9', fontWeight: 400 }}> (not required for Ollama)</span>}
               </label>
               <input
                 type="password"
-                value={form.apiKey}
-                onChange={(e) => setForm({ ...form, apiKey: e.target.value })}
-                placeholder="sk-..."
+                value={form.api_key}
+                onChange={(e) => setForm({ ...form, api_key: e.target.value })}
+                placeholder={form.type === 'anthropic' ? 'sk-ant-...' : form.type === 'ollama' ? '(optional)' : 'sk-...'}
                 className="dark-input"
               />
             </div>
@@ -313,8 +333,8 @@ export default function ProvidersPage() {
                 <input
                   type="checkbox"
                   id="isDefault"
-                  checked={form.isDefault}
-                  onChange={(e) => setForm({ ...form, isDefault: e.target.checked })}
+                  checked={form.is_default}
+                  onChange={(e) => setForm({ ...form, is_default: e.target.checked })}
                   style={{ width: 16, height: 16, accentColor: '#5d87ff', cursor: 'pointer' }}
                 />
                 <label htmlFor="isDefault" style={{ color: '#eaeff4', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>Default</label>
@@ -323,8 +343,8 @@ export default function ProvidersPage() {
                 <input
                   type="checkbox"
                   id="providerActive"
-                  checked={form.active}
-                  onChange={(e) => setForm({ ...form, active: e.target.checked })}
+                  checked={form.is_active}
+                  onChange={(e) => setForm({ ...form, is_active: e.target.checked })}
                   style={{ width: 16, height: 16, accentColor: '#5d87ff', cursor: 'pointer' }}
                 />
                 <label htmlFor="providerActive" style={{ color: '#eaeff4', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>Active</label>

@@ -1,6 +1,7 @@
 import {
-  Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards,
+  Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Res, Header, BadRequestException,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -10,6 +11,13 @@ import { PlansService } from '../plans/plans.service';
 import { AiProvidersService } from '../ai-providers/ai-providers.service';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { UsageService } from '../usage/usage.service';
+import { RewriteLogService } from '../rewrite/rewrite-log.service';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { AppSettings } from './entities/app-settings.entity';
+import { AdminUser } from './entities/admin-user.entity';
+import { PaymentService } from '../payment/payment.service';
+import * as bcrypt from 'bcryptjs';
 import { GrantSubscriptionDto } from './dto/grant-subscription.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 
@@ -25,7 +33,36 @@ export class AdminController {
     private readonly aiProvidersService: AiProvidersService,
     private readonly subscriptionsService: SubscriptionsService,
     private readonly usageService: UsageService,
+    private readonly rewriteLogService: RewriteLogService,
+    @InjectRepository(AppSettings)
+    private readonly settingsRepo: Repository<AppSettings>,
+    @InjectRepository(AdminUser)
+    private readonly adminUserRepo: Repository<AdminUser>,
+    private readonly paymentService: PaymentService,
   ) {}
+
+  // --- Settings ---
+
+  @Get('settings')
+  async getSettings() {
+    let settings = await this.settingsRepo.findOne({ where: {} });
+    if (!settings) {
+      settings = this.settingsRepo.create();
+      await this.settingsRepo.save(settings);
+    }
+    return settings;
+  }
+
+  @Patch('settings')
+  async updateSettings(@Body() body: Partial<AppSettings>) {
+    let settings = await this.settingsRepo.findOne({ where: {} });
+    if (!settings) {
+      settings = this.settingsRepo.create();
+      await this.settingsRepo.save(settings);
+    }
+    await this.settingsRepo.update(settings.id, body);
+    return this.settingsRepo.findOne({ where: { id: settings.id } });
+  }
 
   @Get('stats')
   async getStats() {
@@ -180,5 +217,105 @@ export class AdminController {
     }));
 
     return { transactions, total: result.total };
+  }
+
+  // --- Training Data (Fine-tuning) ---
+
+  @Get('training-data/stats')
+  async trainingDataStats() {
+    const [total, byQuality] = await Promise.all([
+      this.rewriteLogService.count(),
+      this.rewriteLogService.countByQuality(),
+    ]);
+    return { total, ...byQuality };
+  }
+
+  @Get('training-data')
+  async listTrainingData(@Query('page') page?: string, @Query('limit') limit?: string) {
+    return this.rewriteLogService.findPending(
+      page ? parseInt(page) : 1,
+      limit ? parseInt(limit) : 20,
+    );
+  }
+
+  @Patch('training-data/:id')
+  async reviewTrainingData(@Param('id') id: string, @Body() body: { quality: 'approved' | 'rejected' }) {
+    await this.rewriteLogService.updateQuality(id, body.quality);
+    return { success: true };
+  }
+
+  @Get('training-data/export')
+  async exportTrainingData(@Res() res: Response) {
+    const jsonl = await this.rewriteLogService.exportApproved('jsonl');
+    res.setHeader('Content-Type', 'application/jsonl');
+    res.setHeader('Content-Disposition', 'attachment; filename=draftright-training-data.jsonl');
+    res.send(jsonl);
+  }
+
+  // --- Payments ---
+
+  @Get('payments/stats')
+  async paymentStats() {
+    return this.paymentService.getStats();
+  }
+
+  @Get('payments')
+  async listPayments(@Query('page') page?: string, @Query('limit') limit?: string, @Query('status') status?: string) {
+    return this.paymentService.findAll({
+      page: page ? parseInt(page) : 1,
+      limit: limit ? parseInt(limit) : 20,
+      status,
+    });
+  }
+
+  @Post('payments/:id/confirm')
+  async confirmPayment(@Param('id') id: string, @Body() body: { notes?: string }) {
+    return this.paymentService.adminConfirm(id, body.notes);
+  }
+
+  // --- Admin Users CRUD ---
+
+  @Get('admin-users')
+  async listAdminUsers() {
+    const users = await this.adminUserRepo.find({ order: { created_at: 'ASC' } });
+    return users.map(({ password_hash, ...rest }) => rest);
+  }
+
+  @Post('admin-users')
+  async createAdminUser(@Body() body: { email: string; password: string; name: string; role?: string }) {
+    const existing = await this.adminUserRepo.findOne({ where: { email: body.email } });
+    if (existing) throw new BadRequestException('Email already exists');
+
+    const password_hash = await bcrypt.hash(body.password, 10);
+    const user = this.adminUserRepo.create({
+      email: body.email,
+      password_hash,
+      name: body.name,
+      role: body.role || 'admin',
+    });
+    const saved = await this.adminUserRepo.save(user);
+    const { password_hash: _, ...result } = saved;
+    return result;
+  }
+
+  @Patch('admin-users/:id')
+  async updateAdminUser(@Param('id') id: string, @Body() body: { name?: string; email?: string; role?: string; is_active?: boolean; password?: string }) {
+    const update: any = {};
+    if (body.name !== undefined) update.name = body.name;
+    if (body.email !== undefined) update.email = body.email;
+    if (body.role !== undefined) update.role = body.role;
+    if (body.is_active !== undefined) update.is_active = body.is_active;
+    if (body.password) update.password_hash = await bcrypt.hash(body.password, 10);
+
+    await this.adminUserRepo.update(id, update);
+    const user = await this.adminUserRepo.findOneOrFail({ where: { id } });
+    const { password_hash, ...result } = user;
+    return result;
+  }
+
+  @Delete('admin-users/:id')
+  async deleteAdminUser(@Param('id') id: string) {
+    await this.adminUserRepo.update(id, { is_active: false });
+    return { success: true };
   }
 }

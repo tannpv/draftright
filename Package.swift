@@ -9,6 +9,12 @@ let package = Package(
             name: "DraftRight",
             path: "DraftRight",
             exclude: ["Info.plist"],
+            resources: [
+                .copy("Resources/claude-icon.png"),
+            ],
+            swiftSettings: [
+                .define("DEBUG", .when(configuration: .debug))
+            ],
             linkerSettings: [
                 .unsafeFlags([
                     "-Xlinker", "-sectcreate",

@@ -11,6 +11,7 @@ import { UsageModule } from './usage/usage.module';
 import { RewriteModule } from './rewrite/rewrite.module';
 import { AdminModule } from './admin/admin.module';
 import { PaymentModule } from './payment/payment.module';
+import { UpdatesModule } from './updates/updates.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { PaymentModule } from './payment/payment.module';
     RewriteModule,
     AdminModule,
     PaymentModule,
+    UpdatesModule,
   ],
 })
 export class AppModule {}

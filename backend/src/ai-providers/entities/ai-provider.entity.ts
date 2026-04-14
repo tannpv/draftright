@@ -4,6 +4,7 @@ import {
 
 export enum AiProviderType {
   OPENAI = 'openai',
+  ANTHROPIC = 'anthropic',
   OLLAMA = 'ollama',
   CUSTOM = 'custom',
 }

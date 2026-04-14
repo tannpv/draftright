@@ -4,6 +4,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
+using DraftRightWindows.Helpers;
 using DraftRightWindows.Models;
 
 namespace DraftRightWindows.Services;
@@ -26,7 +27,7 @@ public sealed class ApiClient : IDisposable
 
     public ApiClient(string backendUrl)
     {
-        _baseUrl = backendUrl.TrimEnd('/');
+        _baseUrl = backendUrl.StripTrailingSlash();
         _http = new HttpClient
         {
             Timeout = TimeSpan.FromSeconds(30)
@@ -36,7 +37,7 @@ public sealed class ApiClient : IDisposable
     /// <summary>
     /// Sets the Bearer authorization header for subsequent requests.
     /// </summary>
-    public void SetBaseUrl(string url) => _baseUrl = url.TrimEnd('/');
+    public void SetBaseUrl(string url) => _baseUrl = url.StripTrailingSlash();
 
     public void SetToken(string token)
     {

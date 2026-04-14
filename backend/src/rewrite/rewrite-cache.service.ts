@@ -66,4 +66,17 @@ export class RewriteCacheService implements OnModuleDestroy {
   private batchKey(userId: string, text: string): string {
     return `batch:${userId}:${this.hashText(text)}`;
   }
+
+  /** Increment a Redis key and set expiry if new. Returns the new count. */
+  async incrementWithExpiry(key: string, ttlSeconds: number): Promise<number> {
+    try {
+      const count = await this.redis.incr(key);
+      if (count === 1) {
+        await this.redis.expire(key, ttlSeconds);
+      }
+      return count;
+    } catch {
+      return 0; // Redis unavailable — allow request
+    }
+  }
 }

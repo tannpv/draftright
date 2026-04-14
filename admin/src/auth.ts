@@ -10,7 +10,7 @@ interface LoginResponse {
 }
 
 export async function login(email: string, password: string): Promise<void> {
-  const data = await apiFetch('/auth/login', {
+  const data = await apiFetch('/admin/auth/login', {
     method: 'POST',
     body: JSON.stringify({ email, password }),
   }) as LoginResponse;
