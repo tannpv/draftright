@@ -2,6 +2,23 @@ import Foundation
 import SwiftUI
 import Combine
 
+/// Top-level interaction mode for the macOS app.
+/// - `.advanced`: Pencil → diff panel with multiple tones (legacy behavior).
+/// - `.oneClick`: Pencil → instant rewrite+replace with a preset tone, no panel.
+enum AppMode: String, CaseIterable, Identifiable {
+    case advanced
+    case oneClick
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .advanced: return "Advanced"
+        case .oneClick: return "One-Click"
+        }
+    }
+}
+
 @MainActor
 final class AppModel: ObservableObject {
     @Published var accessToken: String = "" {
@@ -34,6 +51,17 @@ final class AppModel: ObservableObject {
         didSet { defaults.set(defaultTone?.rawValue ?? "", forKey: Keys.defaultTab) }
     }
 
+    /// Top-level interaction mode. Defaults to `.advanced` on first launch so
+    /// existing users see no behavior change after updating.
+    @Published var appMode: AppMode {
+        didSet { defaults.set(appMode.rawValue, forKey: Keys.appMode) }
+    }
+
+    /// Tone used by One-Click mode. Only consulted when `appMode == .oneClick`.
+    @Published var oneClickTone: Tone {
+        didSet { defaults.set(oneClickTone.rawValue, forKey: Keys.oneClickTone) }
+    }
+
     /// Tones visible in the panel, in display order
     var visibleTones: [Tone] {
         Tone.allCases.filter { enabledTones.contains($0) }
@@ -62,6 +90,8 @@ final class AppModel: ObservableObject {
         static let hotkey = "draftright.hotkey"
         static let enabledTones = "draftright.enabledTones"
         static let defaultTab = "draftright.defaultTab"
+        static let appMode = "draftright.appMode"
+        static let oneClickTone = "draftright.oneClickTone"
     }
 
     init() {
@@ -78,6 +108,10 @@ final class AppModel: ObservableObject {
         }
         let savedDefault = UserDefaults.standard.string(forKey: Keys.defaultTab) ?? ""
         self.defaultTone = Tone(rawValue: savedDefault)
+        let savedMode = UserDefaults.standard.string(forKey: Keys.appMode) ?? AppMode.advanced.rawValue
+        self.appMode = AppMode(rawValue: savedMode) ?? .advanced
+        let savedOneClick = UserDefaults.standard.string(forKey: Keys.oneClickTone) ?? Tone.polished.rawValue
+        self.oneClickTone = Tone(rawValue: savedOneClick) ?? .polished
         self.accessToken = KeychainHelper.load(forKey: "accessToken") ?? ""
         self.refreshToken = KeychainHelper.load(forKey: "refreshToken") ?? ""
         self.isLoggedIn = !self.accessToken.isEmpty
