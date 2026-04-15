@@ -43,5 +43,6 @@ struct AdvancedSettingsTab: View {
             }
         }
         .padding(12)
+        .frame(maxHeight: .infinity, alignment: .top)
     }
 }

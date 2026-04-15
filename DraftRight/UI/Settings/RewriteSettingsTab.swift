@@ -57,6 +57,7 @@ struct RewriteSettingsTab: View {
 
         }
         .padding(12)
+        .frame(maxHeight: .infinity, alignment: .top)
     }
 
     private func toneBinding(_ tone: Tone) -> Binding<Bool> {

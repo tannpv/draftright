@@ -47,6 +47,7 @@ struct TriggerSettingsTab: View {
             }
         }
         .padding(12)
+        .frame(maxHeight: .infinity, alignment: .top)
     }
 
     private func startRecordingHotkey() {
