@@ -70,7 +70,7 @@ struct DraftRightApp: App {
         let window = NSWindow(contentViewController: hostingController)
         window.title = "DraftRight V2 Settings"
         window.styleMask = [.titled, .closable]
-        window.setContentSize(NSSize(width: 480, height: 420))
+        window.setContentSize(NSSize(width: 520, height: 440))
         window.center()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)

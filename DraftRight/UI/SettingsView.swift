@@ -7,11 +7,13 @@ struct SettingsView: View {
                 .tabItem { Label("General", systemImage: "gearshape") }
             RewriteSettingsTab()
                 .tabItem { Label("Rewrite", systemImage: "pencil.and.outline") }
+            TriggerSettingsTab()
+                .tabItem { Label("Trigger", systemImage: "cursorarrow.click") }
             AccountSettingsTab()
                 .tabItem { Label("Account", systemImage: "person.crop.circle") }
             AdvancedSettingsTab()
                 .tabItem { Label("Advanced", systemImage: "slider.horizontal.3") }
         }
-        .frame(width: 480, height: 420)
+        .frame(width: 520, height: 440)
     }
 }
