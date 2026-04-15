@@ -1,0 +1,102 @@
+/* DraftRight Linux — Dark Theme */
+
+/* ── Window ────────────────────────────────────────────── */
+window {
+    background-color: #0f172a;
+    color: #e2e8f0;
+}
+
+/* ── Cards / Panels ────────────────────────────────────── */
+.card {
+    background-color: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 12px;
+    padding: 16px;
+}
+
+/* ── Tone Buttons ──────────────────────────────────────── */
+.tone-button {
+    background-color: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    color: #e2e8f0;
+    padding: 10px 14px;
+    min-height: 40px;
+}
+
+.tone-button:hover {
+    background-color: #334155;
+    border-color: #5d87ff;
+}
+
+.tone-button-selected {
+    background-color: rgba(93, 135, 255, 0.15);
+    border: 2px solid #5d87ff;
+    border-radius: 8px;
+    color: #5d87ff;
+    padding: 10px 14px;
+    min-height: 40px;
+}
+
+/* ── Action Buttons ────────────────────────────────────── */
+.action-button-primary {
+    background-color: #5d87ff;
+    border-radius: 8px;
+    color: #ffffff;
+    font-weight: 600;
+    padding: 10px 20px;
+    min-height: 40px;
+}
+
+.action-button-primary:hover {
+    background-color: #4a70e0;
+}
+
+.action-button-ghost {
+    background-color: transparent;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    color: #94a3b8;
+    padding: 10px 20px;
+    min-height: 40px;
+}
+
+.action-button-ghost:hover {
+    background-color: #1e293b;
+    color: #e2e8f0;
+}
+
+/* ── Result Area ───────────────────────────────────────── */
+.result-area {
+    background-color: rgba(34, 197, 94, 0.08);
+    border: 1px solid rgba(34, 197, 94, 0.25);
+    border-radius: 8px;
+    color: #e2e8f0;
+    padding: 12px;
+}
+
+/* ── Error Label ───────────────────────────────────────── */
+.error-label {
+    color: #ef4444;
+    font-size: 13px;
+}
+
+/* ── Text Input ────────────────────────────────────────── */
+textview {
+    background-color: #1e293b;
+    color: #e2e8f0;
+    border-radius: 8px;
+    padding: 8px;
+}
+
+textview text {
+    background-color: #1e293b;
+    color: #e2e8f0;
+}
+
+/* ── Scrollbar ─────────────────────────────────────────── */
+scrollbar slider {
+    background-color: #334155;
+    border-radius: 4px;
+    min-width: 6px;
+}

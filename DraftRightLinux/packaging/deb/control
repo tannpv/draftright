@@ -1,0 +1,23 @@
+Package: draftright
+Version: 1.0.0
+Section: utils
+Priority: optional
+Architecture: all
+Depends: python3 (>= 3.10),
+         python3-gi,
+         python3-requests,
+         gir1.2-gtk-4.0,
+         gir1.2-adw-1,
+         gir1.2-ayatanaappindicator3-0.1,
+         xdotool,
+         xsel
+Recommends: xclip
+Maintainer: Tan Nguyen <tan@draftright.app>
+Homepage: https://draftright.app
+Description: AI-powered text rewriting tool
+ DraftRight lets you select text anywhere on your desktop, pick a tone,
+ and get a polished rewrite instantly. Supports professional, casual,
+ friendly, concise, formal, and translation modes.
+ .
+ Press a global hotkey to capture your selection, choose a tone from
+ the floating panel, and replace or copy the result.

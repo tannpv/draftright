@@ -1,0 +1,78 @@
+app-id: com.draftright.app
+runtime: org.gnome.Platform
+runtime-version: '46'
+sdk: org.gnome.Sdk
+command: draftright
+
+finish-args:
+  # Network access for API calls
+  - --share=network
+  # X11 display
+  - --share=ipc
+  - --socket=x11
+  # Wayland display
+  - --socket=wayland
+  # D-Bus access for global hotkeys and system tray
+  - --talk-name=org.freedesktop.portal.GlobalShortcuts
+  - --talk-name=org.kde.StatusNotifierWatcher
+  - --talk-name=org.freedesktop.Notifications
+  # Access to GSettings
+  - --metadata=X-DConf=migrate-path=/com/draftright/app/
+
+modules:
+  - name: python3-requests
+    buildsystem: simple
+    build-commands:
+      - pip3 install --no-build-isolation --prefix=/app --no-deps .
+    sources:
+      - type: archive
+        url: https://files.pythonhosted.org/packages/63/70/2bf7780ad2d390a8d301ad0b550f1581eadbd9a20f896afe06353c2a2913/requests-2.32.3.tar.gz
+        sha256: 55365417734eb18255590a9ff9eb97e9e1da868d4ccd6402399eaf68af20a760
+
+  - name: python3-urllib3
+    buildsystem: simple
+    build-commands:
+      - pip3 install --no-build-isolation --prefix=/app --no-deps .
+    sources:
+      - type: archive
+        url: https://files.pythonhosted.org/packages/aa/63/e53da845320b757bf29ef6a9062f5c669571d2c2f01d3a578a20e1e1c8c1/urllib3-2.2.3.tar.gz
+        sha256: e7d814a81dad81e6caf2ec9fdedb284ecc9c73076b62654547cc64ccdcae26e9
+
+  - name: python3-certifi
+    buildsystem: simple
+    build-commands:
+      - pip3 install --no-build-isolation --prefix=/app --no-deps .
+    sources:
+      - type: archive
+        url: https://files.pythonhosted.org/packages/b0/ee/9b19140fe824b367c04c5e1b369942dd754c4c5462d5674002f75c4dedc1/certifi-2024.8.30.tar.gz
+        sha256: bec941d2aa8195e248a60b31ff9f0558284cf01a52591ceda73ea9afffd69fd9
+
+  - name: python3-charset-normalizer
+    buildsystem: simple
+    build-commands:
+      - pip3 install --no-build-isolation --prefix=/app --no-deps .
+    sources:
+      - type: archive
+        url: https://files.pythonhosted.org/packages/63/09/c1bc53dab74b1816a00d8d030de5bf98f724c52c1635e07681d312f20be8/charset-normalizer-3.3.2.tar.gz
+        sha256: f30c3cb33b24454a82faecaf01b19c18562b1e89558fb6c56de4d9118a032fd5
+
+  - name: python3-idna
+    buildsystem: simple
+    build-commands:
+      - pip3 install --no-build-isolation --prefix=/app --no-deps .
+    sources:
+      - type: archive
+        url: https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz
+        sha256: 9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca
+
+  - name: draftright
+    buildsystem: simple
+    build-commands:
+      - pip3 install --no-build-isolation --prefix=/app --no-deps .
+      - install -Dm644 data/com.draftright.app.desktop /app/share/applications/com.draftright.app.desktop
+      - install -Dm644 data/com.draftright.app.metainfo.xml /app/share/metainfo/com.draftright.app.metainfo.xml
+      - install -Dm644 data/com.draftright.app.gschema.xml /app/share/glib-2.0/schemas/com.draftright.app.gschema.xml
+      - glib-compile-schemas /app/share/glib-2.0/schemas/
+    sources:
+      - type: dir
+        path: ../..
