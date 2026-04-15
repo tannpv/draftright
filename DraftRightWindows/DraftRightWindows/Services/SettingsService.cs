@@ -48,6 +48,12 @@ public sealed class SettingsService
     /// <summary>Default tone API value for auto-run (empty = none).</summary>
     public string DefaultTone { get; set; } = "";
 
+    /// <summary>Interaction mode. Defaults to Advanced so existing users see no behavior change.</summary>
+    public AppMode AppMode { get; set; } = AppMode.Advanced;
+
+    /// <summary>Preset tone used by One-Click mode. Stored as the tone's API value.</summary>
+    public string OneClickTone { get; set; } = "polished";
+
     // ── Persistence ─────────────────────────────────────────
 
     /// <summary>
@@ -75,6 +81,8 @@ public sealed class SettingsService
             if (loaded.EnabledTones != null)
                 EnabledTones = loaded.EnabledTones;
             DefaultTone = loaded.DefaultTone ?? DefaultTone;
+            AppMode = AppModeExtensions.FromApiValue(loaded.AppMode);
+            OneClickTone = loaded.OneClickTone ?? OneClickTone;
         }
         catch
         {
@@ -99,7 +107,9 @@ public sealed class SettingsService
                 TranslateLanguage = TranslateLanguage,
                 AutoStart = AutoStart,
                 EnabledTones = EnabledTones,
-                DefaultTone = DefaultTone
+                DefaultTone = DefaultTone,
+                AppMode = AppMode.ApiValue(),
+                OneClickTone = OneClickTone
             };
 
             var json = JsonSerializer.Serialize(data, JsonOptions);
@@ -125,5 +135,7 @@ public sealed class SettingsService
         public bool? AutoStart { get; set; }
         public List<string>? EnabledTones { get; set; }
         public string? DefaultTone { get; set; }
+        public string? AppMode { get; set; }
+        public string? OneClickTone { get; set; }
     }
 }
