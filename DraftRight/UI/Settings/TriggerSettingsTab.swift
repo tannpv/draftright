@@ -7,8 +7,7 @@ struct TriggerSettingsTab: View {
     @State private var hotkeyMonitor: Any? = nil
 
     var body: some View {
-        VStack(spacing: 0) {
-            Form {
+        Form {
             Section(header: Text("Trigger")) {
                 HStack {
                     Text("Rewrite Trigger")
@@ -47,9 +46,7 @@ struct TriggerSettingsTab: View {
                     .foregroundColor(.secondary)
             }
         }
-            Spacer(minLength: 0)
-        }
-        .padding(12)
+        .formStyle(.grouped)
     }
 
     private func startRecordingHotkey() {

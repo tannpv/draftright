@@ -56,7 +56,7 @@ struct RewriteSettingsTab: View {
             }
 
         }
-        .padding(12)
+        .formStyle(.grouped)
     }
 
     private func toneBinding(_ tone: Tone) -> Binding<Bool> {

@@ -6,8 +6,7 @@ struct AdvancedSettingsTab: View {
     @State private var loggingEnabled: Bool = DRLogger.isEnabled
 
     var body: some View {
-        VStack(spacing: 0) {
-            Form {
+        Form {
             Section(header: Text("Services")) {
                 Text("After launching DraftRight, the rewrite options appear in the right-click → Services menu of any app.")
                     .font(.caption)
@@ -44,8 +43,6 @@ struct AdvancedSettingsTab: View {
                 }
             }
         }
-            Spacer(minLength: 0)
-        }
-        .padding(12)
+        .formStyle(.grouped)
     }
 }

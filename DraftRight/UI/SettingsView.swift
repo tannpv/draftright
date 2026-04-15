@@ -14,6 +14,6 @@ struct SettingsView: View {
             AdvancedSettingsTab()
                 .tabItem { Label("Advanced", systemImage: "slider.horizontal.3") }
         }
-        .frame(width: 520, height: 440)
+        .frame(width: 560, height: 560)
     }
 }
