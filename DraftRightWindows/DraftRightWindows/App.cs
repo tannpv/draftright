@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Dispatching;
+using DraftRightWindows.Helpers;
 using DraftRightWindows.Models;
 using DraftRightWindows.Services;
 using DraftRightWindows.Views;
@@ -16,8 +17,10 @@ public class App : Application
     public static ApiClient Api { get; private set; } = null!;
     public static HotkeyService Hotkey { get; private set; } = null!;
     public static ClipboardService Clipboard { get; private set; } = null!;
+    public static TextInjector Injector { get; private set; } = null!;
 
     private Window? _hiddenWindow;
+    private IntPtr _hwnd = IntPtr.Zero;
     private WinForms.Form? _settingsForm;
     private Thread? _trayThread;
     private WinForms.NotifyIcon? _trayIcon;
@@ -26,6 +29,14 @@ public class App : Application
     public static BackendStatus CurrentStatus { get; private set; } = BackendStatus.Offline;
     private DateTime _lastAutoRecovery = DateTime.MinValue;
     public static UpdateService? UpdateService { get; private set; }
+
+    // ── Rewrite flow ────────────────────────────────────────
+    private DispatcherQueue? _dispatcherQueue;
+    private RewritePanel? _rewritePanel;
+    private IntPtr _sourceWindow = IntPtr.Zero;
+
+    // Must be stored as a field — delegate must stay alive for the lifetime of the subclass
+    private Win32Interop.SUBCLASSPROC? _subclassProc;
 
     public App()
     {
@@ -40,16 +51,48 @@ public class App : Application
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+        // Capture the UI-thread dispatcher queue before any async work
+        _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
+
         _hiddenWindow = new Window { Title = "DraftRight" };
-        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(_hiddenWindow);
-        Helpers.Win32Interop.ShowWindow(hwnd, Helpers.Win32Interop.SW_HIDE);
+        _hwnd = WinRT.Interop.WindowNative.GetWindowHandle(_hiddenWindow);
+        Win32Interop.ShowWindow(_hwnd, Win32Interop.SW_HIDE);
 
         Settings = new SettingsService();
         Settings.Load();
         Api = new ApiClient(Settings.BackendUrl);
         Auth = new AuthService();
         Clipboard = new ClipboardService();
+        Injector = new TextInjector(Clipboard);
         Hotkey = new HotkeyService();
+
+        // Install a WndProc subclass on the hidden window so WM_HOTKEY messages
+        // reach HotkeyService.ProcessHotkeyMessage.  The delegate MUST be stored
+        // in _subclassProc (a field) so the GC never collects it while it is active.
+        _subclassProc = HiddenWindowSubclassProc;
+        Win32Interop.SetWindowSubclass(_hwnd, _subclassProc, (UIntPtr)1, UIntPtr.Zero);
+
+        // Register the global hotkey using saved settings
+        bool registered = Hotkey.Register(
+            _hwnd,
+            (uint)Settings.HotkeyModifiers,
+            (uint)Settings.HotkeyKey);
+
+        if (!registered)
+        {
+            DRLogger.Log(
+                $"Hotkey registration failed (modifiers=0x{Settings.HotkeyModifiers:X} vk=0x{Settings.HotkeyKey:X})",
+                DRLogger.Category.HOTKEY);
+        }
+        else
+        {
+            DRLogger.Log(
+                $"Hotkey registered (modifiers=0x{Settings.HotkeyModifiers:X} vk=0x{Settings.HotkeyKey:X})",
+                DRLogger.Category.HOTKEY);
+        }
+
+        // Wire up the hotkey handler
+        Hotkey.HotkeyPressed += async (_, _) => await HandleHotkeyAsync();
 
         // Restore saved session or auto-login for testing
         if (Auth.RestoreSession())
@@ -72,6 +115,83 @@ public class App : Application
         // Start update check — 10 seconds after launch
         UpdateService = new UpdateService("1.0.0", Settings.BackendUrl);
         _ = Task.Delay(TimeSpan.FromSeconds(10)).ContinueWith(_ => UpdateService.CheckIfNeededAsync());
+    }
+
+    // ── WndProc subclass ────────────────────────────────────
+
+    /// <summary>
+    /// Window procedure subclass installed on the hidden HWND.
+    /// Routes WM_HOTKEY to HotkeyService; all other messages fall through to the default.
+    /// </summary>
+    private IntPtr HiddenWindowSubclassProc(
+        IntPtr hWnd, uint uMsg, IntPtr wParam, IntPtr lParam,
+        UIntPtr uIdSubclass, UIntPtr dwRefData)
+    {
+        if (uMsg == HotkeyService.WM_HOTKEY)
+        {
+            Hotkey.ProcessHotkeyMessage(wParam.ToInt32());
+            return IntPtr.Zero;
+        }
+
+        return Win32Interop.DefSubclassProc(hWnd, uMsg, wParam, lParam);
+    }
+
+    // ── Hotkey handler ──────────────────────────────────────
+
+    /// <summary>
+    /// Called (on the WndProc thread) when the global hotkey fires.
+    /// Captures selected text from the foreground app and opens the RewritePanel.
+    /// </summary>
+    private async Task HandleHotkeyAsync()
+    {
+        if (!Auth.IsLoggedIn)
+        {
+            DRLogger.Log("Hotkey fired but user is not logged in — ignoring.", DRLogger.Category.HOTKEY);
+            return;
+        }
+
+        // Capture the foreground window BEFORE we do anything else.
+        // After Ctrl+C and panel activation the foreground shifts — we need
+        // the original window handle to paste back into later.
+        _sourceWindow = Win32Interop.GetForegroundWindow();
+
+        DRLogger.Log($"Hotkey fired — capturing selection from HWND 0x{_sourceWindow:X}", DRLogger.Category.HOTKEY);
+
+        var text = await Clipboard.GetSelectedTextAsync();
+
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            DRLogger.Log("No text selected — ignoring hotkey.", DRLogger.Category.HOTKEY);
+            return;
+        }
+
+        DRLogger.Log($"Captured {text.Length} chars — opening panel.", DRLogger.Category.HOTKEY);
+
+        // Must open the WinUI window on the UI (dispatcher) thread
+        _dispatcherQueue?.TryEnqueue(() =>
+        {
+            if (_rewritePanel == null)
+            {
+                _rewritePanel = new RewritePanel();
+
+                // When the user clicks Replace, inject the text back
+                _rewritePanel.ViewModel.PasteRequested += async (_, rewrittenText) =>
+                {
+                    _rewritePanel.Close();
+                    _rewritePanel = null;
+                    await Injector.InjectTextAsync(rewrittenText, _sourceWindow);
+                    DRLogger.Log("Paste complete.", DRLogger.Category.HOTKEY);
+                };
+
+                // When Close is clicked (no replace), just null out the panel reference
+                _rewritePanel.ViewModel.CloseRequested += (_, _) =>
+                {
+                    _rewritePanel = null;
+                };
+            }
+
+            _rewritePanel.ShowForText(text);
+        });
     }
 
     private void RunTrayIcon()
@@ -218,6 +338,11 @@ public class App : Application
     {
         _healthTimer?.Dispose();
         Hotkey.Unregister();
+
+        // Remove the WndProc subclass before the window is destroyed
+        if (_subclassProc != null && _hwnd != IntPtr.Zero)
+            Win32Interop.RemoveWindowSubclass(_hwnd, _subclassProc, (UIntPtr)1);
+
         if (_trayIcon != null)
         {
             _trayIcon.Visible = false;

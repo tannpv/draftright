@@ -42,6 +42,12 @@ public partial class RewritePanelViewModel : ObservableObject
     /// <summary>Raised when the panel should close.</summary>
     public event EventHandler? CloseRequested;
 
+    /// <summary>
+    /// Raised when the user accepts the rewrite and wants to paste it back
+    /// into the source application. The string argument is the rewritten text.
+    /// </summary>
+    public event EventHandler<string>? PasteRequested;
+
     // ── Commands ──
 
     [RelayCommand]
@@ -92,12 +98,9 @@ public partial class RewritePanelViewModel : ObservableObject
         if (string.IsNullOrWhiteSpace(OutputText))
             return;
 
-        // Copy to clipboard then simulate paste (Ctrl+V) via the clipboard service
-        var dataPackage = new DataPackage();
-        dataPackage.SetText(OutputText);
-        Clipboard.SetContent(dataPackage);
-
-        CloseRequested?.Invoke(this, EventArgs.Empty);
+        // Raise PasteRequested — App will handle TextInjector.InjectTextAsync
+        // and then close the panel via CloseRequested.
+        PasteRequested?.Invoke(this, OutputText);
     }
 
     [RelayCommand]
