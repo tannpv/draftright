@@ -405,9 +405,14 @@ final class SelectionMonitor {
         grabTextAndOpen()
     }
 
-    /// Keep the pencil button visible and start a pulsing opacity animation
-    /// to indicate that a One-Click rewrite is in flight.
+    /// Show a pulsing pencil indicator to signal that a One-Click rewrite
+    /// is in flight. If the trigger window is already visible (mouse-click
+    /// path), animate it in place. Otherwise (hotkey path) create a new
+    /// indicator at the current mouse location.
     func startLoadingAnimation() {
+        if triggerWindow == nil {
+            showLoadingIndicatorAt(NSEvent.mouseLocation)
+        }
         guard let panel = triggerWindow,
               let button = panel.contentView as? NSButton,
               let layer = button.layer else { return }
@@ -420,6 +425,40 @@ final class SelectionMonitor {
         pulse.repeatCount = .infinity
         pulse.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
         layer.add(pulse, forKey: "oneClickPulse")
+    }
+
+    /// Create a pencil-shaped loading indicator at the given screen point
+    /// (used by the hotkey path where no pencil button was ever shown).
+    private func showLoadingIndicatorAt(_ point: CGPoint) {
+        let buttonSize = CGSize(width: 32, height: 32)
+        let origin = CGPoint(x: point.x + 12, y: point.y + 12)
+
+        let nsButton = NSButton(frame: CGRect(origin: .zero, size: buttonSize))
+        nsButton.bezelStyle = .circular
+        nsButton.image = NSImage(systemSymbolName: "pencil.and.outline", accessibilityDescription: "Rewriting")
+        nsButton.imageScaling = .scaleProportionallyDown
+        nsButton.contentTintColor = .white
+        nsButton.isBordered = false
+        nsButton.wantsLayer = true
+        nsButton.layer?.backgroundColor = NSColor.systemBlue.cgColor
+        nsButton.layer?.cornerRadius = buttonSize.width / 2
+        nsButton.isEnabled = false
+
+        let panel = ClickablePanel(
+            contentRect: NSRect(origin: origin, size: buttonSize),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.level = .floating
+        panel.hasShadow = true
+        panel.isReleasedWhenClosed = false
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.contentView = nsButton
+        panel.orderFrontRegardless()
+        self.triggerWindow = panel
     }
 
     /// Stop the loading animation (if any) and hide the trigger window.
