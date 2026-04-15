@@ -4,7 +4,8 @@ struct RewriteSettingsTab: View {
     @EnvironmentObject var appModel: AppModel
 
     var body: some View {
-        Form {
+        VStack(spacing: 0) {
+            Form {
             Section(header: Text("Mode")) {
                 Picker("Interaction Mode", selection: $appModel.appMode) {
                     ForEach(AppMode.allCases) { mode in
@@ -56,8 +57,9 @@ struct RewriteSettingsTab: View {
             }
 
         }
+            Spacer(minLength: 0)
+        }
         .padding(12)
-        .frame(maxHeight: .infinity, alignment: .top)
     }
 
     private func toneBinding(_ tone: Tone) -> Binding<Bool> {

@@ -4,7 +4,8 @@ struct GeneralSettingsTab: View {
     @EnvironmentObject var appModel: AppModel
 
     var body: some View {
-        Form {
+        VStack(spacing: 0) {
+            Form {
             Section(header: Text("General")) {
                 Toggle("Launch at Login", isOn: $appModel.launchAtLogin)
             }
@@ -28,7 +29,8 @@ struct GeneralSettingsTab: View {
                 }
             }
         }
+            Spacer(minLength: 0)
+        }
         .padding(12)
-        .frame(maxHeight: .infinity, alignment: .top)
     }
 }

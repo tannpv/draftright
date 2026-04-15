@@ -9,7 +9,8 @@ struct AccountSettingsTab: View {
     @State private var showPassword: Bool = false
 
     var body: some View {
-        Form {
+        VStack(spacing: 0) {
+            Form {
             Section(header: Text("Account")) {
                 if appModel.isLoggedIn {
                     HStack {
@@ -73,8 +74,9 @@ struct AccountSettingsTab: View {
                 }
             }
         }
+            Spacer(minLength: 0)
+        }
         .padding(12)
-        .frame(maxHeight: .infinity, alignment: .top)
     }
 
     private func signIn() async {
