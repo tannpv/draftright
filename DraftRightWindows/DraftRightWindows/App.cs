@@ -165,33 +165,88 @@ public class App : Application
             return;
         }
 
-        DRLogger.Log($"Captured {text.Length} chars — opening panel.", DRLogger.Category.HOTKEY);
+        var mode = Settings.AppMode;
+        DRLogger.Log($"Captured {text.Length} chars — mode={mode.ApiValue()}.", DRLogger.Category.HOTKEY);
 
-        // Must open the WinUI window on the UI (dispatcher) thread
-        _dispatcherQueue?.TryEnqueue(() =>
+        if (mode == AppMode.OneClick)
         {
-            if (_rewritePanel == null)
+            await RunOneClickRewriteAsync(text);
+        }
+        else
+        {
+            // Must open the WinUI window on the UI (dispatcher) thread
+            _dispatcherQueue?.TryEnqueue(() =>
             {
-                _rewritePanel = new RewritePanel();
-
-                // When the user clicks Replace, inject the text back
-                _rewritePanel.ViewModel.PasteRequested += async (_, rewrittenText) =>
+                if (_rewritePanel == null)
                 {
-                    _rewritePanel.Close();
-                    _rewritePanel = null;
-                    await Injector.InjectTextAsync(rewrittenText, _sourceWindow);
-                    DRLogger.Log("Paste complete.", DRLogger.Category.HOTKEY);
-                };
+                    _rewritePanel = new RewritePanel();
 
-                // When Close is clicked (no replace), just null out the panel reference
-                _rewritePanel.ViewModel.CloseRequested += (_, _) =>
-                {
-                    _rewritePanel = null;
-                };
+                    // When the user clicks Replace, inject the text back
+                    _rewritePanel.ViewModel.PasteRequested += async (_, rewrittenText) =>
+                    {
+                        _rewritePanel.Close();
+                        _rewritePanel = null;
+                        await Injector.InjectTextAsync(rewrittenText, _sourceWindow);
+                        DRLogger.Log("Paste complete.", DRLogger.Category.HOTKEY);
+                    };
+
+                    // When Close is clicked (no replace), just null out the panel reference
+                    _rewritePanel.ViewModel.CloseRequested += (_, _) =>
+                    {
+                        _rewritePanel = null;
+                    };
+                }
+
+                _rewritePanel.ShowForText(text);
+            });
+        }
+    }
+
+    private async Task RunOneClickRewriteAsync(string text)
+    {
+        var tone = Settings.OneClickTone;
+        DRLogger.Log($"One-Click rewrite: tone={tone} textlen={text.Length}", DRLogger.Category.HOTKEY);
+
+        try
+        {
+            var response = await Api.RewriteAsync(text, tone, Settings.TranslateLanguage);
+            var rewritten = response?.RewrittenText;
+
+            if (string.IsNullOrEmpty(rewritten))
+            {
+                DRLogger.Log("One-Click rewrite: empty result from backend.", DRLogger.Category.HOTKEY);
+                ShowOneClickError("Empty result from backend");
+                return;
             }
 
-            _rewritePanel.ShowForText(text);
-        });
+            DRLogger.Log("One-Click rewrite OK, pasting via TextInjector.", DRLogger.Category.HOTKEY);
+            await Injector.InjectTextAsync(rewritten, _sourceWindow);
+        }
+        catch (Exception ex)
+        {
+            DRLogger.Log($"One-Click rewrite FAILED: {ex.Message}", DRLogger.Category.HOTKEY);
+            ShowOneClickError(ex.Message);
+        }
+    }
+
+    private void ShowOneClickError(string message)
+    {
+        DRLogger.Log($"One-Click error: {message}", DRLogger.Category.HOTKEY);
+
+        try
+        {
+            if (_trayIcon != null)
+            {
+                _trayIcon.BalloonTipTitle = "DraftRight \u2014 One-Click Rewrite Failed";
+                _trayIcon.BalloonTipText = message;
+                _trayIcon.BalloonTipIcon = WinForms.ToolTipIcon.Error;
+                _trayIcon.ShowBalloonTip(4000);
+            }
+        }
+        catch
+        {
+            // Best-effort: tray icon may be disposed or BalloonTip unavailable — log only.
+        }
     }
 
     private void RunTrayIcon()
