@@ -12,6 +12,7 @@ struct AdvancedSettingsTab: View {
                 Text("After launching DraftRight, the rewrite options appear in the right-click → Services menu of any app.")
                     .font(.caption)
                     .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 Button("Refresh Services") {
                     NSUpdateDynamicServices()

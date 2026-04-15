@@ -4,8 +4,7 @@ struct RewriteSettingsTab: View {
     @EnvironmentObject var appModel: AppModel
 
     var body: some View {
-        VStack(spacing: 0) {
-            Form {
+        Form {
             Section(header: Text("Mode")) {
                 Picker("Interaction Mode", selection: $appModel.appMode) {
                     ForEach(AppMode.allCases) { mode in
@@ -56,8 +55,6 @@ struct RewriteSettingsTab: View {
                 .help("Language used by the Translate tone option")
             }
 
-        }
-            Spacer(minLength: 0)
         }
         .padding(12)
     }
