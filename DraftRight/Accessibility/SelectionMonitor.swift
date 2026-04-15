@@ -398,8 +398,37 @@ final class SelectionMonitor {
         if let frame = triggerWindow?.frame {
             DiffWindow.shared.anchorPoint = CGPoint(x: frame.minX, y: frame.minY)
         }
-        hideTrigger()
+        // Don't hide the trigger here — let the consumer decide.
+        // Advanced mode calls hideTrigger() immediately; One-Click mode
+        // calls startLoadingAnimation() and then stopLoadingAndHide()
+        // when the rewrite finishes.
         grabTextAndOpen()
+    }
+
+    /// Keep the pencil button visible and start a pulsing opacity animation
+    /// to indicate that a One-Click rewrite is in flight.
+    func startLoadingAnimation() {
+        guard let panel = triggerWindow,
+              let button = panel.contentView as? NSButton,
+              let layer = button.layer else { return }
+        button.isEnabled = false
+        let pulse = CABasicAnimation(keyPath: "opacity")
+        pulse.fromValue = 1.0
+        pulse.toValue = 0.25
+        pulse.duration = 0.55
+        pulse.autoreverses = true
+        pulse.repeatCount = .infinity
+        pulse.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        layer.add(pulse, forKey: "oneClickPulse")
+    }
+
+    /// Stop the loading animation (if any) and hide the trigger window.
+    func stopLoadingAndHide() {
+        if let button = triggerWindow?.contentView as? NSButton {
+            button.layer?.removeAnimation(forKey: "oneClickPulse")
+            button.isEnabled = true
+        }
+        hideTrigger()
     }
 
     func hideTrigger() {

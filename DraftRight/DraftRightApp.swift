@@ -106,12 +106,15 @@ struct DraftRightApp: App {
 
             switch appModel.appMode {
             case .oneClick:
+                monitor.startLoadingAnimation()
                 Self.runOneClickRewrite(
                     text: text,
                     appModel: appModel,
-                    aiClient: aiClient
+                    aiClient: aiClient,
+                    monitor: monitor
                 )
             case .advanced:
+                monitor.hideTrigger()
                 Self.runAdvancedRewrite(
                     text: text,
                     appModel: appModel,
@@ -167,7 +170,8 @@ struct DraftRightApp: App {
     static func runOneClickRewrite(
         text: String,
         appModel: AppModel,
-        aiClient: BackendClient
+        aiClient: BackendClient,
+        monitor: SelectionMonitor
     ) {
         let tone = appModel.oneClickTone
         DRLogger.log("One-Click mode: instant rewrite with tone=\(tone.rawValue) text='\(text.prefix(30))'",
@@ -175,7 +179,10 @@ struct DraftRightApp: App {
         appModel.isRewriting = true
 
         Task { @MainActor in
-            defer { appModel.isRewriting = false }
+            defer {
+                appModel.isRewriting = false
+                monitor.stopLoadingAndHide()
+            }
             do {
                 let rewritten = try await aiClient.rewrite(
                     text: text,
