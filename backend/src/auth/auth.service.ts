@@ -1,18 +1,22 @@
-import { Injectable, UnauthorizedException, ConflictException, BadRequestException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ConflictException, BadRequestException, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { UsersService } from '../users/users.service';
 import { PlansService } from '../plans/plans.service';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
+import { EmailService } from '../email/email.service';
 import { AuthProvider } from '../users/entities/user.entity';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
     private readonly plansService: PlansService,
     private readonly subscriptionsService: SubscriptionsService,
+    private readonly emailService: EmailService,
   ) {}
 
   private generateTokens(user: { id: string; email: string; role: string }) {
@@ -25,24 +29,84 @@ export class AuthService {
 
     const refresh_token = this.jwtService.sign(payload, {
       secret: process.env.JWT_REFRESH_SECRET || 'dev-refresh-secret',
-      expiresIn: '7d',
+      // 90 days — industry-standard for "keep me signed in" UX.
+      // Refresh tokens rotate on each use, so active users stay signed in
+      // indefinitely. Only inactivity > 90 days forces re-login.
+      expiresIn: '90d',
     });
 
     return { access_token, refresh_token };
   }
 
   async register(email: string, password: string, name: string) {
-    const existing = await this.usersService.findByEmail(email);
+    const normalizedEmail = email.trim().toLowerCase();
+    const existing = await this.usersService.findByEmail(normalizedEmail);
     if (existing) throw new ConflictException('Email already registered');
 
     const password_hash = await bcrypt.hash(password, 10);
-    const user = await this.usersService.create({ email, password_hash, name });
+    const code = this.generateVerificationCode();
+    const expires = new Date(Date.now() + 15 * 60 * 1000);
+
+    const user = await this.usersService.create({
+      email: normalizedEmail,
+      password_hash,
+      name,
+      email_verification_code: code,
+      email_verification_expires: expires,
+    });
 
     const freePlan = await this.plansService.findFreePlan();
     await this.subscriptionsService.createFreeSubscription(user.id, freePlan.id);
 
+    // Fire-and-forget: don't block registration on email-provider latency or transient failures.
+    this.emailService.sendVerificationEmail(normalizedEmail, name, code).catch((err) => {
+      this.logger.error(`Failed to send verification email to ${normalizedEmail}: ${err.message}`);
+    });
+
     const tokens = this.generateTokens(user);
-    return { ...tokens, user: { id: user.id, email: user.email, name: user.name } };
+    return {
+      ...tokens,
+      user: { id: user.id, email: user.email, name: user.name, email_verified: false },
+    };
+  }
+
+  async verifyEmail(email: string, code: string): Promise<{ success: true }> {
+    const user = await this.usersService.findByEmail(email.trim().toLowerCase());
+    if (!user || !user.email_verification_code || !user.email_verification_expires) {
+      throw new BadRequestException('Invalid or expired verification code');
+    }
+    if (user.email_verification_code !== code) {
+      throw new BadRequestException('Invalid or expired verification code');
+    }
+    if (user.email_verification_expires.getTime() < Date.now()) {
+      throw new BadRequestException('Invalid or expired verification code');
+    }
+    await this.usersService.update(user.id, {
+      email_verified: true,
+      email_verification_code: null,
+      email_verification_expires: null,
+    });
+    return { success: true };
+  }
+
+  async resendVerification(email: string): Promise<void> {
+    // Silent for unknown emails — don't leak which addresses exist.
+    const user = await this.usersService.findByEmail(email.trim().toLowerCase());
+    if (!user || user.email_verified) return;
+
+    const code = this.generateVerificationCode();
+    const expires = new Date(Date.now() + 15 * 60 * 1000);
+    await this.usersService.update(user.id, {
+      email_verification_code: code,
+      email_verification_expires: expires,
+    });
+    this.emailService.sendVerificationEmail(user.email, user.name, code).catch((err) => {
+      this.logger.error(`Failed to resend verification to ${user.email}: ${err.message}`);
+    });
+  }
+
+  private generateVerificationCode(): string {
+    return Math.floor(100000 + Math.random() * 900000).toString();
   }
 
   async login(email: string, password: string) {

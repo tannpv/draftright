@@ -12,10 +12,12 @@ import { RewriteModule } from './rewrite/rewrite.module';
 import { AdminModule } from './admin/admin.module';
 import { PaymentModule } from './payment/payment.module';
 import { UpdatesModule } from './updates/updates.module';
+import { EmailModule } from './email/email.module';
 
 @Module({
   imports: [
     TypeOrmModule.forRoot(databaseConfig()),
+    EmailModule,
     HealthModule,
     UsersModule,
     PlansModule,

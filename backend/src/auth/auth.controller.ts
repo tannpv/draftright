@@ -26,6 +26,19 @@ export class AuthController {
     return this.authService.refresh(body.refresh_token);
   }
 
+  @Post('verify-email')
+  @HttpCode(HttpStatus.OK)
+  async verifyEmail(@Body() body: { email: string; code: string }) {
+    return this.authService.verifyEmail(body.email, body.code);
+  }
+
+  @Post('resend-verification')
+  @HttpCode(HttpStatus.OK)
+  async resendVerification(@Body() body: { email: string }) {
+    await this.authService.resendVerification(body.email);
+    return { success: true };
+  }
+
   @Post('social')
   async socialLogin(@Body() body: { provider: string; id_token: string; name?: string; email?: string; avatar_url?: string }) {
     return this.authService.socialLogin(body.provider, body.id_token, {
