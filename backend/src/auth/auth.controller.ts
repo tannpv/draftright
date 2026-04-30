@@ -4,11 +4,19 @@ import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
+import { UsersService } from '../users/users.service';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service';
+import { UsageService } from '../usage/usage.service';
 
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly usersService: UsersService,
+    private readonly subscriptionsService: SubscriptionsService,
+    private readonly usageService: UsageService,
+  ) {}
 
   @Post('register')
   async register(@Body() dto: RegisterDto) {
@@ -58,5 +66,34 @@ export class AuthController {
   @Get('me')
   async me(@Request() req: any) {
     return { id: req.user.id, email: req.user.email, role: req.user.role };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('account')
+  async account(@Request() req: any) {
+    const user = await this.usersService.findById(req.user.id);
+    if (!user) return null;
+
+    const sub = await this.subscriptionsService.findActiveByUserId(req.user.id);
+    const usageToday = await this.usageService.countTodayByUser(req.user.id);
+
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      email_verified: user.email_verified,
+      has_lemonsqueezy_customer: !!user.lemonsqueezy_customer_id,
+      subscription: sub
+        ? {
+            plan_name: sub.plan?.name ?? 'Unknown',
+            status: sub.status,
+            store_type: sub.store_type,
+            started_at: sub.started_at,
+            expires_at: sub.expires_at,
+            daily_limit: sub.plan?.daily_limit ?? 0,
+            usage_today: usageToday,
+          }
+        : null,
+    };
   }
 }

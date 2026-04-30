@@ -24,6 +24,10 @@ export class PlansService {
     return plan;
   }
 
+  async findByName(name: string): Promise<Plan | null> {
+    return this.plansRepo.findOne({ where: { name, is_active: true } });
+  }
+
   async create(data: Partial<Plan>): Promise<Plan> {
     const plan = this.plansRepo.create(data);
     return this.plansRepo.save(plan);

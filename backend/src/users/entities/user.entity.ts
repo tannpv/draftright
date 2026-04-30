@@ -57,6 +57,9 @@ export class User {
   @Column({ type: 'timestamptz', nullable: true })
   email_verification_expires: Date | null;
 
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  lemonsqueezy_customer_id: string | null;
+
   @CreateDateColumn()
   created_at: Date;
 

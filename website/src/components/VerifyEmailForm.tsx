@@ -61,17 +61,30 @@ export default function VerifyEmailForm() {
   };
 
   if (done) {
+    const next = new URLSearchParams(window.location.search).get('next');
+    if (next) {
+      window.location.href = next;
+      return null;
+    }
     return (
       <div className="max-w-md mx-auto text-center space-y-6">
         <div className="text-5xl">✓</div>
         <p className="text-2xl font-semibold text-white">Email verified</p>
-        <p className="text-gray-400">You're all set. Download the app and start rewriting.</p>
-        <a
-          href="/download"
-          className="inline-block rounded-full bg-brand-400 px-6 py-3 text-sm font-semibold text-white hover:bg-brand-500 transition-colors"
-        >
-          Download DraftRight
-        </a>
+        <p className="text-gray-400">You're all set. Download the app or upgrade to Pro.</p>
+        <div className="flex gap-3 justify-center">
+          <a
+            href="/download"
+            className="rounded-full bg-brand-400 px-6 py-3 text-sm font-semibold text-white hover:bg-brand-500 transition-colors"
+          >
+            Download DraftRight
+          </a>
+          <a
+            href="/account"
+            className="rounded-full border border-brand-400 px-6 py-3 text-sm font-semibold text-brand-400 hover:bg-brand-400/10 transition-colors"
+          >
+            My account
+          </a>
+        </div>
       </div>
     );
   }

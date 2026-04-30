@@ -28,7 +28,12 @@ export default function SignupForm() {
         const msg = Array.isArray(body.message) ? body.message[0] : body.message;
         throw new Error(msg || `HTTP ${res.status}`);
       }
-      window.location.href = `/verify-email?email=${encodeURIComponent(email.trim().toLowerCase())}`;
+      const data: { access_token: string; refresh_token: string } = await res.json();
+      localStorage.setItem('dr_access_token', data.access_token);
+      localStorage.setItem('dr_refresh_token', data.refresh_token);
+      const next = new URLSearchParams(window.location.search).get('next');
+      const verifyUrl = `/verify-email?email=${encodeURIComponent(email.trim().toLowerCase())}${next ? `&next=${encodeURIComponent(next)}` : ''}`;
+      window.location.href = verifyUrl;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
     } finally {
