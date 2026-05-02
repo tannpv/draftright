@@ -1,7 +1,7 @@
 import { Controller, Post, Body, UseGuards, Req } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Request } from 'express';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RewriteAuthGuard } from '../auth/rewrite-auth.guard';
 import { RewriteService } from './rewrite.service';
 import { RewriteDto } from './dto/rewrite.dto';
 
@@ -10,7 +10,9 @@ import { RewriteDto } from './dto/rewrite.dto';
 export class RewriteController {
   constructor(private readonly rewriteService: RewriteService) {}
 
-  @UseGuards(JwtAuthGuard)
+  // Accepts either a regular user JWT or a dr_ext_* extension token with
+  // the 'rewrite' scope. See RewriteAuthGuard.
+  @UseGuards(RewriteAuthGuard)
   @ApiBearerAuth()
   @Post()
   async rewrite(@Req() req: any, @Body() dto: RewriteDto) {
