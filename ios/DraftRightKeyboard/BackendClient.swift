@@ -19,8 +19,10 @@ final class BackendClient {
         settings: SharedSettings,
         completion: @escaping (Result<String, Error>) -> Void
     ) {
-        let accessToken = settings.accessToken
-        guard !accessToken.isEmpty else {
+        // Prefer the long-lived dr_ext_* token; fall back to the access
+        // JWT for users on a build older than the one that mints it.
+        let bearerToken = settings.bearerToken
+        guard !bearerToken.isEmpty else {
             completion(.failure(NSError(
                 domain: "BackendClient", code: -1,
                 userInfo: [NSLocalizedDescriptionKey: "Please login in DraftRight app"])))
@@ -45,7 +47,7 @@ final class BackendClient {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.addValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.addValue("Bearer \(bearerToken)", forHTTPHeaderField: "Authorization")
         request.timeoutInterval = 15
 
         do {
