@@ -29,6 +29,24 @@ NestJS API server — auth, rewrite proxy, subscriptions, usage tracking, admin 
 - Passwords: bcrypt with 10 rounds
 - Admin role: `role` enum on users table, guarded by `RolesGuard`
 
+### Extension tokens (`dr_ext_*`)
+
+Long-lived (sliding 90-day) per-device tokens for the iOS keyboard,
+iOS share extension, and Android keyboard. Backend stores
+`sha256(token)` only — never plaintext.
+
+| Endpoint | Auth | Notes |
+|---|---|---|
+| `POST   /auth/extension-tokens` | Session JWT | Mints / rotates a token for a `(user, device_id)` pair. Returns `{ token, id }`. Plaintext is exposed here only. |
+| `GET    /auth/extension-tokens` | Session JWT | Lists active tokens for current user. Server-only fields (`token_hash`, `user_id`) are stripped from the response. |
+| `DELETE /auth/extension-tokens/:id` | Session JWT | Revokes a single token; service-level filter on `user_id` prevents cross-user revocation. |
+| `POST   /rewrite` | `RewriteAuthGuard` | Accepts a regular session JWT **or** a `dr_ext_*` token with `rewrite` scope. All other protected endpoints keep using `JwtAuthGuard`, so an extension token can never reach `/auth/me`, `/payment`, `/admin`, etc. |
+
+Table: `extension_tokens` (id, user_id FK, token_hash CHAR(64), scopes
+TEXT[], device_id, device_name, last_used_at, created_at, revoked_at)
+with partial unique indexes on `token_hash` and `(user_id, device_id)`
+WHERE `revoked_at IS NULL`.
+
 ## Key Patterns
 
 - Entities in `module/entities/entity.ts`
