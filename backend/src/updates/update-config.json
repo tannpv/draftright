@@ -1,0 +1,8 @@
+{
+  "version": "2.1.0",
+  "mac_url": "http://localhost:8888/DraftRight-2.1.0.dmg",
+  "windows_url": "",
+  "linux_url": "",
+  "release_notes": "New: Grammar Check with inline annotations, Claude Style icon, improved panel",
+  "required": false
+}
