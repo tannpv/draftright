@@ -17,8 +17,11 @@ class BackendClient {
     ) {
         thread {
             try {
-                val accessToken = settings.accessToken
-                if (accessToken.isEmpty()) {
+                // Prefer the long-lived dr_ext_* token; fall back to the
+                // access JWT for users on a build older than the one that
+                // mints it.
+                val bearerToken = settings.bearerToken
+                if (bearerToken.isEmpty()) {
                     onResult(Result.failure(Exception("Please login in DraftRight app")))
                     return@thread
                 }
@@ -38,7 +41,7 @@ class BackendClient {
                 val conn = url.openConnection() as HttpURLConnection
                 conn.requestMethod = "POST"
                 conn.setRequestProperty("Content-Type", "application/json")
-                conn.setRequestProperty("Authorization", "Bearer $accessToken")
+                conn.setRequestProperty("Authorization", "Bearer $bearerToken")
                 conn.connectTimeout = 15000
                 conn.readTimeout = 15000
                 conn.doOutput = true
