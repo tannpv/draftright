@@ -41,6 +41,28 @@ import UIKit
         } else {
           result(FlutterError(code: "INVALID_ARGS", message: "key required", details: nil))
         }
+      case "setKeychain":
+        if let args = call.arguments as? [String: Any],
+           let key = args["key"] as? String {
+          let value = args["value"] as? String
+          result(SharedKeychain.set(key, value))
+        } else {
+          result(FlutterError(code: "INVALID_ARGS", message: "key required", details: nil))
+        }
+      case "getKeychain":
+        if let args = call.arguments as? [String: Any],
+           let key = args["key"] as? String {
+          result(SharedKeychain.get(key))
+        } else {
+          result(FlutterError(code: "INVALID_ARGS", message: "key required", details: nil))
+        }
+      case "deleteKeychain":
+        if let args = call.arguments as? [String: Any],
+           let key = args["key"] as? String {
+          result(SharedKeychain.delete(key))
+        } else {
+          result(FlutterError(code: "INVALID_ARGS", message: "key required", details: nil))
+        }
       default:
         result(FlutterMethodNotImplemented)
       }
