@@ -1,8 +1,9 @@
-import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:draftright_mobile/services/auth_service.dart';
+import 'package:draftright_mobile/services/logger_service.dart';
 import 'package:draftright_mobile/services/settings_service.dart';
 import 'package:draftright_mobile/screens/login_screen.dart';
 import 'package:draftright_mobile/screens/onboarding_screen.dart';
@@ -14,10 +15,15 @@ import 'package:draftright_mobile/desktop/desktop_app.dart'
     if (dart.library.html) 'package:draftright_mobile/desktop/desktop_app_stub.dart';
 
 bool get isDesktop =>
-    !Platform.isAndroid && !Platform.isIOS && !Platform.isFuchsia;
+    !kIsWeb &&
+    (defaultTargetPlatform == TargetPlatform.windows ||
+     defaultTargetPlatform == TargetPlatform.linux ||
+     defaultTargetPlatform == TargetPlatform.macOS);
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await DRLogger.init();
+  DRLogger.log('App started', category: 'APP');
   final settings = SettingsService();
   await settings.init();
 

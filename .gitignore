@@ -55,3 +55,9 @@ build/
 android/.gradle/
 ios/Pods/
 ios/.symlinks/
+
+# Android release signing — NEVER commit
+android/key.properties
+android/app/dr-release.jks
+*.jks
+*.keystore

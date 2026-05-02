@@ -82,21 +82,44 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     final usagePct = info.dailyLimit > 0 ? info.usageToday / info.dailyLimit : 0.0;
     final isAtLimit = info.usageToday >= info.dailyLimit;
 
+    String statusLabel;
+    switch (info.status) {
+      case 'active': statusLabel = 'Active'; break;
+      case 'expired': statusLabel = 'Expired'; break;
+      case 'cancelled': statusLabel = 'Cancelled'; break;
+      default: statusLabel = info.status;
+    }
+
+    String billingLabel;
+    switch (info.billingPeriod) {
+      case 'none': billingLabel = 'Free'; break;
+      case 'monthly': billingLabel = 'Monthly'; break;
+      case 'yearly': billingLabel = 'Yearly'; break;
+      default: billingLabel = info.billingPeriod;
+    }
+
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
         _InfoCard(
           icon: Icons.workspace_premium,
-          iconColor: info.plan == 'free' ? Colors.grey : Colors.amber,
+          iconColor: info.isFree ? Colors.grey : Colors.amber,
           title: 'Plan',
-          value: info.plan.toUpperCase(),
+          value: info.planName,
+        ),
+        const SizedBox(height: 16),
+        _InfoCard(
+          icon: Icons.receipt_long,
+          iconColor: Colors.blue,
+          title: 'Billing',
+          value: billingLabel,
         ),
         const SizedBox(height: 16),
         _InfoCard(
           icon: Icons.check_circle_outline,
           iconColor: info.status == 'active' ? Colors.green : Colors.orange,
           title: 'Status',
-          value: info.status.toUpperCase(),
+          value: statusLabel,
         ),
         if (info.expiresAt != null) ...[
           const SizedBox(height: 16),
@@ -128,7 +151,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
             Text('Limit: ${info.dailyLimit}', style: const TextStyle(color: Colors.grey)),
           ],
         ),
-        if (info.plan == 'free') ...[
+        if (info.isFree) ...[
           const SizedBox(height: 32),
           FilledButton.icon(
             onPressed: () {
