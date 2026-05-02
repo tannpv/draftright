@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:draftright_mobile/services/auth_service.dart';
 import 'package:draftright_mobile/services/settings_service.dart';
 import 'package:draftright_mobile/screens/subscription_screen.dart';
+import 'package:draftright_mobile/screens/change_password_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -66,6 +67,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     onTap: () {
                       Navigator.of(context).push(
                         MaterialPageRoute(builder: (_) => const SubscriptionScreen()),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.lock_outline),
+                    title: const Text('Change Password'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const ChangePasswordScreen()),
                       );
                     },
                   ),

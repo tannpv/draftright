@@ -1,52 +1,55 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:draftright_mobile/services/auth_service.dart';
-import 'package:draftright_mobile/widgets/social_login_buttons.dart';
 
-class RegisterScreen extends StatefulWidget {
-  const RegisterScreen({super.key});
+class ChangePasswordScreen extends StatefulWidget {
+  const ChangePasswordScreen({super.key});
 
   @override
-  State<RegisterScreen> createState() => _RegisterScreenState();
+  State<ChangePasswordScreen> createState() => _ChangePasswordScreenState();
 }
 
-class _RegisterScreenState extends State<RegisterScreen> {
+class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
+  final _currentPasswordController = TextEditingController();
+  final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   bool _isLoading = false;
-  bool _obscurePassword = true;
+  bool _obscureCurrent = true;
+  bool _obscureNew = true;
   bool _obscureConfirm = true;
   String? _error;
+  String? _success;
 
   @override
   void dispose() {
-    _nameController.dispose();
-    _emailController.dispose();
-    _passwordController.dispose();
+    _currentPasswordController.dispose();
+    _newPasswordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
   }
 
-  Future<void> _register() async {
+  Future<void> _changePassword() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() {
       _isLoading = true;
       _error = null;
+      _success = null;
     });
 
     try {
       final auth = context.read<AuthService>();
-      await auth.register(
-        _nameController.text.trim(),
-        _emailController.text.trim(),
-        _passwordController.text,
+      await auth.changePassword(
+        _currentPasswordController.text,
+        _newPasswordController.text,
       );
-      // AuthService notifies listeners → main.dart rebuilds to HomeScreen
-      if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
+      setState(() {
+        _success = 'Password changed successfully';
+      });
+      _currentPasswordController.clear();
+      _newPasswordController.clear();
+      _confirmPasswordController.clear();
     } catch (e) {
       setState(() {
         _error = e.toString().replaceFirst('Exception: ', '');
@@ -59,7 +62,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Create Account')),
+      appBar: AppBar(title: const Text('Change Password')),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
@@ -68,53 +71,41 @@ class _RegisterScreenState extends State<RegisterScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SizedBox(height: 16),
+                const SizedBox(height: 8),
                 TextFormField(
-                  controller: _nameController,
-                  textInputAction: TextInputAction.next,
-                  textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(
-                    labelText: 'Full Name',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.person_outline),
-                  ),
-                  validator: (v) {
-                    if (v == null || v.trim().isEmpty) return 'Name is required';
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  textInputAction: TextInputAction.next,
-                  decoration: const InputDecoration(
-                    labelText: 'Email',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.email_outlined),
-                  ),
-                  validator: (v) {
-                    if (v == null || v.trim().isEmpty) return 'Email is required';
-                    if (!v.contains('@')) return 'Enter a valid email';
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _passwordController,
-                  obscureText: _obscurePassword,
+                  controller: _currentPasswordController,
+                  obscureText: _obscureCurrent,
                   textInputAction: TextInputAction.next,
                   decoration: InputDecoration(
-                    labelText: 'Password',
+                    labelText: 'Current Password',
                     border: const OutlineInputBorder(),
                     prefixIcon: const Icon(Icons.lock_outline),
                     suffixIcon: IconButton(
-                      icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
-                      onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                      icon: Icon(_obscureCurrent ? Icons.visibility_off : Icons.visibility),
+                      onPressed: () => setState(() => _obscureCurrent = !_obscureCurrent),
                     ),
                   ),
                   validator: (v) {
-                    if (v == null || v.isEmpty) return 'Password is required';
+                    if (v == null || v.isEmpty) return 'Current password is required';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _newPasswordController,
+                  obscureText: _obscureNew,
+                  textInputAction: TextInputAction.next,
+                  decoration: InputDecoration(
+                    labelText: 'New Password',
+                    border: const OutlineInputBorder(),
+                    prefixIcon: const Icon(Icons.lock_outline),
+                    suffixIcon: IconButton(
+                      icon: Icon(_obscureNew ? Icons.visibility_off : Icons.visibility),
+                      onPressed: () => setState(() => _obscureNew = !_obscureNew),
+                    ),
+                  ),
+                  validator: (v) {
+                    if (v == null || v.isEmpty) return 'New password is required';
                     if (v.length < 8) return 'Password must be at least 8 characters';
                     return null;
                   },
@@ -124,9 +115,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   controller: _confirmPasswordController,
                   obscureText: _obscureConfirm,
                   textInputAction: TextInputAction.done,
-                  onFieldSubmitted: (_) => _register(),
+                  onFieldSubmitted: (_) => _changePassword(),
                   decoration: InputDecoration(
-                    labelText: 'Confirm Password',
+                    labelText: 'Confirm New Password',
                     border: const OutlineInputBorder(),
                     prefixIcon: const Icon(Icons.lock_outline),
                     suffixIcon: IconButton(
@@ -135,8 +126,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     ),
                   ),
                   validator: (v) {
-                    if (v == null || v.isEmpty) return 'Please confirm your password';
-                    if (v != _passwordController.text) return 'Passwords do not match';
+                    if (v == null || v.isEmpty) return 'Please confirm your new password';
+                    if (v != _newPasswordController.text) return 'Passwords do not match';
                     return null;
                   },
                 ),
@@ -157,21 +148,30 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                   const SizedBox(height: 16),
                 ],
+                if (_success != null) ...[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+                    ),
+                    child: Text(
+                      _success!,
+                      style: const TextStyle(color: Colors.green),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
                 FilledButton(
-                  onPressed: _isLoading ? null : _register,
+                  onPressed: _isLoading ? null : _changePassword,
                   child: _isLoading
                       ? const SizedBox(
                           height: 20, width: 20,
                           child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                         )
-                      : const Text('Create Account'),
-                ),
-                const SizedBox(height: 20),
-                const SocialLoginButtons(),
-                const SizedBox(height: 20),
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Already have an account? Sign in'),
+                      : const Text('Change Password'),
                 ),
               ],
             ),
