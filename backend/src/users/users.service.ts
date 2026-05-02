@@ -11,14 +11,17 @@ export class UsersService {
   ) {}
 
   async findByEmail(email: string): Promise<User | null> {
-    return this.usersRepo.findOne({ where: { email } });
+    return this.usersRepo
+      .createQueryBuilder('u')
+      .where('LOWER(u.email) = LOWER(:email)', { email: email.trim() })
+      .getOne();
   }
 
   async findById(id: string): Promise<User | null> {
     return this.usersRepo.findOne({ where: { id } });
   }
 
-  async create(data: { email: string; password_hash?: string; name: string; role?: UserRole; auth_provider?: AuthProvider; google_id?: string; facebook_id?: string; tiktok_id?: string; avatar_url?: string }): Promise<User> {
+  async create(data: Partial<User> & { email: string; name: string }): Promise<User> {
     const user = this.usersRepo.create(data);
     return this.usersRepo.save(user);
   }

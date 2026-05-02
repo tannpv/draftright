@@ -1,0 +1,71 @@
+---
+import SubscribeButton from './SubscribeButton.tsx';
+
+const free = [
+  '20 rewrites per day',
+  'All 6 tones',
+  'Keyboard + Share Sheet',
+  'iOS, Android, macOS, Windows, Linux',
+];
+const pro = [
+  'Unlimited rewrites',
+  'Priority processing',
+  'All platforms',
+  'Early access to new features',
+];
+---
+<section id="pricing" class="py-24">
+  <div class="mx-auto max-w-5xl px-6">
+    <!-- Header -->
+    <div class="text-center mb-16">
+      <h2 class="text-4xl md:text-5xl font-bold tracking-tight">Simple Pricing</h2>
+      <p class="mt-4 text-lg text-gray-400 max-w-2xl mx-auto">
+        Start free, upgrade when you need more.
+      </p>
+    </div>
+
+    <!-- Plans -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-3xl mx-auto">
+      <!-- Free -->
+      <div class="rounded-2xl border border-dark-border bg-dark-card p-8">
+        <h3 class="text-lg font-semibold text-gray-300 mb-2">Free</h3>
+        <div class="flex items-baseline gap-1 mb-6">
+          <span class="text-4xl font-extrabold text-white">$0</span>
+          <span class="text-gray-500">/ forever</span>
+        </div>
+        <ul class="space-y-3">
+          {free.map((item) => (
+            <li class="flex items-start gap-2 text-sm text-gray-300">
+              <span class="text-brand-400 mt-0.5">&#10003;</span>
+              <span>{item}</span>
+            </li>
+          ))}
+        </ul>
+        <a
+          href="/signup"
+          class="mt-8 block text-center rounded-full border border-brand-400 px-6 py-2.5 text-sm font-semibold text-brand-400 hover:bg-brand-400/10 transition-colors"
+        >
+          Get Started
+        </a>
+      </div>
+
+      <!-- Pro -->
+      <div class="rounded-2xl border-2 border-brand-400 bg-dark-card p-8 ring-1 ring-brand-400/20">
+        <h3 class="text-lg font-semibold text-brand-400 mb-2">Pro</h3>
+        <div class="flex items-baseline gap-1 mb-6">
+          <span class="text-4xl font-extrabold text-white">$4.99</span>
+          <span class="text-gray-500">/ month</span>
+        </div>
+        <ul class="space-y-3">
+          {pro.map((item) => (
+            <li class="flex items-start gap-2 text-sm text-gray-300">
+              <span class="text-brand-400 mt-0.5">&#10003;</span>
+              <span>{item}</span>
+            </li>
+          ))}
+        </ul>
+        <SubscribeButton client:load />
+      </div>
+    </div>
+  </div>
+</section>

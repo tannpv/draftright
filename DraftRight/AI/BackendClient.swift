@@ -119,6 +119,39 @@ final class BackendClient {
         return decoded.rewritten_text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// POSTs to /auth/refresh with the refresh token. Returns new (access, refresh) on success, nil on failure.
+    /// Caller is responsible for persisting the new tokens.
+    func refreshTokens(refreshToken: String, backendUrl: String) async -> (access: String, refresh: String)? {
+        guard !refreshToken.isEmpty else { return nil }
+        let base = backendUrl.strippingTrailingSlash
+        guard let url = URL(string: "\(base)/auth/refresh") else { return nil }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 10
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: ["refresh_token": refreshToken])
+
+        do {
+            let (data, response) = try await session.data(for: request)
+            guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+                DRLogger.log("refreshTokens FAILED: HTTP \((response as? HTTPURLResponse)?.statusCode ?? -1)", category: .auth)
+                return nil
+            }
+            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let access = json["access_token"] as? String,
+                  let refresh = json["refresh_token"] as? String else {
+                DRLogger.log("refreshTokens FAILED: bad response shape", category: .auth)
+                return nil
+            }
+            DRLogger.log("refreshTokens SUCCESS", category: .auth)
+            return (access, refresh)
+        } catch {
+            DRLogger.log("refreshTokens FAILED: \(error.localizedDescription)", category: .auth)
+            return nil
+        }
+    }
+
     func checkHealth(backendUrl: String, accessToken: String?) async -> BackendStatus {
         let base = backendUrl.strippingTrailingSlash
 

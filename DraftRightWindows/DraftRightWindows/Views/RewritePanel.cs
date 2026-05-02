@@ -428,6 +428,16 @@ public sealed class RewritePanel : Window
         UpdateToneButtonStyles(null);
     }
 
+    /// <summary>
+    /// Loads captured text into the panel and brings it to the foreground.
+    /// Call from the UI thread (e.g., via DispatcherQueue.TryEnqueue).
+    /// </summary>
+    public void ShowForText(string text)
+    {
+        SetInputText(text);
+        this.Activate();
+    }
+
     private void OnToneClick(object sender, RoutedEventArgs e)
     {
         if (sender is Button btn && btn.Tag is string toneName && ToneMap.TryGetValue(toneName, out var tone))

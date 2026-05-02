@@ -48,6 +48,18 @@ export class User {
   @Column({ type: 'varchar', length: 500, nullable: true })
   avatar_url: string;
 
+  @Column({ type: 'boolean', default: false })
+  email_verified: boolean;
+
+  @Column({ type: 'varchar', length: 6, nullable: true })
+  email_verification_code: string | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  email_verification_expires: Date | null;
+
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  lemonsqueezy_customer_id: string | null;
+
   @CreateDateColumn()
   created_at: Date;
 

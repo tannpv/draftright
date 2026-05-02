@@ -8,9 +8,10 @@ import { RewriteLog } from './entities/rewrite-log.entity';
 import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
 import { UsageModule } from '../usage/usage.module';
 import { AiProvidersModule } from '../ai-providers/ai-providers.module';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([RewriteLog]), SubscriptionsModule, UsageModule, AiProvidersModule],
+  imports: [TypeOrmModule.forFeature([RewriteLog]), SubscriptionsModule, UsageModule, AiProvidersModule, AuthModule],
   controllers: [RewriteController],
   providers: [RewriteService, RewriteCacheService, RewriteLogService],
   exports: [RewriteLogService],

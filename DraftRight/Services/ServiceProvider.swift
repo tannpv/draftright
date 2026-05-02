@@ -38,6 +38,10 @@ final class ServiceProvider: NSObject {
     // MARK: - Core rewrite logic
 
     private func handleRewrite(pasteboard: NSPasteboard, tone: Tone, error: AutoreleasingUnsafeMutablePointer<NSString>) {
+        guard appModel.appMode == .advanced else {
+            DRLogger.log("NSService ignored: app is in One-Click mode", category: .app)
+            return
+        }
         guard let text = pasteboard.string(forType: .string), !text.isEmpty else {
             error.pointee = "No text provided." as NSString
             return

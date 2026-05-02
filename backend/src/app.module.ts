@@ -12,10 +12,13 @@ import { RewriteModule } from './rewrite/rewrite.module';
 import { AdminModule } from './admin/admin.module';
 import { PaymentModule } from './payment/payment.module';
 import { UpdatesModule } from './updates/updates.module';
+import { EmailModule } from './email/email.module';
+import { LemonsqueezyModule } from './lemonsqueezy/lemonsqueezy.module';
 
 @Module({
   imports: [
     TypeOrmModule.forRoot(databaseConfig()),
+    EmailModule,
     HealthModule,
     UsersModule,
     PlansModule,
@@ -27,6 +30,7 @@ import { UpdatesModule } from './updates/updates.module';
     AdminModule,
     PaymentModule,
     UpdatesModule,
+    LemonsqueezyModule,
   ],
 })
 export class AppModule {}

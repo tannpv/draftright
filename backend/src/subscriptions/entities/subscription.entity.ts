@@ -15,6 +15,7 @@ export enum StoreType {
   GOOGLE_PLAY = 'google_play',
   APPLE_IAP = 'apple_iap',
   ADMIN_GRANTED = 'admin_granted',
+  LEMONSQUEEZY = 'lemonsqueezy',
 }
 
 @Entity('subscriptions')
