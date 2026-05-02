@@ -53,8 +53,32 @@ class BackendClient {
 
                 val responseBody = BufferedReader(InputStreamReader(conn.inputStream)).readText()
                 val json = JSONObject(responseBody)
-                val rewrittenText = json.getString("rewritten_text").trim()
-                onResult(Result.success(rewrittenText))
+
+                // Grammar check returns {"grammar": {score, issues[]}} instead of rewritten_text
+                val grammar = json.optJSONObject("grammar")
+                if (tone == Tone.GRAMMAR_CHECK && grammar != null) {
+                    val score = grammar.optInt("score", 0)
+                    val issues = grammar.optJSONArray("issues")
+                    val sb = StringBuilder()
+                    sb.append("Score: $score/100")
+                    if (issues != null && issues.length() > 0) {
+                        sb.append("\n\nIssues:")
+                        for (i in 0 until issues.length()) {
+                            val issue = issues.getJSONObject(i)
+                            val original = issue.optString("original", "")
+                            val suggestion = issue.optString("suggestion", "")
+                            val reason = issue.optString("reason", "")
+                            sb.append("\n• \"$original\" → \"$suggestion\"")
+                            if (reason.isNotBlank()) sb.append(" ($reason)")
+                        }
+                    } else {
+                        sb.append("\n\nNo issues found. Your text looks great!")
+                    }
+                    onResult(Result.success(sb.toString()))
+                } else {
+                    val rewrittenText = json.getString("rewritten_text").trim()
+                    onResult(Result.success(rewrittenText))
+                }
             } catch (e: Exception) {
                 onResult(Result.failure(e))
             }

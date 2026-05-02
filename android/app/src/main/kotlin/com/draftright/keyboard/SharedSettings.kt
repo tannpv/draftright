@@ -12,8 +12,8 @@ class SharedSettings(context: Context) {
         get() = prefs.getString("flutter.draftright.accessToken", "") ?: ""
 
     val backendUrl: String
-        get() = prefs.getString("flutter.draftright.backendUrl", "https://api.draftright.app")
-            ?: "https://api.draftright.app"
+        get() = prefs.getString("flutter.draftright.backendUrl", "https://api.draftright.info")
+            ?: "https://api.draftright.info"
 
     val translateLanguage: String
         get() = prefs.getString("flutter.draftright.translateLanguage", "Vietnamese") ?: "Vietnamese"
