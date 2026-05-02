@@ -16,6 +16,28 @@ public static class Win32Interop
     [DllImport("user32.dll", SetLastError = true)]
     public static extern bool UnregisterHotKey(IntPtr hWnd, int id);
 
+    // ── Window subclassing (comctl32) ──
+
+    /// <summary>
+    /// Delegate type for the subclass window procedure callback.
+    /// Must be kept alive (stored in a field) for the lifetime of the subclass.
+    /// </summary>
+    public delegate IntPtr SUBCLASSPROC(
+        IntPtr hWnd, uint uMsg, IntPtr wParam, IntPtr lParam,
+        UIntPtr uIdSubclass, UIntPtr dwRefData);
+
+    [DllImport("comctl32.dll", SetLastError = true)]
+    public static extern bool SetWindowSubclass(
+        IntPtr hWnd, SUBCLASSPROC pfnSubclass, UIntPtr uIdSubclass, UIntPtr dwRefData);
+
+    [DllImport("comctl32.dll", SetLastError = true)]
+    public static extern bool RemoveWindowSubclass(
+        IntPtr hWnd, SUBCLASSPROC pfnSubclass, UIntPtr uIdSubclass);
+
+    [DllImport("comctl32.dll")]
+    public static extern IntPtr DefSubclassProc(
+        IntPtr hWnd, uint uMsg, IntPtr wParam, IntPtr lParam);
+
     // ── Window visibility ──
 
     [DllImport("user32.dll")]

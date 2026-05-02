@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import UserNotifications
 
 @main
 struct DraftRightApp: App {
@@ -66,14 +67,10 @@ struct DraftRightApp: App {
             .environmentObject(appModel)
 
         let hostingController = NSHostingController(rootView: settingsView)
-        let fittingSize = hostingController.view.fittingSize
         let window = NSWindow(contentViewController: hostingController)
         window.title = "DraftRight V2 Settings"
         window.styleMask = [.titled, .closable]
-        window.setContentSize(NSSize(
-            width: max(fittingSize.width, 480),
-            height: max(fittingSize.height, 300)
-        ))
+        window.setContentSize(NSSize(width: 560, height: 560))
         window.center()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -99,50 +96,123 @@ struct DraftRightApp: App {
             }
         }.store(in: &appModel.cancellables)
 
-        // When user clicks pencil icon or presses hotkey, open the rewrite panel
+        // When user clicks pencil icon or presses hotkey, fork on appMode
         monitor.start { text in
-            DRLogger.log("onTextSelected fired, isLoggedIn=\(appModel.isLoggedIn) hasToken=\(!appModel.accessToken.isEmpty)", category: .app)
+            DRLogger.log("onTextSelected fired, isLoggedIn=\(appModel.isLoggedIn) mode=\(appModel.appMode.rawValue)", category: .app)
             guard appModel.isLoggedIn, !appModel.accessToken.isEmpty else {
-                DRLogger.log("BLOCKED: not logged in — panel will not show", category: .app)
+                DRLogger.log("BLOCKED: not logged in — ignoring selection", category: .app)
                 return
             }
-            DRLogger.log("Opening panel with text: '\(text.prefix(30))'", category: .app)
 
-            diffWindow.presentPanel(
-                original: text,
-                visibleTones: appModel.visibleTones,
-                autoRunTone: appModel.autoRunTone,
-                onToneSelected: { tone in
-                    // User picked a tone inside the panel → call API
-                    diffWindow.model.startLoading(tone: tone)
-                    appModel.isRewriting = true
-
-                    Task {
-                        do {
-                            let rewritten = try await aiClient.rewrite(
-                                text: text,
-                                tone: tone,
-                                accessToken: appModel.accessToken,
-                                backendUrl: appModel.backendUrl,
-                                targetLanguage: appModel.translateLanguage
-                            )
-                            diffWindow.model.handleRewriteResponse(rewritten, tone: tone)
-                        } catch {
-                            diffWindow.model.setError(error.localizedDescription)
-                        }
-                        appModel.isRewriting = false
-                    }
-                },
-                onReplace: { _ in
-                    // Handled by DiffWindow (copy + refocus + paste)
-                },
-                onCopy: { rewritten in
-                    ClipboardHelper.copy(text: rewritten)
-                }
-            )
+            switch appModel.appMode {
+            case .oneClick:
+                monitor.startLoadingAnimation()
+                Self.runOneClickRewrite(
+                    text: text,
+                    appModel: appModel,
+                    aiClient: aiClient,
+                    monitor: monitor
+                )
+            case .advanced:
+                monitor.hideTrigger()
+                Self.runAdvancedRewrite(
+                    text: text,
+                    appModel: appModel,
+                    aiClient: aiClient,
+                    diffWindow: diffWindow
+                )
+            }
         }
 
         objc_setAssociatedObject(appModel, "serviceProvider", serviceProvider, .OBJC_ASSOCIATION_RETAIN)
         objc_setAssociatedObject(appModel, "selectionMonitor", monitor, .OBJC_ASSOCIATION_RETAIN)
+    }
+
+    @MainActor
+    static func runAdvancedRewrite(
+        text: String,
+        appModel: AppModel,
+        aiClient: BackendClient,
+        diffWindow: DiffWindow
+    ) {
+        DRLogger.log("Advanced mode: opening panel with text: '\(text.prefix(30))'", category: .app)
+        diffWindow.presentPanel(
+            original: text,
+            visibleTones: appModel.visibleTones,
+            autoRunTone: appModel.autoRunTone,
+            onToneSelected: { tone in
+                diffWindow.model.startLoading(tone: tone)
+                appModel.isRewriting = true
+                Task {
+                    do {
+                        let rewritten = try await aiClient.rewrite(
+                            text: text,
+                            tone: tone,
+                            accessToken: appModel.accessToken,
+                            backendUrl: appModel.backendUrl,
+                            targetLanguage: appModel.translateLanguage
+                        )
+                        diffWindow.model.handleRewriteResponse(rewritten, tone: tone)
+                    } catch {
+                        diffWindow.model.setError(error.localizedDescription)
+                    }
+                    appModel.isRewriting = false
+                }
+            },
+            onReplace: { _ in },
+            onCopy: { rewritten in
+                ClipboardHelper.copy(text: rewritten)
+            }
+        )
+    }
+
+    @MainActor
+    static func runOneClickRewrite(
+        text: String,
+        appModel: AppModel,
+        aiClient: BackendClient,
+        monitor: SelectionMonitor
+    ) {
+        let tone = appModel.oneClickTone
+        DRLogger.log("One-Click mode: instant rewrite with tone=\(tone.rawValue) text='\(text.prefix(30))'",
+                     category: .app)
+        appModel.isRewriting = true
+
+        Task { @MainActor in
+            defer {
+                appModel.isRewriting = false
+                monitor.stopLoadingAndHide()
+            }
+            do {
+                let rewritten = try await aiClient.rewrite(
+                    text: text,
+                    tone: tone,
+                    accessToken: appModel.accessToken,
+                    backendUrl: appModel.backendUrl,
+                    targetLanguage: appModel.translateLanguage
+                )
+                DRLogger.log("One-Click rewrite OK, replacing selection", category: .app)
+                if !AXTextService().replaceSelectedText(with: rewritten) {
+                    ClipboardHelper.copy(text: rewritten)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        ClipboardHelper.pasteFromClipboard()
+                    }
+                }
+            } catch {
+                DRLogger.log("One-Click rewrite FAILED: \(error.localizedDescription)", category: .app)
+                Self.showOneClickError(error.localizedDescription)
+            }
+        }
+    }
+
+    @MainActor
+    static func showOneClickError(_ message: String) {
+        let center = UNUserNotificationCenter.current()
+        center.requestAuthorization(options: [.alert]) { _, _ in }
+        let content = UNMutableNotificationContent()
+        content.title = "DraftRight — One-Click Rewrite Failed"
+        content.body = message
+        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+        center.add(request, withCompletionHandler: nil)
     }
 }
