@@ -47,6 +47,8 @@ class ToolbarView(
                     Tone.POLISHED -> "\u2728"       // ✨ sparkles
                     Tone.CONCISE -> "\u2296"        // ⊖ compact
                     Tone.TECHNICAL -> "\uD83D\uDD27" // 🔧 wrench
+                    Tone.CLAUDE -> "\uD83E\uDD16" // 🤖 robot (Claude)
+                    Tone.GRAMMAR_CHECK -> "\u2705" // ✅ check
                     Tone.TRANSLATE -> "\uD83C\uDF10" // 🌐 globe
                 }
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)

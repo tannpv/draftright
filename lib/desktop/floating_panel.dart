@@ -281,12 +281,26 @@ class _FloatingPanelState extends State<FloatingPanel> {
   Widget _buildError() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Text(
-        _errorMessage!,
-        style: TextStyle(
-          color: Theme.of(context).colorScheme.error,
-          fontSize: 12,
-        ),
+      child: Row(
+        children: [
+          Expanded(
+            child: SelectableText(
+              _errorMessage!,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.error,
+                fontSize: 12,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          IconButton(
+            icon: const Icon(Icons.copy, size: 16),
+            tooltip: 'Copy error',
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: _errorMessage!));
+            },
+          ),
+        ],
       ),
     );
   }
@@ -373,6 +387,10 @@ class _FloatingPanelState extends State<FloatingPanel> {
         return Icons.compress;
       case Tone.technical:
         return Icons.build;
+      case Tone.claude:
+        return Icons.auto_awesome_outlined;
+      case Tone.grammarCheck:
+        return Icons.spellcheck;
       case Tone.translate:
         return Icons.language;
     }

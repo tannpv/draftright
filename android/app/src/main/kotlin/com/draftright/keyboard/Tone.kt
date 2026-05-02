@@ -9,6 +9,8 @@ enum class Tone(
     POLISHED("More Polished", "auto_awesome"),
     CONCISE("Concise", "compress"),
     TECHNICAL("Technical", "build"),
+    CLAUDE("Claude Style", "smart_toy"),
+    GRAMMAR_CHECK("Grammar Check", "spellcheck"),
     TRANSLATE("Translate", "language");
 
     val apiValue: String get() = when (this) {
@@ -17,6 +19,8 @@ enum class Tone(
         POLISHED -> "polished"
         CONCISE -> "concise"
         TECHNICAL -> "technical"
+        CLAUDE -> "claude"
+        GRAMMAR_CHECK -> "grammar_check"
         TRANSLATE -> "translate"
     }
 
@@ -26,6 +30,8 @@ enum class Tone(
         POLISHED -> "Rewrite the following text to be more polished and professional. Improve grammar, word choice, and sentence structure for a refined, workplace-appropriate tone. Preserve the original meaning. Return only the rewritten text, no explanations."
         CONCISE -> "Rewrite the following text to be as concise as possible. Remove unnecessary words, redundancy, and filler while preserving the key meaning. Return only the rewritten text, no explanations."
         TECHNICAL -> "Rewrite the following text in a technical specification style. Use precise, unambiguous language suitable for documentation, specs, or technical communication. Preserve the original meaning. Return only the rewritten text, no explanations."
+        CLAUDE -> "Rewrite the following text in a clear, thoughtful, and well-structured style. Be direct but warm — every sentence should carry weight. Use good paragraph breaks and logical flow. Acknowledge nuance where relevant without over-hedging. Sound naturally confident and approachable, not formal or stiff. Preserve the original meaning. Return only the rewritten text, no explanations."
+        GRAMMAR_CHECK -> "Analyze the given text for grammar, spelling, and style issues. Return a JSON object with a \"score\" (0-100) and an \"issues\" array. Each issue has \"type\", \"offset\", \"length\", \"original\", \"suggestion\", and \"reason\". Return ONLY JSON."
         TRANSLATE -> "Translate the following text into $targetLanguage. If the text is already in $targetLanguage, translate it into English instead. Preserve the original meaning and tone. Return only the translated text, no explanations."
     }
 }

@@ -88,6 +88,7 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
                   return Padding(
                     padding: const EdgeInsets.only(right: 6),
                     child: ChoiceChip(
+                      avatar: Icon(tone.icon, size: 18),
                       label: Text(tone.displayName),
                       selected: isSelected,
                       onSelected: _isLoading ? null : (_) => _rewrite(tone),
@@ -102,10 +103,26 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
                   ? const Center(child: CircularProgressIndicator())
                   : _error != null
                       ? Center(
-                          child: Text(
-                            _error!,
-                            style: const TextStyle(color: Colors.red),
-                            textAlign: TextAlign.center,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              SelectableText(
+                                _error!,
+                                style: const TextStyle(color: Colors.red),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 8),
+                              TextButton.icon(
+                                onPressed: () {
+                                  Clipboard.setData(ClipboardData(text: _error!));
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Error copied')),
+                                  );
+                                },
+                                icon: const Icon(Icons.copy, size: 14),
+                                label: const Text('Copy Error'),
+                              ),
+                            ],
                           ),
                         )
                       : _result != null
