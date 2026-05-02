@@ -61,3 +61,16 @@ android/key.properties
 android/app/dr-release.jks
 *.jks
 *.keystore
+
+# Google Play Console service-account key — NEVER commit
+android/play-console-key.json
+android/fastlane/play-console-key.json
+**/play-console-key.json
+google-play-*.json
+
+# Fastlane runtime artifacts
+android/fastlane/report.xml
+android/fastlane/Preview.html
+android/fastlane/screenshots/
+android/fastlane/test_output/
+android/Gemfile.lock
