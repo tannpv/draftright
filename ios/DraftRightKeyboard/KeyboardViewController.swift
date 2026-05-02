@@ -3,32 +3,52 @@ import UIKit
 class KeyboardViewController: UIInputViewController {
 
     private let toolbar = ToolbarView()
+    private let keyboard = QwertyKeyboardView()
     private let aiClient = BackendClient()
     private let settings = SharedSettings()
     private var diffSheet: DiffSheetView?
     private var originalText: String?
+    private var heightConstraint: NSLayoutConstraint!
+
+    private var totalHeight: CGFloat {
+        return 44 + keyboard.totalHeight // toolbar + keyboard rows
+    }
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        setupToolbar()
+        setupUI()
     }
 
-    private func setupToolbar() {
+    private func setupUI() {
+        // Height constraint for the entire input view
+        heightConstraint = view.heightAnchor.constraint(equalToConstant: totalHeight)
+        heightConstraint.priority = .defaultHigh
+        heightConstraint.isActive = true
+
+        // Toolbar
         toolbar.delegate = self
         toolbar.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(toolbar)
+
+        // Keyboard
+        keyboard.delegate = self
+        keyboard.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(keyboard)
 
         NSLayoutConstraint.activate([
             toolbar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             toolbar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             toolbar.topAnchor.constraint(equalTo: view.topAnchor),
             toolbar.heightAnchor.constraint(equalToConstant: 44),
-        ])
 
-        let heightConstraint = view.heightAnchor.constraint(equalToConstant: 44)
-        heightConstraint.priority = .defaultHigh
-        heightConstraint.isActive = true
+            keyboard.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            keyboard.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            keyboard.topAnchor.constraint(equalTo: toolbar.bottomAnchor),
+            keyboard.heightAnchor.constraint(equalToConstant: keyboard.totalHeight),
+        ])
     }
+
+    // MARK: - Text operations
 
     private func readFullText() -> String {
         let before = textDocumentProxy.documentContextBeforeInput ?? ""
@@ -48,6 +68,8 @@ class KeyboardViewController: UIInputViewController {
         textDocumentProxy.insertText(newText)
     }
 
+    // MARK: - Diff sheet
+
     private func showDiffSheet(original: String, rewritten: String) {
         dismissDiffSheet()
 
@@ -64,15 +86,18 @@ class KeyboardViewController: UIInputViewController {
             sheet.heightAnchor.constraint(equalToConstant: sheetHeight),
         ])
 
-        view.constraints.first { $0.firstAttribute == .height }?.constant = 44 + sheetHeight
+        // Push keyboard below diff sheet
+        heightConstraint.constant = 44 + sheetHeight + keyboard.totalHeight
         self.diffSheet = sheet
     }
 
     private func dismissDiffSheet() {
         diffSheet?.removeFromSuperview()
         diffSheet = nil
-        view.constraints.first { $0.firstAttribute == .height }?.constant = 44
+        heightConstraint.constant = totalHeight
     }
+
+    // MARK: - Banner
 
     private func showBanner(_ text: String, color: UIColor) {
         let banner = UILabel()
@@ -98,6 +123,8 @@ class KeyboardViewController: UIInputViewController {
         }
     }
 }
+
+// MARK: - ToolbarViewDelegate
 
 extension KeyboardViewController: ToolbarViewDelegate {
     func toolbarDidSelectTone(_ tone: Tone) {
@@ -134,6 +161,8 @@ extension KeyboardViewController: ToolbarViewDelegate {
     }
 }
 
+// MARK: - DiffSheetDelegate
+
 extension KeyboardViewController: DiffSheetDelegate {
     func diffSheetDidReplace(_ text: String) {
         replaceAllText(with: text)
@@ -148,5 +177,29 @@ extension KeyboardViewController: DiffSheetDelegate {
 
     func diffSheetDidCancel() {
         dismissDiffSheet()
+    }
+}
+
+// MARK: - KeyboardActionDelegate
+
+extension KeyboardViewController: KeyboardActionDelegate {
+    func keyboardDidType(_ char: String) {
+        textDocumentProxy.insertText(char)
+    }
+
+    func keyboardDidBackspace() {
+        textDocumentProxy.deleteBackward()
+    }
+
+    func keyboardDidEnter() {
+        textDocumentProxy.insertText("\n")
+    }
+
+    func keyboardDidSpace() {
+        textDocumentProxy.insertText(" ")
+    }
+
+    func keyboardDidSwitchKeyboard() {
+        advanceToNextInputMode()
     }
 }

@@ -12,7 +12,11 @@ struct SharedSettings {
     }
 
     var backendUrl: String {
-        defaults?.string(forKey: "draftright.backendUrl") ?? "https://api.draftright.app"
+        #if DEBUG
+        return defaults?.string(forKey: "draftright.backendUrl") ?? "http://localhost:3000"
+        #else
+        return defaults?.string(forKey: "draftright.backendUrl") ?? "https://api.draftright.info"
+        #endif
     }
 
     var translateLanguage: String {

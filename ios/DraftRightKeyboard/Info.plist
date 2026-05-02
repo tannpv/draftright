@@ -26,6 +26,17 @@
         <string>com.apple.keyboard-service</string>
         <key>NSExtensionPrincipalClass</key>
         <string>$(PRODUCT_MODULE_NAME).KeyboardViewController</string>
+        <key>NSExtensionAttributes</key>
+        <dict>
+            <key>IsASCIICapable</key>
+            <true/>
+            <key>PrefersRightToLeft</key>
+            <false/>
+            <key>PrimaryLanguage</key>
+            <string>en-US</string>
+            <key>RequestsOpenAccess</key>
+            <true/>
+        </dict>
     </dict>
     <key>NSAppTransportSecurity</key>
     <dict>
