@@ -1,0 +1,3 @@
+[submodule "DraftRightMobile"]
+	path = DraftRightMobile
+	url = https://github.com/tannpv/draftrightmobile.git
