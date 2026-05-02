@@ -218,7 +218,7 @@ class ActionViewController: UIViewController {
         let tone = Tone.allCases[sender.tag]
         guard !inputText.isEmpty else { return }
 
-        if settings.accessToken.isEmpty {
+        if settings.bearerToken.isEmpty {
             showError("Please login in the DraftRight app first")
             return
         }
