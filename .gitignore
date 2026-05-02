@@ -2,3 +2,41 @@
 .DS_Store
 *.swp
 .worktrees/
+
+# Secrets — NEVER commit
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Claude Code & IDE state
+.claude/
+.vscode/
+.idea/
+*.iml
+
+# Node
+**/node_modules/
+**/dist/
+**/.astro/
+**/.next/
+**/.turbo/
+
+# C# / .NET
+**/bin/
+**/obj/
+
+# Python
+**/__pycache__/
+*.pyc
+
+# Java / Gradle / Android
+**/build/
+**/.gradle/
+**/local.properties
+
+# Logs & runtime data
+*.log
+backups/
+DraftRightLinux/data/
