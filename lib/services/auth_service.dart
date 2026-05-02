@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -7,6 +8,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:draftright_mobile/services/extension_token_service.dart';
 import 'package:draftright_mobile/services/logger_service.dart';
 
 class AuthService extends ChangeNotifier {
@@ -23,6 +25,8 @@ class AuthService extends ChangeNotifier {
   String? _accessToken;
   String? _refreshToken;
   String _baseUrl = 'http://localhost:3000';
+  late final ExtensionTokenService _extension =
+      ExtensionTokenService(baseUrl: _baseUrl);
 
   bool get isLoggedIn => _accessToken != null && _accessToken!.isNotEmpty;
   String? get accessToken => _accessToken;
@@ -30,6 +34,7 @@ class AuthService extends ChangeNotifier {
   /// Called by SettingsService when backendUrl changes.
   void setBaseUrl(String url) {
     _baseUrl = url;
+    _extension.baseUrl = url;
   }
 
   Future<void> init(String baseUrl) async {
@@ -160,6 +165,12 @@ class AuthService extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_sharedKeyAccess);
     await _syncToAppGroup('draftright.accessToken', null);
+    // Clear the extension token from SharedPreferences and (on iOS) App
+    // Group keychain so the extensions can no longer authenticate.
+    // Server-side revoke is a follow-up — for now the row stays active
+    // until 90-day idle expiry; on next login we re-mint and the old row
+    // is revoked via the (user_id, device_id) partial unique index.
+    await _extension.clearToken();
     notifyListeners();
   }
 
@@ -224,6 +235,11 @@ class AuthService extends ChangeNotifier {
     await prefs.setString(_sharedKeyAccess, access);
     await _syncToAppGroup('draftright.accessToken', access);
     notifyListeners();
+    // Mint or rotate the long-lived extension token in the background.
+    // Failures here must not block login — the extensions fall back to
+    // the access JWT path via SharedSettings.bearerToken until a future
+    // mint succeeds.
+    unawaited(_extension.ensureMinted(accessToken: access));
   }
 
   /// Sync a key/value to iOS App Group UserDefaults for keyboard extension access.
