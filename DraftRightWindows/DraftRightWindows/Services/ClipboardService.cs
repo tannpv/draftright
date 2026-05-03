@@ -48,8 +48,18 @@ public sealed class ClipboardService
     private const uint CF_UNICODETEXT = 13;
     private const uint GMEM_MOVEABLE = 0x0002;
 
-    private const ushort VK_CONTROL = 0x11;
-    private const ushort VK_C = 0x43;
+    private const ushort VK_CONTROL  = 0x11;
+    private const ushort VK_LCONTROL = 0xA2;
+    private const ushort VK_RCONTROL = 0xA3;
+    private const ushort VK_SHIFT    = 0x10;
+    private const ushort VK_LSHIFT   = 0xA0;
+    private const ushort VK_RSHIFT   = 0xA1;
+    private const ushort VK_MENU     = 0x12; // Alt
+    private const ushort VK_LMENU    = 0xA4;
+    private const ushort VK_RMENU    = 0xA5;
+    private const ushort VK_LWIN     = 0x5B;
+    private const ushort VK_RWIN     = 0x5C;
+    private const ushort VK_C        = 0x43;
     private const ushort VK_V = 0x56;
 
     private const uint KEYEVENTF_KEYUP = 0x0002;
@@ -95,20 +105,53 @@ public sealed class ClipboardService
         // 2. Clear clipboard so we can detect new content
         ClearClipboard();
 
-        // 3. Simulate Ctrl+C
+        // 3. Release any modifier keys the user may still be holding from
+        //    the global hotkey (Ctrl+Shift+R typically). Otherwise our
+        //    SimulateKeyCombo(Ctrl, C) below ends up effectively
+        //    Ctrl+Shift+C from the OS's perspective, which is "Copy as
+        //    Path" or similar in many apps — not actual Copy. Result:
+        //    clipboard stays empty and the panel shows "No text selected".
+        ReleaseHeldModifiers();
+        await Task.Delay(30);  // let the keyup events propagate
+
+        // 4. Simulate clean Ctrl+C
         SimulateKeyCombo(VK_CONTROL, VK_C);
 
-        // 4. Wait for the copy to complete
-        await Task.Delay(100);
+        // 5. Wait for the copy to complete. 100 ms wasn't enough for
+        //    Electron / web / WinUI editors that handle keyboard events
+        //    asynchronously through their own message loop.
+        await Task.Delay(150);
 
-        // 5. Read the newly copied text
+        // 6. Read the newly copied text
         string? selectedText = ReadClipboardText();
 
-        // 6. Restore original clipboard
+        // 7. Restore original clipboard
         if (originalClipboard != null)
             SetClipboardText(originalClipboard);
 
         return selectedText;
+    }
+
+    /// <summary>
+    /// Force keyup events for every modifier the user might be holding
+    /// down from a global-hotkey trigger. Standard pattern for capturing
+    /// selection after a hotkey fires.
+    /// </summary>
+    private static void ReleaseHeldModifiers()
+    {
+        ushort[] mods =
+        {
+            VK_LCONTROL, VK_RCONTROL, VK_CONTROL,
+            VK_LSHIFT,   VK_RSHIFT,   VK_SHIFT,
+            VK_LMENU,    VK_RMENU,    VK_MENU,
+            VK_LWIN,     VK_RWIN,
+        };
+        var inputs = new INPUT[mods.Length];
+        for (int i = 0; i < mods.Length; i++)
+        {
+            inputs[i] = MakeKeyInput(mods[i], keyUp: true);
+        }
+        SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
     }
 
     /// <summary>
