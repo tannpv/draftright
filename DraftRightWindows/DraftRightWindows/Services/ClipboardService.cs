@@ -66,6 +66,11 @@ public sealed class ClipboardService
 
     // ── SendInput structs ───────────────────────────────────
 
+    // INPUT struct must be sized to hold the LARGEST union member (MOUSEINPUT,
+    // 28 bytes / 32 with alignment on 64-bit). Without including all three
+    // possible union members, Marshal.SizeOf<INPUT>() returns 32 on x64
+    // when Windows expects 40, and SendInput rejects the call with
+    // ERROR_INVALID_PARAMETER (0x57). Same applies on ARM64.
     [StructLayout(LayoutKind.Sequential)]
     private struct INPUT
     {
@@ -76,7 +81,20 @@ public sealed class ClipboardService
     [StructLayout(LayoutKind.Explicit)]
     private struct INPUTUNION
     {
+        [FieldOffset(0)] public MOUSEINPUT mi;
         [FieldOffset(0)] public KEYBDINPUT ki;
+        [FieldOffset(0)] public HARDWAREINPUT hi;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MOUSEINPUT
+    {
+        public int dx;
+        public int dy;
+        public uint mouseData;
+        public uint dwFlags;
+        public uint time;
+        public IntPtr dwExtraInfo;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -87,6 +105,14 @@ public sealed class ClipboardService
         public uint dwFlags;
         public uint time;
         public IntPtr dwExtraInfo;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct HARDWAREINPUT
+    {
+        public uint uMsg;
+        public ushort wParamL;
+        public ushort wParamH;
     }
 
     private const uint INPUT_KEYBOARD = 1;
