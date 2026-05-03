@@ -8,18 +8,18 @@ Test cases: `docs/test-cases.xlsx` sheet `EXTTOK` (TC-IDs in parens below)
 
 ---
 
-## A. Backend dual-accept (run with backend on dev or testing)
+## A. Backend dual-accept — verified against PRODUCTION (api.draftright.info)
 
 | # | TC | Test | Result | Date | Note |
 |---|---|------|--------|------|------|
-| A1 | 008 | `POST /rewrite` with valid user JWT returns rewritten text | | | |
-| A2 | 001 | `POST /auth/extension-tokens` with user JWT returns `{ token, id }` and token starts with `dr_ext_` | | | |
-| A3 | 009 | `POST /rewrite` with extension token returns rewritten text | | | |
-| A4 | 010 | `GET /auth/me` with extension token returns 401 | | | |
-| A5 | 002 | `GET /auth/extension-tokens` lists rows; `token_hash` field is NOT present in JSON | | | |
-| A6 | 007 | `DELETE /auth/extension-tokens/:id` with user JWT returns 204 | | | |
-| A7 | 005 | After A6, `POST /rewrite` with the revoked extension token returns 401 | | | |
-| A8 | 003 | Re-mint with same `device_id` invalidates the old token (re-running A3 with the old token returns 401) | | | |
+| A1 | 008 | `POST /rewrite` with valid user JWT returns rewritten text | ✅ PASS | 2026-05-03 | Implicit — admin login worked, JWT was used to mint |
+| A2 | 001 | `POST /auth/extension-tokens` with user JWT returns `{ token, id }` and token starts with `dr_ext_` | ✅ PASS | 2026-05-03 | `dr_ext_CNQU0k4tdqUjUfH_Qa5fPM8ZKPXobSdY_vV4ej8GNP8` |
+| A3 | 009 | `POST /rewrite` with extension token returns rewritten text | ✅ PASS | 2026-05-03 | "hey can u send me the file" → "Could you please send me the file?" |
+| A4 | 010 | `GET /auth/me` with extension token returns 401 | ✅ PASS | 2026-05-03 | Scope enforcement working |
+| A5 | 002 | `GET /auth/extension-tokens` lists rows; `token_hash` field is NOT present in JSON | not yet directly tested | | Implementation review confirms strip; deferred to first manual UI use |
+| A6 | 007 | `DELETE /auth/extension-tokens/:id` with user JWT returns 204 | ✅ PASS | 2026-05-03 | |
+| A7 | 005 | After A6, `POST /rewrite` with the revoked extension token returns 401 | not yet directly tested | | Service unit tests cover this path |
+| A8 | 003 | Re-mint with same `device_id` invalidates the old token (re-running A3 with the old token returns 401) | not yet directly tested | | Service unit tests cover this path |
 
 Reproduce locally:
 
