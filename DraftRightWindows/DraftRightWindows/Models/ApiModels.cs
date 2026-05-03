@@ -74,6 +74,56 @@ public class RewriteResponse
 
     [JsonPropertyName("daily_limit")]
     public int DailyLimit { get; set; }
+
+    /// <summary>
+    /// Present only when tone == grammar_check. Backend returns a structured
+    /// { grammar: { score, issues: [...] } } in addition to (or instead of) a
+    /// flat rewritten_text. Rendered by GrammarCheckView.
+    /// </summary>
+    [JsonPropertyName("grammar")]
+    public GrammarResult? Grammar { get; set; }
+}
+
+// ── Grammar Check ──
+//
+// Returned by /rewrite when tone == "grammar_check".
+//
+// IMPORTANT: do NOT trust the LLM-returned offset/length. The AI is
+// unreliable about character positions across multi-line input — it
+// counts code points or visible chars in inconsistent ways. To apply a
+// fix, search the current text for `Original` near `Offset` and resolve
+// the actual range at fix time. See memory feedback_llm_offsets_unreliable.
+
+public class GrammarIssue
+{
+    /// <summary>"spelling" | "grammar" | "style" | other</summary>
+    [JsonPropertyName("type")]
+    public string Type { get; set; } = string.Empty;
+
+    [JsonPropertyName("offset")]
+    public int Offset { get; set; }
+
+    [JsonPropertyName("length")]
+    public int Length { get; set; }
+
+    /// <summary>The actual text the issue is about — anchor for content-resolved replacement.</summary>
+    [JsonPropertyName("original")]
+    public string Original { get; set; } = string.Empty;
+
+    [JsonPropertyName("suggestion")]
+    public string Suggestion { get; set; } = string.Empty;
+
+    [JsonPropertyName("reason")]
+    public string Reason { get; set; } = string.Empty;
+}
+
+public class GrammarResult
+{
+    [JsonPropertyName("score")]
+    public int Score { get; set; }
+
+    [JsonPropertyName("issues")]
+    public List<GrammarIssue> Issues { get; set; } = new();
 }
 
 // ── Subscription ──

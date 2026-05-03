@@ -35,6 +35,8 @@ public sealed class RewritePanel : Window
     private TextBlock _errorTextBlock = null!;
     private Grid _loadingOverlay = null!;
     private ProgressRing _loadingRing = null!;
+    private Border _outputBorder = null!;          // wraps _outputTextBlock — toggled when grammar UI is shown
+    private ContentControl _grammarHost = null!;    // hosts GrammarCheckView when tone == grammar_check
 
     // Colors
     private static readonly SolidColorBrush BrandBlue = new(Windows.UI.Color.FromArgb(255, 93, 135, 255));
@@ -232,7 +234,7 @@ public sealed class RewritePanel : Window
             Content = _outputTextBlock,
         };
 
-        var resultBorder = new Border
+        _outputBorder = new Border
         {
             Background = ResultBg,
             BorderBrush = BorderColor,
@@ -241,8 +243,18 @@ public sealed class RewritePanel : Window
             Padding = new Thickness(12),
             Child = scrollViewer,
         };
+        container.Children.Add(_outputBorder);
 
-        container.Children.Add(resultBorder);
+        // Sibling host for GrammarCheckView (collapsed by default; swapped
+        // in when the response has grammar data). Stays a separate child so
+        // the regular result Border doesn't have to be torn down each time.
+        _grammarHost = new ContentControl
+        {
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            VerticalContentAlignment = VerticalAlignment.Stretch,
+            Visibility = Visibility.Collapsed,
+        };
+        container.Children.Add(_grammarHost);
 
         // Loading overlay
         _loadingRing = new ProgressRing
@@ -412,6 +424,34 @@ public sealed class RewritePanel : Window
                 _loadingOverlay.Visibility = ViewModel.IsLoading ? Visibility.Visible : Visibility.Collapsed;
                 _loadingRing.IsActive = ViewModel.IsLoading;
                 break;
+            case nameof(ViewModel.GrammarResult):
+                ApplyGrammarResult();
+                break;
+        }
+    }
+
+    private void ApplyGrammarResult()
+    {
+        if (ViewModel.GrammarResult is { } grammar)
+        {
+            // Swap to GrammarCheckView
+            var view = new GrammarCheckView(
+                ViewModel.InputText ?? string.Empty,
+                grammar,
+                onReplace: text => ViewModel.OutputText = text,  // keeps the text in sync for paste/copy
+                onCopy: null);
+            _grammarHost.Content = view;
+            _grammarHost.Visibility = Visibility.Visible;
+            _outputBorder.Visibility = Visibility.Collapsed;
+            DRLogger.Log($"GrammarCheckView shown: score={grammar.Score} issues={grammar.Issues.Count}",
+                DRLogger.Category.PANEL);
+        }
+        else
+        {
+            // Back to plain rewritten_text display
+            _grammarHost.Content = null;
+            _grammarHost.Visibility = Visibility.Collapsed;
+            _outputBorder.Visibility = Visibility.Visible;
         }
     }
 
