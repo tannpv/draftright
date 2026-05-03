@@ -32,7 +32,19 @@ public class App : Application
 
     // ── Rewrite flow ────────────────────────────────────────
     private DispatcherQueue? _dispatcherQueue;
-    private RewritePanel? _rewritePanel;
+    // The WinUI RewritePanel relies on theme XAML resources (themeresources.xaml,
+    // TabViewScrollButtonBackground, etc.) that are only fully resolvable when the
+    // app is built with the VS AppX MSBuild tooling that produces a real
+    // resources.pri. On unpackaged builds without that tooling, the WinUI panel
+    // crashes during the first XAML render with STATUS_STOWED_EXCEPTION (0xc000027b)
+    // / "Cannot find a Resource with the Name/Key TabViewScrollButtonBackground".
+    //
+    // RewritePanelForm is a WinForms reimplementation of the same UI surface
+    // (same ViewModel API, same dark theme) that doesn't go through XAML and
+    // therefore works reliably on local x64 builds. Used in place of the WinUI
+    // panel below.
+    private RewritePanelForm? _rewritePanel;
+    private Thread? _rewritePanelThread;
     private IntPtr _sourceWindow = IntPtr.Zero;
     private LoadingIndicator? _loadingIndicator;
 
@@ -243,40 +255,95 @@ public class App : Application
         }
         else
         {
-            // Must open the WinUI window on the UI (dispatcher) thread
-            _dispatcherQueue?.TryEnqueue(() =>
-            {
-                try
-                {
-                    DRLogger.Log("Panel: dispatcher entered", DRLogger.Category.PANEL);
-                    if (_rewritePanel == null)
-                    {
-                        DRLogger.Log("Panel: constructing new RewritePanel", DRLogger.Category.PANEL);
-                        _rewritePanel = new RewritePanel();
-                        DRLogger.Log("Panel: constructed", DRLogger.Category.PANEL);
-
-                        _rewritePanel.ViewModel.PasteRequested += async (_, rewrittenText) =>
-                        {
-                            _rewritePanel.Close();
-                            _rewritePanel = null;
-                            await Injector.InjectTextAsync(rewrittenText, _sourceWindow);
-                            DRLogger.Log("Paste complete.", DRLogger.Category.HOTKEY);
-                        };
-                        _rewritePanel.ViewModel.CloseRequested += (_, _) => { _rewritePanel = null; };
-                    }
-
-                    DRLogger.Log($"Panel: ShowForText({text.Length} chars)", DRLogger.Category.PANEL);
-                    _rewritePanel.ShowForText(text);
-                    DRLogger.Log("Panel: ShowForText returned", DRLogger.Category.PANEL);
-                }
-                catch (Exception ex)
-                {
-                    DRLogger.Log($"Panel: EXCEPTION {ex.GetType().Name}: {ex.Message}", DRLogger.Category.PANEL);
-                    DRLogger.Log($"Panel: stack:\n{ex}", DRLogger.Category.PANEL);
-                    _rewritePanel = null;
-                }
-            });
+            ShowRewritePanelOnNewThread(text);
         }
+    }
+
+    /// <summary>
+    /// Runs the WinForms RewritePanelForm on a dedicated STA thread with its own
+    /// message pump (Application.Run). When the panel closes, the thread exits.
+    /// </summary>
+    private void ShowRewritePanelOnNewThread(string text)
+    {
+        // If a previous panel is still open, just bring it forward and update its text.
+        if (_rewritePanel != null)
+        {
+            try
+            {
+                _rewritePanel.BeginInvoke(new Action(() =>
+                {
+                    _rewritePanel.SetInputText(text);
+                    _rewritePanel.Activate();
+                }));
+                return;
+            }
+            catch
+            {
+                _rewritePanel = null;
+            }
+        }
+
+        var sourceHwnd = _sourceWindow;
+        _rewritePanelThread = new Thread(() =>
+        {
+            try
+            {
+                DRLogger.Log("Panel: thread starting", DRLogger.Category.PANEL);
+                using var panel = new RewritePanelForm();
+                _rewritePanel = panel;
+                panel.SetInputText(text);
+
+                panel.ViewModel.PasteRequested += (_, rewrittenText) =>
+                {
+                    // Hide panel immediately so focus can return to source app.
+                    // Close (dispose) AFTER inject completes — otherwise the panel's
+                    // STA pump tears down and the await Task.Delay continuations
+                    // inside Injector.InjectTextAsync get dropped, leaving SendInput
+                    // unfired.
+                    if (panel.IsHandleCreated)
+                    {
+                        try { panel.BeginInvoke(new Action(() => panel.Hide())); }
+                        catch { /* panel may already be closing */ }
+                    }
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await Injector.InjectTextAsync(rewrittenText, sourceHwnd);
+                            DRLogger.Log("Paste complete.", DRLogger.Category.HOTKEY);
+                        }
+                        catch (Exception ex)
+                        {
+                            DRLogger.Log($"Paste failed: {ex.Message}", DRLogger.Category.HOTKEY);
+                        }
+                        finally
+                        {
+                            try
+                            {
+                                if (panel.IsHandleCreated)
+                                    panel.BeginInvoke(new Action(() => panel.Close()));
+                            }
+                            catch { /* panel may already be gone */ }
+                        }
+                    });
+                };
+
+                DRLogger.Log("Panel: running message loop", DRLogger.Category.PANEL);
+                System.Windows.Forms.Application.Run(panel);
+                DRLogger.Log("Panel: closed", DRLogger.Category.PANEL);
+            }
+            catch (Exception ex)
+            {
+                DRLogger.Log($"Panel: EXCEPTION {ex.GetType().Name}: {ex.Message}", DRLogger.Category.PANEL);
+            }
+            finally
+            {
+                _rewritePanel = null;
+            }
+        });
+        _rewritePanelThread.SetApartmentState(ApartmentState.STA);
+        _rewritePanelThread.IsBackground = true;
+        _rewritePanelThread.Start();
     }
 
     private async Task RunOneClickRewriteAsync(string text)
