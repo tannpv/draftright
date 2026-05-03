@@ -1,0 +1,87 @@
+name: Build Windows app
+
+on:
+  push:
+    branches: [develop, main]
+    paths:
+      - 'DraftRightWindows/**'
+      - '.github/workflows/build-windows.yml'
+  workflow_dispatch:
+    inputs:
+      runtime:
+        description: 'Target runtime'
+        required: false
+        default: 'both'
+        type: choice
+        options: [both, win-x64, win-arm64]
+  release:
+    types: [created]
+
+jobs:
+  build:
+    name: Build ${{ matrix.runtime }}
+    runs-on: windows-latest
+    timeout-minutes: 25
+
+    strategy:
+      fail-fast: false
+      matrix:
+        runtime: [win-x64, win-arm64]
+
+    env:
+      RUNTIME: ${{ matrix.runtime }}
+      COMMIT_SHA: ${{ github.sha }}
+
+    defaults:
+      run:
+        working-directory: DraftRightWindows/DraftRightWindows
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Show .NET info
+        run: dotnet --info
+
+      - name: Restore
+        run: dotnet restore -r "$env:RUNTIME"
+
+      - name: Publish self-contained single-file
+        run: |
+          dotnet publish `
+            -c Release `
+            -r "$env:RUNTIME" `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:EnableMsixTooling=true `
+            -p:IncludeAllContentForSelfExtract=true `
+            -o publish
+
+      - name: Inspect output and rename for upload
+        shell: pwsh
+        run: |
+          $exe = Get-Item publish\DraftRightWindows.exe
+          "Built: $($exe.FullName)"
+          "Size:  $([math]::Round($exe.Length/1MB, 1)) MB"
+          $shortSha = $env:COMMIT_SHA.Substring(0, 7)
+          $name = "DraftRight-Windows-${env:RUNTIME}-$shortSha.exe"
+          Copy-Item publish\DraftRightWindows.exe "publish\$name"
+          Add-Content -Path $env:GITHUB_ENV -Value "ARTIFACT_NAME=$name"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DraftRight-Windows-${{ matrix.runtime }}
+          path: DraftRightWindows/DraftRightWindows/publish/${{ env.ARTIFACT_NAME }}
+          retention-days: 30
+
+      - name: Attach to release (if a release triggered this run)
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: DraftRightWindows/DraftRightWindows/publish/${{ env.ARTIFACT_NAME }}
