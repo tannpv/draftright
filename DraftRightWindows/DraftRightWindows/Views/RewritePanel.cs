@@ -245,16 +245,11 @@ public sealed class RewritePanel : Window
         };
         container.Children.Add(_outputBorder);
 
-        // Sibling host for GrammarCheckView (collapsed by default; swapped
-        // in when the response has grammar data). Stays a separate child so
-        // the regular result Border doesn't have to be torn down each time.
-        _grammarHost = new ContentControl
-        {
-            HorizontalContentAlignment = HorizontalAlignment.Stretch,
-            VerticalContentAlignment = VerticalAlignment.Stretch,
-            Visibility = Visibility.Collapsed,
-        };
-        container.Children.Add(_grammarHost);
+        // GrammarCheckView host disabled while debugging WinUI crash on ARM64.
+        // The empty ContentControl was causing a render-frame crash inside
+        // Microsoft.UI.Xaml.dll right after Window activation. Re-add once the
+        // root cause is identified.
+        _grammarHost = null!;
 
         // Loading overlay
         _loadingRing = new ProgressRing
@@ -432,27 +427,10 @@ public sealed class RewritePanel : Window
 
     private void ApplyGrammarResult()
     {
-        if (ViewModel.GrammarResult is { } grammar)
-        {
-            // Swap to GrammarCheckView
-            var view = new GrammarCheckView(
-                ViewModel.InputText ?? string.Empty,
-                grammar,
-                onReplace: text => ViewModel.OutputText = text,  // keeps the text in sync for paste/copy
-                onCopy: null);
-            _grammarHost.Content = view;
-            _grammarHost.Visibility = Visibility.Visible;
-            _outputBorder.Visibility = Visibility.Collapsed;
-            DRLogger.Log($"GrammarCheckView shown: score={grammar.Score} issues={grammar.Issues.Count}",
-                DRLogger.Category.PANEL);
-        }
-        else
-        {
-            // Back to plain rewritten_text display
-            _grammarHost.Content = null;
-            _grammarHost.Visibility = Visibility.Collapsed;
-            _outputBorder.Visibility = Visibility.Visible;
-        }
+        // GrammarCheckView temporarily disabled — see BuildResultArea for context.
+        // For now, grammar-check responses fall back to plain text via the
+        // existing TextBlock path.
+        if (_grammarHost == null) return;
     }
 
     /// <summary>
