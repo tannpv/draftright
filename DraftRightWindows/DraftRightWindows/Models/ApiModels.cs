@@ -27,8 +27,11 @@ public class RegisterRequest
 
 public class AuthUser
 {
+    // Backend uses UUID PKs (Postgres @PrimaryGeneratedColumn('uuid')),
+    // not integers. This was originally typed as int and crashed login
+    // with "The JSON value could not be converted to System.Int32. Path: $.user.id".
     [JsonPropertyName("id")]
-    public int Id { get; set; }
+    public string Id { get; set; } = string.Empty;
 
     [JsonPropertyName("email")]
     public string Email { get; set; } = string.Empty;

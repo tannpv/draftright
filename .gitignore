@@ -40,3 +40,9 @@
 *.log
 backups/
 DraftRightLinux/data/
+
+# Built distribution artifacts — too big for GitHub (100 MB hard limit),
+# and not source code. Hosted on draftright.info/downloads/ instead.
+store-assets/windows/*.exe
+store-assets/windows/*.msix
+store-assets/windows/*.msi

@@ -916,20 +916,69 @@ internal static class SettingsFormBuilder
             tab.Controls.Add(passBox);
             y += 44;
 
-            var statusLabel = new WinForms.Label
+            // Read-only multi-line TextBox styled as a label so the user
+            // can select + copy any error message (Ctrl+C, right-click, drag).
+            // WinForms.Label.Text isn't selectable; TextBox.Text is.
+            var statusBox = new WinForms.TextBox
             {
+                ReadOnly = true,
+                Multiline = true,
                 ForeColor = ErrorRed,
+                BackColor = BgDark,
+                BorderStyle = WinForms.BorderStyle.None,
                 Font = new Font("Segoe UI", 9),
                 Location = new Point(16, y),
-                Size = new Size(448, 20),
+                Size = new Size(380, 60),
+                ScrollBars = WinForms.ScrollBars.Vertical,
+                TabStop = false,
+                Visible = false,  // hidden until there's a message
             };
-            tab.Controls.Add(statusLabel);
-            y += 28;
+            tab.Controls.Add(statusBox);
+
+            // One-click Copy button — hidden until there's text to copy.
+            var copyBtn = new WinForms.Button
+            {
+                Text = "Copy",
+                Location = new Point(400, y),
+                Size = new Size(64, 24),
+                BackColor = CardBg,
+                ForeColor = TextMuted,
+                FlatStyle = WinForms.FlatStyle.Flat,
+                Font = new Font("Segoe UI", 8),
+                Visible = false,
+                TabStop = false,
+            };
+            copyBtn.FlatAppearance.BorderColor = BorderColor;
+            copyBtn.Click += (_, _) =>
+            {
+                if (!string.IsNullOrEmpty(statusBox.Text))
+                {
+                    WinForms.Clipboard.SetText(statusBox.Text);
+                    copyBtn.Text = "Copied";
+                    var t = new WinForms.Timer { Interval = 1200 };
+                    t.Tick += (_, _) => { copyBtn.Text = "Copy"; t.Stop(); t.Dispose(); };
+                    t.Start();
+                }
+            };
+            tab.Controls.Add(copyBtn);
+
+            // Helper: show/hide the status box + copy button together.
+            Action<string, Color> setStatus = (text, color) =>
+            {
+                statusBox.Text = text;
+                statusBox.ForeColor = color;
+                var hasText = !string.IsNullOrEmpty(text);
+                statusBox.Visible = hasText;
+                // Only show Copy for actual errors (red), not success messages.
+                copyBtn.Visible = hasText && color == ErrorRed;
+            };
+
+            y += 72;
 
             var signInBtn = MakePrimaryButton("Sign In", y);
             signInBtn.Click += async (_, _) =>
             {
-                statusLabel.Text = "";
+                setStatus("", ErrorRed);
                 signInBtn.Enabled = false;
                 try
                 {
@@ -939,19 +988,17 @@ internal static class SettingsFormBuilder
                     {
                         App.Auth.SaveTokens(result.AccessToken, result.RefreshToken, result.User?.Email);
                         App.Api.SetToken(result.AccessToken);
-                        statusLabel.ForeColor = SuccessGreen;
-                        statusLabel.Text = "Signed in! Please reopen Settings.";
+                        setStatus("Signed in! Please reopen Settings.", SuccessGreen);
                     }
                     else
                     {
-                        statusLabel.ForeColor = ErrorRed;
-                        statusLabel.Text = "Login failed.";
+                        setStatus("Login failed.", ErrorRed);
                     }
                 }
                 catch (Exception ex)
                 {
-                    statusLabel.ForeColor = ErrorRed;
-                    statusLabel.Text = ex.Message;
+                    setStatus(ex.ToString(), ErrorRed);
+                    DRLogger.Log($"Login error: {ex}", DRLogger.Category.AUTH);
                 }
                 finally
                 {
