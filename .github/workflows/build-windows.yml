@@ -104,10 +104,17 @@ jobs:
         working-directory: DraftRightWindows
         run: |
           # Read the version from the built .exe so the installer carries
-          # the same version string as the binary.
+          # the same version string as the binary. Strip any "+commit" suffix
+          # (.NET adds the source-link InformationalVersion as ProductVersion,
+          # e.g. "1.0.0+1f1a6605..."); Inno Setup's VersionInfoVersion only
+          # accepts numeric MAJOR.MINOR.BUILD[.REVISION].
           $exe = Get-Item DraftRightWindows\publish\DraftRightWindows.exe
-          $version = $exe.VersionInfo.ProductVersion
-          if ([string]::IsNullOrEmpty($version)) { $version = "1.0.0" }
+          $rawVersion = $exe.VersionInfo.ProductVersion
+          $version = if ([string]::IsNullOrEmpty($rawVersion)) {
+            "1.0.0"
+          } else {
+            ($rawVersion -split '\+')[0]
+          }
 
           # Inno Setup wants the arch as just "x64" or "arm64" (not "win-x64").
           $arch = "$env:RUNTIME" -replace "^win-", ""
