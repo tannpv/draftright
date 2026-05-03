@@ -27,6 +27,7 @@
 **/bin/
 **/obj/
 DraftRightWindows/publish/
+DraftRightWindows/installer/Output/
 
 # Python
 **/__pycache__/

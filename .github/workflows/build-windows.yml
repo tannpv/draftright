@@ -80,8 +80,68 @@ jobs:
           path: DraftRightWindows/DraftRightWindows/publish/${{ env.ARTIFACT_NAME }}
           retention-days: 30
 
+      # ── Installer ─────────────────────────────────────────────────────
+      # Wrap the published files into an Inno Setup .exe installer with a
+      # Start menu entry, Add/Remove Programs registration, and uninstaller.
+      # Inno Setup is preinstalled on windows-latest runners; the choco line
+      # below is a safety net in case the image changes.
+
+      - name: Ensure Inno Setup is available
+        shell: pwsh
+        run: |
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            Write-Host "Inno Setup not preinstalled, installing via choco..."
+            choco install innosetup -y --no-progress
+          }
+          if (-not (Test-Path $iscc)) {
+            throw "ISCC.exe still not found after install attempt"
+          }
+          Add-Content -Path $env:GITHUB_ENV -Value "ISCC=$iscc"
+
+      - name: Build installer
+        shell: pwsh
+        working-directory: DraftRightWindows
+        run: |
+          # Read the version from the built .exe so the installer carries
+          # the same version string as the binary.
+          $exe = Get-Item DraftRightWindows\publish\DraftRightWindows.exe
+          $version = $exe.VersionInfo.ProductVersion
+          if ([string]::IsNullOrEmpty($version)) { $version = "1.0.0" }
+
+          # Inno Setup wants the arch as just "x64" or "arm64" (not "win-x64").
+          $arch = "$env:RUNTIME" -replace "^win-", ""
+
+          $sourceDir = (Resolve-Path "DraftRightWindows\publish").Path
+
+          Write-Host "Building installer: version=$version arch=$arch"
+          Write-Host "  source: $sourceDir"
+
+          & "$env:ISCC" `
+            "/DAppVersion=$version" `
+            "/DSourceDir=$sourceDir" `
+            "/DArch=$arch" `
+            installer\draftright.iss
+
+          # Stamp the installer filename with the short SHA so artifacts
+          # uploaded across runs are distinguishable.
+          $shortSha = $env:COMMIT_SHA.Substring(0, 7)
+          $built = Get-Item "installer\Output\DraftRight-Setup-$version-$arch.exe"
+          $stamped = "DraftRight-Setup-$version-$arch-$shortSha.exe"
+          Move-Item $built.FullName "installer\Output\$stamped"
+          Add-Content -Path $env:GITHUB_ENV -Value "INSTALLER_NAME=$stamped"
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: DraftRight-Setup-${{ matrix.runtime }}
+          path: DraftRightWindows/installer/Output/${{ env.INSTALLER_NAME }}
+          retention-days: 30
+
       - name: Attach to release (if a release triggered this run)
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
-          files: DraftRightWindows/DraftRightWindows/publish/${{ env.ARTIFACT_NAME }}
+          files: |
+            DraftRightWindows/DraftRightWindows/publish/${{ env.ARTIFACT_NAME }}
+            DraftRightWindows/installer/Output/${{ env.INSTALLER_NAME }}
