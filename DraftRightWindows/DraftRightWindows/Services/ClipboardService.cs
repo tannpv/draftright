@@ -122,8 +122,8 @@ public sealed class ClipboardService
             DRLogger.Category.HOTKEY);
 
         // 4. Simulate clean Ctrl+C
-        var sent = SimulateKeyComboReporting(VK_CONTROL, VK_C);
-        DRLogger.Log($"  step4: SendInput Ctrl+C → events sent={sent}",
+        var (sent, err) = SimulateKeyComboReporting(VK_CONTROL, VK_C);
+        DRLogger.Log($"  step4: SendInput Ctrl+C → events sent={sent} lastError={err} (0x{err:X})",
             DRLogger.Category.HOTKEY);
 
         // 5. Wait, then poll the clipboard up to 8x100ms in case the app
@@ -147,16 +147,19 @@ public sealed class ClipboardService
     }
 
     /// <summary>
-    /// Same as SimulateKeyCombo but returns the count of input events
-    /// SendInput says it injected, for logging diagnosis.
+    /// Same as SimulateKeyCombo but returns (sent, lastError) for diagnosis.
+    /// SendInput returning 0 means UIPI/UAC blocked us, BlockInput is active,
+    /// or the target desktop differs.
     /// </summary>
-    private uint SimulateKeyComboReporting(params ushort[] vkCodes)
+    private (uint sent, int lastError) SimulateKeyComboReporting(params ushort[] vkCodes)
     {
         var inputs = new INPUT[vkCodes.Length * 2];
         int idx = 0;
         foreach (var vk in vkCodes) inputs[idx++] = MakeKeyInput(vk, keyUp: false);
         for (int i = vkCodes.Length - 1; i >= 0; i--) inputs[idx++] = MakeKeyInput(vkCodes[i], keyUp: true);
-        return SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
+        var sent = SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
+        var err = sent == 0 ? Marshal.GetLastWin32Error() : 0;
+        return (sent, err);
     }
 
     [DllImport("user32.dll")]
