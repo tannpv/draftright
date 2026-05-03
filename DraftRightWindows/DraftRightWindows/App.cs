@@ -41,31 +41,95 @@ public class App : Application
 
     public App()
     {
-        UnhandledException += (_, e) =>
+        // Capture every kind of unhandled exception with as much context as
+        // possible. Each handler logs to BOTH the rolling log file (via
+        // DRLogger) and a top-level draftright-crash.log on the Desktop so
+        // post-mortem debugging works even if the Local AppData folder is
+        // unreachable.
+
+        UnhandledException += (sender, e) =>
         {
-            System.IO.File.AppendAllText(
-                System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "draftright-crash.log"),
-                $"[{DateTime.Now}] {e.Exception}\n");
+            DRLogger.Log($"WinUI UnhandledException: {e.Exception}", DRLogger.Category.APP);
+            WriteCrashFile("WinUI", e.Exception);
             e.Handled = true;
         };
+
+        AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
+        {
+            var ex = e.ExceptionObject as Exception;
+            DRLogger.Log($"AppDomain UnhandledException (terminating={e.IsTerminating}): {ex}",
+                DRLogger.Category.APP);
+            WriteCrashFile("AppDomain", ex);
+        };
+
+        TaskScheduler.UnobservedTaskException += (sender, e) =>
+        {
+            DRLogger.Log($"UnobservedTaskException: {e.Exception}", DRLogger.Category.APP);
+            WriteCrashFile("UnobservedTask", e.Exception);
+            e.SetObserved();
+        };
+
+        // One-shot startup banner so every log file starts with the
+        // environment fingerprint: app version, .NET, OS, architecture.
+        try
+        {
+            var asm = System.Reflection.Assembly.GetExecutingAssembly();
+            var ver = asm.GetName().Version?.ToString() ?? "?";
+            var os = Environment.OSVersion.VersionString;
+            var bits = Environment.Is64BitProcess ? "64-bit" : "32-bit";
+            var arch = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture;
+            var dotnet = Environment.Version.ToString();
+            DRLogger.Log(
+                $"DraftRight startup: app={ver} .NET={dotnet} OS={os} {bits} arch={arch}",
+                DRLogger.Category.APP);
+        }
+        catch (Exception ex)
+        {
+            DRLogger.Log($"Startup banner failed: {ex.Message}", DRLogger.Category.APP);
+        }
+    }
+
+    private static void WriteCrashFile(string source, Exception? ex)
+    {
+        try
+        {
+            var path = System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
+                "draftright-crash.log");
+            System.IO.File.AppendAllText(path,
+                $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {source}: {ex}\n\n");
+        }
+        catch
+        {
+            // best-effort — Desktop may not be writable in some elevated contexts
+        }
     }
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+        DRLogger.Log("OnLaunched start", DRLogger.Category.APP);
+
         // Capture the UI-thread dispatcher queue before any async work
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
+        DRLogger.Log($"OnLaunched: dispatcher captured={_dispatcherQueue != null}", DRLogger.Category.APP);
 
         _hiddenWindow = new Window { Title = "DraftRight" };
+        DRLogger.Log("OnLaunched: hidden window created", DRLogger.Category.APP);
         _hwnd = WinRT.Interop.WindowNative.GetWindowHandle(_hiddenWindow);
+        DRLogger.Log($"OnLaunched: hwnd=0x{_hwnd.ToInt64():X}", DRLogger.Category.APP);
         Win32Interop.ShowWindow(_hwnd, Win32Interop.SW_HIDE);
 
         Settings = new SettingsService();
         Settings.Load();
+        DRLogger.Log($"OnLaunched: settings loaded — BackendUrl={Settings.BackendUrl} AppMode={Settings.AppMode} Hotkey={Settings.HotkeyModifiers:X}+{Settings.HotkeyKey:X}",
+            DRLogger.Category.APP);
+
         Api = new ApiClient(Settings.BackendUrl);
         Auth = new AuthService();
         Clipboard = new ClipboardService();
         Injector = new TextInjector(Clipboard);
         Hotkey = new HotkeyService();
+        DRLogger.Log("OnLaunched: services constructed (Api, Auth, Clipboard, Injector, Hotkey)", DRLogger.Category.APP);
 
         // Install a WndProc subclass on the hidden window so WM_HOTKEY messages
         // reach HotkeyService.ProcessHotkeyMessage.  The delegate MUST be stored
@@ -182,27 +246,35 @@ public class App : Application
             // Must open the WinUI window on the UI (dispatcher) thread
             _dispatcherQueue?.TryEnqueue(() =>
             {
-                if (_rewritePanel == null)
+                try
                 {
-                    _rewritePanel = new RewritePanel();
-
-                    // When the user clicks Replace, inject the text back
-                    _rewritePanel.ViewModel.PasteRequested += async (_, rewrittenText) =>
+                    DRLogger.Log("Panel: dispatcher entered", DRLogger.Category.PANEL);
+                    if (_rewritePanel == null)
                     {
-                        _rewritePanel.Close();
-                        _rewritePanel = null;
-                        await Injector.InjectTextAsync(rewrittenText, _sourceWindow);
-                        DRLogger.Log("Paste complete.", DRLogger.Category.HOTKEY);
-                    };
+                        DRLogger.Log("Panel: constructing new RewritePanel", DRLogger.Category.PANEL);
+                        _rewritePanel = new RewritePanel();
+                        DRLogger.Log("Panel: constructed", DRLogger.Category.PANEL);
 
-                    // When Close is clicked (no replace), just null out the panel reference
-                    _rewritePanel.ViewModel.CloseRequested += (_, _) =>
-                    {
-                        _rewritePanel = null;
-                    };
+                        _rewritePanel.ViewModel.PasteRequested += async (_, rewrittenText) =>
+                        {
+                            _rewritePanel.Close();
+                            _rewritePanel = null;
+                            await Injector.InjectTextAsync(rewrittenText, _sourceWindow);
+                            DRLogger.Log("Paste complete.", DRLogger.Category.HOTKEY);
+                        };
+                        _rewritePanel.ViewModel.CloseRequested += (_, _) => { _rewritePanel = null; };
+                    }
+
+                    DRLogger.Log($"Panel: ShowForText({text.Length} chars)", DRLogger.Category.PANEL);
+                    _rewritePanel.ShowForText(text);
+                    DRLogger.Log("Panel: ShowForText returned", DRLogger.Category.PANEL);
                 }
-
-                _rewritePanel.ShowForText(text);
+                catch (Exception ex)
+                {
+                    DRLogger.Log($"Panel: EXCEPTION {ex.GetType().Name}: {ex.Message}", DRLogger.Category.PANEL);
+                    DRLogger.Log($"Panel: stack:\n{ex}", DRLogger.Category.PANEL);
+                    _rewritePanel = null;
+                }
             });
         }
     }
@@ -916,20 +988,69 @@ internal static class SettingsFormBuilder
             tab.Controls.Add(passBox);
             y += 44;
 
-            var statusLabel = new WinForms.Label
+            // Read-only multi-line TextBox styled as a label so the user
+            // can select + copy any error message (Ctrl+C, right-click, drag).
+            // WinForms.Label.Text isn't selectable; TextBox.Text is.
+            var statusBox = new WinForms.TextBox
             {
+                ReadOnly = true,
+                Multiline = true,
                 ForeColor = ErrorRed,
+                BackColor = BgDark,
+                BorderStyle = WinForms.BorderStyle.None,
                 Font = new Font("Segoe UI", 9),
                 Location = new Point(16, y),
-                Size = new Size(448, 20),
+                Size = new Size(380, 60),
+                ScrollBars = WinForms.ScrollBars.Vertical,
+                TabStop = false,
+                Visible = false,  // hidden until there's a message
             };
-            tab.Controls.Add(statusLabel);
-            y += 28;
+            tab.Controls.Add(statusBox);
+
+            // One-click Copy button — hidden until there's text to copy.
+            var copyBtn = new WinForms.Button
+            {
+                Text = "Copy",
+                Location = new Point(400, y),
+                Size = new Size(64, 24),
+                BackColor = CardBg,
+                ForeColor = TextMuted,
+                FlatStyle = WinForms.FlatStyle.Flat,
+                Font = new Font("Segoe UI", 8),
+                Visible = false,
+                TabStop = false,
+            };
+            copyBtn.FlatAppearance.BorderColor = BorderColor;
+            copyBtn.Click += (_, _) =>
+            {
+                if (!string.IsNullOrEmpty(statusBox.Text))
+                {
+                    WinForms.Clipboard.SetText(statusBox.Text);
+                    copyBtn.Text = "Copied";
+                    var t = new WinForms.Timer { Interval = 1200 };
+                    t.Tick += (_, _) => { copyBtn.Text = "Copy"; t.Stop(); t.Dispose(); };
+                    t.Start();
+                }
+            };
+            tab.Controls.Add(copyBtn);
+
+            // Helper: show/hide the status box + copy button together.
+            Action<string, Color> setStatus = (text, color) =>
+            {
+                statusBox.Text = text;
+                statusBox.ForeColor = color;
+                var hasText = !string.IsNullOrEmpty(text);
+                statusBox.Visible = hasText;
+                // Only show Copy for actual errors (red), not success messages.
+                copyBtn.Visible = hasText && color == ErrorRed;
+            };
+
+            y += 72;
 
             var signInBtn = MakePrimaryButton("Sign In", y);
             signInBtn.Click += async (_, _) =>
             {
-                statusLabel.Text = "";
+                setStatus("", ErrorRed);
                 signInBtn.Enabled = false;
                 try
                 {
@@ -939,19 +1060,17 @@ internal static class SettingsFormBuilder
                     {
                         App.Auth.SaveTokens(result.AccessToken, result.RefreshToken, result.User?.Email);
                         App.Api.SetToken(result.AccessToken);
-                        statusLabel.ForeColor = SuccessGreen;
-                        statusLabel.Text = "Signed in! Please reopen Settings.";
+                        setStatus("Signed in! Please reopen Settings.", SuccessGreen);
                     }
                     else
                     {
-                        statusLabel.ForeColor = ErrorRed;
-                        statusLabel.Text = "Login failed.";
+                        setStatus("Login failed.", ErrorRed);
                     }
                 }
                 catch (Exception ex)
                 {
-                    statusLabel.ForeColor = ErrorRed;
-                    statusLabel.Text = ex.Message;
+                    setStatus(ex.ToString(), ErrorRed);
+                    DRLogger.Log($"Login error: {ex}", DRLogger.Category.AUTH);
                 }
                 finally
                 {

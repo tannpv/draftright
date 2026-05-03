@@ -24,7 +24,7 @@ _ALL_TONE_VALUES = [
 # Defaults
 # ---------------------------------------------------------------------------
 _DEFAULTS: dict[str, object] = {
-    "backend_url": "https://api.draftright.app",
+    "backend_url": "https://api.draftright.info",
     "hotkey": "Ctrl+Shift+R",
     "translate_language": "Vietnamese",
     "auto_start": False,

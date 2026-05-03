@@ -8,18 +8,24 @@ Test cases: `docs/test-cases.xlsx` sheet `EXTTOK` (TC-IDs in parens below)
 
 ---
 
-## A. Backend dual-accept (run with backend on dev or testing)
+## A. Backend dual-accept — verified against PRODUCTION (api.draftright.info)
+
+All 8 rows below verified by `scripts/test-extension-tokens-e2e.py` against
+production. Re-run any time:
+```
+python3 scripts/test-extension-tokens-e2e.py
+```
 
 | # | TC | Test | Result | Date | Note |
 |---|---|------|--------|------|------|
-| A1 | 008 | `POST /rewrite` with valid user JWT returns rewritten text | | | |
-| A2 | 001 | `POST /auth/extension-tokens` with user JWT returns `{ token, id }` and token starts with `dr_ext_` | | | |
-| A3 | 009 | `POST /rewrite` with extension token returns rewritten text | | | |
-| A4 | 010 | `GET /auth/me` with extension token returns 401 | | | |
-| A5 | 002 | `GET /auth/extension-tokens` lists rows; `token_hash` field is NOT present in JSON | | | |
-| A6 | 007 | `DELETE /auth/extension-tokens/:id` with user JWT returns 204 | | | |
-| A7 | 005 | After A6, `POST /rewrite` with the revoked extension token returns 401 | | | |
-| A8 | 003 | Re-mint with same `device_id` invalidates the old token (re-running A3 with the old token returns 401) | | | |
+| A1 | 008 | `POST /rewrite` with valid user JWT returns rewritten text | ✅ PASS | 2026-05-03 | Automated |
+| A2 | 001 | `POST /auth/extension-tokens` with user JWT returns `{ token, id }` and token starts with `dr_ext_` | ✅ PASS | 2026-05-03 | Automated; token format `dr_ext_[A-Za-z0-9_-]{43}` validated |
+| A3 | 009 | `POST /rewrite` with extension token returns rewritten text | ✅ PASS | 2026-05-03 | Automated |
+| A4 | 010 | `GET /auth/me` with extension token returns 401 | ✅ PASS | 2026-05-03 | Automated; scope enforcement |
+| A5 | 002 | `GET /auth/extension-tokens` lists rows; `token_hash` and `user_id` fields stripped from JSON | ✅ PASS | 2026-05-03 | Automated |
+| A6 | 007 | `DELETE /auth/extension-tokens/:id` with user JWT returns 204 | ✅ PASS | 2026-05-03 | Automated |
+| A7 | 005 | After A6, `POST /rewrite` with the revoked extension token returns 401 | ✅ PASS | 2026-05-03 | Automated |
+| A8 | 003 | Re-mint with same `device_id` invalidates the old token (old returns 401, new works) | ✅ PASS | 2026-05-03 | Automated; partial-unique-index rotation working |
 
 Reproduce locally:
 

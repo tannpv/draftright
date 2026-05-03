@@ -22,7 +22,7 @@ class APIClient:
 
     TIMEOUT = 30  # seconds
 
-    def __init__(self, backend_url: str = "https://api.draftright.app"):
+    def __init__(self, backend_url: str = "https://api.draftright.info"):
         self._base_url = backend_url.rstrip("/")
         self._token: str | None = None
         self._lock = threading.Lock()

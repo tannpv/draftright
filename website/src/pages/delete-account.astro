@@ -1,0 +1,78 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="Delete your DraftRight account">
+  <main class="max-w-2xl mx-auto px-6 py-16 text-gray-300">
+    <h1 class="text-3xl font-bold text-white mb-2">Delete your DraftRight account</h1>
+    <p class="text-sm text-gray-500 mb-10">
+      Last updated: 2026-05-03
+    </p>
+
+    <p class="mb-6">
+      DraftRight (operated by Tan Nguyen) lets you delete your account and the
+      data associated with it at any time. This page describes how to request
+      deletion, what gets deleted, and what is retained for how long.
+    </p>
+
+    <h2 class="text-xl font-semibold text-white mt-10 mb-3">How to request deletion</h2>
+    <p class="mb-4">
+      Email <a href="mailto:support@draftright.info" class="text-brand-400 underline">support@draftright.info</a>
+      from the address you used to sign up, with the subject line
+      <span class="text-white">&ldquo;Delete my account&rdquo;</span>.
+    </p>
+    <p class="mb-4">
+      Optional: include any DraftRight order numbers or subscription IDs to
+      help us locate your account faster. We process all requests within
+      <span class="text-white">7 business days</span> and reply with confirmation
+      once your data is removed.
+    </p>
+
+    <h2 class="text-xl font-semibold text-white mt-10 mb-3">What gets deleted</h2>
+    <ul class="list-disc pl-6 space-y-1 mb-4">
+      <li>Your account record (email, name, hashed password)</li>
+      <li>Any active or past subscription state</li>
+      <li>Rewrite history and logs associated with your account</li>
+      <li>All extension tokens (mobile keyboard / share extension auth)</li>
+      <li>Any social-login linkage (Google, Facebook, TikTok)</li>
+      <li>Stored email-verification and password-reset tokens</li>
+    </ul>
+
+    <h2 class="text-xl font-semibold text-white mt-10 mb-3">What is retained, and for how long</h2>
+    <ul class="list-disc pl-6 space-y-2 mb-4">
+      <li>
+        <span class="text-white">Anonymized usage statistics</span> — indefinitely.
+        After deletion, these are no longer linked to your identity.
+      </li>
+      <li>
+        <span class="text-white">Payment records</span> — up to 7 years where
+        required by tax compliance laws of the operator&rsquo;s jurisdiction.
+        Records contain transaction amounts and dates only; not personal
+        identifiers beyond what tax law mandates.
+      </li>
+      <li>
+        <span class="text-white">Security audit logs</span> — 90 days after
+        deletion, for investigation of fraud or abuse. Then permanently removed.
+      </li>
+      <li>
+        <span class="text-white">Backups</span> — encrypted backups may contain
+        a copy of your data for up to 30 days after deletion before being
+        rotated out.
+      </li>
+    </ul>
+
+    <h2 class="text-xl font-semibold text-white mt-10 mb-3">In-app deletion</h2>
+    <p class="mb-4">
+      A self-service &ldquo;Delete account&rdquo; button is being added to the
+      <a href="/account" class="text-brand-400 underline">draftright.info/account</a>
+      page. Until then, the email request above is the supported path.
+    </p>
+
+    <h2 class="text-xl font-semibold text-white mt-10 mb-3">Questions</h2>
+    <p>
+      Anything not covered here, email
+      <a href="mailto:support@draftright.info" class="text-brand-400 underline">support@draftright.info</a>
+      or see the <a href="/privacy" class="text-brand-400 underline">privacy policy</a>.
+    </p>
+  </main>
+</Layout>

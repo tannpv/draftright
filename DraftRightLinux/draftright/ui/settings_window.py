@@ -129,7 +129,7 @@ class SettingsWindow(Adw.PreferencesWindow):
         prefs_page.add(conn_group)
 
         self._url_row = Adw.EntryRow(title="Backend URL")
-        self._url_row.set_text(self._get_setting("backend-url", "https://api.draftright.app"))
+        self._url_row.set_text(self._get_setting("backend-url", "https://api.draftright.info"))
         self._url_row.connect("changed", self._on_url_changed)
         conn_group.add(self._url_row)
 

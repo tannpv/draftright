@@ -35,6 +35,8 @@ public sealed class RewritePanel : Window
     private TextBlock _errorTextBlock = null!;
     private Grid _loadingOverlay = null!;
     private ProgressRing _loadingRing = null!;
+    private Border _outputBorder = null!;          // wraps _outputTextBlock — toggled when grammar UI is shown
+    private ContentControl _grammarHost = null!;    // hosts GrammarCheckView when tone == grammar_check
 
     // Colors
     private static readonly SolidColorBrush BrandBlue = new(Windows.UI.Color.FromArgb(255, 93, 135, 255));
@@ -51,10 +53,11 @@ public sealed class RewritePanel : Window
     {
         ViewModel = new RewritePanelViewModel();
 
-        // Configure window
+        // Configure window. Note: ExtendsContentIntoTitleBar=true combined
+        // with SetTitleBar(null) crashes Microsoft.UI.Xaml.dll on ARM64 first
+        // render. Use the default chrome until we have a proper custom title
+        // bar element to set.
         Title = "DraftRight";
-        ExtendsContentIntoTitleBar = true;
-        SetTitleBar(null);
 
         // Build the UI
         Content = BuildUI();
@@ -144,14 +147,17 @@ public sealed class RewritePanel : Window
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
+        // BMP-only icons that render reliably in Segoe UI without emoji
+        // fallback (which often shows astral-plane emoji as tofu boxes).
+        // Kept in sync with Tone.Icon() in Models/Tone.cs.
         var tones = new (string Name, string Emoji, int Row, int Col)[]
         {
-            ("Simple",    "\u270E",  0, 0),
-            ("Natural",   "\uD83D\uDCAC", 0, 1),
-            ("Polished",  "\u2728",  0, 2),
-            ("Concise",   "\u2296",  1, 0),
-            ("Technical", "\uD83D\uDD27", 1, 1),
-            ("Translate", "\uD83C\uDF10", 1, 2),
+            ("Simple",    "\u270E", 0, 0),  // \u270E pencil
+            ("Natural",   "\u275D", 0, 1),  // \u275D quotation
+            ("Polished",  "\u2728", 0, 2),  // \u2728 sparkles
+            ("Concise",   "\u2296", 1, 0),  // \u2296 circled minus
+            ("Technical", "\u2699", 1, 1),  // \u2699 gear
+            ("Translate", "\u21C4", 1, 2),  // \u21C4 left-right arrows
         };
 
         foreach (var (name, emoji, row, col) in tones)
@@ -232,7 +238,7 @@ public sealed class RewritePanel : Window
             Content = _outputTextBlock,
         };
 
-        var resultBorder = new Border
+        _outputBorder = new Border
         {
             Background = ResultBg,
             BorderBrush = BorderColor,
@@ -241,8 +247,13 @@ public sealed class RewritePanel : Window
             Padding = new Thickness(12),
             Child = scrollViewer,
         };
+        container.Children.Add(_outputBorder);
 
-        container.Children.Add(resultBorder);
+        // GrammarCheckView host disabled while debugging WinUI crash on ARM64.
+        // The empty ContentControl was causing a render-frame crash inside
+        // Microsoft.UI.Xaml.dll right after Window activation. Re-add once the
+        // root cause is identified.
+        _grammarHost = null!;
 
         // Loading overlay
         _loadingRing = new ProgressRing
@@ -412,7 +423,18 @@ public sealed class RewritePanel : Window
                 _loadingOverlay.Visibility = ViewModel.IsLoading ? Visibility.Visible : Visibility.Collapsed;
                 _loadingRing.IsActive = ViewModel.IsLoading;
                 break;
+            case nameof(ViewModel.GrammarResult):
+                ApplyGrammarResult();
+                break;
         }
+    }
+
+    private void ApplyGrammarResult()
+    {
+        // GrammarCheckView temporarily disabled — see BuildResultArea for context.
+        // For now, grammar-check responses fall back to plain text via the
+        // existing TextBlock path.
+        if (_grammarHost == null) return;
     }
 
     /// <summary>

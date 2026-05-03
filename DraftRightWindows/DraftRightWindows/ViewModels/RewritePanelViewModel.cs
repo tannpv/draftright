@@ -31,6 +31,14 @@ public partial class RewritePanelViewModel : ObservableObject
     [ObservableProperty]
     private string _usageInfo = string.Empty;
 
+    /// <summary>
+    /// Set when the latest /rewrite response was a grammar check
+    /// (tone == grammar_check and the response has a `grammar` payload).
+    /// RewritePanel observes this and swaps in GrammarCheckView for richer UI.
+    /// </summary>
+    [ObservableProperty]
+    private GrammarResult? _grammarResult;
+
     // ── Collections ──
 
     public ObservableCollection<Tone> Tones { get; } = new(
@@ -62,6 +70,7 @@ public partial class RewritePanelViewModel : ObservableObject
         SelectedTone = tone;
         ErrorMessage = string.Empty;
         OutputText = string.Empty;
+        GrammarResult = null;  // clear any previous grammar UI state
         IsLoading = true;
 
         try
@@ -75,7 +84,19 @@ public partial class RewritePanelViewModel : ObservableObject
                 tone.ApiValue(),
                 targetLanguage);
 
-            OutputText = result.RewrittenText;
+            // Grammar Check returns a structured { grammar: { score, issues } }.
+            // Show the structured view for it; for everything else, show plain
+            // rewritten_text in the existing TextBlock.
+            if (result.Grammar != null && tone == Tone.GrammarCheck)
+            {
+                GrammarResult = result.Grammar;
+                OutputText = string.Empty;
+            }
+            else
+            {
+                GrammarResult = null;
+                OutputText = result.RewrittenText;
+            }
             UsageInfo = $"{result.UsageToday} / {result.DailyLimit} rewrites today";
         }
         catch (ApiException ex)

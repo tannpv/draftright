@@ -169,29 +169,40 @@ public class UpdateService
 
         try
         {
-            var tempPath = Path.Combine(Path.GetTempPath(), $"DraftRight-{version}-setup.msix");
+            // Derive the temp filename from the URL so we keep the actual
+            // file extension (.exe, .msi, .msix). Hardcoding ".msix" was a
+            // legacy assumption from when we shipped the MSIX installer.
+            // Now we ship a self-contained single-file .exe.
+            var urlFileName = Path.GetFileName(new Uri(url).LocalPath);
+            if (string.IsNullOrEmpty(urlFileName))
+            {
+                urlFileName = $"DraftRight-{version}-setup.exe";
+            }
+            var tempPath = Path.Combine(Path.GetTempPath(), urlFileName);
 
             using var response = await _http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
             response.EnsureSuccessStatusCode();
             var totalBytes = response.Content.Headers.ContentLength ?? -1;
 
-            using var stream = await response.Content.ReadAsStreamAsync();
-            using var fileStream = new FileStream(tempPath, FileMode.Create, FileAccess.Write);
-            var buffer = new byte[8192];
-            long downloaded = 0;
-            int bytesRead;
-
-            while ((bytesRead = await stream.ReadAsync(buffer)) > 0)
+            using (var stream = await response.Content.ReadAsStreamAsync())
+            using (var fileStream = new FileStream(tempPath, FileMode.Create, FileAccess.Write))
             {
-                await fileStream.WriteAsync(buffer.AsMemory(0, bytesRead));
-                downloaded += bytesRead;
-                if (totalBytes > 0)
+                var buffer = new byte[8192];
+                long downloaded = 0;
+                int bytesRead;
+
+                while ((bytesRead = await stream.ReadAsync(buffer)) > 0)
                 {
-                    var percent = (int)(downloaded * 100 / totalBytes);
-                    progressBar.Value = percent;
-                    percentLabel.Text = $"{percent}%";
+                    await fileStream.WriteAsync(buffer.AsMemory(0, bytesRead));
+                    downloaded += bytesRead;
+                    if (totalBytes > 0)
+                    {
+                        var percent = (int)(downloaded * 100 / totalBytes);
+                        progressBar.Value = percent;
+                        percentLabel.Text = $"{percent}%";
+                    }
+                    System.Windows.Forms.Application.DoEvents();
                 }
-                System.Windows.Forms.Application.DoEvents();
             }
 
             statusLabel.Text = "Installing...";
@@ -201,11 +212,24 @@ public class UpdateService
 
             progressForm.Close();
 
-            Process.Start(new ProcessStartInfo
+            // For .msi and .msix, just shell-execute and let the OS installer
+            // handle replacement. For our self-contained .exe distribution,
+            // we need a helper script: wait for the current process to exit,
+            // copy new exe over current exe, launch new exe.
+            var ext = Path.GetExtension(tempPath).ToLowerInvariant();
+            if (ext == ".exe")
             {
-                FileName = tempPath,
-                UseShellExecute = true
-            });
+                LaunchExeReplacer(tempPath);
+            }
+            else
+            {
+                // .msi / .msix / anything else: hand off to OS shell.
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = tempPath,
+                    UseShellExecute = true
+                });
+            }
 
             Environment.Exit(0);
         }
@@ -219,5 +243,41 @@ public class UpdateService
                 System.Windows.Forms.MessageBoxIcon.Error
             );
         }
+    }
+
+    /// <summary>
+    /// Spawns a hidden PowerShell helper that waits for this process to
+    /// exit, then atomically replaces the current EXE with the downloaded
+    /// new one and launches the new EXE. The helper outlives this process
+    /// so the running .exe can finish releasing its file lock before we
+    /// try to overwrite it.
+    /// </summary>
+    private static void LaunchExeReplacer(string newExePath)
+    {
+        var currentExe = Environment.ProcessPath
+            ?? Process.GetCurrentProcess().MainModule?.FileName
+            ?? throw new InvalidOperationException("Cannot determine current EXE path");
+
+        var pid = Environment.ProcessId;
+
+        // PowerShell script: wait for old process to exit (5s grace),
+        // replace exe, relaunch, clean up temp.
+        var ps = string.Join(";", new[]
+        {
+            $"$ErrorActionPreference = 'SilentlyContinue'",
+            $"try {{ Wait-Process -Id {pid} -Timeout 30 }} catch {{ }}",
+            $"Start-Sleep -Milliseconds 500",  // extra safety for file-lock release
+            $"Copy-Item -LiteralPath '{newExePath.Replace("'", "''")}' -Destination '{currentExe.Replace("'", "''")}' -Force",
+            $"Start-Process -FilePath '{currentExe.Replace("'", "''")}'",
+            $"Remove-Item -LiteralPath '{newExePath.Replace("'", "''")}' -Force"
+        });
+
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = "powershell.exe",
+            Arguments = $"-NoProfile -WindowStyle Hidden -Command \"{ps.Replace("\"", "\\\"")}\"",
+            UseShellExecute = false,
+            CreateNoWindow = true
+        });
     }
 }

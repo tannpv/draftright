@@ -40,16 +40,18 @@ public static class ToneExtensions
         _ => "Polished"
     };
 
+    // Use BMP-only glyphs so Segoe UI renders them directly without falling
+    // back to Segoe UI Emoji (which often shows as tofu boxes in WinForms).
     public static string Icon(this Tone tone) => tone switch
     {
-        Tone.Simple => "\u270e",
-        Tone.Natural => "\U0001f4ac",
-        Tone.Polished => "\u2728",
-        Tone.Concise => "\u2296",
-        Tone.Technical => "\U0001f527",
-        Tone.Claude => "\U0001f916",
-        Tone.GrammarCheck => "\u2713",
-        Tone.Translate => "\U0001f310",
+        Tone.Simple       => "\u270e",  // \u270e pencil
+        Tone.Natural      => "\u275d",  // \u275d heavy double turned comma quotation
+        Tone.Polished     => "\u2728",  // \u2728 sparkles (renders fine in Segoe UI)
+        Tone.Concise      => "\u2296",  // \u2296 circled minus
+        Tone.Technical    => "\u2699",  // \u2699 gear
+        Tone.Claude       => "\u24b8",  // \u24b8 circled C
+        Tone.GrammarCheck => "\u2713",  // \u2713 check mark
+        Tone.Translate    => "\u21c4",  // \u21c4 rightwards arrow over leftwards
         _ => "\u2728"
     };
 }

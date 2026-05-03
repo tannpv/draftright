@@ -48,14 +48,29 @@ public sealed class ClipboardService
     private const uint CF_UNICODETEXT = 13;
     private const uint GMEM_MOVEABLE = 0x0002;
 
-    private const ushort VK_CONTROL = 0x11;
-    private const ushort VK_C = 0x43;
+    private const ushort VK_CONTROL  = 0x11;
+    private const ushort VK_LCONTROL = 0xA2;
+    private const ushort VK_RCONTROL = 0xA3;
+    private const ushort VK_SHIFT    = 0x10;
+    private const ushort VK_LSHIFT   = 0xA0;
+    private const ushort VK_RSHIFT   = 0xA1;
+    private const ushort VK_MENU     = 0x12; // Alt
+    private const ushort VK_LMENU    = 0xA4;
+    private const ushort VK_RMENU    = 0xA5;
+    private const ushort VK_LWIN     = 0x5B;
+    private const ushort VK_RWIN     = 0x5C;
+    private const ushort VK_C        = 0x43;
     private const ushort VK_V = 0x56;
 
     private const uint KEYEVENTF_KEYUP = 0x0002;
 
     // ── SendInput structs ───────────────────────────────────
 
+    // INPUT struct must be sized to hold the LARGEST union member (MOUSEINPUT,
+    // 28 bytes / 32 with alignment on 64-bit). Without including all three
+    // possible union members, Marshal.SizeOf<INPUT>() returns 32 on x64
+    // when Windows expects 40, and SendInput rejects the call with
+    // ERROR_INVALID_PARAMETER (0x57). Same applies on ARM64.
     [StructLayout(LayoutKind.Sequential)]
     private struct INPUT
     {
@@ -66,7 +81,20 @@ public sealed class ClipboardService
     [StructLayout(LayoutKind.Explicit)]
     private struct INPUTUNION
     {
+        [FieldOffset(0)] public MOUSEINPUT mi;
         [FieldOffset(0)] public KEYBDINPUT ki;
+        [FieldOffset(0)] public HARDWAREINPUT hi;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MOUSEINPUT
+    {
+        public int dx;
+        public int dy;
+        public uint mouseData;
+        public uint dwFlags;
+        public uint time;
+        public IntPtr dwExtraInfo;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -79,6 +107,14 @@ public sealed class ClipboardService
         public IntPtr dwExtraInfo;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct HARDWAREINPUT
+    {
+        public uint uMsg;
+        public ushort wParamL;
+        public ushort wParamH;
+    }
+
     private const uint INPUT_KEYBOARD = 1;
 
     // ── Public API ──────────────────────────────────────────
@@ -89,26 +125,94 @@ public sealed class ClipboardService
     /// </summary>
     public async Task<string?> GetSelectedTextAsync()
     {
+        var fg0 = NativeForegroundWindow();
+        DRLogger.Log($"GetSelectedTextAsync start fg=0x{fg0:X}", DRLogger.Category.HOTKEY);
+
         // 1. Save current clipboard content
         string? originalClipboard = ReadClipboardText();
+        DRLogger.Log($"  step1: originalClipboard len={(originalClipboard?.Length ?? -1)}",
+            DRLogger.Category.HOTKEY);
 
         // 2. Clear clipboard so we can detect new content
         ClearClipboard();
 
-        // 3. Simulate Ctrl+C
-        SimulateKeyCombo(VK_CONTROL, VK_C);
+        // 3. Release any modifier keys the user may still be holding from
+        //    the global hotkey (Ctrl+Shift+R typically). Otherwise our
+        //    SimulateKeyCombo(Ctrl, C) below ends up effectively
+        //    Ctrl+Shift+C from the OS's perspective.
+        ReleaseHeldModifiers();
+        await Task.Delay(50);
 
-        // 4. Wait for the copy to complete
-        await Task.Delay(100);
+        var fg1 = NativeForegroundWindow();
+        DRLogger.Log($"  step3: fg=0x{fg1:X} (after modifier release)",
+            DRLogger.Category.HOTKEY);
 
-        // 5. Read the newly copied text
-        string? selectedText = ReadClipboardText();
+        // 4. Simulate clean Ctrl+C
+        var (sent, err) = SimulateKeyComboReporting(VK_CONTROL, VK_C);
+        DRLogger.Log($"  step4: SendInput Ctrl+C → events sent={sent} lastError={err} (0x{err:X})",
+            DRLogger.Category.HOTKEY);
+
+        // 5. Wait, then poll the clipboard up to 8x100ms in case the app
+        //    is slow to populate it (web/Electron editors often are).
+        string? selectedText = null;
+        for (int attempt = 1; attempt <= 8; attempt++)
+        {
+            await Task.Delay(100);
+            selectedText = ReadClipboardText();
+            DRLogger.Log($"  step5 attempt {attempt}: clipboard len={(selectedText?.Length ?? -1)}",
+                DRLogger.Category.HOTKEY);
+            if (!string.IsNullOrEmpty(selectedText))
+                break;
+        }
 
         // 6. Restore original clipboard
         if (originalClipboard != null)
             SetClipboardText(originalClipboard);
 
         return selectedText;
+    }
+
+    /// <summary>
+    /// Same as SimulateKeyCombo but returns (sent, lastError) for diagnosis.
+    /// SendInput returning 0 means UIPI/UAC blocked us, BlockInput is active,
+    /// or the target desktop differs.
+    /// </summary>
+    private (uint sent, int lastError) SimulateKeyComboReporting(params ushort[] vkCodes)
+    {
+        var inputs = new INPUT[vkCodes.Length * 2];
+        int idx = 0;
+        foreach (var vk in vkCodes) inputs[idx++] = MakeKeyInput(vk, keyUp: false);
+        for (int i = vkCodes.Length - 1; i >= 0; i--) inputs[idx++] = MakeKeyInput(vkCodes[i], keyUp: true);
+        var sent = SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
+        var err = sent == 0 ? Marshal.GetLastWin32Error() : 0;
+        return (sent, err);
+    }
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    private static long NativeForegroundWindow() => GetForegroundWindow().ToInt64();
+
+    /// <summary>
+    /// Force keyup events for every modifier the user might be holding
+    /// down from a global-hotkey trigger. Standard pattern for capturing
+    /// selection after a hotkey fires.
+    /// </summary>
+    private static void ReleaseHeldModifiers()
+    {
+        ushort[] mods =
+        {
+            VK_LCONTROL, VK_RCONTROL, VK_CONTROL,
+            VK_LSHIFT,   VK_RSHIFT,   VK_SHIFT,
+            VK_LMENU,    VK_RMENU,    VK_MENU,
+            VK_LWIN,     VK_RWIN,
+        };
+        var inputs = new INPUT[mods.Length];
+        for (int i = 0; i < mods.Length; i++)
+        {
+            inputs[i] = MakeKeyInput(mods[i], keyUp: true);
+        }
+        SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
     }
 
     /// <summary>
