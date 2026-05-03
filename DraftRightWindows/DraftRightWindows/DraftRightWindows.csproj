@@ -3,7 +3,9 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
-    <RuntimeIdentifier>win-arm64</RuntimeIdentifier>
+    <!-- RuntimeIdentifier is supplied at publish time via `dotnet publish -r <rid>`
+         (CI passes win-x64/win-arm64 from a matrix). Hardcoding it here would force
+         the value even when the CLI overrides, breaking local x64 dev builds. -->
     <RootNamespace>DraftRightWindows</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\DraftRight.ico</ApplicationIcon>
@@ -12,7 +14,6 @@
     <UseWinUI>true</UseWinUI>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <WindowsPackageType>None</WindowsPackageType>
-    <Platform>arm64</Platform>
     <EnableDefaultPageItems>false</EnableDefaultPageItems>
     <EnableDefaultApplicationDefinition>false</EnableDefaultApplicationDefinition>
     <GeneratePriFile>false</GeneratePriFile>
@@ -34,8 +35,7 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
-  <!-- Override PRI targets that require VS AppxPackage tooling (unavailable on ARM64 dotnet CLI) -->
-  <Target Name="_ExpandPriContent" BeforeTargets="Build" />
-  <Target Name="_GenerateProjectPriFileCore" BeforeTargets="Build" />
-  <Target Name="_MrtCoreGeneratePriFiles" BeforeTargets="Build" />
+  <!-- VS-only AppX MSBuild target stubs live in DraftRightWindows/Directory.Build.targets
+       (auto-imported by MSBuild after Sdk.targets). They're gated on
+       EnableMsixTooling != true so CI builds are unaffected. -->
 </Project>
