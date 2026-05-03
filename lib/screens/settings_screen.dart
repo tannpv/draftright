@@ -4,6 +4,7 @@ import 'package:draftright_mobile/services/auth_service.dart';
 import 'package:draftright_mobile/services/settings_service.dart';
 import 'package:draftright_mobile/screens/subscription_screen.dart';
 import 'package:draftright_mobile/screens/change_password_screen.dart';
+import 'package:draftright_mobile/screens/about_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -137,6 +138,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onChanged: (value) {
                   if (value != null) settings.setTranslateLanguage(value);
                 },
+              ),
+
+              const SizedBox(height: 24),
+              const Text('About', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const SizedBox(height: 8),
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.info_outline),
+                  title: const Text('About DraftRight'),
+                  subtitle: const Text('Version, links, support'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const AboutScreen()),
+                    );
+                  },
+                ),
               ),
             ],
           ),
