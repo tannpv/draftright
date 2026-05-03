@@ -41,31 +41,95 @@ public class App : Application
 
     public App()
     {
-        UnhandledException += (_, e) =>
+        // Capture every kind of unhandled exception with as much context as
+        // possible. Each handler logs to BOTH the rolling log file (via
+        // DRLogger) and a top-level draftright-crash.log on the Desktop so
+        // post-mortem debugging works even if the Local AppData folder is
+        // unreachable.
+
+        UnhandledException += (sender, e) =>
         {
-            System.IO.File.AppendAllText(
-                System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "draftright-crash.log"),
-                $"[{DateTime.Now}] {e.Exception}\n");
+            DRLogger.Log($"WinUI UnhandledException: {e.Exception}", DRLogger.Category.APP);
+            WriteCrashFile("WinUI", e.Exception);
             e.Handled = true;
         };
+
+        AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
+        {
+            var ex = e.ExceptionObject as Exception;
+            DRLogger.Log($"AppDomain UnhandledException (terminating={e.IsTerminating}): {ex}",
+                DRLogger.Category.APP);
+            WriteCrashFile("AppDomain", ex);
+        };
+
+        TaskScheduler.UnobservedTaskException += (sender, e) =>
+        {
+            DRLogger.Log($"UnobservedTaskException: {e.Exception}", DRLogger.Category.APP);
+            WriteCrashFile("UnobservedTask", e.Exception);
+            e.SetObserved();
+        };
+
+        // One-shot startup banner so every log file starts with the
+        // environment fingerprint: app version, .NET, OS, architecture.
+        try
+        {
+            var asm = System.Reflection.Assembly.GetExecutingAssembly();
+            var ver = asm.GetName().Version?.ToString() ?? "?";
+            var os = Environment.OSVersion.VersionString;
+            var bits = Environment.Is64BitProcess ? "64-bit" : "32-bit";
+            var arch = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture;
+            var dotnet = Environment.Version.ToString();
+            DRLogger.Log(
+                $"DraftRight startup: app={ver} .NET={dotnet} OS={os} {bits} arch={arch}",
+                DRLogger.Category.APP);
+        }
+        catch (Exception ex)
+        {
+            DRLogger.Log($"Startup banner failed: {ex.Message}", DRLogger.Category.APP);
+        }
+    }
+
+    private static void WriteCrashFile(string source, Exception? ex)
+    {
+        try
+        {
+            var path = System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
+                "draftright-crash.log");
+            System.IO.File.AppendAllText(path,
+                $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {source}: {ex}\n\n");
+        }
+        catch
+        {
+            // best-effort — Desktop may not be writable in some elevated contexts
+        }
     }
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+        DRLogger.Log("OnLaunched start", DRLogger.Category.APP);
+
         // Capture the UI-thread dispatcher queue before any async work
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
+        DRLogger.Log($"OnLaunched: dispatcher captured={_dispatcherQueue != null}", DRLogger.Category.APP);
 
         _hiddenWindow = new Window { Title = "DraftRight" };
+        DRLogger.Log("OnLaunched: hidden window created", DRLogger.Category.APP);
         _hwnd = WinRT.Interop.WindowNative.GetWindowHandle(_hiddenWindow);
+        DRLogger.Log($"OnLaunched: hwnd=0x{_hwnd.ToInt64():X}", DRLogger.Category.APP);
         Win32Interop.ShowWindow(_hwnd, Win32Interop.SW_HIDE);
 
         Settings = new SettingsService();
         Settings.Load();
+        DRLogger.Log($"OnLaunched: settings loaded — BackendUrl={Settings.BackendUrl} AppMode={Settings.AppMode} Hotkey={Settings.HotkeyModifiers:X}+{Settings.HotkeyKey:X}",
+            DRLogger.Category.APP);
+
         Api = new ApiClient(Settings.BackendUrl);
         Auth = new AuthService();
         Clipboard = new ClipboardService();
         Injector = new TextInjector(Clipboard);
         Hotkey = new HotkeyService();
+        DRLogger.Log("OnLaunched: services constructed (Api, Auth, Clipboard, Injector, Hotkey)", DRLogger.Category.APP);
 
         // Install a WndProc subclass on the hidden window so WM_HOTKEY messages
         // reach HotkeyService.ProcessHotkeyMessage.  The delegate MUST be stored
