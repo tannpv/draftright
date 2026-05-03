@@ -79,8 +79,13 @@ SolidCompression=yes
   ArchitecturesInstallIn64BitMode=x64compatible
 #endif
 
-; Icon shown in Add/Remove Programs.
-SetupIconFile={#SourceDir}\Assets\DraftRight.ico
+; Icon shown in the installer wizard + Add/Remove Programs entry.
+; Resolved relative to this .iss file. Pulled from the repo (always present),
+; not from {#SourceDir} — the latter would break for CI builds that use
+; PublishSingleFile=true + IncludeAllContentForSelfExtract=true, which
+; bundles content files into the single .exe and leaves no separate
+; Assets folder in publish/.
+SetupIconFile=..\DraftRightWindows\Assets\DraftRight.ico
 WizardStyle=modern
 
 ; Application identity — version comes through to file properties + the "Date
@@ -109,9 +114,12 @@ Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs 
   Excludes: "Logs\*,settings.json,auth.json,resources.pri,priconfig.xml"
 
 [Icons]
-Name: "{group}\{#AppName}";       Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\Assets\DraftRight.ico"
+; IconFilename points at the .exe — Windows pulls the embedded icon resource
+; from there. This works whether or not the Assets folder is laid out in
+; the install dir (single-file CI builds bundle Assets into the .exe).
+Name: "{group}\{#AppName}";       Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\{#AppExeName}"
 Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"
-Name: "{userdesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\Assets\DraftRight.ico"; Tasks: desktopicon
+Name: "{userdesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\{#AppExeName}"; Tasks: desktopicon
 
 [Registry]
 ; "Start at login" toggle — user opts in via the autostart task. The app's own
