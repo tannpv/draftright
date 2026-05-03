@@ -99,8 +99,13 @@ public sealed class ClipboardService
     /// </summary>
     public async Task<string?> GetSelectedTextAsync()
     {
+        var fg0 = NativeForegroundWindow();
+        DRLogger.Log($"GetSelectedTextAsync start fg=0x{fg0:X}", DRLogger.Category.HOTKEY);
+
         // 1. Save current clipboard content
         string? originalClipboard = ReadClipboardText();
+        DRLogger.Log($"  step1: originalClipboard len={(originalClipboard?.Length ?? -1)}",
+            DRLogger.Category.HOTKEY);
 
         // 2. Clear clipboard so we can detect new content
         ClearClipboard();
@@ -108,29 +113,56 @@ public sealed class ClipboardService
         // 3. Release any modifier keys the user may still be holding from
         //    the global hotkey (Ctrl+Shift+R typically). Otherwise our
         //    SimulateKeyCombo(Ctrl, C) below ends up effectively
-        //    Ctrl+Shift+C from the OS's perspective, which is "Copy as
-        //    Path" or similar in many apps — not actual Copy. Result:
-        //    clipboard stays empty and the panel shows "No text selected".
+        //    Ctrl+Shift+C from the OS's perspective.
         ReleaseHeldModifiers();
-        await Task.Delay(30);  // let the keyup events propagate
+        await Task.Delay(50);
+
+        var fg1 = NativeForegroundWindow();
+        DRLogger.Log($"  step3: fg=0x{fg1:X} (after modifier release)",
+            DRLogger.Category.HOTKEY);
 
         // 4. Simulate clean Ctrl+C
-        SimulateKeyCombo(VK_CONTROL, VK_C);
+        var sent = SimulateKeyComboReporting(VK_CONTROL, VK_C);
+        DRLogger.Log($"  step4: SendInput Ctrl+C → events sent={sent}",
+            DRLogger.Category.HOTKEY);
 
-        // 5. Wait for the copy to complete. 100 ms wasn't enough for
-        //    Electron / web / WinUI editors that handle keyboard events
-        //    asynchronously through their own message loop.
-        await Task.Delay(150);
+        // 5. Wait, then poll the clipboard up to 8x100ms in case the app
+        //    is slow to populate it (web/Electron editors often are).
+        string? selectedText = null;
+        for (int attempt = 1; attempt <= 8; attempt++)
+        {
+            await Task.Delay(100);
+            selectedText = ReadClipboardText();
+            DRLogger.Log($"  step5 attempt {attempt}: clipboard len={(selectedText?.Length ?? -1)}",
+                DRLogger.Category.HOTKEY);
+            if (!string.IsNullOrEmpty(selectedText))
+                break;
+        }
 
-        // 6. Read the newly copied text
-        string? selectedText = ReadClipboardText();
-
-        // 7. Restore original clipboard
+        // 6. Restore original clipboard
         if (originalClipboard != null)
             SetClipboardText(originalClipboard);
 
         return selectedText;
     }
+
+    /// <summary>
+    /// Same as SimulateKeyCombo but returns the count of input events
+    /// SendInput says it injected, for logging diagnosis.
+    /// </summary>
+    private uint SimulateKeyComboReporting(params ushort[] vkCodes)
+    {
+        var inputs = new INPUT[vkCodes.Length * 2];
+        int idx = 0;
+        foreach (var vk in vkCodes) inputs[idx++] = MakeKeyInput(vk, keyUp: false);
+        for (int i = vkCodes.Length - 1; i >= 0; i--) inputs[idx++] = MakeKeyInput(vkCodes[i], keyUp: true);
+        return SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
+    }
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    private static long NativeForegroundWindow() => GetForegroundWindow().ToInt64();
 
     /// <summary>
     /// Force keyup events for every modifier the user might be holding
