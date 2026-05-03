@@ -5,7 +5,6 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DraftRightWindows.Models;
 using DraftRightWindows.Services;
-using Windows.ApplicationModel.DataTransfer;
 
 namespace DraftRightWindows.ViewModels;
 
@@ -130,9 +129,11 @@ public partial class RewritePanelViewModel : ObservableObject
         if (string.IsNullOrWhiteSpace(OutputText))
             return;
 
-        var dataPackage = new DataPackage();
-        dataPackage.SetText(OutputText);
-        Clipboard.SetContent(dataPackage);
+        // The panel view runs on a WinForms STA thread; the WinUI clipboard
+        // API requires a DispatcherQueue context and hangs/throws here.
+        // WinForms.Clipboard works on any STA thread.
+        try { System.Windows.Forms.Clipboard.SetText(OutputText); }
+        catch { /* clipboard may be locked briefly */ }
     }
 
     [RelayCommand]
