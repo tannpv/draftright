@@ -79,7 +79,7 @@ if (-not $exe) {
 'Launching via Task Scheduler into Session 1...'
 $taskName = 'DraftRight-DevRun'
 schtasks /Delete /TN $taskName /F 2>&1 | Out-Null
-schtasks /Create /TN $taskName /SC ONCE /ST 00:00 /RL HIGHEST /TR "`"$($exe.FullName)`"" /F /IT /RU 'tan' 2>&1 | Out-Null
+schtasks /Create /TN $taskName /SC ONCE /ST 00:00 /RL LIMITED /TR "`"$($exe.FullName)`"" /F /IT /RU 'tan' 2>&1 | Out-Null
 schtasks /Run /TN $taskName 2>&1 | Out-Null
 Start-Sleep -Seconds 2
 schtasks /Delete /TN $taskName /F 2>&1 | Out-Null
