@@ -53,10 +53,11 @@ public sealed class RewritePanel : Window
     {
         ViewModel = new RewritePanelViewModel();
 
-        // Configure window
+        // Configure window. Note: ExtendsContentIntoTitleBar=true combined
+        // with SetTitleBar(null) crashes Microsoft.UI.Xaml.dll on ARM64 first
+        // render. Use the default chrome until we have a proper custom title
+        // bar element to set.
         Title = "DraftRight";
-        ExtendsContentIntoTitleBar = true;
-        SetTitleBar(null);
 
         // Build the UI
         Content = BuildUI();
