@@ -64,15 +64,36 @@ if ($errs) {
 }
 
 $exe = Get-ChildItem -Recurse -Path bin\arm64\Debug -Filter DraftRightWindows.exe -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-if ($exe) {
-    "Built: $($exe.FullName)"
-    "Size:  $([math]::Round($exe.Length/1MB, 1)) MB"
-    "Launching..."
-    Start-Process -FilePath $exe.FullName -WorkingDirectory $exe.DirectoryName
-    'Done. Check the VM window.'
-} else {
+if (-not $exe) {
     'BUILD OUTPUT NOT FOUND'
     exit 1
+}
+
+"Built: $($exe.FullName)"
+"Size:  $([math]::Round($exe.Length/1MB, 1)) MB"
+
+# Launch in interactive Session 1 (the user's desktop), not Session 0 (services).
+# Plain Start-Process from a WinRM-Service context spawns into Session 0
+# where tray icons / WinUI windows are invisible to the logged-in user.
+# Using Task Scheduler with /IT (interactive) /RU 'tan' /RL HIGHEST forces Session 1.
+'Launching via Task Scheduler into Session 1...'
+$taskName = 'DraftRight-DevRun'
+schtasks /Delete /TN $taskName /F 2>&1 | Out-Null
+schtasks /Create /TN $taskName /SC ONCE /ST 00:00 /RL HIGHEST /TR "`"$($exe.FullName)`"" /F /IT /RU 'tan' 2>&1 | Out-Null
+schtasks /Run /TN $taskName 2>&1 | Out-Null
+Start-Sleep -Seconds 2
+schtasks /Delete /TN $taskName /F 2>&1 | Out-Null
+
+$proc = Get-Process DraftRightWindows -ErrorAction SilentlyContinue | Select-Object -First 1
+if ($proc) {
+    "Running: PID $($proc.Id) in SessionId $($proc.SessionId)"
+    if ($proc.SessionId -eq 1) {
+        'OK — tray icon should be visible on the VM.'
+    } else {
+        "WARN — process is in Session $($proc.SessionId), not 1. Tray icon may be invisible."
+    }
+} else {
+    'WARN — process not detected after launch.'
 }
 """
 r = session.run_ps(script)
