@@ -147,14 +147,17 @@ public sealed class RewritePanel : Window
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
+        // BMP-only icons that render reliably in Segoe UI without emoji
+        // fallback (which often shows astral-plane emoji as tofu boxes).
+        // Kept in sync with Tone.Icon() in Models/Tone.cs.
         var tones = new (string Name, string Emoji, int Row, int Col)[]
         {
-            ("Simple",    "\u270E",  0, 0),
-            ("Natural",   "\uD83D\uDCAC", 0, 1),
-            ("Polished",  "\u2728",  0, 2),
-            ("Concise",   "\u2296",  1, 0),
-            ("Technical", "\uD83D\uDD27", 1, 1),
-            ("Translate", "\uD83C\uDF10", 1, 2),
+            ("Simple",    "\u270E", 0, 0),  // \u270E pencil
+            ("Natural",   "\u275D", 0, 1),  // \u275D quotation
+            ("Polished",  "\u2728", 0, 2),  // \u2728 sparkles
+            ("Concise",   "\u2296", 1, 0),  // \u2296 circled minus
+            ("Technical", "\u2699", 1, 1),  // \u2699 gear
+            ("Translate", "\u21C4", 1, 2),  // \u21C4 left-right arrows
         };
 
         foreach (var (name, emoji, row, col) in tones)

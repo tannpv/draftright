@@ -7,7 +7,7 @@ namespace DraftRightWindows.Services;
 /// <summary>
 /// Replaces the selected text in the source application by pasting from the clipboard.
 /// Sets clipboard to the rewritten text, brings the target window to the foreground,
-/// and simulates Ctrl+V.
+/// and simulates Ctrl+V using scan-code input (works in Electron/Chromium apps too).
 /// </summary>
 public sealed class TextInjector
 {
@@ -19,10 +19,33 @@ public sealed class TextInjector
     [DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();
 
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+    [DllImport("user32.dll")]
+    private static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
+
+    [DllImport("user32.dll")]
+    private static extern bool BringWindowToTop(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+    private const int SW_RESTORE = 9;
+    private const int SW_SHOW = 5;
+
+    [DllImport("user32.dll")]
+    private static extern bool IsIconic(IntPtr hWnd);
+
+    [DllImport("kernel32.dll")]
+    private static extern uint GetCurrentThreadId();
+
     [DllImport("user32.dll", SetLastError = true)]
     private static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
 
-    // ── SendInput structs (mirrors ClipboardService) ────────
+    // ── SendInput structs ───────────────────────────────────
+    // The union MUST be sized to MOUSEINPUT (the largest member). Otherwise
+    // Marshal.SizeOf<INPUT>() reports a smaller size than Win32 expects and
+    // every SendInput call fails with ERROR_INVALID_PARAMETER (87).
 
     [StructLayout(LayoutKind.Sequential)]
     private struct INPUT
@@ -34,7 +57,9 @@ public sealed class TextInjector
     [StructLayout(LayoutKind.Explicit)]
     private struct INPUTUNION
     {
+        [FieldOffset(0)] public MOUSEINPUT mi;
         [FieldOffset(0)] public KEYBDINPUT ki;
+        [FieldOffset(0)] public HARDWAREINPUT hi;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -47,10 +72,32 @@ public sealed class TextInjector
         public IntPtr dwExtraInfo;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MOUSEINPUT
+    {
+        public int dx;
+        public int dy;
+        public uint mouseData;
+        public uint dwFlags;
+        public uint time;
+        public IntPtr dwExtraInfo;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct HARDWAREINPUT
+    {
+        public uint uMsg;
+        public ushort wParamL;
+        public ushort wParamH;
+    }
+
     private const uint INPUT_KEYBOARD = 1;
     private const uint KEYEVENTF_KEYUP = 0x0002;
-    private const ushort VK_CONTROL = 0x11;
-    private const ushort VK_V = 0x56;
+    private const uint KEYEVENTF_SCANCODE = 0x0008;
+
+    // Scan codes (US layout — same on most layouts for these keys).
+    private const ushort SC_LCTRL = 0x1D;
+    private const ushort SC_V = 0x2F;
 
     // ── Dependencies ────────────────────────────────────────
 
@@ -66,24 +113,55 @@ public sealed class TextInjector
     /// <summary>
     /// Injects text into the target application by pasting from the clipboard.
     /// </summary>
-    /// <param name="text">The rewritten text to inject.</param>
-    /// <param name="targetWindow">Handle of the window that should receive the paste.</param>
     public async Task InjectTextAsync(string text, IntPtr targetWindow)
     {
-        // 1. Place the rewritten text on the clipboard
+        DRLogger.Log($"InjectText: target HWND=0x{targetWindow:X} len={text.Length}", DRLogger.Category.HOTKEY);
+
+        // 1. Put the rewritten text on the clipboard.
         _clipboard.SetClipboardText(text);
 
-        // 2. Bring the target window to the foreground
-        SetForegroundWindow(targetWindow);
+        // 2. Bring the target window to the foreground reliably. SetForegroundWindow
+        //    alone is silently rejected when the caller isn't already the foreground
+        //    process. The standard workaround is to attach our thread's input queue
+        //    to the target window's thread first.
+        if (targetWindow != IntPtr.Zero)
+        {
+            if (IsIconic(targetWindow)) ShowWindow(targetWindow, SW_RESTORE);
 
-        // 3. Small delay to let the OS finish the window switch
-        await Task.Delay(100);
+            uint targetThread = GetWindowThreadProcessId(targetWindow, out _);
+            uint thisThread = GetCurrentThreadId();
+            bool attached = false;
+            try
+            {
+                if (targetThread != 0 && targetThread != thisThread)
+                    attached = AttachThreadInput(thisThread, targetThread, true);
 
-        // 4. Simulate Ctrl+V to paste
-        SimulateCtrlV();
+                BringWindowToTop(targetWindow);
+                SetForegroundWindow(targetWindow);
+                ShowWindow(targetWindow, SW_SHOW);
+            }
+            finally
+            {
+                if (attached) AttachThreadInput(thisThread, targetThread, false);
+            }
+        }
 
-        // 5. Brief delay for the paste to register
-        await Task.Delay(50);
+        // 3. Wait for the foreground switch to land. Apps queue input until they
+        //    have foreground focus, so under-waiting drops the paste.
+        await Task.Delay(150);
+
+        // 4. Simulate Ctrl+V using SCAN CODES — works in Electron/Chromium apps
+        //    (VS Code, browsers) where VK-only SendInput is filtered out.
+        var sent = SimulateCtrlVViaScanCode();
+        if (sent != 4)
+        {
+            int err = Marshal.GetLastWin32Error();
+            DRLogger.Log($"InjectText: SendInput sent {sent}/4, GetLastError={err}", DRLogger.Category.HOTKEY);
+        }
+
+        // 5. Brief delay for the paste to register before our caller continues.
+        await Task.Delay(80);
+        DRLogger.Log("InjectText: done", DRLogger.Category.HOTKEY);
     }
 
     /// <summary>
@@ -94,21 +172,23 @@ public sealed class TextInjector
 
     // ── Private helpers ─────────────────────────────────────
 
-    private static void SimulateCtrlV()
+    private static uint SimulateCtrlVViaScanCode()
     {
         var inputs = new INPUT[]
         {
-            MakeKeyInput(VK_CONTROL, keyUp: false),
-            MakeKeyInput(VK_V, keyUp: false),
-            MakeKeyInput(VK_V, keyUp: true),
-            MakeKeyInput(VK_CONTROL, keyUp: true),
+            MakeScanCodeInput(SC_LCTRL, keyUp: false),
+            MakeScanCodeInput(SC_V,     keyUp: false),
+            MakeScanCodeInput(SC_V,     keyUp: true),
+            MakeScanCodeInput(SC_LCTRL, keyUp: true),
         };
-
-        SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
+        return SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
     }
 
-    private static INPUT MakeKeyInput(ushort vk, bool keyUp)
+    private static INPUT MakeScanCodeInput(ushort scan, bool keyUp)
     {
+        uint flags = KEYEVENTF_SCANCODE;
+        if (keyUp) flags |= KEYEVENTF_KEYUP;
+
         return new INPUT
         {
             type = INPUT_KEYBOARD,
@@ -116,11 +196,11 @@ public sealed class TextInjector
             {
                 ki = new KEYBDINPUT
                 {
-                    wVk = vk,
-                    wScan = 0,
-                    dwFlags = keyUp ? KEYEVENTF_KEYUP : 0,
+                    wVk = 0,
+                    wScan = scan,
+                    dwFlags = flags,
                     time = 0,
-                    dwExtraInfo = IntPtr.Zero
+                    dwExtraInfo = IntPtr.Zero,
                 }
             }
         };

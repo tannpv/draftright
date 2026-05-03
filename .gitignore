@@ -26,6 +26,7 @@
 # C# / .NET
 **/bin/
 **/obj/
+DraftRightWindows/publish/
 
 # Python
 **/__pycache__/
