@@ -182,27 +182,35 @@ public class App : Application
             // Must open the WinUI window on the UI (dispatcher) thread
             _dispatcherQueue?.TryEnqueue(() =>
             {
-                if (_rewritePanel == null)
+                try
                 {
-                    _rewritePanel = new RewritePanel();
-
-                    // When the user clicks Replace, inject the text back
-                    _rewritePanel.ViewModel.PasteRequested += async (_, rewrittenText) =>
+                    DRLogger.Log("Panel: dispatcher entered", DRLogger.Category.PANEL);
+                    if (_rewritePanel == null)
                     {
-                        _rewritePanel.Close();
-                        _rewritePanel = null;
-                        await Injector.InjectTextAsync(rewrittenText, _sourceWindow);
-                        DRLogger.Log("Paste complete.", DRLogger.Category.HOTKEY);
-                    };
+                        DRLogger.Log("Panel: constructing new RewritePanel", DRLogger.Category.PANEL);
+                        _rewritePanel = new RewritePanel();
+                        DRLogger.Log("Panel: constructed", DRLogger.Category.PANEL);
 
-                    // When Close is clicked (no replace), just null out the panel reference
-                    _rewritePanel.ViewModel.CloseRequested += (_, _) =>
-                    {
-                        _rewritePanel = null;
-                    };
+                        _rewritePanel.ViewModel.PasteRequested += async (_, rewrittenText) =>
+                        {
+                            _rewritePanel.Close();
+                            _rewritePanel = null;
+                            await Injector.InjectTextAsync(rewrittenText, _sourceWindow);
+                            DRLogger.Log("Paste complete.", DRLogger.Category.HOTKEY);
+                        };
+                        _rewritePanel.ViewModel.CloseRequested += (_, _) => { _rewritePanel = null; };
+                    }
+
+                    DRLogger.Log($"Panel: ShowForText({text.Length} chars)", DRLogger.Category.PANEL);
+                    _rewritePanel.ShowForText(text);
+                    DRLogger.Log("Panel: ShowForText returned", DRLogger.Category.PANEL);
                 }
-
-                _rewritePanel.ShowForText(text);
+                catch (Exception ex)
+                {
+                    DRLogger.Log($"Panel: EXCEPTION {ex.GetType().Name}: {ex.Message}", DRLogger.Category.PANEL);
+                    DRLogger.Log($"Panel: stack:\n{ex}", DRLogger.Category.PANEL);
+                    _rewritePanel = null;
+                }
             });
         }
     }
