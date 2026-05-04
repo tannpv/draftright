@@ -28,8 +28,7 @@
     <AppxPackage Condition="'$(WindowsPackageType)' == 'MSIX'">true</AppxPackage>
     <EnableMsixTooling Condition="'$(WindowsPackageType)' == 'MSIX'">true</EnableMsixTooling>
     <GenerateAppxPackageOnBuild Condition="'$(WindowsPackageType)' == 'MSIX'">true</GenerateAppxPackageOnBuild>
-    <AppxBundle Condition="'$(WindowsPackageType)' == 'MSIX'">Always</AppxBundle>
-    <AppxBundlePlatforms Condition="'$(WindowsPackageType)' == 'MSIX'">x64|arm64</AppxBundlePlatforms>
+    <AppxBundle Condition="'$(WindowsPackageType)' == 'MSIX'">Never</AppxBundle>
     <AppxAutoIncrementPackageRevision Condition="'$(WindowsPackageType)' == 'MSIX'">False</AppxAutoIncrementPackageRevision>
     <DefaultLanguage Condition="'$(WindowsPackageType)' == 'MSIX'">en-US</DefaultLanguage>
     <DefaultResourceLanguage Condition="'$(WindowsPackageType)' == 'MSIX'">en-US</DefaultResourceLanguage>

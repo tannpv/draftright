@@ -185,21 +185,21 @@ jobs:
       - name: Restore
         run: msbuild /t:Restore /p:Configuration=Release /p:Platform=x64
 
-      - name: Build MSIX bundle (x64 + arm64)
+      - name: Build MSIX (x64)
         shell: pwsh
         run: |
-          # Single-project MSIX build. AppxBundlePlatforms drives the
-          # bundle to include both architectures in one .msixbundle.
+          # Single-arch x64 MSIX. arm64 + bundling is a follow-up once
+          # Microsoft Store accepts the first x64 submission.
           msbuild `
             /t:Rebuild `
             /p:Configuration=Release `
             /p:Platform=x64 `
+            /p:RuntimeIdentifier=win-x64 `
             /p:WindowsPackageType=MSIX `
             /p:EnableMsixTooling=true `
             /p:GenerateAppxPackageOnBuild=true `
             /p:UapAppxPackageBuildMode=StoreUpload `
-            /p:AppxBundle=Always `
-            /p:AppxBundlePlatforms="x64|arm64" `
+            /p:AppxBundle=Never `
             /p:AppxPackageDir=AppPackages\
 
       - name: Locate built bundle
