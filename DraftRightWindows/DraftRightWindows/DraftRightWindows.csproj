@@ -55,6 +55,16 @@
     </AppxManifest>
     <Content Include="Assets\*.png" />
   </ItemGroup>
+  <!-- In unpackaged mode the WinUI 3 SDK still auto-discovers .resw files
+       under Strings/ and registers them as PRIResource items, but the PRI
+       generation MSBuild tasks are shimmed out (see Directory.Build.targets).
+       Removing the items here avoids GenerateBundle failing with
+       "resources.pri does not exist". -->
+  <ItemGroup Condition="'$(WindowsPackageType)' != 'MSIX'">
+    <PRIResource Remove="@(PRIResource)" />
+    <Content Remove="Strings\**\*.resw" />
+    <None Remove="Strings\**\*.resw" />
+  </ItemGroup>
   <!-- VS-only AppX MSBuild target stubs live in DraftRightWindows/Directory.Build.targets
        (auto-imported by MSBuild after Sdk.targets). They're gated on
        EnableMsixTooling != true so CI builds are unaffected. -->
