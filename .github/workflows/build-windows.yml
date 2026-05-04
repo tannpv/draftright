@@ -204,21 +204,47 @@ jobs:
             /p:AppxBundle=Never `
             /p:AppxPackageDir=AppPackages\
 
-      - name: Locate built bundle
+      - name: Locate built MSIX
         shell: pwsh
         run: |
-          $bundle = Get-ChildItem -Path AppPackages -Recurse -Include *.msixupload, *.msixbundle | Select-Object -First 1
+          # Search broadly — .msix output can land in AppPackages/, bin/, or
+          # obj/ depending on tooling decisions. Pick the largest .msix file
+          # (the actual app, not Microsoft.WindowsAppRuntime.* dependency packages).
+          $candidates = @()
+          foreach ($dir in @("AppPackages", "bin", "obj")) {
+            if (Test-Path $dir) {
+              $candidates += Get-ChildItem -Path $dir -Recurse -Include *.msix, *.msixbundle, *.msixupload -ErrorAction SilentlyContinue
+            }
+          }
+          # Prefer Store-upload package, then bundle, then plain .msix
+          $bundle = $candidates | Where-Object { $_.Extension -eq ".msixupload" } | Select-Object -First 1
           if (-not $bundle) {
-            Write-Host "Listing AppPackages tree for diagnosis:"
-            Get-ChildItem -Path AppPackages -Recurse | Select-Object FullName, Length
-            throw "No .msixupload or .msixbundle found"
+            $bundle = $candidates | Where-Object { $_.Extension -eq ".msixbundle" } | Select-Object -First 1
+          }
+          if (-not $bundle) {
+            # Filter out runtime dependency .msix files; pick the largest (our app)
+            $bundle = $candidates | Where-Object {
+              $_.Extension -eq ".msix" -and $_.Name -notmatch "Microsoft\.WindowsAppRuntime|VCLibs"
+            } | Sort-Object Length -Descending | Select-Object -First 1
+          }
+          if (-not $bundle) {
+            Write-Host "Diagnostic — full search tree:"
+            foreach ($dir in @("AppPackages", "bin", "obj")) {
+              if (Test-Path $dir) {
+                Write-Host "=== $dir ==="
+                Get-ChildItem -Path $dir -Recurse -Include *.msix, *.msixbundle, *.msixupload, *.appx, *.appxbundle, *.appxupload -ErrorAction SilentlyContinue | Select-Object FullName, Length
+              }
+            }
+            throw "No .msix output found"
           }
           Write-Host "Built: $($bundle.FullName) ($([math]::Round($bundle.Length/1MB, 1)) MB)"
           $shortSha = $env:COMMIT_SHA.Substring(0, 7)
           $name = "DraftRight-Store-$shortSha$($bundle.Extension)"
-          Copy-Item $bundle.FullName "AppPackages\$name"
+          $stagingDir = "AppPackages"
+          New-Item -ItemType Directory -Force -Path $stagingDir | Out-Null
+          Copy-Item $bundle.FullName "$stagingDir\$name" -Force
           Add-Content -Path $env:GITHUB_ENV -Value "MSIX_NAME=$name"
-          Add-Content -Path $env:GITHUB_ENV -Value "MSIX_PATH=DraftRightWindows/DraftRightWindows/AppPackages/$name"
+          Add-Content -Path $env:GITHUB_ENV -Value "MSIX_PATH=DraftRightWindows/DraftRightWindows/$stagingDir/$name"
 
       - name: Upload MSIX bundle
         uses: actions/upload-artifact@v4
