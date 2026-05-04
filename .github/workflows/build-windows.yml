@@ -182,8 +182,8 @@ jobs:
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
-      - name: Restore
-        run: msbuild /t:Restore /p:Configuration=Release /p:Platform=x64
+      - name: Restore (x64 RID)
+        run: msbuild /t:Restore /p:Configuration=Release /p:Platform=x64 /p:RuntimeIdentifier=win-x64
 
       - name: Build MSIX (x64)
         shell: pwsh
