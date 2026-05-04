@@ -54,6 +54,9 @@
       <SubType>Designer</SubType>
     </AppxManifest>
     <Content Include="Assets\*.png" />
+    <!-- Explicit PRIResource so MakePri runs on our .resw regardless of
+         what auto-discovery does. -->
+    <PRIResource Include="Strings\en-US\Resources.resw" />
   </ItemGroup>
   <!-- In unpackaged mode the WinUI 3 SDK still auto-discovers .resw files
        under Strings/ and registers them as PRIResource items, but the PRI

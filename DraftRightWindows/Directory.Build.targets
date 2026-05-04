@@ -1,64 +1,19 @@
 <!--
-  Build-portability shim for the standalone .NET SDK.
+  Build-portability for the standalone .NET SDK.
 
-  WinUI 3 / Windows App SDK rely on Visual Studio AppX MSBuild tasks
-  (Microsoft.Build.Packaging.Pri.Tasks.dll, Microsoft.Build.AppxPackage.dll)
-  that ship only with VS Build Tools. The standalone .NET SDK on a developer
-  machine without VS Build Tools fails to load those tasks and the build dies
-  with errors like:
+  WinUI 3 / Windows App SDK rely on Visual Studio AppX MSBuild tasks that
+  ship only with VS Build Tools. On a dev machine without VS Build Tools,
+  the build dies loading these tasks.
 
-    error MSB4062: The "Microsoft.Build.Packaging.Pri.Tasks.ExpandPriContent"
-                   task could not be loaded from the assembly
-                   <SDK>\Microsoft\VisualStudio\v17.0\AppxPackage\
-                   Microsoft.Build.Packaging.Pri.Tasks.dll. The system cannot
-                   find the path specified.
+  We work around this by importing UnpackagedShims.targets — a file that
+  redefines the offending targets to empty pass-throughs — but ONLY when
+  building unpackaged (.exe) mode. The Import is parse-time conditional
+  so the redefinitions never enter the project graph in MSIX mode.
 
-  We replace the offending targets with empty / pass-through versions so the
-  build completes. None of these matter for an unpackaged WinUI app
-  (WindowsPackageType=None, AppxPackage=false), so the no-ops are safe.
-
-  Gated on `EnableMsixTooling != 'true'` so CI runs (which set
-  -p:EnableMsixTooling=true and have full VS Build Tools installed) skip
-  these shims and use the real targets.
-
-  Imported automatically because MSBuild auto-imports Directory.Build.targets
-  AFTER Sdk.targets, so target redefinitions here win.
+  In MSIX-packaged mode the real targets must run to generate resources.pri
+  and Appx package recipes.
 -->
 <Project>
-  <PropertyGroup Condition="'$(EnableMsixTooling)' != 'true'">
-    <AppxGeneratePriEnabled>false</AppxGeneratePriEnabled>
-  </PropertyGroup>
-
-  <!-- Targets that invoke ExpandPriContent (Microsoft.Build.Packaging.Pri.Tasks). -->
-  <Target Name="_GenerateProjectPriFileCore" Condition="'$(EnableMsixTooling)' != 'true'" />
-  <Target Name="_ExpandProjectPriFile"       Condition="'$(EnableMsixTooling)' != 'true'" />
-  <Target Name="AddPriPayloadFilesToCopyToOutputDirectoryItems" Condition="'$(EnableMsixTooling)' != 'true'" />
-  <Target Name="_ExpandPriFiles"             Condition="'$(EnableMsixTooling)' != 'true'" />
-
-  <!-- Targets that invoke ExpandPayloadDirectories / GetDefaultResourceLanguage /
-       GetPackageArchitecture / ValidateConfiguration (Microsoft.Build.AppxPackage). -->
-  <Target Name="GetMrtPackagingOutputs"      Condition="'$(EnableMsixTooling)' != 'true'" Returns="@(PackagingOutputs)" />
-  <Target Name="_GetPackageArchitecture"     Condition="'$(EnableMsixTooling)' != 'true'" />
-  <Target Name="_GetDefaultResourceLanguage" Condition="'$(EnableMsixTooling)' != 'true'" />
-  <Target Name="_ValidateConfiguration"      Condition="'$(EnableMsixTooling)' != 'true'" />
-
-  <!-- Sub-targets gated by other conditions; safe to no-op. -->
-  <Target Name="_GeneratePrisForPortableLibraries"     Condition="'$(EnableMsixTooling)' != 'true'" />
-  <Target Name="_GetPriFilesFromPayload"               Condition="'$(EnableMsixTooling)' != 'true'" />
-  <Target Name="_GenerateProjectPriConfigurationFiles" Condition="'$(EnableMsixTooling)' != 'true'" />
-
-  <!-- CopyLocalFilesOutputGroup (used by publish) calls RemovePayloadDuplicates,
-       another VS-only task. Replace with a pass-through that just forwards
-       ReferenceCopyLocalPaths — NuGet has already deduplicated those. -->
-  <Target Name="CopyLocalFilesOutputGroup"
-          Condition="'$(EnableMsixTooling)' != 'true'"
-          DependsOnTargets="$(CopyLocalFilesOutputGroupDependsOn)"
-          Returns="@(CopyLocalFilesOutputGroupOutput)">
-    <ItemGroup>
-      <CopyLocalFilesOutputGroupOutput Include="@(ReferenceCopyLocalPaths)"
-                                       Condition="'%(ReferenceCopyLocalPaths.Extension)' != '.xml' or '$(AppxCopyLocalFilesOutputGroupIncludeXmlFiles)' == 'true'">
-        <TargetPath>%(ReferenceCopyLocalPaths.DestinationSubDirectory)%(ReferenceCopyLocalPaths.Filename)%(ReferenceCopyLocalPaths.Extension)</TargetPath>
-      </CopyLocalFilesOutputGroupOutput>
-    </ItemGroup>
-  </Target>
+  <Import Project="UnpackagedShims.targets"
+          Condition="'$(WindowsPackageType)' != 'MSIX' and '$(EnableMsixTooling)' != 'true'" />
 </Project>
