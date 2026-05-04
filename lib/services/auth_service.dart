@@ -51,6 +51,12 @@ class AuthService extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_sharedKeyAccess, _accessToken!);
       await _syncToAppGroup('draftright.accessToken', _accessToken!);
+      // Ensure the long-lived extension token exists for the IME / share
+      // extension. Users who upgraded into the EXTTOK build without
+      // re-logging in won't have one yet — without this, the IME falls
+      // back to the 15-min access JWT and shows "Unauthorized" the moment
+      // it expires. Best-effort: failures don't block app startup.
+      unawaited(_extension.ensureMinted(accessToken: _accessToken!));
     }
     notifyListeners();
   }
