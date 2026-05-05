@@ -5,12 +5,45 @@ import 'package:draftright_mobile/services/settings_service.dart';
 import 'package:draftright_mobile/screens/subscription_screen.dart';
 import 'package:draftright_mobile/screens/change_password_screen.dart';
 import 'package:draftright_mobile/screens/about_screen.dart';
+import 'package:draftright_mobile/services/share_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _FloatingBubbleTile extends StatelessWidget {
+  final bool enabled;
+  final ValueChanged<bool> onChanged;
+  const _FloatingBubbleTile({required this.enabled, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Column(
+        children: [
+          SwitchListTile(
+            secondary: const Icon(Icons.bubble_chart_outlined),
+            title: const Text('Show floating bubble'),
+            subtitle: const Text(
+              'A draggable button stays on screen. Copy text, tap the bubble, pick a tone — paste back. Works in any app.',
+            ),
+            value: enabled,
+            onChanged: onChanged,
+          ),
+          if (!enabled) const Padding(
+            padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: Text(
+              'Asks for "Display over other apps" permission once. We do not read your screen — only the clipboard, and only when you tap the bubble.',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
@@ -27,6 +60,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void dispose() {
     _backendUrlController.dispose();
     super.dispose();
+  }
+
+  Future<void> _setBubble(SettingsService settings, bool enable) async {
+    final messenger = ScaffoldMessenger.of(context);
+    if (!enable) {
+      await ShareService.stopBubble();
+      await settings.setFloatingBubbleEnabled(false);
+      return;
+    }
+    final canDraw = await ShareService.canDrawOverlays();
+    if (!canDraw) {
+      // Send user to the system page to grant permission. We don't auto-toggle
+      // back on after they return — the next time they tap the toggle, the
+      // permission will be there.
+      messenger.showSnackBar(const SnackBar(
+        content: Text('Grant "Display over other apps", then enable again.'),
+      ));
+      await ShareService.openOverlaySettings();
+      return;
+    }
+    final ok = await ShareService.startBubble();
+    await settings.setFloatingBubbleEnabled(ok);
+    if (!ok) {
+      messenger.showSnackBar(const SnackBar(
+        content: Text('Could not start the bubble. Try again.'),
+      ));
+    }
   }
 
   Future<void> _logout() async {
@@ -138,6 +198,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onChanged: (value) {
                   if (value != null) settings.setTranslateLanguage(value);
                 },
+              ),
+
+              const SizedBox(height: 24),
+              const Text('Floating Bubble',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const SizedBox(height: 8),
+              _FloatingBubbleTile(
+                enabled: settings.floatingBubbleEnabled,
+                onChanged: (value) => _setBubble(settings, value),
               ),
 
               const SizedBox(height: 24),

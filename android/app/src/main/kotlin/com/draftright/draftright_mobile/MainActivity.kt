@@ -1,22 +1,31 @@
 package com.draftright.draftright_mobile
 
 import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 /**
- * Captures ACTION_SEND text/plain intents and forwards them to Flutter via
- * a method channel.  Two surfaces:
+ * Captures ACTION_SEND text/plain intents (system Share or floating bubble
+ * tap) and forwards them to Flutter via a method channel.  Same channel
+ * also exposes the floating-bubble lifecycle and the overlay-permission
+ * check / settings deep-link.
  *
- *  - [getInitialSharedText]  — Flutter calls this on app start to drain any
- *    text the user shared while DraftRight was not running.
- *  - [onSharedText] callback — Flutter sets a handler; we invoke it whenever
- *    the activity receives a fresh share while already running.
+ * Method channel: `draftright/share`
  *
- * Required because Samsung / Xiaomi / Huawei strip third-party PROCESS_TEXT
- * actions out of the text-selection popup; ACTION_SEND is the reliable
- * fallback because no OEM restricts the share sheet.
+ *  Methods Flutter → native:
+ *    getInitialSharedText  — drains pending share text (consumed once)
+ *    canDrawOverlays       — Settings.canDrawOverlays(this)
+ *    openOverlaySettings   — launch ACTION_MANAGE_OVERLAY_PERMISSION
+ *    startBubble           — start FloatingBubbleService
+ *    stopBubble            — stop FloatingBubbleService
+ *
+ *  Native → Flutter:
+ *    onSharedText(String)  — fired when a fresh share arrives while the
+ *                            app is running (live update).
  */
 class MainActivity : FlutterActivity() {
     private val channelName = "draftright/share"
@@ -31,9 +40,6 @@ class MainActivity : FlutterActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         val text = extractSharedText(intent) ?: return
-        // App is already running — push to Flutter immediately, and stash
-        // a copy in case Flutter asks for the initial text before its
-        // handler is wired up.
         pendingSharedText = text
         channel?.invokeMethod("onSharedText", text)
     }
@@ -45,12 +51,52 @@ class MainActivity : FlutterActivity() {
             when (call.method) {
                 "getInitialSharedText" -> {
                     val t = pendingSharedText
-                    pendingSharedText = null  // consume so reads aren't sticky
+                    pendingSharedText = null
                     result.success(t)
+                }
+                "canDrawOverlays" -> {
+                    result.success(canDrawOverlays())
+                }
+                "openOverlaySettings" -> {
+                    openOverlaySettings()
+                    result.success(null)
+                }
+                "startBubble" -> {
+                    if (!canDrawOverlays()) {
+                        result.error("NO_PERMISSION",
+                            "Overlay permission not granted", null)
+                    } else {
+                        val svc = Intent(this, FloatingBubbleService::class.java)
+                            .apply { action = FloatingBubbleService.ACTION_START }
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            startForegroundService(svc)
+                        } else {
+                            startService(svc)
+                        }
+                        result.success(true)
+                    }
+                }
+                "stopBubble" -> {
+                    val svc = Intent(this, FloatingBubbleService::class.java)
+                        .apply { action = FloatingBubbleService.ACTION_STOP }
+                    startService(svc)
+                    result.success(true)
                 }
                 else -> result.notImplemented()
             }
         }
+    }
+
+    private fun canDrawOverlays(): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.M ||
+        Settings.canDrawOverlays(this)
+
+    private fun openOverlaySettings() {
+        val i = Intent(
+            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+            Uri.parse("package:$packageName")
+        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        startActivity(i)
     }
 
     private fun extractSharedText(intent: Intent?): String? {

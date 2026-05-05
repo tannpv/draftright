@@ -2,6 +2,17 @@
     xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Floating bubble (Tier 1, no Accessibility Service):
+         SYSTEM_ALERT_WINDOW = draw the bubble over other apps.
+         FOREGROUND_SERVICE + FOREGROUND_SERVICE_SPECIAL_USE = keep the
+         service alive when the app is backgrounded so the bubble stays.
+         POST_NOTIFICATIONS = Android 13+ requires runtime grant for the
+         foreground-service notification. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <!-- DraftRight does not use advertising IDs. The AD_ID permission gets
          auto-merged in by Google Play Services / google_sign_in / Facebook
          SDK transitive deps even though we don't actually read the
@@ -79,6 +90,18 @@
                 <data android:mimeType="text/plain" />
             </intent-filter>
         </activity>
+
+        <!-- Floating bubble service. Runs as foreground service with a
+             low-priority persistent notification while the user has the
+             bubble enabled. Tier 1 — overlay only, no Accessibility. -->
+        <service
+            android:name="com.draftright.draftright_mobile.FloatingBubbleService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Floating overlay button that opens DraftRight rewrite UI from any app, similar to chat-head bubbles." />
+        </service>
     </application>
     <!-- Android 11+ package visibility (https://developer.android.com/training/package-visibility).
          Without these <queries> declarations, url_launcher's canLaunchUrl()

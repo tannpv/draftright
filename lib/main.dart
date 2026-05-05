@@ -118,6 +118,13 @@ class _HomeScreenState extends State<HomeScreen> {
     ShareService.setHandler((text) {
       if (mounted) _openShareRewrite(text);
     });
+    // Restart floating bubble if the user had it enabled last session.
+    // No-op on iOS / desktop / web (channel returns false).
+    if (!mounted) return;
+    final settings = context.read<SettingsService>();
+    if (settings.floatingBubbleEnabled && await ShareService.canDrawOverlays()) {
+      await ShareService.startBubble();
+    }
   }
 
   void _openShareRewrite(String text) {

@@ -22,11 +22,13 @@ class SettingsService extends ChangeNotifier {
   String _translateLanguage = 'Vietnamese';
   List<String> _enabledTones = Tone.values.map((t) => t.apiValue).toList();
   String _defaultTone = '';
+  bool _floatingBubbleEnabled = false;
 
   String get backendUrl => _backendUrl;
   String get translateLanguage => _translateLanguage;
   List<String> get enabledTones => List.unmodifiable(_enabledTones);
   String get defaultTone => _defaultTone;
+  bool get floatingBubbleEnabled => _floatingBubbleEnabled;
 
   Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
@@ -37,6 +39,7 @@ class SettingsService extends ChangeNotifier {
     _enabledTones = _prefs.getStringList('draftright.enabledTones')
         ?? Tone.values.map((t) => t.apiValue).toList();
     _defaultTone = _prefs.getString('draftright.defaultTone') ?? '';
+    _floatingBubbleEnabled = _prefs.getBool('draftright.floatingBubbleEnabled') ?? false;
 
     // Sync backend URL to SharedPreferences for keyboard extensions
     await _prefs.setString('draftright.backendUrl', _backendUrl);
@@ -67,6 +70,12 @@ class SettingsService extends ChangeNotifier {
   Future<void> setTranslateLanguage(String value) async {
     _translateLanguage = value;
     await _prefs.setString('draftright.translateLanguage', value);
+    notifyListeners();
+  }
+
+  Future<void> setFloatingBubbleEnabled(bool value) async {
+    _floatingBubbleEnabled = value;
+    await _prefs.setBool('draftright.floatingBubbleEnabled', value);
     notifyListeners();
   }
 
