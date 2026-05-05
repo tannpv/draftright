@@ -92,7 +92,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
-    ShareService.setHandler(null);
+    ShareService.setHandler();
     super.dispose();
   }
 
@@ -115,9 +115,18 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _wireShareIntake() async {
     final initial = await ShareService.getInitialSharedText();
     if (initial != null && mounted) _openShareRewrite(initial);
-    ShareService.setHandler((text) {
-      if (mounted) _openShareRewrite(text);
-    });
+    ShareService.setHandler(
+      onSharedText: (text) {
+        if (mounted) _openShareRewrite(text);
+      },
+      onBubbleEmptyClipboard: () {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Clipboard is empty. Copy text first, then tap the bubble.'),
+          duration: Duration(seconds: 3),
+        ));
+      },
+    );
     // Restart floating bubble if the user had it enabled last session.
     // No-op on iOS / desktop / web (channel returns false).
     if (!mounted) return;

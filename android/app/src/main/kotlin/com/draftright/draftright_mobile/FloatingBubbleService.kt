@@ -212,20 +212,14 @@ class FloatingBubbleService : Service() {
     }
 
     private fun onBubbleTap() {
-        // Pull current clipboard. Empty / non-text → still launch the app
-        // (user might want to paste into Playground); the share screen
-        // refuses to launch with empty text, MainActivity falls back to
-        // its normal launch flow in that case.
-        val item = clipboard.primaryClip?.getItemAt(0)
-        val text = item?.coerceToText(this)?.toString()?.trim().orEmpty()
-
+        // Don't read clipboard from this background service — Android 10+
+        // (API 29) restricts ClipboardManager.getPrimaryClip() to the
+        // foreground app. Instead launch MainActivity with a custom
+        // action; MainActivity reads the clipboard from foreground in
+        // onResume (where the read is allowed) and forwards it to Flutter.
         val launch = Intent(this, MainActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-            if (text.isNotEmpty()) {
-                action = Intent.ACTION_SEND
-                type = "text/plain"
-                putExtra(Intent.EXTRA_TEXT, text)
-            }
+            action = MainActivity.ACTION_OPEN_FROM_BUBBLE
         }
         startActivity(launch)
     }

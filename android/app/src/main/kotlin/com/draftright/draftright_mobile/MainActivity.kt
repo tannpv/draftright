@@ -1,5 +1,6 @@
 package com.draftright.draftright_mobile
 
+import android.content.ClipboardManager
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -28,18 +29,47 @@ import io.flutter.plugin.common.MethodChannel
  *                            app is running (live update).
  */
 class MainActivity : FlutterActivity() {
+    companion object {
+        const val ACTION_OPEN_FROM_BUBBLE = "com.draftright.bubble.OPEN"
+    }
+
     private val channelName = "draftright/share"
     private var pendingSharedText: String? = null
+    private var pendingBubbleClipboardRead = false
     private var channel: MethodChannel? = null
 
     override fun onCreate(savedInstanceState: android.os.Bundle?) {
         super.onCreate(savedInstanceState)
         pendingSharedText = extractSharedText(intent)
+        if (intent?.action == ACTION_OPEN_FROM_BUBBLE) pendingBubbleClipboardRead = true
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        if (intent.action == ACTION_OPEN_FROM_BUBBLE) {
+            // Defer clipboard read to onResume — Android 10+ only allows
+            // the read while we have window focus.
+            pendingBubbleClipboardRead = true
+            return
+        }
         val text = extractSharedText(intent) ?: return
+        pendingSharedText = text
+        channel?.invokeMethod("onSharedText", text)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (!pendingBubbleClipboardRead) return
+        pendingBubbleClipboardRead = false
+        val cm = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+        val text = cm.primaryClip?.getItemAt(0)
+            ?.coerceToText(this)?.toString()?.trim().orEmpty()
+        if (text.isEmpty()) {
+            // Empty clipboard — let Flutter know so it can show a toast
+            // rather than silently doing nothing.
+            channel?.invokeMethod("onBubbleEmptyClipboard", null)
+            return
+        }
         pendingSharedText = text
         channel?.invokeMethod("onSharedText", text)
     }

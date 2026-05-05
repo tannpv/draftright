@@ -21,18 +21,25 @@ class ShareService {
     }
   }
 
-  /// Subscribe to in-flight shares — fired when the user shares to
-  /// DraftRight while the app is already foregrounded or backgrounded.
+  /// Subscribe to in-flight shares + bubble events.
   /// Pass `null` to clear.
-  static void setHandler(void Function(String text)? handler) {
-    if (handler == null) {
+  static void setHandler({
+    void Function(String text)? onSharedText,
+    void Function()? onBubbleEmptyClipboard,
+  }) {
+    if (onSharedText == null && onBubbleEmptyClipboard == null) {
       _channel.setMethodCallHandler(null);
       return;
     }
     _channel.setMethodCallHandler((call) async {
-      if (call.method == 'onSharedText' && call.arguments is String) {
-        final text = (call.arguments as String).trim();
-        if (text.isNotEmpty) handler(text);
+      switch (call.method) {
+        case 'onSharedText':
+          final text = (call.arguments as String?)?.trim() ?? '';
+          if (text.isNotEmpty) onSharedText?.call(text);
+          break;
+        case 'onBubbleEmptyClipboard':
+          onBubbleEmptyClipboard?.call();
+          break;
       }
     });
   }
