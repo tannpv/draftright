@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		0400A0ED4EDDC0CACDDB4F4E /* ToolbarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C4C4EFACDA78448A27A3B35 /* ToolbarView.swift */; };
 		087C83CD7CF4BCB380E0610F /* BackendClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B4DE00CF78D3D3F4EEF5388 /* BackendClient.swift */; };
+		0B0F0927D0C47B4663DC995B /* SharedKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = A07D316FE4FE99EDD5922F96 /* SharedKeychain.swift */; };
 		1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */ = {isa = PBXBuildFile; fileRef = 1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */; };
 		1D1E151DC20ADAC8D2F8C910 /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AD8997318C0237682399A953 /* Pods_Runner.framework */; };
 		1FAABDAD11D7F2FEBE581A4B /* SharedSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = F52E61497CDC2BCE4E673A21 /* SharedSettings.swift */; };
@@ -82,6 +83,7 @@
 		97C146FD1CF9000F007C117D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		97C147001CF9000F007C117D /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		97C147021CF9000F007C117D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A07D316FE4FE99EDD5922F96 /* SharedKeychain.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SharedKeychain.swift; sourceTree = "<group>"; };
 		AD8997318C0237682399A953 /* Pods_Runner.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Runner.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		B0BF922207681BC7EB3F90F3 /* DraftRightKeyboard.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = DraftRightKeyboard.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		B6042AAB0C8F1ACC07AA5884 /* Pods-Runner.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.profile.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"; sourceTree = "<group>"; };
@@ -194,6 +196,7 @@
 				5F986B5443AAECAEED6750DA /* DraftRightKeyboard */,
 				50FC833AD36DA6480A08EDF3 /* DraftRightAction */,
 				DDFE0029C549C084D1EC5B1C /* iOS */,
+				C2D36A4E0A1E3675CF73005E /* Shared */,
 			);
 			sourceTree = "<group>";
 		};
@@ -245,6 +248,15 @@
 				8C4EF552001DA5828736C107 /* Pods-RunnerTests.profile.xcconfig */,
 			);
 			path = Pods;
+			sourceTree = "<group>";
+		};
+		C2D36A4E0A1E3675CF73005E /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				A07D316FE4FE99EDD5922F96 /* SharedKeychain.swift */,
+			);
+			name = Shared;
+			path = Shared;
 			sourceTree = "<group>";
 		};
 		DDFE0029C549C084D1EC5B1C /* iOS */ = {
@@ -570,6 +582,7 @@
 				74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 				7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */,
+				0B0F0927D0C47B4663DC995B /* SharedKeychain.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -749,8 +762,8 @@
 				CODE_SIGN_ENTITLEMENTS = DraftRightAction/DraftRightAction.entitlements;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = Y8NWQK9BZJ;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = Y8NWQK9BZJ;
 				ENABLE_PREVIEWS = NO;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -778,8 +791,8 @@
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_ENTITLEMENTS = DraftRightKeyboard/DraftRightKeyboard.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = Y8NWQK9BZJ;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = Y8NWQK9BZJ;
 				ENABLE_PREVIEWS = NO;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -808,8 +821,8 @@
 				CODE_SIGN_ENTITLEMENTS = DraftRightAction/DraftRightAction.entitlements;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = Y8NWQK9BZJ;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = Y8NWQK9BZJ;
 				ENABLE_PREVIEWS = NO;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -996,8 +1009,8 @@
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_ENTITLEMENTS = DraftRightKeyboard/DraftRightKeyboard.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = Y8NWQK9BZJ;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = Y8NWQK9BZJ;
 				ENABLE_PREVIEWS = NO;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -1026,8 +1039,8 @@
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_ENTITLEMENTS = DraftRightKeyboard/DraftRightKeyboard.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = Y8NWQK9BZJ;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = Y8NWQK9BZJ;
 				ENABLE_PREVIEWS = NO;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -1056,8 +1069,8 @@
 				CODE_SIGN_ENTITLEMENTS = DraftRightAction/DraftRightAction.entitlements;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = Y8NWQK9BZJ;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = Y8NWQK9BZJ;
 				ENABLE_PREVIEWS = NO;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = NO;
