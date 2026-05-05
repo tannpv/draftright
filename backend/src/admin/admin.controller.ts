@@ -20,6 +20,7 @@ import { PaymentService } from '../payment/payment.service';
 import * as bcrypt from 'bcryptjs';
 import { GrantSubscriptionDto } from './dto/grant-subscription.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { ReleasesService } from '../updates/releases.service';
 
 @ApiTags('admin')
 @ApiBearerAuth()
@@ -39,7 +40,34 @@ export class AdminController {
     @InjectRepository(AdminUser)
     private readonly adminUserRepo: Repository<AdminUser>,
     private readonly paymentService: PaymentService,
+    private readonly releasesService: ReleasesService,
   ) {}
+
+  // --- App releases (Mac/Windows/Linux/Android/iOS update channel) ---
+
+  @Get('releases')
+  async listReleases() {
+    return this.releasesService.listAll();
+  }
+
+  @Post('releases')
+  async upsertRelease(@Body() body: {
+    platform: string;
+    version: string;
+    download_url: string;
+    release_notes?: string;
+    required?: boolean;
+  }) {
+    if (!['mac', 'windows', 'linux', 'android', 'ios'].includes(body.platform)) {
+      throw new BadRequestException(
+        `platform must be one of: mac, windows, linux, android, ios`,
+      );
+    }
+    if (!body.version || !body.download_url) {
+      throw new BadRequestException('version and download_url are required');
+    }
+    return this.releasesService.upsert(body);
+  }
 
   // --- Settings ---
 

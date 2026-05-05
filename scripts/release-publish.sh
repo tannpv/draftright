@@ -12,8 +12,12 @@
 # What it does:
 #   1. Uploads the file to the droplet at /var/www/draftright/downloads/
 #   2. Updates /var/www/draftright/downloads/versions.json so the website's
-#      download cards immediately reflect the new version. No HTML edit, no
-#      Astro rebuild, no static-site redeploy.
+#      download cards immediately reflect the new version.
+#   3. Updates the `app_releases` row in the prod database so that
+#      /updates/latest (consumed by every desktop app's "Check for Updates")
+#      reflects the new version. No backend rebuild, no container restart.
+#
+# All three changes propagate within seconds of this script finishing.
 #
 # Filename conventions on the public URL:
 #   android  →  DraftRight-Android-<version>.apk
@@ -110,19 +114,52 @@ sudo chown www-data:www-data "\$MAN"
 sudo chmod 644 "\$MAN"
 EOF
 
-# ── 3. Verify ──────────────────────────────────────────────────────────────
+# ── 3. Update app_releases row in the prod DB (drives /updates/latest) ─────
+case "$PLATFORM" in
+  android)  DB_PLATFORM="android" ;;
+  ios-sim)  DB_PLATFORM="ios" ;;
+  macos)    DB_PLATFORM="mac" ;;
+  windows)  DB_PLATFORM="windows" ;;
+  linux)    DB_PLATFORM="linux" ;;
+  *) DB_PLATFORM="" ;;
+esac
+
+if [ -n "$DB_PLATFORM" ]; then
+  echo "==> Updating app_releases.$DB_PLATFORM in prod DB..."
+  SQL_URL="https://draftright.info$URL"
+  ssh draftright "sudo docker exec -i draftright-postgres-1 psql -U draftright -d draftright -v ON_ERROR_STOP=1 <<EOF
+INSERT INTO app_releases (platform, version, download_url, release_notes, required)
+VALUES ('$DB_PLATFORM', '$VERSION', '$SQL_URL', '', false)
+ON CONFLICT (platform) DO UPDATE SET
+  version = EXCLUDED.version,
+  download_url = EXCLUDED.download_url,
+  updated_at = now();
+EOF" 2>&1 | tail -2
+fi
+
+# ── 4. Verify ──────────────────────────────────────────────────────────────
 echo "==> Verifying..."
 HTTP_CODE=$(curl -sS -o /dev/null -w '%{http_code}' "https://draftright.info${URL}")
 JSON=$(curl -sS "https://draftright.info/downloads/versions.json")
-echo "    binary: HTTP $HTTP_CODE  →  https://draftright.info${URL}"
+echo "    binary:    HTTP $HTTP_CODE  →  https://draftright.info${URL}"
 echo "$JSON" | python3 -c "
 import json, sys
 d = json.load(sys.stdin)
 for cat in ('mobile','desktop'):
     for p in d.get(cat, []):
         if p.get('platform') == '$PLATFORM':
-            print(f'    manifest: {p[\"label\"]} v{p[\"version\"]} → {p[\"url\"]}')
-            print(f'    meta:     {p[\"meta\"]}')
+            print(f'    manifest:  {p[\"label\"]} v{p[\"version\"]} → {p[\"url\"]}')
+            print(f'    meta:      {p[\"meta\"]}')
 "
+if [ -n "$DB_PLATFORM" ]; then
+  DB_JSON=$(curl -sS "https://api.draftright.info/updates/latest")
+  echo "$DB_JSON" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+p = d.get('platforms', {}).get('$DB_PLATFORM')
+if p:
+    print(f'    /updates/: $DB_PLATFORM v{p[\"version\"]} → {p[\"url\"]}')
+"
+fi
 echo
-echo "==> Done. Hard-refresh the website to see the change (or wait ~5s for cache)."
+echo "==> Done. Website + in-app updater both reflect $VERSION."
