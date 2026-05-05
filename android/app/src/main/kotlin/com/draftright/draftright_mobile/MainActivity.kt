@@ -57,16 +57,19 @@ class MainActivity : FlutterActivity() {
         channel?.invokeMethod("onSharedText", text)
     }
 
-    override fun onResume() {
-        super.onResume()
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (!hasFocus) return
         if (!pendingBubbleClipboardRead) return
+        // Android 10+ only grants clipboard access to apps with actual
+        // window focus.  onResume() fires too early — the focus
+        // transition from the previous app to ours hasn't completed.
+        // onWindowFocusChanged(true) is the first reliable point.
         pendingBubbleClipboardRead = false
         val cm = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
         val text = cm.primaryClip?.getItemAt(0)
             ?.coerceToText(this)?.toString()?.trim().orEmpty()
         if (text.isEmpty()) {
-            // Empty clipboard — let Flutter know so it can show a toast
-            // rather than silently doing nothing.
             channel?.invokeMethod("onBubbleEmptyClipboard", null)
             return
         }
