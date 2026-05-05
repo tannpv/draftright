@@ -59,13 +59,16 @@ class AboutScreen extends StatelessWidget {
                 padding: EdgeInsets.symmetric(horizontal: 4),
                 child: Text(
                   'DraftRight rewrites your text in any tone, instantly, '
-                  'from any app on your phone.\n\n'
-                  'Type a message, email, or post — pick a tone, and '
-                  'DraftRight rewrites it to match. Polished. Professional. '
-                  'Casual. Or run a grammar check that catches issues other '
-                  'apps miss.\n\n'
-                  'The DraftRight keyboard works in every app you type in. '
-                  'The share extension picks up text you select anywhere. '
+                  'in any app on your phone.\n\n'
+                  'Type a message, email, or post — long-press the text, '
+                  'tap DraftRight in the popup, pick a tone. Polished. '
+                  'Professional. Concise. Translate. Or run a grammar '
+                  'check that catches issues other apps miss.\n\n'
+                  'Works alongside the keyboard you already use, in any '
+                  'language — Vietnamese, Chinese, Japanese, Korean, and '
+                  'more — because typing stays with your familiar keyboard. '
+                  'Power users can also install the optional DraftRight '
+                  'Keyboard for one-tap rewriting while typing in English.\n\n'
                   'A web playground at draftright.info lets you try without '
                   'installing.',
                   style: TextStyle(height: 1.4),
@@ -99,10 +102,22 @@ class AboutScreen extends StatelessWidget {
               const SizedBox(height: 8),
               Center(
                 child: Text(
-                  'Made by Tan Nguyen',
+                  'Made by Southern Martin',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: Theme.of(context).hintColor,
                       ),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Center(
+                child: GestureDetector(
+                  onTap: () => _open('https://southernmartin.com'),
+                  child: Text(
+                    'southernmartin.com',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                  ),
                 ),
               ),
               const SizedBox(height: 24),
