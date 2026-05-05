@@ -23,12 +23,14 @@ class SettingsService extends ChangeNotifier {
   List<String> _enabledTones = Tone.values.map((t) => t.apiValue).toList();
   String _defaultTone = '';
   bool _floatingBubbleEnabled = false;
+  bool _autoCloseAfterRewrite = true;
 
   String get backendUrl => _backendUrl;
   String get translateLanguage => _translateLanguage;
   List<String> get enabledTones => List.unmodifiable(_enabledTones);
   String get defaultTone => _defaultTone;
   bool get floatingBubbleEnabled => _floatingBubbleEnabled;
+  bool get autoCloseAfterRewrite => _autoCloseAfterRewrite;
 
   Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
@@ -40,6 +42,7 @@ class SettingsService extends ChangeNotifier {
         ?? Tone.values.map((t) => t.apiValue).toList();
     _defaultTone = _prefs.getString('draftright.defaultTone') ?? '';
     _floatingBubbleEnabled = _prefs.getBool('draftright.floatingBubbleEnabled') ?? false;
+    _autoCloseAfterRewrite = _prefs.getBool('draftright.autoCloseAfterRewrite') ?? true;
 
     // Sync backend URL to SharedPreferences for keyboard extensions
     await _prefs.setString('draftright.backendUrl', _backendUrl);
@@ -76,6 +79,12 @@ class SettingsService extends ChangeNotifier {
   Future<void> setFloatingBubbleEnabled(bool value) async {
     _floatingBubbleEnabled = value;
     await _prefs.setBool('draftright.floatingBubbleEnabled', value);
+    notifyListeners();
+  }
+
+  Future<void> setAutoCloseAfterRewrite(bool value) async {
+    _autoCloseAfterRewrite = value;
+    await _prefs.setBool('draftright.autoCloseAfterRewrite', value);
     notifyListeners();
   }
 

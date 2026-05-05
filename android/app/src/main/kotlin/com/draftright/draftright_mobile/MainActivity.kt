@@ -112,6 +112,16 @@ class MainActivity : FlutterActivity() {
                     startService(svc)
                     result.success(true)
                 }
+                "dismissToBackground" -> {
+                    // Send DraftRight to the back of the task stack — the
+                    // app the user was in before tapping the bubble (or
+                    // before sharing) comes back to foreground. Lets us
+                    // simulate "auto-paste-back" without Accessibility:
+                    // user lands in the source app + clipboard already
+                    // contains the rewrite, so a single Paste is one tap.
+                    moveTaskToBack(true)
+                    result.success(null)
+                }
                 else -> result.notImplemented()
             }
         }

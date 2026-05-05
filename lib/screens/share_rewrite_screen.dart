@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -5,6 +7,7 @@ import 'package:draftright_mobile/models/tone.dart';
 import 'package:draftright_mobile/services/auth_service.dart';
 import 'package:draftright_mobile/services/backend_client.dart';
 import 'package:draftright_mobile/services/settings_service.dart';
+import 'package:draftright_mobile/services/share_service.dart';
 
 /// Lightweight tone-picker that shows when the user reaches DraftRight via
 /// the system Share sheet.  Optimised for speed: paste the shared text in
@@ -21,10 +24,18 @@ class _ShareRewriteScreenState extends State<ShareRewriteScreen> {
   Tone? _running;
   String? _result;
   String? _error;
+  Timer? _autoCloseTimer;
+
+  @override
+  void dispose() {
+    _autoCloseTimer?.cancel();
+    super.dispose();
+  }
 
   Future<void> _rewrite(Tone tone) async {
     if (_running != null) return;
     setState(() { _running = tone; _result = null; _error = null; });
+    _autoCloseTimer?.cancel();
 
     final auth = context.read<AuthService>();
     final settings = context.read<SettingsService>();
@@ -45,6 +56,19 @@ class _ShareRewriteScreenState extends State<ShareRewriteScreen> {
       await Clipboard.setData(ClipboardData(text: out));
       if (!mounted) return;
       setState(() { _result = out; _running = null; });
+
+      // Auto-return: if the user has it enabled (default), drop DraftRight
+      // to background after a brief moment so they land on their source
+      // app + clipboard already contains the rewrite. Skip for grammar
+      // check since the user needs to read the result.
+      final autoClose = settings.autoCloseAfterRewrite;
+      if (autoClose && tone != Tone.grammarCheck) {
+        _autoCloseTimer = Timer(const Duration(milliseconds: 1500), () {
+          if (!mounted) return;
+          ShareService.dismissToBackground();
+          Navigator.of(context).maybePop();
+        });
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() { _error = e.toString(); _running = null; });
@@ -155,8 +179,12 @@ class _ShareRewriteScreenState extends State<ShareRewriteScreen> {
                       Row(children: [
                         const Icon(Icons.check_circle, size: 16),
                         const SizedBox(width: 6),
-                        Text('Copied to clipboard',
-                            style: Theme.of(context).textTheme.labelMedium),
+                        Text(
+                          _autoCloseTimer?.isActive == true
+                              ? 'Copied. Switching back to your app…'
+                              : 'Copied to clipboard',
+                          style: Theme.of(context).textTheme.labelMedium,
+                        ),
                       ]),
                       const SizedBox(height: 6),
                       Text(_result!,
@@ -179,9 +207,14 @@ class _ShareRewriteScreenState extends State<ShareRewriteScreen> {
                         ),
                         const SizedBox(width: 8),
                         FilledButton.icon(
-                          onPressed: () => Navigator.of(context).maybePop(),
-                          icon: const Icon(Icons.check, size: 16),
-                          label: const Text('Done'),
+                          onPressed: () async {
+                            _autoCloseTimer?.cancel();
+                            final nav = Navigator.of(context);
+                            await ShareService.dismissToBackground();
+                            if (mounted) nav.maybePop();
+                          },
+                          icon: const Icon(Icons.arrow_back, size: 16),
+                          label: const Text('Back to app'),
                         ),
                       ]),
                     ],

@@ -86,4 +86,13 @@ class ShareService {
       return false;
     }
   }
+
+  /// Send DraftRight to the back of the task stack so the previous
+  /// foreground app comes back. Called after a successful rewrite so the
+  /// user doesn't have to navigate back manually before pasting.
+  static Future<void> dismissToBackground() async {
+    try {
+      await _channel.invokeMethod<void>('dismissToBackground');
+    } catch (_) {/* swallow */}
+  }
 }
