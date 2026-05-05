@@ -5,11 +5,24 @@ import 'package:url_launcher/url_launcher.dart';
 class AboutScreen extends StatelessWidget {
   const AboutScreen({super.key});
 
-  Future<void> _open(String url) async {
+  Future<void> _open(BuildContext context, String url) async {
+    final messenger = ScaffoldMessenger.of(context);
     final uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
+    // Try external first (browser / mail client), fall back to in-app
+    // browser if that fails. Don't gate on canLaunchUrl — on Android 11+
+    // it can return false even when a browser is installed if the
+    // <queries> block is incomplete, leaving links as silent no-ops.
+    try {
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (ok) return;
+    } catch (_) {/* fall through */}
+    try {
+      final ok = await launchUrl(uri, mode: LaunchMode.platformDefault);
+      if (ok) return;
+    } catch (_) {/* fall through */}
+    messenger.showSnackBar(
+      SnackBar(content: Text('Could not open $url')),
+    );
   }
 
   @override
@@ -80,29 +93,29 @@ class AboutScreen extends StatelessWidget {
                 leading: const Icon(Icons.help_outline),
                 title: const Text('Help & FAQ'),
                 subtitle: const Text('Setup, tones, troubleshooting'),
-                onTap: () => _open('https://draftright.info/help/mobile/'),
+                onTap: () => _open(context, 'https://draftright.info/help/mobile/'),
               ),
               ListTile(
                 leading: const Icon(Icons.public),
                 title: const Text('Website'),
                 subtitle: const Text('draftright.info'),
-                onTap: () => _open('https://draftright.info'),
+                onTap: () => _open(context, 'https://draftright.info'),
               ),
               ListTile(
                 leading: const Icon(Icons.privacy_tip_outlined),
                 title: const Text('Privacy policy'),
-                onTap: () => _open('https://draftright.info/privacy'),
+                onTap: () => _open(context, 'https://draftright.info/privacy'),
               ),
               ListTile(
                 leading: const Icon(Icons.delete_outline),
                 title: const Text('Delete account'),
-                onTap: () => _open('https://draftright.info/delete-account'),
+                onTap: () => _open(context, 'https://draftright.info/delete-account'),
               ),
               ListTile(
                 leading: const Icon(Icons.support_agent),
                 title: const Text('Support'),
                 subtitle: const Text('support@draftright.info'),
-                onTap: () => _open('mailto:support@draftright.info'),
+                onTap: () => _open(context, 'mailto:support@draftright.info'),
               ),
               const Divider(),
               const SizedBox(height: 8),
@@ -117,7 +130,7 @@ class AboutScreen extends StatelessWidget {
               const SizedBox(height: 4),
               Center(
                 child: GestureDetector(
-                  onTap: () => _open('https://southernmartin.com'),
+                  onTap: () => _open(context, 'https://southernmartin.com'),
                   child: Text(
                     'southernmartin.com',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
