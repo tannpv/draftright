@@ -74,3 +74,4 @@ android/fastlane/Preview.html
 android/fastlane/screenshots/
 android/fastlane/test_output/
 android/Gemfile.lock
+ios/fastlane/report.xml
