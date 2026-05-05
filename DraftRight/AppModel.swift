@@ -205,10 +205,31 @@ final class AppModel: ObservableObject {
 
     private func performHealthCheck() async {
         guard !isRewriting else { return }
-        let status = await healthClient.checkHealth(
+        var status = await healthClient.checkHealth(
             backendUrl: backendUrl,
             accessToken: accessToken.isEmpty ? nil : accessToken
         )
+
+        // Silent refresh: if the access token aged out but we still hold a refresh token,
+        // exchange it before declaring the user logged out. This is the fix for the
+        // "had to open Settings and click Sign In again" papercut after JWT expiry.
+        if status == .notLoggedIn && !refreshToken.isEmpty {
+            DRLogger.log("Access token rejected — attempting silent refresh", category: .auth)
+            if let pair = await healthClient.refreshTokens(refreshToken: refreshToken, backendUrl: backendUrl) {
+                storeTokens(access: pair.access, refresh: pair.refresh)
+                status = await healthClient.checkHealth(
+                    backendUrl: backendUrl,
+                    accessToken: pair.access
+                )
+            } else {
+                // Refresh failed → stale tokens are useless, clear them so the next
+                // health check doesn't keep looping through the refresh path.
+                DRLogger.log("Silent refresh failed — clearing stale tokens", category: .auth)
+                accessToken = ""
+                refreshToken = ""
+            }
+        }
+
         if backendStatus != status {
             DRLogger.log("Health status: \(backendStatus) → \(status)", category: .api)
         }
