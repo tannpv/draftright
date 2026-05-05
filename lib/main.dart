@@ -9,6 +9,8 @@ import 'package:draftright_mobile/screens/login_screen.dart';
 import 'package:draftright_mobile/screens/onboarding_screen.dart';
 import 'package:draftright_mobile/screens/settings_screen.dart';
 import 'package:draftright_mobile/screens/playground_screen.dart';
+import 'package:draftright_mobile/screens/share_rewrite_screen.dart';
+import 'package:draftright_mobile/services/share_service.dart';
 
 // Desktop imports — only compiled on desktop platforms
 import 'package:draftright_mobile/desktop/desktop_app.dart'
@@ -85,6 +87,13 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _checkOnboarding();
+    _wireShareIntake();
+  }
+
+  @override
+  void dispose() {
+    ShareService.setHandler(null);
+    super.dispose();
   }
 
   Future<void> _checkOnboarding() async {
@@ -97,6 +106,31 @@ class _HomeScreenState extends State<HomeScreen> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('draftright.onboardingComplete', true);
     setState(() => _onboardingComplete = true);
+  }
+
+  /// Drain any text the user shared on cold-start, and subscribe to fresh
+  /// shares while the app is alive.  Routes straight to ShareRewriteScreen
+  /// (skipping the bottom-nav Playground) so the user gets a fast tone
+  /// picker for the exact text they shared.
+  Future<void> _wireShareIntake() async {
+    final initial = await ShareService.getInitialSharedText();
+    if (initial != null && mounted) _openShareRewrite(initial);
+    ShareService.setHandler((text) {
+      if (mounted) _openShareRewrite(text);
+    });
+  }
+
+  void _openShareRewrite(String text) {
+    // Defer one frame so the Navigator is mounted on cold-start.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final nav = Navigator.of(context, rootNavigator: true);
+      // Avoid stacking duplicate share screens.
+      nav.popUntil((r) => r.isFirst);
+      nav.push(MaterialPageRoute(
+        builder: (_) => ShareRewriteScreen(sharedText: text),
+      ));
+    });
   }
 
   @override
