@@ -77,6 +77,12 @@ class AboutScreen extends StatelessWidget {
               const SizedBox(height: 28),
               const Divider(),
               ListTile(
+                leading: const Icon(Icons.help_outline),
+                title: const Text('Help & FAQ'),
+                subtitle: const Text('Setup, tones, troubleshooting'),
+                onTap: () => _open('https://draftright.info/help/mobile/'),
+              ),
+              ListTile(
                 leading: const Icon(Icons.public),
                 title: const Text('Website'),
                 subtitle: const Text('draftright.info'),
