@@ -14,6 +14,7 @@ import { AppSettings } from './entities/app-settings.entity';
 import { AdminUser } from './entities/admin-user.entity';
 import { PaymentModule } from '../payment/payment.module';
 import { UpdatesModule } from '../updates/updates.module';
+import { ErrorsModule } from '../errors/errors.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { UpdatesModule } from '../updates/updates.module';
     RewriteModule,
     PaymentModule,
     UpdatesModule,
+    ErrorsModule,
   ],
   controllers: [AdminController, AdminAuthController],
   providers: [AdminAuthService],

@@ -21,6 +21,7 @@ import * as bcrypt from 'bcryptjs';
 import { GrantSubscriptionDto } from './dto/grant-subscription.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { ReleasesService } from '../updates/releases.service';
+import { ErrorsService } from '../errors/errors.service';
 
 @ApiTags('admin')
 @ApiBearerAuth()
@@ -41,7 +42,45 @@ export class AdminController {
     private readonly adminUserRepo: Repository<AdminUser>,
     private readonly paymentService: PaymentService,
     private readonly releasesService: ReleasesService,
+    private readonly errorsService: ErrorsService,
   ) {}
+
+  // --- Error reports (Sentry-equivalent — collects bugs from all clients) ---
+
+  @Get('errors')
+  async listErrors(
+    @Query('platform') platform?: string,
+    @Query('status') status?: string,
+    @Query('severity') severity?: string,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    return this.errorsService.list({
+      platform,
+      status: status !== undefined ? Number(status) : undefined,
+      severity,
+      limit: limit ? Number(limit) : undefined,
+      offset: offset ? Number(offset) : undefined,
+    });
+  }
+
+  @Get('errors/:id')
+  async getError(@Param('id') id: string) {
+    const row = await this.errorsService.getOne(id);
+    if (!row) throw new BadRequestException('not found');
+    return row;
+  }
+
+  @Patch('errors/:id')
+  async updateErrorStatus(
+    @Param('id') id: string,
+    @Body() body: { status: number; resolved_by?: string },
+  ) {
+    if (body.status === undefined) {
+      throw new BadRequestException('status required');
+    }
+    return this.errorsService.setStatus(id, body.status, body.resolved_by);
+  }
 
   // --- App releases (Mac/Windows/Linux/Android/iOS update channel) ---
 
