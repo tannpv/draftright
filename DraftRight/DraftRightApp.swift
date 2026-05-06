@@ -150,7 +150,13 @@ struct DraftRightApp: App {
                             tone: tone,
                             accessToken: appModel.accessToken,
                             backendUrl: appModel.backendUrl,
-                            targetLanguage: appModel.translateLanguage
+                            targetLanguage: appModel.translateLanguage,
+                            refreshToken: appModel.refreshToken,
+                            onTokensRefreshed: { newAccess, newRefresh in
+                                Task { @MainActor in
+                                    appModel.storeTokens(access: newAccess, refresh: newRefresh)
+                                }
+                            }
                         )
                         diffWindow.model.handleRewriteResponse(rewritten, tone: tone)
                     } catch {

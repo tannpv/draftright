@@ -1,8 +1,8 @@
 {
-  "version": "2.1.7",
-  "mac_url": "https://draftright.info/downloads/DraftRight-macOS-2.1.7.dmg",
+  "version": "2.1.8",
+  "mac_url": "https://draftright.info/downloads/DraftRight-macOS-2.1.8.dmg",
   "windows_url": "https://draftright.info/downloads/DraftRight-Setup-Windows-2.1.7-x64.exe",
   "linux_url": "",
-  "release_notes": "Stay signed in: silent token refresh keeps your session alive. Universal binary (Apple Silicon + Intel).",
+  "release_notes": "No more 401 errors mid-rewrite — DraftRight now refreshes your session silently before any request.",
   "required": false
 }
