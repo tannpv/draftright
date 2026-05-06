@@ -127,6 +127,12 @@ final class AppModel: ObservableObject {
 
         startHealthCheck()
 
+        // Wire crash reporter — unhandled NSExceptions go to /errors for triage.
+        ErrorReporter.install(
+            backendUrl: backendUrl,
+            bearerTokenProvider: { [weak self] in self?.accessToken }
+        )
+
         // Start update check — 10 seconds after launch
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
         updateService = UpdateService(currentVersion: version, backendUrl: backendUrl)

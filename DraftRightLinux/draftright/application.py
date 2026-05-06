@@ -15,6 +15,11 @@ from pathlib import Path
 
 from draftright.services.logger import setup_logging
 from draftright.services.update_service import UpdateService
+from draftright.services import error_reporter
+
+# Wire crash reporting as early as possible — sys.excepthook covers
+# anything that throws after this point.
+error_reporter.configure(backend_url="https://api.draftright.info")
 
 logger = logging.getLogger(__name__)
 

@@ -59,10 +59,19 @@ public class App : Application
         // post-mortem debugging works even if the Local AppData folder is
         // unreachable.
 
+        // Configure the server-side error reporter so the three handlers
+        // below send to /errors as well as logging locally. Token provider
+        // is wired later in Init() once Auth is available.
+        ErrorReporter.Configure(
+            backendUrl: "https://api.draftright.info",
+            bearerTokenProvider: () => Auth?.AccessToken
+        );
+
         UnhandledException += (sender, e) =>
         {
             DRLogger.Log($"WinUI UnhandledException: {e.Exception}", DRLogger.Category.APP);
             WriteCrashFile("WinUI", e.Exception);
+            ErrorReporter.Report(e.Exception, source: "WinUI", severity: "fatal");
             e.Handled = true;
         };
 
@@ -72,12 +81,14 @@ public class App : Application
             DRLogger.Log($"AppDomain UnhandledException (terminating={e.IsTerminating}): {ex}",
                 DRLogger.Category.APP);
             WriteCrashFile("AppDomain", ex);
+            if (ex != null) ErrorReporter.Report(ex, source: "AppDomain", severity: "fatal");
         };
 
         TaskScheduler.UnobservedTaskException += (sender, e) =>
         {
             DRLogger.Log($"UnobservedTaskException: {e.Exception}", DRLogger.Category.APP);
             WriteCrashFile("UnobservedTask", e.Exception);
+            ErrorReporter.Report(e.Exception, source: "UnobservedTask", severity: "error");
             e.SetObserved();
         };
 
