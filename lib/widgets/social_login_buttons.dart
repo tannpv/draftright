@@ -44,24 +44,10 @@ class _SocialLoginButtonsState extends State<SocialLoginButtons> {
           isLoading: _loadingProvider == 'google',
           onPressed: _loadingProvider != null ? null : () => _handleSocial('google', auth.signInWithGoogle),
         ),
-        const SizedBox(height: 10),
-        _SocialButton(
-          label: 'Continue with Facebook',
-          icon: const Icon(Icons.facebook, color: Colors.white, size: 22),
-          backgroundColor: const Color(0xFF1877F2),
-          textColor: Colors.white,
-          isLoading: _loadingProvider == 'facebook',
-          onPressed: _loadingProvider != null ? null : () => _handleSocial('facebook', auth.signInWithFacebook),
-        ),
-        const SizedBox(height: 10),
-        _SocialButton(
-          label: 'Continue with TikTok',
-          icon: _tiktokIcon(),
-          backgroundColor: Colors.black,
-          textColor: Colors.white,
-          isLoading: _loadingProvider == 'tiktok',
-          onPressed: _loadingProvider != null ? null : () => _handleSocial('tiktok', auth.signInWithTikTok),
-        ),
+        // Facebook + TikTok buttons hidden for the App Store submission until
+        // their respective SDK credentials are wired up. Restore by enabling
+        // the buttons below — both `signInWithFacebook` and `signInWithTikTok`
+        // already exist in AuthService.
       ],
     );
   }
@@ -71,10 +57,6 @@ class _SocialLoginButtonsState extends State<SocialLoginButtons> {
       width: 22, height: 22,
       child: CustomPaint(painter: _GoogleLogoPainter()),
     );
-  }
-
-  Widget _tiktokIcon() {
-    return const Icon(Icons.music_note, color: Colors.white, size: 22);
   }
 }
 
