@@ -127,6 +127,23 @@ export default function ErrorsPage() {
     }
   };
 
+  const [suggesting, setSuggesting] = useState(false);
+  const suggestFix = async (id: string) => {
+    setSuggesting(true);
+    try {
+      const updated = await apiFetch(`/admin/errors/${id}/suggest-fix`, {
+        method: 'POST',
+      }) as ErrorReport;
+      setToast({ msg: 'AI fix proposal saved', type: 'success' });
+      await load();
+      if (selected?.id === id) setSelected(updated);
+    } catch (e: any) {
+      setToast({ msg: e.message || 'Suggestion failed', type: 'error' });
+    } finally {
+      setSuggesting(false);
+    }
+  };
+
   return (
     <div className="p-6 max-w-[1600px] mx-auto">
       <div className="flex items-center justify-between mb-4">
@@ -292,6 +309,19 @@ export default function ErrorsPage() {
                 <pre className="whitespace-pre-wrap text-sm text-[#eaeff4]">{selected.ai_fix_proposal}</pre>
               </Block>
             )}
+
+            <div className="mt-4 pt-4 border-t border-[#333f55]">
+              <button
+                onClick={() => suggestFix(selected.id)}
+                disabled={suggesting}
+                className="w-full rounded-md bg-[#5d87ff] hover:bg-[#3b6cff] disabled:opacity-50 text-white text-sm font-medium px-4 py-2 transition-colors"
+              >
+                {suggesting ? '🧠 Asking AI…' : selected.ai_fix_proposal ? '🧠 Re-ask AI for new proposal' : '🧠 Suggest fix with AI'}
+              </button>
+              <p className="text-xs text-[#7c8fac] mt-2">
+                Sends the error type, message, stack trace, and context to the configured AI provider. Sets status to FIX PROPOSED.
+              </p>
+            </div>
 
             <div className="mt-6 pt-4 border-t border-[#333f55]">
               <p className="text-xs text-[#7c8fac] uppercase tracking-wider mb-2">Mark status</p>

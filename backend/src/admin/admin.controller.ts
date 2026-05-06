@@ -82,6 +82,11 @@ export class AdminController {
     return this.errorsService.setStatus(id, body.status, body.resolved_by);
   }
 
+  @Post('errors/:id/suggest-fix')
+  async suggestFix(@Param('id') id: string) {
+    return this.errorsService.suggestFix(id);
+  }
+
   // --- App releases (Mac/Windows/Linux/Android/iOS update channel) ---
 
   @Get('releases')
