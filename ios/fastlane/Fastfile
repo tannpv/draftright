@@ -45,10 +45,16 @@ platform :ios do
       skip_screenshots: false,
       skip_metadata: false,
       precheck_include_in_app_purchases: false,
+      # All the yes/no declarations Apple requires before review.
+      # Defaults below match a productivity-app posture: no IDFA, no
+      # third-party content, no encryption beyond HTTPS, no health
+      # topics, no unrestricted web access (we only call our own API).
       submission_information: {
         add_id_info_uses_idfa: false,
         export_compliance_uses_encryption: false,
         export_compliance_encryption_updated: false,
+        content_rights_contains_third_party_content: false,
+        content_rights_has_rights: true,
       },
     )
   end
