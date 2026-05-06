@@ -128,6 +128,19 @@ export default function ErrorsPage() {
   };
 
   const [suggesting, setSuggesting] = useState(false);
+  const [runningCron, setRunningCron] = useState(false);
+  const runAiCron = async () => {
+    setRunningCron(true);
+    try {
+      await apiFetch('/admin/errors/run-ai-cron', { method: 'POST' });
+      setToast({ msg: 'AI cron triggered — check rows that flipped to FIX_PROPOSED', type: 'success' });
+      await load();
+    } catch (e: any) {
+      setToast({ msg: e.message || 'Cron failed', type: 'error' });
+    } finally {
+      setRunningCron(false);
+    }
+  };
   const suggestFix = async (id: string) => {
     setSuggesting(true);
     try {
@@ -153,12 +166,22 @@ export default function ErrorsPage() {
             {total} total &middot; Bug fingerprints from all client platforms.
           </p>
         </div>
-        <button
-          onClick={load}
-          className="rounded-md bg-[#5d87ff] hover:bg-[#3b6cff] text-white text-sm font-medium px-4 py-2 transition-colors"
-        >
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={runAiCron}
+            disabled={runningCron}
+            title="Run the AI fix-proposal cron right now (also runs hourly automatically)"
+            className="rounded-md bg-[#2a3547] hover:bg-[#5d87ff]/30 disabled:opacity-50 text-[#eaeff4] text-sm font-medium px-4 py-2 border border-[#333f55] transition-colors"
+          >
+            {runningCron ? '🧠 Cron running…' : '🧠 Run AI on new errors'}
+          </button>
+          <button
+            onClick={load}
+            className="rounded-md bg-[#5d87ff] hover:bg-[#3b6cff] text-white text-sm font-medium px-4 py-2 transition-colors"
+          >
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* Filters */}

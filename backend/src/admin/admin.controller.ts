@@ -22,6 +22,7 @@ import { GrantSubscriptionDto } from './dto/grant-subscription.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { ReleasesService } from '../updates/releases.service';
 import { ErrorsService } from '../errors/errors.service';
+import { FixProposalCron } from '../errors/fix-proposal.cron';
 
 @ApiTags('admin')
 @ApiBearerAuth()
@@ -43,6 +44,7 @@ export class AdminController {
     private readonly paymentService: PaymentService,
     private readonly releasesService: ReleasesService,
     private readonly errorsService: ErrorsService,
+    private readonly fixProposalCron: FixProposalCron,
   ) {}
 
   // --- Error reports (Sentry-equivalent — collects bugs from all clients) ---
@@ -85,6 +87,14 @@ export class AdminController {
   @Post('errors/:id/suggest-fix')
   async suggestFix(@Param('id') id: string) {
     return this.errorsService.suggestFix(id);
+  }
+
+  @Post('errors/run-ai-cron')
+  async runFixProposalCron() {
+    // Manual trigger for the hourly cron — useful for testing or
+    // burning through a backlog without waiting for the schedule.
+    await this.fixProposalCron.run();
+    return { ok: true };
   }
 
   // --- App releases (Mac/Windows/Linux/Android/iOS update channel) ---
