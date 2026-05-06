@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Apple Events: required so AXTextService can talk to other apps
+         and call AccessibilityNotificationsAttributedString / replace
+         selected text. The macOS app is NOT sandboxed because the
+         system-hotkey + AX text replacement architecture isn't sandbox
+         compatible. This is the standard "outside Mac App Store" posture. -->
+    <key>com.apple.security.automation.apple-events</key>
+    <true/>
+
+    <!-- Read-only access to user-selected files. Used by future "import"
+         flows; harmless to declare. -->
+    <key>com.apple.security.files.user-selected.read-only</key>
+    <true/>
+</dict>
+</plist>
