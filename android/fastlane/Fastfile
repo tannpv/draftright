@@ -22,7 +22,7 @@ default_platform(:android)
 #   bundle exec fastlane production_draft  # production track, draft state
 #                                          # (must promote in Play Console UI)
 
-AAB_PATH = "../build/app/outputs/bundle/release/app-release.aab"
+AAB_PATH = File.expand_path("../../build/app/outputs/bundle/release/app-release.aab", __dir__)
 
 platform :android do
   before_all do
