@@ -11,6 +11,7 @@ import 'package:draftright_mobile/screens/settings_screen.dart';
 import 'package:draftright_mobile/screens/playground_screen.dart';
 import 'package:draftright_mobile/screens/share_rewrite_screen.dart';
 import 'package:draftright_mobile/services/share_service.dart';
+import 'package:draftright_mobile/services/error_reporter.dart';
 
 // Desktop imports — only compiled on desktop platforms
 import 'package:draftright_mobile/desktop/desktop_app.dart'
@@ -32,13 +33,26 @@ void main() async {
   final auth = AuthService();
   await auth.init(settings.backendUrl);
 
-  if (isDesktop) {
-    // Windows / Linux: run as system tray app with floating panel
-    runApp(DesktopApp(settings: settings, auth: auth));
-  } else {
-    // Android / iOS: run as mobile app
-    runApp(DraftRightApp(settings: settings, auth: auth));
-  }
+  // Wire global error reporter — sends unhandled crashes to /errors so the
+  // team can triage. Listen to auth changes so the bearer token is current
+  // even if the user signs in/out mid-session.
+  auth.addListener(() async {
+    final token = await auth.getAccessToken();
+    ErrorReporter.setBearerToken(token);
+  });
+  final initialToken = await auth.getAccessToken();
+
+  await ErrorReporter.run(
+    () {
+      if (isDesktop) {
+        runApp(DesktopApp(settings: settings, auth: auth));
+      } else {
+        runApp(DraftRightApp(settings: settings, auth: auth));
+      }
+    },
+    backendUrl: settings.backendUrl,
+    bearerToken: initialToken,
+  );
 }
 
 // ── Mobile app ───────────────────────────────────────────────────────────────
