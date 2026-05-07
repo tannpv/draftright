@@ -38,6 +38,7 @@ interface KeyboardActionListener {
     fun onEnter()
     fun onSpace()
     fun onSwitchKeyboard()
+    fun onSwitchKeyboardLongPress()
 }
 
 enum class ShiftState { OFF, SINGLE, CAPS_LOCK }
@@ -260,6 +261,10 @@ class QwertyKeyboardView(
                         handleKeyPress(keyDef)
                         startBackspaceRepeat()
                     }
+                    if (keyDef.code == KeyCode.GLOBE) {
+                        globeLongPressed = false
+                        handler.postDelayed(globeLongPressRunnable, 500)
+                    }
                     true
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
@@ -273,6 +278,11 @@ class QwertyKeyboardView(
                     dismissKeyPopup()
                     if (keyDef.code == KeyCode.BACKSPACE) {
                         stopBackspaceRepeat()
+                    } else if (keyDef.code == KeyCode.GLOBE) {
+                        handler.removeCallbacks(globeLongPressRunnable)
+                        if (!globeLongPressed && event.action == MotionEvent.ACTION_UP) {
+                            handleKeyPress(keyDef)
+                        }
                     } else if (event.action == MotionEvent.ACTION_UP) {
                         handleKeyPress(keyDef)
                     }
@@ -347,6 +357,12 @@ class QwertyKeyboardView(
                 handler.postDelayed(this, 50)
             }
         }
+    }
+
+    private var globeLongPressed = false
+    private val globeLongPressRunnable = Runnable {
+        globeLongPressed = true
+        listener.onSwitchKeyboardLongPress()
     }
 
     private fun startBackspaceRepeat() {
