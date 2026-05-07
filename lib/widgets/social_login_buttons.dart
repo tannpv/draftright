@@ -1,6 +1,23 @@
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:draftright_mobile/services/auth_service.dart';
+
+/// True on iOS / iPadOS. Apple's App Store Guideline 4.8 requires that
+/// any third-party login service (Google, Facebook, TikTok, etc.) be
+/// paired with Sign in with Apple. Until we add Sign in with Apple,
+/// the cleanest path is to hide third-party social logins on Apple
+/// platforms so the guideline doesn't apply.
+bool _isApplePlatform() {
+  if (kIsWeb) return false;
+  try {
+    return Platform.isIOS || Platform.isMacOS;
+  } catch (_) {
+    return false;
+  }
+}
 
 class SocialLoginButtons extends StatefulWidget {
   const SocialLoginButtons({super.key});
@@ -30,6 +47,17 @@ class _SocialLoginButtonsState extends State<SocialLoginButtons> {
   @override
   Widget build(BuildContext context) {
     final auth = context.read<AuthService>();
+    final hideGoogle = _isApplePlatform();
+
+    // On Apple platforms, hide Google entirely until Sign in with Apple
+    // is wired up. Apple's Guideline 4.8 forbids third-party social
+    // logins without an Apple-equivalent option. Once Sign in with Apple
+    // is added, both buttons can show on iOS/macOS.
+    if (hideGoogle) {
+      // Email/password is the only path on Apple platforms today.
+      // Returning an empty widget collapses the social section.
+      return const SizedBox.shrink();
+    }
 
     return Column(
       children: [
