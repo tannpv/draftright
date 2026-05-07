@@ -74,23 +74,15 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
     }
 
     override fun onSwitchKeyboard() {
-        // Tap globe: cycle to the next installed IME (Samsung-style).
+        // Both globe and ≡ buttons open the IME picker. User can pick another
+        // keyboard OR dismiss back to DraftRight. Cycling-by-tap was tested but
+        // produced a "stuck on next IME" UX — the next IME's globe doesn't
+        // reliably bring users back to DraftRight.
         val imm = getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
-        val token = window?.window?.attributes?.token
-        try {
-            if (token != null) {
-                imm.switchToNextInputMethod(token, false)
-            } else {
-                imm.showInputMethodPicker()
-            }
-        } catch (e: Exception) {
-            imm.showInputMethodPicker()
-        }
+        imm.showInputMethodPicker()
     }
 
     override fun onSwitchKeyboardLongPress() {
-        // Long-press globe: open the full IME picker so the user can pick any
-        // keyboard or dismiss back to DraftRight.
         val imm = getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
         imm.showInputMethodPicker()
     }
