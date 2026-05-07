@@ -23,7 +23,8 @@ enum class KeyCode {
     SYMBOLS,
     ALPHA,
     SYMBOLS2,
-    GLOBE
+    GLOBE,
+    GLOBE_PICKER
 }
 
 data class KeyDef(
@@ -82,8 +83,9 @@ class QwertyKeyboardView(
         listOf(
             KeyDef("?123", KeyCode.SYMBOLS, 1.5f),
             KeyDef("\uD83C\uDF10", KeyCode.GLOBE, 1.0f),
+            KeyDef("\u2630", KeyCode.GLOBE_PICKER, 1.0f),
             KeyDef(",", KeyCode.CHAR, 1.0f),
-            KeyDef(" ", KeyCode.SPACE, 5.0f),
+            KeyDef(" ", KeyCode.SPACE, 4.0f),
             KeyDef(".", KeyCode.CHAR, 1.0f),
             KeyDef("\u21B5", KeyCode.ENTER, 1.5f)
         )
@@ -111,8 +113,9 @@ class QwertyKeyboardView(
         listOf(
             KeyDef("ABC", KeyCode.ALPHA, 1.5f),
             KeyDef("\uD83C\uDF10", KeyCode.GLOBE, 1.0f),
+            KeyDef("\u2630", KeyCode.GLOBE_PICKER, 1.0f),
             KeyDef(",", KeyCode.CHAR, 1.0f),
-            KeyDef(" ", KeyCode.SPACE, 5.0f),
+            KeyDef(" ", KeyCode.SPACE, 4.0f),
             KeyDef(".", KeyCode.CHAR, 1.0f),
             KeyDef("\u21B5", KeyCode.ENTER, 1.5f)
         )
@@ -140,8 +143,9 @@ class QwertyKeyboardView(
         listOf(
             KeyDef("ABC", KeyCode.ALPHA, 1.5f),
             KeyDef("\uD83C\uDF10", KeyCode.GLOBE, 1.0f),
+            KeyDef("\u2630", KeyCode.GLOBE_PICKER, 1.0f),
             KeyDef(",", KeyCode.CHAR, 1.0f),
-            KeyDef(" ", KeyCode.SPACE, 5.0f),
+            KeyDef(" ", KeyCode.SPACE, 4.0f),
             KeyDef(".", KeyCode.CHAR, 1.0f),
             KeyDef("\u21B5", KeyCode.ENTER, 1.5f)
         )
@@ -261,10 +265,6 @@ class QwertyKeyboardView(
                         handleKeyPress(keyDef)
                         startBackspaceRepeat()
                     }
-                    if (keyDef.code == KeyCode.GLOBE) {
-                        globeLongPressed = false
-                        handler.postDelayed(globeLongPressRunnable, 500)
-                    }
                     true
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
@@ -278,11 +278,6 @@ class QwertyKeyboardView(
                     dismissKeyPopup()
                     if (keyDef.code == KeyCode.BACKSPACE) {
                         stopBackspaceRepeat()
-                    } else if (keyDef.code == KeyCode.GLOBE) {
-                        handler.removeCallbacks(globeLongPressRunnable)
-                        if (!globeLongPressed && event.action == MotionEvent.ACTION_UP) {
-                            handleKeyPress(keyDef)
-                        }
                     } else if (event.action == MotionEvent.ACTION_UP) {
                         handleKeyPress(keyDef)
                     }
@@ -347,6 +342,9 @@ class QwertyKeyboardView(
             KeyCode.GLOBE -> {
                 listener.onSwitchKeyboard()
             }
+            KeyCode.GLOBE_PICKER -> {
+                listener.onSwitchKeyboardLongPress()
+            }
         }
     }
 
@@ -359,11 +357,6 @@ class QwertyKeyboardView(
         }
     }
 
-    private var globeLongPressed = false
-    private val globeLongPressRunnable = Runnable {
-        globeLongPressed = true
-        listener.onSwitchKeyboardLongPress()
-    }
 
     private fun startBackspaceRepeat() {
         backspaceRepeating = true
