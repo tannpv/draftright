@@ -3,6 +3,6 @@
     android:settingsActivity="com.draftright.draftright_mobile.MainActivity">
     <subtype
         android:imeSubtypeMode="keyboard"
-        android:label="DraftRight V2"
+        android:label="DraftRight Keyboard"
         android:imeSubtypeLocale="en_US" />
 </input-method>
