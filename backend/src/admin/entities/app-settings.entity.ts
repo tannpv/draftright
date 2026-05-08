@@ -15,6 +15,9 @@ export class AppSettings {
   @Column({ type: 'int', default: 15 })
   token_expiry_minutes: number;
 
+  @Column({ type: 'int', default: 90 })
+  refresh_token_expiry_days: number;
+
   @Column({ type: 'int', default: 3000 })
   max_input_length: number;
 

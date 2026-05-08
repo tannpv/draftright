@@ -14,12 +14,13 @@ import { ExtensionToken } from './extension-token.entity';
 import { ExtensionTokenService } from './extension-token.service';
 import { ExtensionTokenController } from './extension-token.controller';
 import { RewriteAuthGuard } from './rewrite-auth.guard';
+import { AppSettings } from '../admin/entities/app-settings.entity';
 
 @Module({
   imports: [
     PassportModule,
     JwtModule.register({}),
-    TypeOrmModule.forFeature([ExtensionToken]),
+    TypeOrmModule.forFeature([ExtensionToken, AppSettings]),
     UsersModule,
     PlansModule,
     SubscriptionsModule,

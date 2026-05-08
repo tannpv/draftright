@@ -6,6 +6,7 @@ interface Settings {
   environment: string;
   trial_limit: number;
   token_expiry_minutes: number;
+  refresh_token_expiry_days: number;
   max_input_length: number;
   supported_languages: string;
   // Payment
@@ -111,7 +112,7 @@ function StatusDot({ configured }: { configured: boolean }) {
 
 export default function SettingsPage() {
   const defaults: Settings = {
-    environment: 'testing', trial_limit: 3, token_expiry_minutes: 15, max_input_length: 3000,
+    environment: 'testing', trial_limit: 3, token_expiry_minutes: 15, refresh_token_expiry_days: 90, max_input_length: 3000,
     supported_languages: ALL_LANGUAGES.join(','),
     stripe_secret_key: '', stripe_webhook_secret: '',
     paypal_client_id: '', paypal_client_secret: '', paypal_mode: 'sandbox',
@@ -219,10 +220,27 @@ export default function SettingsPage() {
           {/* Limits */}
           <div className="card" style={{ marginBottom: 24 }}>
             <h2 style={{ color: '#eaeff4', fontSize: 16, fontWeight: 600, marginBottom: 16 }}>Limits</h2>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
               <div><label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Trial Rewrites/Day</label><input type="number" value={settings.trial_limit} onChange={e => set('trial_limit')(parseInt(e.target.value) || 3)} className="dark-input" min={1} /></div>
-              <div><label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Token Expiry (min)</label><input type="number" value={settings.token_expiry_minutes} onChange={e => set('token_expiry_minutes')(parseInt(e.target.value) || 15)} className="dark-input" min={1} /></div>
               <div><label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Max Input Length</label><input type="number" value={settings.max_input_length} onChange={e => set('max_input_length')(parseInt(e.target.value) || 3000)} className="dark-input" min={100} /></div>
+            </div>
+          </div>
+
+          {/* Session */}
+          <div className="card" style={{ marginBottom: 24 }}>
+            <h2 style={{ color: '#eaeff4', fontSize: 16, fontWeight: 600, marginBottom: 8 }}>Session</h2>
+            <p style={{ color: '#7c8fac', fontSize: 12, marginBottom: 16 }}>How long users stay signed in. Access token is short-lived and silently refreshed; session lifetime is the maximum idle window before re-login is required.</p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              <div>
+                <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Access Token Lifetime (minutes)</label>
+                <input type="number" value={settings.token_expiry_minutes} onChange={e => set('token_expiry_minutes')(parseInt(e.target.value) || 15)} className="dark-input" min={1} max={1440} />
+                <p style={{ color: '#7c8fac', fontSize: 11, marginTop: 4 }}>Default: 15. Auto-refreshed silently — users don't notice expiry.</p>
+              </div>
+              <div>
+                <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Session Lifetime (days)</label>
+                <input type="number" value={settings.refresh_token_expiry_days} onChange={e => set('refresh_token_expiry_days')(parseInt(e.target.value) || 90)} className="dark-input" min={1} max={365} />
+                <p style={{ color: '#7c8fac', fontSize: 11, marginTop: 4 }}>Default: 90. Forces re-login after this many days of inactivity. Industry standard: 30–90.</p>
+              </div>
             </div>
           </div>
 
