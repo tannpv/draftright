@@ -1,14 +1,15 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, MoreThanOrEqual } from 'typeorm';
 import { Payment, PaymentMethod, PaymentStatus } from './entities/payment.entity';
-import { PaymentStrategy, CheckoutResult } from './strategies/payment-strategy.interface';
+import { PaymentStrategy, CheckoutResult, WebhookAction } from './strategies/payment-strategy.interface';
 import { StripeStrategy } from './strategies/stripe.strategy';
 import { PayPalStrategy } from './strategies/paypal.strategy';
 import { VietQRStrategy } from './strategies/vietqr.strategy';
 import { MomoStrategy } from './strategies/momo.strategy';
 import { PlansService } from '../plans/plans.service';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
+import { User } from '../users/entities/user.entity';
 import { randomBytes } from 'crypto';
 
 @Injectable()
@@ -28,9 +29,13 @@ export class PaymentService {
    */
   private readonly enabledMethods: Set<string>;
 
+  private readonly logger = new Logger(PaymentService.name);
+
   constructor(
     @InjectRepository(Payment)
     private readonly paymentRepo: Repository<Payment>,
+    @InjectRepository(User)
+    private readonly userRepo: Repository<User>,
     private readonly plansService: PlansService,
     private readonly subscriptionsService: SubscriptionsService,
     private readonly stripeStrategy: StripeStrategy,
@@ -84,23 +89,33 @@ export class PaymentService {
 
     const strategy = this.getStrategy(method);
 
-    // Create payment record
+    // Load user for Stripe customer reuse + email pre-fill
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+
+    // Create payment record. Currency is taken from the plan now (multi-currency).
     const payment = this.paymentRepo.create({
       user_id: userId,
       plan_id: planId,
       amount: plan.price_cents,
-      currency: 'VND',
+      currency: plan.currency || 'USD',
       method: method as PaymentMethod,
       status: PaymentStatus.PENDING,
       reference_code: this.generateReferenceCode(),
       expires_at: new Date(Date.now() + 30 * 60 * 1000), // 30 min expiry
     });
+    // Eagerly attach the plan so the strategy can read it without a re-fetch
+    (payment as any).plan = plan;
     await this.paymentRepo.save(payment);
 
     // Delegate to strategy
     let result: CheckoutResult;
     try {
-      result = await strategy.createCheckout(payment, options);
+      result = await strategy.createCheckout(payment, {
+        ...options,
+        stripe_customer_id: user.stripe_customer_id,
+        user_email: user.email,
+      });
     } catch (err: any) {
       payment.status = PaymentStatus.FAILED;
       payment.notes = err.message;
@@ -121,11 +136,68 @@ export class PaymentService {
 
   async handleWebhook(method: string, payload: any, headers: any): Promise<{ success: boolean; reference_code?: string }> {
     const strategy = this.getStrategy(method);
-    const result = await strategy.verifyWebhook(payload, headers);
+    const action: WebhookAction = await strategy.verifyWebhook(payload, headers);
 
-    if (!result) return { success: false };
+    switch (action.type) {
+      case 'payment_completed': {
+        // Stripe: capture the new Customer ID for reuse on next checkout
+        if (action.stripe_customer_id) {
+          const payment = await this.paymentRepo.findOne({ where: { reference_code: action.reference_code } });
+          if (payment?.user_id) {
+            await this.userRepo.update(payment.user_id, { stripe_customer_id: action.stripe_customer_id });
+            this.logger.log(`Saved stripe_customer_id ${action.stripe_customer_id} for user ${payment.user_id}`);
+          }
+        }
+        // Stripe: stamp subscription_id on the granted subscription via store_transaction_id
+        const completion = await this.completePayment(action.reference_code, 'completed');
+        if (action.stripe_subscription_id && completion.success) {
+          await this.subscriptionsService.stampStripeSubscription(
+            action.reference_code,
+            action.stripe_subscription_id,
+          );
+        }
+        return completion;
+      }
 
-    return this.completePayment(result.reference_code, result.status);
+      case 'payment_failed':
+        return this.completePayment(action.reference_code, 'failed');
+
+      case 'subscription_renewed':
+        await this.handleSubscriptionRenewed(action.stripe_subscription_id, action.current_period_end);
+        return { success: true };
+
+      case 'subscription_canceled':
+        await this.handleSubscriptionCanceled(action.stripe_subscription_id);
+        return { success: true };
+
+      case 'dispute_created':
+        this.logger.warn(`Stripe dispute on charge ${action.stripe_charge_id}, amount ${action.amount}. Manual review required.`);
+        return { success: true };
+
+      case 'ignored':
+      default:
+        return { success: false };
+    }
+  }
+
+  /**
+   * Stripe `invoice.payment_succeeded` — extend the subscription's expires_at
+   * to the new period end. Idempotent: setting same expiry twice is safe.
+   */
+  private async handleSubscriptionRenewed(stripeSubId: string, periodEndUnixSec: number): Promise<void> {
+    const expiresAt = new Date(periodEndUnixSec * 1000);
+    const updated = await this.subscriptionsService.extendByStripeSubId(stripeSubId, expiresAt);
+    this.logger.log(`Renewed Stripe sub ${stripeSubId} → expires ${expiresAt.toISOString()} (rows=${updated})`);
+  }
+
+  /**
+   * Stripe `customer.subscription.deleted` — mark the matching subscription
+   * cancelled. Whether it was customer-initiated, dunning failure, or admin
+   * doesn't change our action: stop renewing, let access lapse at expires_at.
+   */
+  private async handleSubscriptionCanceled(stripeSubId: string): Promise<void> {
+    const updated = await this.subscriptionsService.cancelByStripeSubId(stripeSubId);
+    this.logger.log(`Cancelled Stripe sub ${stripeSubId} (rows=${updated})`);
   }
 
   // --- Generic: complete/fail a payment ---

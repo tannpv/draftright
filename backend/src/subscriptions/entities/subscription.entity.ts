@@ -16,6 +16,8 @@ export enum StoreType {
   APPLE_IAP = 'apple_iap',
   ADMIN_GRANTED = 'admin_granted',
   LEMONSQUEEZY = 'lemonsqueezy',
+  /** Native Stripe subscription (web checkout). Distinct from Lemon Squeezy. */
+  STRIPE = 'stripe',
 }
 
 @Entity('subscriptions')
