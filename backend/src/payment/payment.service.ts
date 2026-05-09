@@ -15,6 +15,19 @@ import { randomBytes } from 'crypto';
 export class PaymentService {
   private strategies: Map<string, PaymentStrategy>;
 
+  /**
+   * Methods that are publicly exposed. Controlled via env var
+   * `PAYMENT_ENABLED_METHODS=stripe,vietqr` (comma-separated).
+   *
+   * Phase 3a default = "stripe" only. VietQR/Casso will be added in Phase 3b
+   * once the Vietnamese LLC is registered (Casso requires business docs).
+   * PayPal + Momo stay implemented but disabled — webhooks return 404,
+   * checkout requests rejected — until they're explicitly enabled.
+   *
+   * `bank_transfer` is an alias for `vietqr` — only enabled if `vietqr` is.
+   */
+  private readonly enabledMethods: Set<string>;
+
   constructor(
     @InjectRepository(Payment)
     private readonly paymentRepo: Repository<Payment>,
@@ -32,11 +45,19 @@ export class PaymentService {
       ['vietqr', this.vietqrStrategy],
       ['bank_transfer', this.vietqrStrategy],
     ]);
+
+    const raw = (process.env.PAYMENT_ENABLED_METHODS || 'stripe').toLowerCase();
+    this.enabledMethods = new Set(raw.split(',').map((s) => s.trim()).filter(Boolean));
+    // bank_transfer is implicitly enabled iff vietqr is enabled
+    if (this.enabledMethods.has('vietqr')) this.enabledMethods.add('bank_transfer');
   }
 
   // --- Generic: get strategy by method ---
 
   private getStrategy(method: string): PaymentStrategy {
+    if (!this.enabledMethods.has(method)) {
+      throw new NotFoundException(`Payment method '${method}' is not enabled.`);
+    }
     const strategy = this.strategies.get(method);
     if (!strategy) throw new BadRequestException(`Unsupported payment method: ${method}`);
     return strategy;
