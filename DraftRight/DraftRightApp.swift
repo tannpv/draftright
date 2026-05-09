@@ -54,6 +54,31 @@ struct DraftRightApp: App {
         }
     }
 
+    /// Surface a visible "you need to sign in" prompt when the hotkey fires
+    /// while the user is logged out. Silently ignoring the hotkey leaves the
+    /// user thinking the app is broken; this gives them a clear next action.
+    /// Differentiates "session expired" (token rejected by backend) from
+    /// "never signed in" so the message matches the actual state.
+    @MainActor
+    static func showSignInRequiredAlert(appModel: AppModel) {
+        let alert = NSAlert()
+        if appModel.sessionExpired {
+            alert.messageText = "DraftRight session expired"
+            alert.informativeText = "Your sign-in session expired. Please sign in again to keep using rewrite."
+        } else {
+            alert.messageText = "Sign in to use DraftRight"
+            alert.informativeText = "DraftRight needs you to sign in before it can rewrite text."
+        }
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Open Settings")
+        alert.addButton(withTitle: "Cancel")
+        NSApp.activate(ignoringOtherApps: true)
+        let response = alert.runModal()
+        if response == .alertFirstButtonReturn {
+            openSettingsWindow(appModel: appModel)
+        }
+    }
+
     @MainActor
     static func openSettingsWindow(appModel: AppModel) {
         // Reuse existing window if open
@@ -100,7 +125,8 @@ struct DraftRightApp: App {
         monitor.start { text in
             DRLogger.log("onTextSelected fired, isLoggedIn=\(appModel.isLoggedIn) mode=\(appModel.appMode.rawValue)", category: .app)
             guard appModel.isLoggedIn, !appModel.accessToken.isEmpty else {
-                DRLogger.log("BLOCKED: not logged in — ignoring selection", category: .app)
+                DRLogger.log("BLOCKED: not logged in — surfacing sign-in alert", category: .app)
+                Self.showSignInRequiredAlert(appModel: appModel)
                 return
             }
 
