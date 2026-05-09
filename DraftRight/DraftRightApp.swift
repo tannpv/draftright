@@ -242,7 +242,7 @@ struct DraftRightApp: App {
         let center = UNUserNotificationCenter.current()
         center.requestAuthorization(options: [.alert]) { _, _ in }
         let content = UNMutableNotificationContent()
-        content.title = "DraftRight — One-Click Rewrite Failed"
+        content.title = "DraftRight — Simple Mode Rewrite Failed"
         content.body = message
         let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
         center.add(request, withCompletionHandler: nil)

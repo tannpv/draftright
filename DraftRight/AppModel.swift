@@ -14,7 +14,7 @@ enum AppMode: String, CaseIterable, Identifiable {
     var displayName: String {
         switch self {
         case .advanced: return "Advanced"
-        case .oneClick: return "One-Click"
+        case .oneClick: return "Simple"
         }
     }
 }

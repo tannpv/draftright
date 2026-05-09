@@ -238,7 +238,18 @@ public class App : Application
     {
         if (!Auth.IsLoggedIn)
         {
-            DRLogger.Log("Hotkey fired but user is not logged in — ignoring.", DRLogger.Category.HOTKEY);
+            DRLogger.Log("Hotkey fired but user is not logged in.", DRLogger.Category.HOTKEY);
+
+            // Visible feedback so the user (or store reviewer) knows what's needed.
+            // Without this, the hotkey appears to do nothing — the prior failure mode.
+            ShowTrayToast(
+                title: "Sign in to DraftRight",
+                body: "Open Settings → Account to sign in. Your hotkey will then rewrite text in any app.",
+                icon: WinForms.ToolTipIcon.Info);
+
+            // Auto-open Settings to the Account tab (index 3 in the tab order:
+            // General=0, Rewrite=1, Trigger=2, Account=3, Advanced=4).
+            OpenSettings(targetTabIndex: 3);
             return;
         }
 
@@ -254,6 +265,13 @@ public class App : Application
         if (string.IsNullOrWhiteSpace(text))
         {
             DRLogger.Log("No text selected — ignoring hotkey.", DRLogger.Category.HOTKEY);
+
+            // Visible feedback — the hotkey was registered correctly but there
+            // was nothing to act on. Prior failure mode: silent no-op.
+            ShowTrayToast(
+                title: "DraftRight",
+                body: "Select some text first, then press the hotkey to rewrite it.",
+                icon: WinForms.ToolTipIcon.Info);
             return;
         }
 
@@ -424,7 +442,7 @@ public class App : Application
         {
             if (_trayIcon != null)
             {
-                _trayIcon.BalloonTipTitle = "DraftRight \u2014 One-Click Rewrite Failed";
+                _trayIcon.BalloonTipTitle = "DraftRight \u2014 Simple Mode Rewrite Failed";
                 _trayIcon.BalloonTipText = message;
                 _trayIcon.BalloonTipIcon = WinForms.ToolTipIcon.Error;
                 _trayIcon.ShowBalloonTip(4000);
@@ -563,17 +581,65 @@ public class App : Application
         }
     }
 
-    private void OpenSettings()
+    /// <summary>
+    /// Opens the Settings window. If <paramref name="targetTabIndex"/> &gt;= 0,
+    /// the window opens with that tab selected. Tab order:
+    /// 0=General, 1=Rewrite, 2=Trigger, 3=Account, 4=Advanced.
+    /// </summary>
+    private void OpenSettings(int targetTabIndex = -1)
     {
         if (_settingsForm != null && !_settingsForm.IsDisposed)
         {
-            _settingsForm.BringToFront();
-            _settingsForm.Activate();
+            Action switchAndShow = () =>
+            {
+                _settingsForm.BringToFront();
+                _settingsForm.Activate();
+                if (targetTabIndex >= 0)
+                {
+                    var tab = _settingsForm.Controls.OfType<WinForms.TabControl>().FirstOrDefault();
+                    if (tab != null && targetTabIndex < tab.TabPages.Count)
+                        tab.SelectedIndex = targetTabIndex;
+                }
+            };
+            try
+            {
+                if (_settingsForm.InvokeRequired)
+                    _settingsForm.BeginInvoke(switchAndShow);
+                else
+                    switchAndShow();
+            }
+            catch
+            {
+                // form may be closing — best effort
+            }
             return;
         }
 
-        _settingsForm = SettingsFormBuilder.Create();
+        _settingsForm = SettingsFormBuilder.Create(targetTabIndex < 0 ? 0 : targetTabIndex);
         _settingsForm.Show();
+    }
+
+    /// <summary>
+    /// Shows a system tray toast notification. On modern Windows, NotifyIcon
+    /// balloon tips appear as proper Windows 10/11 toast notifications.
+    /// </summary>
+    private void ShowTrayToast(string title, string body, WinForms.ToolTipIcon icon = WinForms.ToolTipIcon.Info, int durationMs = 4500)
+    {
+        try
+        {
+            if (_trayIcon != null)
+            {
+                _trayIcon.BalloonTipTitle = title;
+                _trayIcon.BalloonTipText = body;
+                _trayIcon.BalloonTipIcon = icon;
+                _trayIcon.ShowBalloonTip(durationMs);
+            }
+        }
+        catch
+        {
+            // Tray may be disposed or notifications disabled — log only.
+            DRLogger.Log($"Toast suppressed: {title} — {body}", DRLogger.Category.APP);
+        }
     }
 
     private void DoQuit()
@@ -610,7 +676,7 @@ internal static class SettingsFormBuilder
     private static readonly Color SuccessGreen = Color.FromArgb(34, 197, 94);
     private static readonly Color BorderColor = Color.FromArgb(51, 65, 85);
 
-    public static WinForms.Form Create()
+    public static WinForms.Form Create(int defaultTabIndex = 0)
     {
         var form = new WinForms.Form
         {
@@ -641,6 +707,9 @@ internal static class SettingsFormBuilder
         tabControl.TabPages.Add(BuildTriggerTab());
         tabControl.TabPages.Add(BuildAccountTab());
         tabControl.TabPages.Add(BuildAdvancedTab());
+
+        if (defaultTabIndex > 0 && defaultTabIndex < tabControl.TabPages.Count)
+            tabControl.SelectedIndex = defaultTabIndex;
 
         form.Controls.Add(tabControl);
         return form;
@@ -841,13 +910,13 @@ internal static class SettingsFormBuilder
         y += 18;
         var modeCombo = MakeComboBox(y);
         modeCombo.Items.Add("Advanced");
-        modeCombo.Items.Add("One-Click");
+        modeCombo.Items.Add("Simple");
         modeCombo.SelectedIndex = App.Settings.AppMode == AppMode.OneClick ? 1 : 0;
         tab.Controls.Add(modeCombo);
         y += 44;
 
         // One-Click Tone (conditionally visible)
-        var oneClickLabel = MakeFieldLabel("One-Click Tone", y);
+        var oneClickLabel = MakeFieldLabel("Simple Mode Tone", y);
         tab.Controls.Add(oneClickLabel);
         y += 18;
         var oneClickCombo = MakeComboBox(y);
