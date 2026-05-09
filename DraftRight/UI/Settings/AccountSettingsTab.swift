@@ -2,6 +2,12 @@ import SwiftUI
 
 struct AccountSettingsTab: View {
     @EnvironmentObject var appModel: AppModel
+
+    /// Persist the email across app sessions so re-login is one-handed —
+    /// when a refresh-token expiry forces sign-in again, the user only types
+    /// the password. Stored in standard UserDefaults; not sensitive.
+    @AppStorage("lastSignInEmail") private var lastSignInEmail: String = ""
+
     @State private var loginEmail: String = ""
     @State private var loginPassword: String = ""
     @State private var isLoggingIn: Bool = false
@@ -24,7 +30,22 @@ struct AccountSettingsTab: View {
                     }
                 } else {
                     VStack(alignment: .leading, spacing: 8) {
+                        if appModel.sessionExpired {
+                            HStack(spacing: 6) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundColor(.orange)
+                                Text("Session expired — please sign in again.")
+                                    .font(.callout)
+                            }
+                            .padding(8)
+                            .background(Color.orange.opacity(0.12))
+                            .cornerRadius(6)
+                        }
                         TextField("Email", text: $loginEmail)
+                            .onAppear {
+                                // Pre-fill from the last successful sign-in.
+                                if loginEmail.isEmpty { loginEmail = lastSignInEmail }
+                            }
                         HStack {
                             if showPassword {
                                 TextField("Password", text: $loginPassword)
@@ -87,8 +108,12 @@ struct AccountSettingsTab: View {
                 backendUrl: appModel.backendUrl
             )
             appModel.storeTokens(access: access, refresh: refresh)
+            appModel.sessionExpired = false
             DRLogger.log("Sign-in SUCCESS", category: .settings)
-            loginEmail = ""
+
+            // Save the email so the user doesn't have to re-type it next time
+            // they're forced to sign in. Password is intentionally NOT saved.
+            lastSignInEmail = loginEmail
             loginPassword = ""
         } catch {
             DRLogger.log("Sign-in FAILED: \(error.localizedDescription)", category: .settings)
@@ -112,6 +137,7 @@ struct AccountSettingsTab: View {
                 backendUrl: appModel.backendUrl
             )
             appModel.storeTokens(access: access, refresh: refresh)
+            appModel.sessionExpired = false
             DRLogger.log("Google Sign-In: SUCCESS", category: .settings)
         } catch {
             DRLogger.log("Google Sign-In FAILED: \(error.localizedDescription)", category: .settings)

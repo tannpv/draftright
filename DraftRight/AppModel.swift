@@ -76,6 +76,11 @@ final class AppModel: ObservableObject {
     @Published var isRewriting: Bool = false
     @Published var isLoggedIn: Bool = false
     @Published var backendStatus: BackendStatus = .offline
+    /// True when backend explicitly rejected the refresh token (HTTP 401/403).
+    /// Tells the UI to show "Session expired — please sign in again". Cleared
+    /// on successful sign-in. Distinct from a transient network failure where
+    /// the user just needs to wait, not re-authenticate.
+    @Published var sessionExpired: Bool = false
     var cancellables = Set<AnyCancellable>()
 
     private let defaults = UserDefaults.standard
@@ -217,22 +222,27 @@ final class AppModel: ObservableObject {
         )
 
         // Silent refresh: if the access token aged out but we still hold a refresh token,
-        // exchange it before declaring the user logged out. This is the fix for the
-        // "had to open Settings and click Sign In again" papercut after JWT expiry.
+        // exchange it before declaring the user logged out. Classify the failure mode —
+        // only wipe credentials when the BACKEND explicitly rejects them. A network blip
+        // or 5xx must NOT destroy a valid 90-day token.
         if status == .notLoggedIn && !refreshToken.isEmpty {
             DRLogger.log("Access token rejected — attempting silent refresh", category: .auth)
-            if let pair = await healthClient.refreshTokens(refreshToken: refreshToken, backendUrl: backendUrl) {
-                storeTokens(access: pair.access, refresh: pair.refresh)
+            switch await healthClient.refreshTokens(refreshToken: refreshToken, backendUrl: backendUrl) {
+            case .success(let access, let refresh):
+                storeTokens(access: access, refresh: refresh)
+                sessionExpired = false
                 status = await healthClient.checkHealth(
                     backendUrl: backendUrl,
-                    accessToken: pair.access
+                    accessToken: access
                 )
-            } else {
-                // Refresh failed → stale tokens are useless, clear them so the next
-                // health check doesn't keep looping through the refresh path.
-                DRLogger.log("Silent refresh failed — clearing stale tokens", category: .auth)
+            case .unauthorized:
+                DRLogger.log("Refresh rejected by backend — clearing tokens, surfacing sessionExpired", category: .auth)
                 accessToken = ""
                 refreshToken = ""
+                sessionExpired = true
+            case .transient:
+                DRLogger.log("Refresh transient failure — keeping tokens, will retry next cycle", category: .auth)
+                // Intentionally do NOT clear. Next 30s health check tries again.
             }
         }
 
