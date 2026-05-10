@@ -113,6 +113,116 @@ export class AdminController {
     return { success: true };
   }
 
+  /**
+   * Manually trigger an AI fix-proposal for one bug. Useful when you
+   * want analysis right now instead of waiting for the hourly cron.
+   */
+  @Post('bug-reports/:id/fix-proposal')
+  async suggestBugFix(@Param('id') id: string) {
+    return this.bugReportsService.suggestFix(id);
+  }
+
+  /**
+   * Unified inbox — merges error_reports + bug_reports into one
+   * time-sorted feed. Powers the admin /inbox page.
+   *
+   * Query params:
+   *   ?kind=error|bug   filter to one source
+   *   ?status=open      'open' = not resolved (status<4 for errors, status not in {resolved, wont_fix} for bugs)
+   *   ?limit=50         default 50, max 100
+   */
+  @Get('inbox')
+  async listInbox(
+    @Query('kind') kind?: string,
+    @Query('status') status?: string,
+    @Query('limit') limitStr?: string,
+  ) {
+    const limit = Math.min(parseInt(limitStr || '50', 10) || 50, 100);
+    const wantErrors = kind !== 'bug';
+    const wantBugs = kind !== 'error';
+    const openOnly = status === 'open';
+
+    const errorRows = wantErrors
+      ? await this.errorsService.list({
+          status: openOnly ? 0 : undefined,
+          limit,
+          offset: 0,
+        })
+      : { items: [], total: 0 };
+
+    const bugRows = wantBugs
+      ? await this.bugReportsService.findAllPaginated({
+          page: 1,
+          limit,
+          status: openOnly ? 'new' : undefined,
+          sort_by: 'created_at',
+          sort_order: 'DESC',
+        } as any)
+      : { rows: [], total: 0 };
+
+    type InboxItem = {
+      kind: 'error' | 'bug';
+      id: string;
+      title: string;
+      platform: string | null;
+      app_version: string | null;
+      status: string;
+      created_at: Date;
+      ai_fix_proposal: string | null;
+      // Kind-specific extras (so the UI can deep-link without another fetch)
+      error_type?: string | null;
+      severity?: string | null;
+      occurrence_count?: number;
+      user_email?: string | null;
+      has_screenshot?: boolean;
+    };
+
+    const errorItems: InboxItem[] = (errorRows.items as any[]).map(e => ({
+      kind: 'error',
+      id: e.id,
+      title: [e.error_type, e.message].filter(Boolean).join(': ').slice(0, 200) || '(no message)',
+      platform: e.platform ?? null,
+      app_version: e.app_version ?? null,
+      status: this.errorStatusLabel(e.status),
+      created_at: e.last_seen_at ?? e.first_seen_at ?? e.created_at,
+      ai_fix_proposal: e.ai_fix_proposal ?? null,
+      error_type: e.error_type ?? null,
+      severity: e.severity ?? null,
+      occurrence_count: e.count ?? 0,
+    }));
+
+    const bugItems: InboxItem[] = (bugRows.rows as any[]).map(b => ({
+      kind: 'bug',
+      id: b.id,
+      title: (b.description ?? '').slice(0, 200) || '(no description)',
+      platform: b.os_info ?? null,
+      app_version: b.app_version ?? null,
+      status: b.status,
+      created_at: b.created_at,
+      ai_fix_proposal: b.ai_fix_proposal ?? null,
+      user_email: b.user_email ?? null,
+      has_screenshot: !!b.screenshot_path,
+    }));
+
+    const merged = [...errorItems, ...bugItems]
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .slice(0, limit);
+
+    return {
+      items: merged,
+      counts: {
+        errors: errorRows.total,
+        bugs: bugRows.total,
+        returned: merged.length,
+      },
+    };
+  }
+
+  private errorStatusLabel(s: number): string {
+    // Mirrors the int-enum used by error_reports.status
+    return ['new', 'reviewing', 'resolved', 'fix_proposed', 'resolved', 'wont_fix'][s] ?? 'new';
+  }
+
   // --- Error reports (Sentry-equivalent — collects bugs from all clients) ---
 
   @Get('errors')

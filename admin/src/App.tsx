@@ -16,6 +16,7 @@ import AdminUsersPage from './pages/AdminUsersPage';
 import ErrorsPage from './pages/ErrorsPage';
 import BugReportsPage from './pages/BugReportsPage';
 import VersionsPage from './pages/VersionsPage';
+import InboxPage from './pages/InboxPage';
 
 function ProtectedRoute() {
   if (!isAuthenticated()) {
@@ -45,6 +46,7 @@ export default function App() {
             <Route path="/errors" element={<ErrorsPage />} />
             <Route path="/bug-reports" element={<BugReportsPage />} />
             <Route path="/versions" element={<VersionsPage />} />
+            <Route path="/inbox" element={<InboxPage />} />
           </Route>
         </Route>
         {/* Fallback */}
