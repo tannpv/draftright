@@ -42,6 +42,9 @@ struct DraftRightApp: App {
                 Self.openSettingsWindow(appModel: appModel)
             }
             .keyboardShortcut(",", modifiers: .command)
+            Button("Report a Bug…") {
+                BugReportPresenter.present(appModel: appModel)
+            }
             Divider()
             Button("Quit DraftRight V2") {
                 NSApp.terminate(nil)
@@ -223,11 +226,24 @@ struct DraftRightApp: App {
                     backendUrl: appModel.backendUrl,
                     targetLanguage: appModel.translateLanguage
                 )
-                DRLogger.log("One-Click rewrite OK, replacing selection", category: .app)
-                if !AXTextService().replaceSelectedText(with: rewritten) {
-                    ClipboardHelper.copy(text: rewritten)
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        ClipboardHelper.pasteFromClipboard()
+                DRLogger.log("One-Click rewrite OK, replacing selection via clipboard paste", category: .app)
+                // AX setSelectedText is unreliable across apps — many browsers
+                // and Electron apps return AX success but don't actually mutate
+                // the field. So we always go through the clipboard. Snapshot
+                // and restore so we don't blow away whatever the user copied.
+                let savedClipboard = ClipboardHelper.snapshot()
+                ClipboardHelper.copy(text: rewritten)
+                // 0.3s delay so the user's hotkey modifiers (Cmd+Shift)
+                // have time to release before we synthesize Cmd+V — otherwise
+                // the OS sees Cmd+Shift+V (paste-and-match) or nothing.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    ClipboardHelper.pasteFromClipboard()
+                    DRLogger.log("Clipboard paste fired", category: .app)
+                    // Give the paste a moment to land in the target app
+                    // before we restore the user's original clipboard.
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        ClipboardHelper.restore(savedClipboard)
+                        DRLogger.log("Clipboard restored", category: .app)
                     }
                 }
             } catch {
