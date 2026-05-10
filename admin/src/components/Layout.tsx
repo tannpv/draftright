@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { verifyBackend } from '../api';
 import { logout, getAdminEmail } from '../auth';
+import ReportBugButton from './ReportBugButton';
 
 /* ── SVG Icons (inline, no external deps) ───────────────── */
 function IconDashboard() {
@@ -100,6 +101,35 @@ function IconErrors() {
     </svg>
   );
 }
+function IconBugReports() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 4l1.5 1.5" />
+      <path d="M14.5 5.5L16 4" />
+      <path d="M9 7.5v-1a3 3 0 016 0v1" />
+      <path d="M12 21c-3.3 0-6-2.7-6-6v-3a4 4 0 014-4h4a4 4 0 014 4v3c0 3.3-2.7 6-6 6z" />
+      <path d="M12 21v-9" />
+      <path d="M6 13H3" />
+      <path d="M21 13h-3" />
+      <path d="M5 9C3.5 8.7 2.5 7.4 2.5 6" />
+      <path d="M21.5 6c0 1.4-1 2.7-2.5 3" />
+      <path d="M3 20c0-1.7 1.3-3 3-3" />
+      <path d="M21 20c0-1.7-1.3-3-3-3" />
+    </svg>
+  );
+}
+function IconVersions() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+      <polyline points="7.5 4.21 12 6.81 16.5 4.21" />
+      <polyline points="7.5 19.79 7.5 14.6 3 12" />
+      <polyline points="21 12 16.5 14.6 16.5 19.79" />
+      <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+      <line x1="12" y1="22.08" x2="12" y2="12" />
+    </svg>
+  );
+}
 function IconLogout() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -121,6 +151,8 @@ const navItems = [
   { path: '/settings',      label: 'Settings',      icon: <IconSettings />,      exact: false },
   { path: '/admin-users',   label: 'Admin Users',   icon: <IconAdminUsers />,    exact: false },
   { path: '/errors',        label: 'Error Reports', icon: <IconErrors />,        exact: false },
+  { path: '/bug-reports',   label: 'Bug Reports',   icon: <IconBugReports />,    exact: false },
+  { path: '/versions',      label: 'App Versions',  icon: <IconVersions />,      exact: false },
 ];
 
 export default function Layout() {
@@ -399,6 +431,9 @@ export default function Layout() {
           <Outlet />
         </main>
       </div>
+
+      {/* Floating "Report bug" button — visible on every page */}
+      <ReportBugButton />
     </div>
   );
 }

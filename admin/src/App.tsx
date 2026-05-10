@@ -14,6 +14,8 @@ import PaymentsPage from './pages/PaymentsPage';
 import SettingsPage from './pages/SettingsPage';
 import AdminUsersPage from './pages/AdminUsersPage';
 import ErrorsPage from './pages/ErrorsPage';
+import BugReportsPage from './pages/BugReportsPage';
+import VersionsPage from './pages/VersionsPage';
 
 function ProtectedRoute() {
   if (!isAuthenticated()) {
@@ -41,6 +43,8 @@ export default function App() {
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/admin-users" element={<AdminUsersPage />} />
             <Route path="/errors" element={<ErrorsPage />} />
+            <Route path="/bug-reports" element={<BugReportsPage />} />
+            <Route path="/versions" element={<VersionsPage />} />
           </Route>
         </Route>
         {/* Fallback */}
