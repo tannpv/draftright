@@ -2,6 +2,7 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AiProvider, AiProviderType } from './entities/ai-provider.entity';
+import { ListQuery, ListResult, applyListQuery } from '../common/list-query';
 
 @Injectable()
 export class AiProvidersService {
@@ -12,6 +13,25 @@ export class AiProvidersService {
 
   async findAll(): Promise<AiProvider[]> {
     return this.providersRepo.find({ order: { created_at: 'ASC' } });
+  }
+
+  async findAllPaginated(query: ListQuery): Promise<ListResult<AiProvider>> {
+    const qb = this.providersRepo.createQueryBuilder('provider');
+    return applyListQuery(
+      qb,
+      query,
+      ['provider.name', 'provider.type', 'provider.model'],
+      {
+        name: 'provider.name',
+        type: 'provider.type',
+        model: 'provider.model',
+        is_default: 'provider.is_default',
+        is_active: 'provider.is_active',
+        created_at: 'provider.created_at',
+      },
+      'provider.created_at',
+      'provider.is_active',
+    );
   }
 
   async findById(id: string): Promise<AiProvider | null> {

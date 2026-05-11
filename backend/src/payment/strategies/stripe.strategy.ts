@@ -147,11 +147,24 @@ export class StripeStrategy implements PaymentStrategy {
 
       case 'invoice.payment_succeeded': {
         // Subscription renewal — extends expiry. Also fires after trial → first paid charge.
+        // API version 2026-04-22 moved invoice.subscription → invoice.parent.subscription_details.subscription
+        // and lines[0].period → lines[0].parent.subscription_item_details.subscription_period.
+        // We also accept the legacy paths so older API versions still work.
         const invoice = event.data.object;
-        const subscriptionId = invoice.subscription;
-        const periodEnd = invoice.lines?.data?.[0]?.period?.end;
+        const subscriptionId =
+          invoice.parent?.subscription_details?.subscription ||
+          invoice.subscription;
+        const line = invoice.lines?.data?.[0];
+        const periodEnd =
+          line?.period?.end ||
+          line?.parent?.subscription_item_details?.subscription_period?.end ||
+          invoice.period_end;
         if (!subscriptionId || !periodEnd) {
-          this.logger.warn(`invoice.payment_succeeded missing subscription/period_end (id=${event.id})`);
+          // $0 trial-start invoice has no subscription on it — that's expected.
+          // Real renewal will have one; warn so it's visible in logs.
+          this.logger.warn(
+            `invoice.payment_succeeded missing subscription/period_end (id=${event.id}, amount=${invoice.amount_paid}, billing_reason=${invoice.billing_reason})`
+          );
           return { type: 'ignored' };
         }
         return {
@@ -166,9 +179,13 @@ export class StripeStrategy implements PaymentStrategy {
         // Stripe Smart Retries handles 3 retries automatically. Only mark failed
         // when customer.subscription.deleted fires.
         const invoice = event.data.object;
+        const refCode =
+          invoice.parent?.subscription_details?.metadata?.reference_code ||
+          invoice.subscription_details?.metadata?.reference_code ||
+          invoice.id;
         return {
           type: 'payment_failed',
-          reference_code: invoice.subscription_details?.metadata?.reference_code || invoice.id,
+          reference_code: refCode,
         };
       }
 

@@ -1,0 +1,178 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import DownloadCTA from '../components/DownloadCTA.astro';
+import Pricing from '../components/Pricing.astro';
+import Playground from '../components/Playground.tsx';
+---
+<BaseLayout
+  title="DraftRight — Write Better, Everywhere"
+  description="AI-powered text rewriting. Select text, pick a tone, get a polished rewrite. Available on iOS, Android, macOS, Windows, and Linux."
+>
+  <!-- Hero -->
+  <section class="relative overflow-hidden">
+    <!-- Gradient overlay -->
+    <div class="absolute inset-0 bg-gradient-to-b from-brand-900/50 to-dark-bg pointer-events-none"></div>
+    <div class="relative mx-auto max-w-4xl px-6 py-24 md:py-36 text-center">
+      <!-- Pill badge -->
+      <div class="inline-flex items-center gap-2 rounded-full border border-brand-400/30 bg-brand-400/10 px-4 py-1.5 text-sm text-brand-300 mb-8">
+        <span class="relative flex h-2 w-2">
+          <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-400 opacity-75"></span>
+          <span class="relative inline-flex h-2 w-2 rounded-full bg-brand-400"></span>
+        </span>
+        AI-Powered Writing Assistant
+      </div>
+      <!-- Headline -->
+      <h1 class="text-5xl md:text-7xl font-extrabold tracking-tight leading-tight">
+        Write Better,
+        <span class="bg-gradient-to-r from-brand-400 to-brand-200 bg-clip-text text-transparent">Everywhere</span>
+      </h1>
+      <!-- Subtext -->
+      <p class="mt-6 text-lg md:text-xl text-gray-400 max-w-2xl mx-auto leading-relaxed">
+        Select any text, pick a tone, and get a polished rewrite in seconds. Works as a keyboard extension, share sheet, or desktop app.
+      </p>
+      <!-- CTAs -->
+      <div class="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
+        <a
+          href="#playground"
+          class="rounded-full bg-brand-400 px-8 py-3 text-base font-semibold text-white hover:bg-brand-500 transition-colors"
+        >
+          Try It Free
+        </a>
+        <a
+          href="/download"
+          class="rounded-full border border-brand-400 px-8 py-3 text-base font-semibold text-brand-400 hover:bg-brand-400/10 transition-colors"
+        >
+          Download App
+        </a>
+      </div>
+      <!-- Bottom note -->
+      <p class="mt-8 text-sm text-gray-500">
+        No sign-up required &middot; 3 free rewrites &middot; Available on iOS, Android, macOS, Windows, Linux
+      </p>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section id="features" class="py-24">
+    <div class="mx-auto max-w-7xl px-6">
+      <!-- Header -->
+      <div class="text-center mb-16">
+        <h2 class="text-4xl md:text-5xl font-bold tracking-tight">Six Tones, One Tap</h2>
+        <p class="mt-4 text-lg text-gray-400 max-w-2xl mx-auto">
+          Choose how you want your text to sound. Each tone is fine-tuned for a specific writing style.
+        </p>
+      </div>
+      <!-- Grid -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div class="group rounded-2xl border border-dark-border bg-dark-card p-6 hover:border-brand-400/50 hover:bg-dark-card/80 transition-all">
+          <div class="text-3xl mb-4">✎</div>
+          <h3 class="text-lg font-semibold text-white mb-2">Simple</h3>
+          <p class="text-sm text-gray-400 leading-relaxed">Easy language, short sentences. Great for quick messages and casual notes.</p>
+        </div>
+        <div class="group rounded-2xl border border-dark-border bg-dark-card p-6 hover:border-brand-400/50 hover:bg-dark-card/80 transition-all">
+          <div class="text-3xl mb-4">💬</div>
+          <h3 class="text-lg font-semibold text-white mb-2">Natural</h3>
+          <p class="text-sm text-gray-400 leading-relaxed">Conversational and friendly. Flows smoothly like everyday speech.</p>
+        </div>
+        <div class="group rounded-2xl border border-dark-border bg-dark-card p-6 hover:border-brand-400/50 hover:bg-dark-card/80 transition-all">
+          <div class="text-3xl mb-4">✨</div>
+          <h3 class="text-lg font-semibold text-white mb-2">Polished</h3>
+          <p class="text-sm text-gray-400 leading-relaxed">Professional and refined. Perfect for emails, proposals, and presentations.</p>
+        </div>
+        <div class="group rounded-2xl border border-dark-border bg-dark-card p-6 hover:border-brand-400/50 hover:bg-dark-card/80 transition-all">
+          <div class="text-3xl mb-4">⊖</div>
+          <h3 class="text-lg font-semibold text-white mb-2">Concise</h3>
+          <p class="text-sm text-gray-400 leading-relaxed">Removes redundancy and tightens your prose. Say more with less.</p>
+        </div>
+        <div class="group rounded-2xl border border-dark-border bg-dark-card p-6 hover:border-brand-400/50 hover:bg-dark-card/80 transition-all">
+          <div class="text-3xl mb-4">🔧</div>
+          <h3 class="text-lg font-semibold text-white mb-2">Technical</h3>
+          <p class="text-sm text-gray-400 leading-relaxed">Precise and structured. Ideal for documentation and technical writing.</p>
+        </div>
+        <div class="group rounded-2xl border border-dark-border bg-dark-card p-6 hover:border-brand-400/50 hover:bg-dark-card/80 transition-all">
+          <div class="text-3xl mb-4">🌐</div>
+          <h3 class="text-lg font-semibold text-white mb-2">Translate</h3>
+          <p class="text-sm text-gray-400 leading-relaxed">Translate to 30+ languages while preserving tone and meaning.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- How It Works -->
+  <section class="bg-dark-card/50 py-24">
+    <div class="mx-auto max-w-7xl px-6">
+      <!-- Header -->
+      <div class="text-center mb-16">
+        <h2 class="text-4xl md:text-5xl font-bold tracking-tight">How It Works</h2>
+        <p class="mt-4 text-lg text-gray-400 max-w-2xl mx-auto">
+          Three simple steps to better writing.
+        </p>
+      </div>
+      <!-- Steps -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <div class="text-center">
+          <div class="mx-auto flex items-center justify-center w-14 h-14 rounded-full bg-brand-400 text-white text-xl font-bold mb-6">
+            1
+          </div>
+          <h3 class="text-xl font-semibold text-white mb-3">Select Text</h3>
+          <p class="text-gray-400 leading-relaxed">Highlight any text in any app — messages, emails, documents, social media.</p>
+        </div>
+        <div class="text-center">
+          <div class="mx-auto flex items-center justify-center w-14 h-14 rounded-full bg-brand-400 text-white text-xl font-bold mb-6">
+            2
+          </div>
+          <h3 class="text-xl font-semibold text-white mb-3">Pick a Tone</h3>
+          <p class="text-gray-400 leading-relaxed">Choose from 6 tones: Simple, Natural, Polished, Concise, Technical, or Translate.</p>
+        </div>
+        <div class="text-center">
+          <div class="mx-auto flex items-center justify-center w-14 h-14 rounded-full bg-brand-400 text-white text-xl font-bold mb-6">
+            3
+          </div>
+          <h3 class="text-xl font-semibold text-white mb-3">Get Your Rewrite</h3>
+          <p class="text-gray-400 leading-relaxed">See the improved version instantly. Replace the original, copy, or undo.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Two Ways to Use -->
+  <section class="py-24">
+    <div class="mx-auto max-w-7xl px-6">
+      <!-- Header -->
+      <div class="text-center mb-16">
+        <h2 class="text-4xl md:text-5xl font-bold tracking-tight">Two Ways to Use</h2>
+        <p class="mt-4 text-lg text-gray-400 max-w-2xl mx-auto">
+          Choose the method that fits your workflow.
+        </p>
+      </div>
+      <!-- Grid -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <!-- Keyboard -->
+        <div class="rounded-2xl border border-dark-border bg-dark-card p-8">
+          <div class="text-4xl mb-4">&#9000;&#65039;</div>
+          <h3 class="text-2xl font-bold text-white mb-3">Keyboard Extension</h3>
+          <p class="text-gray-400 leading-relaxed">
+            Full QWERTY keyboard with a built-in AI toolbar. Type and rewrite without leaving the app — Grammarly-style integration. Available on iOS and Android.
+          </p>
+        </div>
+        <!-- Share Sheet -->
+        <div class="rounded-2xl border border-dark-border bg-dark-card p-8">
+          <div class="text-4xl mb-4">&#128228;</div>
+          <h3 class="text-2xl font-bold text-white mb-3">Share Sheet</h3>
+          <p class="text-gray-400 leading-relaxed">
+            Keep your default keyboard. Select text, tap Share, choose DraftRight, and get your rewrite. Available on iOS.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Playground -->
+  <Playground client:load />
+
+  <!-- Pricing -->
+  <Pricing />
+
+  <!-- Download -->
+  <DownloadCTA />
+</BaseLayout>

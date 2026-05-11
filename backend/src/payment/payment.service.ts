@@ -10,6 +10,7 @@ import { MomoStrategy } from './strategies/momo.strategy';
 import { PlansService } from '../plans/plans.service';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { User } from '../users/entities/user.entity';
+import { AppSettings } from '../admin/entities/app-settings.entity';
 import { randomBytes } from 'crypto';
 
 @Injectable()
@@ -36,6 +37,8 @@ export class PaymentService {
     private readonly paymentRepo: Repository<Payment>,
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
+    @InjectRepository(AppSettings)
+    private readonly settingsRepo: Repository<AppSettings>,
     private readonly plansService: PlansService,
     private readonly subscriptionsService: SubscriptionsService,
     private readonly stripeStrategy: StripeStrategy,
@@ -278,18 +281,43 @@ export class PaymentService {
 
   // --- Generic: list payments (admin) ---
 
-  async findAll(options: { page?: number; limit?: number; status?: string }): Promise<{ payments: Payment[]; total: number }> {
-    const { page = 1, limit = 20, status } = options;
-    const where: any = {};
-    if (status) where.status = status;
+  async findAll(options: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    search?: string;
+    sort_by?: string;
+    sort_order?: 'ASC' | 'DESC';
+  }): Promise<{ payments: Payment[]; total: number }> {
+    const { page = 1, limit = 20, status, search, sort_by, sort_order } = options;
 
-    const [payments, total] = await this.paymentRepo.findAndCount({
-      where,
-      relations: ['user', 'plan'],
-      order: { created_at: 'DESC' },
-      skip: (page - 1) * limit,
-      take: limit,
-    });
+    const qb = this.paymentRepo.createQueryBuilder('payment')
+      .leftJoinAndSelect('payment.user', 'user')
+      .leftJoinAndSelect('payment.plan', 'plan');
+
+    if (status) qb.andWhere('payment.status = :status', { status });
+
+    if (search?.trim()) {
+      const term = `%${search.trim()}%`;
+      qb.andWhere(
+        '(payment.reference_code ILIKE :s OR user.email ILIKE :s OR user.name ILIKE :s OR plan.name ILIKE :s OR payment.method ILIKE :s)',
+        { s: term },
+      );
+    }
+
+    const sortMap: Record<string, string> = {
+      reference_code: 'payment.reference_code',
+      amount: 'payment.amount',
+      method: 'payment.method',
+      status: 'payment.status',
+      created_at: 'payment.created_at',
+      'user.email': 'user.email',
+    };
+    const sortField = (sort_by && sortMap[sort_by]) || 'payment.created_at';
+    qb.orderBy(sortField, sort_order === 'ASC' ? 'ASC' : 'DESC');
+
+    qb.skip((page - 1) * limit).take(limit);
+    const [payments, total] = await qb.getManyAndCount();
     return { payments, total };
   }
 
@@ -314,6 +342,83 @@ export class PaymentService {
       .where('status = :status AND expires_at < NOW()', { status: PaymentStatus.PENDING })
       .execute();
     return result.affected || 0;
+  }
+
+  // --- Refund (admin) ---
+
+  /**
+   * Issue a refund for a Stripe payment + cancel the linked subscription so
+   * the user loses access immediately. Only Stripe is supported (the only
+   * provider with subscriptions in Phase 3a).
+   *
+   * Idempotent-ish: re-running on a refunded payment is a no-op (returns the
+   * existing row). Stripe refunds can fail silently if the charge is too old
+   * (>180 days) or partially refunded — caller should surface error message.
+   */
+  async refund(paymentId: string, reason?: string): Promise<Payment> {
+    const payment = await this.paymentRepo.findOne({
+      where: { id: paymentId },
+      relations: ['plan'],
+    });
+    if (!payment) throw new NotFoundException('Payment not found');
+    if (payment.status === PaymentStatus.REFUNDED) return payment;
+    if (payment.status !== PaymentStatus.COMPLETED) {
+      throw new BadRequestException('Only completed payments can be refunded');
+    }
+    if (payment.method !== PaymentMethod.STRIPE) {
+      throw new BadRequestException(`Refund not supported for method '${payment.method}'`);
+    }
+
+    const settings = await this.settingsRepo.findOne({ where: {} });
+    const secretKey = settings?.stripe_secret_key || process.env.STRIPE_SECRET_KEY;
+    if (!secretKey) throw new BadRequestException('Stripe secret_key is not configured');
+
+    const Stripe = (await import('stripe')).default;
+    const stripe = new Stripe(secretKey);
+
+    // Find the matching Stripe subscription via subscriptions table.
+    // store_transaction_id holds sub_XXXX after checkout.session.completed webhook.
+    const sub = await this.subscriptionsService.findLatestStripeForUserPlan(payment.user_id, payment.plan_id);
+    const stripeSubId = sub?.store_transaction_id;
+
+    // Refund the charge. If we have the subscription, refund the latest invoice's charge.
+    // Otherwise we need a charge_id, which we don't store — fall back to listing charges
+    // by customer.
+    let refundedCharge: string | undefined;
+    if (stripeSubId) {
+      const subObj: any = await stripe.subscriptions.retrieve(stripeSubId, { expand: ['latest_invoice'] });
+      const invoiceObj: any = subObj.latest_invoice;
+      const chargeId = invoiceObj?.charge || invoiceObj?.payments?.data?.[0]?.payment?.charge;
+      if (chargeId) {
+        const refund = await stripe.refunds.create({ charge: chargeId, reason: reason as any });
+        refundedCharge = refund.id;
+        this.logger.log(`Refunded charge ${chargeId} → refund ${refund.id} for payment ${paymentId}`);
+      } else {
+        this.logger.warn(`No charge found on latest invoice for sub ${stripeSubId}; skipping Stripe refund`);
+      }
+      // Cancel the subscription immediately. (cancel_at_period_end=false; access ends now.)
+      try {
+        await stripe.subscriptions.cancel(stripeSubId);
+        this.logger.log(`Cancelled Stripe sub ${stripeSubId} for payment ${paymentId}`);
+      } catch (err: any) {
+        this.logger.warn(`Stripe sub cancel failed for ${stripeSubId}: ${err.message}`);
+      }
+    } else {
+      this.logger.warn(`No Stripe subscription linked to payment ${paymentId}; refunding metadata only`);
+    }
+
+    payment.status = PaymentStatus.REFUNDED;
+    payment.notes = [payment.notes, `Refunded by admin${reason ? ` (${reason})` : ''}${refundedCharge ? ` — Stripe refund ${refundedCharge}` : ''}`]
+      .filter(Boolean)
+      .join(' | ');
+    await this.paymentRepo.save(payment);
+
+    // Mark our subscription cancelled so quota guard demotes user.
+    if (stripeSubId) {
+      await this.subscriptionsService.cancelByStripeSubId(stripeSubId);
+    }
+
+    return payment;
   }
 
   // --- Stats ---

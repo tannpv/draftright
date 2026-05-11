@@ -480,6 +480,7 @@ public class App : Application
         menu.Items.Add(_statusMenuItem);
         menu.Items.Add(new WinForms.ToolStripSeparator());
         menu.Items.Add("Settings", null, (_, _) => OpenSettings());
+        menu.Items.Add("Report a bug…", null, (_, _) => Views.ReportBugDialog.Show(_hwnd));
         menu.Items.Add(new WinForms.ToolStripSeparator());
         menu.Items.Add("Sign Out", null, (_, _) => { Auth.ClearTokens(); Api.ClearToken(); });
         menu.Items.Add("Quit", null, (_, _) => DoQuit());
@@ -1289,6 +1290,23 @@ internal static class SettingsFormBuilder
             }
         };
         tab.Controls.Add(clearBtn);
+        y += 48;
+
+        // ── Feedback section ────────────────────────────────
+        tab.Controls.Add(MakeSectionHeader("Feedback", y));
+        y += 30;
+        tab.Controls.Add(new WinForms.Label
+        {
+            Text = "Found a bug? Send us a description and an optional screenshot.",
+            ForeColor = TextMuted,
+            Font = new Font("Segoe UI", 9),
+            Location = new Point(16, y),
+            Size = new Size(448, 36),
+        });
+        y += 40;
+        var bugBtn = MakeSecondaryButton("🐛  Report a bug", 16, y, 200);
+        bugBtn.Click += (_, _) => Views.ReportBugDialog.Show();
+        tab.Controls.Add(bugBtn);
 
         return tab;
     }

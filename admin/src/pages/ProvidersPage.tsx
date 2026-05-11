@@ -51,22 +51,42 @@ export default function ProvidersPage() {
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
 
+  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [total, setTotal] = useState(0);
+  const [sortBy, setSortBy] = useState<string>('created_at');
+  const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('DESC');
+
   const fetchProviders = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await apiFetch('/admin/ai-providers') as Provider[];
-      setProviders(Array.isArray(data) ? data : []);
+      const params = new URLSearchParams({
+        page: String(page), limit: String(pageSize),
+        status: statusFilter, sort_by: sortBy, sort_order: sortOrder,
+      });
+      if (search) params.set('search', search);
+      const data = await apiFetch(`/admin/ai-providers/paginated?${params}`) as { rows: Provider[]; total: number };
+      setProviders(data.rows ?? []);
+      setTotal(data.total ?? 0);
       setError('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load providers');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page, pageSize, statusFilter, search, sortBy, sortOrder]);
 
   useEffect(() => {
     fetchProviders();
   }, [fetchProviders]);
+
+  useEffect(() => {
+    const t = setTimeout(() => { setSearch(searchInput); setPage(1); }, 300);
+    return () => clearTimeout(t);
+  }, [searchInput]);
 
   function openCreate() {
     setEditingProvider(null);
@@ -160,11 +180,13 @@ export default function ProvidersPage() {
     {
       header: 'Name',
       key: 'name',
+      sortKey: 'name',
       render: (row: Provider) => <span style={{ color: '#eaeff4', fontWeight: 600 }}>{row.name}</span>,
     },
     {
       header: 'Type',
       key: 'type',
+      sortKey: 'type',
       render: (row: Provider) => <span style={{ color: '#7c8fac', textTransform: 'capitalize' }}>{row.type}</span>,
     },
     {
@@ -179,6 +201,7 @@ export default function ProvidersPage() {
     {
       header: 'Model',
       key: 'model',
+      sortKey: 'model',
       render: (row: Provider) => (
         <span style={{ color: '#49beff', fontSize: 12, fontFamily: 'monospace' }}>{row.model}</span>
       ),
@@ -186,6 +209,7 @@ export default function ProvidersPage() {
     {
       header: 'Default',
       key: 'is_default',
+      sortKey: 'is_default',
       render: (row: Provider) =>
         row.is_default
           ? <span className="badge badge-primary">Default</span>
@@ -194,6 +218,7 @@ export default function ProvidersPage() {
     {
       header: 'Active',
       key: 'is_active',
+      sortKey: 'is_active',
       render: (row: Provider) => (
         <span className={`badge ${row.is_active ? 'badge-success' : 'badge-muted'}`}>
           {row.is_active ? 'Yes' : 'No'}
@@ -247,11 +272,58 @@ export default function ProvidersPage() {
 
       {error && <div className="alert-error" style={{ marginBottom: 16 }}>{error}</div>}
 
+      {/* Toolbar */}
+      <div style={{ display: 'flex', gap: 12, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+        <input
+          type="text"
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          placeholder="Search by name, type, or model..."
+          style={{
+            flex: '1 1 280px', maxWidth: 360,
+            padding: '8px 14px 8px 36px',
+            borderRadius: 7, border: '1px solid #333f55', background: '#202936',
+            color: '#eaeff4', fontSize: 13, fontFamily: 'inherit', outline: 'none',
+            backgroundImage: "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%237c8fac' stroke-width='2'><circle cx='11' cy='11' r='8'/><path d='M21 21l-4.35-4.35'/></svg>\")",
+            backgroundRepeat: 'no-repeat', backgroundPosition: '12px center',
+          }}
+        />
+        <div style={{ display: 'flex', gap: 4, padding: 4, background: '#202936', border: '1px solid #333f55', borderRadius: 7 }}>
+          {(['all','active','inactive'] as const).map((s) => (
+            <button
+              key={s}
+              onClick={() => { setStatusFilter(s); setPage(1); }}
+              style={{
+                padding: '6px 14px', borderRadius: 5, fontSize: 12, fontWeight: 600,
+                border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                background: statusFilter === s ? 'rgba(93,135,255,0.15)' : 'transparent',
+                color: statusFilter === s ? '#5d87ff' : '#7c8fac',
+                textTransform: 'capitalize',
+              }}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+        <span style={{ marginLeft: 'auto', color: '#7c8fac', fontSize: 12 }}>
+          {total > 0 ? `${total} ${total === 1 ? 'provider' : 'providers'}` : ''}
+        </span>
+      </div>
+
       <DataTable<Provider>
         columns={columns}
         rows={providers}
         loading={loading}
-        emptyMessage="No providers configured. Add one to get started."
+        page={page}
+        totalPages={Math.max(1, Math.ceil(total / pageSize))}
+        onPageChange={setPage}
+        total={total}
+        pageSize={pageSize}
+        onPageSizeChange={(s) => { setPageSize(s); setPage(1); }}
+        sortBy={sortBy}
+        sortOrder={sortOrder}
+        onSortChange={(by, order) => { setSortBy(by); setSortOrder(order); setPage(1); }}
+        emptyMessage={search || statusFilter !== 'all' ? 'No matches.' : 'No providers configured. Add one to get started.'}
       />
 
       {showModal && (

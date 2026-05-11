@@ -6,18 +6,16 @@ import { SubscriptionsService } from './subscriptions.service';
 import { SubscriptionsController } from './subscriptions.controller';
 import { SubscriptionsCron } from './subscriptions.cron';
 import { UsageModule } from '../usage/usage.module';
-import { EmailService } from '../email/email.service';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Subscription]),
     ScheduleModule.forRoot(), // safe to call multiple times across modules
     UsageModule,
+    // EmailService comes from the global EmailModule registered in app.module.
   ],
   controllers: [SubscriptionsController],
-  // EmailService is light enough to construct here without a full EmailModule import.
-  // If/when EmailModule grows (templates, queues), refactor to import the module.
-  providers: [SubscriptionsService, SubscriptionsCron, EmailService],
+  providers: [SubscriptionsService, SubscriptionsCron],
   exports: [SubscriptionsService],
 })
 export class SubscriptionsModule {}

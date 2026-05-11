@@ -31,6 +31,9 @@ export class AppSettings {
   @Column({ type: 'varchar', length: 500, default: '' })
   stripe_webhook_secret: string;
 
+  @Column({ type: 'varchar', length: 20, default: 'test' })
+  stripe_mode: string;
+
   // --- Payment: PayPal ---
   @Column({ type: 'varchar', length: 500, default: '' })
   paypal_client_id: string;
@@ -70,6 +73,16 @@ export class AppSettings {
 
   @Column({ type: 'varchar', length: 500, default: '' })
   sepay_api_key: string;
+
+  @Column({ type: 'varchar', length: 20, default: 'sandbox' })
+  sepay_mode: string;
+
+  // --- Email: Resend ---
+  @Column({ type: 'varchar', length: 500, default: '' })
+  resend_api_key: string;
+
+  @Column({ type: 'varchar', length: 200, default: 'DraftRight <noreply@draftright.info>' })
+  email_from: string;
 
   // --- Google OAuth ---
   @Column({ type: 'varchar', length: 500, default: '22951518033-gf853ftmf4emivffk0su2bik42j7cmai.apps.googleusercontent.com' })

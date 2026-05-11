@@ -40,15 +40,33 @@ export class UsersService {
     return this.usersRepo.count();
   }
 
-  async findAll(options: { search?: string; page?: number; limit?: number }): Promise<{ users: User[]; total: number }> {
-    const { search, page = 1, limit = 20 } = options;
+  async findAll(options: {
+    search?: string;
+    page?: number;
+    limit?: number;
+    status?: 'all' | 'active' | 'inactive';
+    sort_by?: string;
+    sort_order?: 'ASC' | 'DESC';
+  }): Promise<{ users: User[]; total: number }> {
+    const { search, page = 1, limit = 20, status, sort_by, sort_order } = options;
     const qb = this.usersRepo.createQueryBuilder('user');
 
     if (search) {
-      qb.where('user.email ILIKE :search OR user.name ILIKE :search', { search: `%${search}%` });
+      qb.andWhere('(user.email ILIKE :search OR user.name ILIKE :search)', { search: `%${search}%` });
+    }
+    if (status && status !== 'all') {
+      qb.andWhere('user.is_active = :is_active', { is_active: status === 'active' });
     }
 
-    qb.orderBy('user.created_at', 'DESC')
+    const sortMap: Record<string, string> = {
+      email: 'user.email',
+      name: 'user.name',
+      role: 'user.role',
+      is_active: 'user.is_active',
+      created_at: 'user.created_at',
+    };
+    const sortField = (sort_by && sortMap[sort_by]) || 'user.created_at';
+    qb.orderBy(sortField, sort_order === 'ASC' ? 'ASC' : 'DESC')
       .skip((page - 1) * limit)
       .take(limit);
 

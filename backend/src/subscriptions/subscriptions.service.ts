@@ -118,6 +118,17 @@ export class SubscriptionsService {
     return result.affected ?? 0;
   }
 
+  /**
+   * Find the most-recent Stripe subscription for a (user, plan) pair, regardless
+   * of status. Used by the admin refund flow to locate the sub_XXXX to cancel.
+   */
+  async findLatestStripeForUserPlan(userId: string, planId: string): Promise<Subscription | null> {
+    return this.subsRepo.findOne({
+      where: { user_id: userId, plan_id: planId, store_type: StoreType.STRIPE },
+      order: { created_at: 'DESC' },
+    });
+  }
+
   async findAllPaginated(options: { search?: string; page?: number; limit?: number }): Promise<{ subscriptions: Subscription[]; total: number }> {
     const { search, page = 1, limit = 20 } = options;
     const qb = this.subsRepo.createQueryBuilder('sub')

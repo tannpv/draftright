@@ -20,13 +20,16 @@ interface UsersResponse {
   total: number;
 }
 
-const LIMIT = 20;
-
 export default function UsersPage() {
   const navigate = useNavigate();
   const [users, setUsers] = useState<User[]>([]);
   const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [sortBy, setSortBy] = useState<string>('created_at');
+  const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('DESC');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -37,7 +40,10 @@ export default function UsersPage() {
       const params = new URLSearchParams({
         search,
         page: String(page),
-        limit: String(LIMIT),
+        limit: String(pageSize),
+        status: statusFilter,
+        sort_by: sortBy,
+        sort_order: sortOrder,
       });
       const data = await apiFetch(`/admin/users?${params}`) as UsersResponse;
       setUsers(data.users ?? []);
@@ -48,22 +54,22 @@ export default function UsersPage() {
     } finally {
       setLoading(false);
     }
-  }, [search, page]);
+  }, [search, page, pageSize, statusFilter, sortBy, sortOrder]);
 
   useEffect(() => {
     fetchUsers();
   }, [fetchUsers]);
 
-  const handleSearch = (value: string) => {
-    setSearch(value);
-    setPage(1);
-  };
+  useEffect(() => {
+    const t = setTimeout(() => { setSearch(searchInput); setPage(1); }, 300);
+    return () => clearTimeout(t);
+  }, [searchInput]);
 
-  const totalPages = Math.max(1, Math.ceil(total / LIMIT));
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   const columns = [
-    { header: 'Email', key: 'email' },
-    { header: 'Name', key: 'name' },
+    { header: 'Email', key: 'email', sortKey: 'email' },
+    { header: 'Name', key: 'name', sortKey: 'name' },
     {
       header: 'Plan',
       key: 'plan',
@@ -81,6 +87,7 @@ export default function UsersPage() {
     {
       header: 'Status',
       key: 'is_active',
+      sortKey: 'is_active',
       render: (row: User) => (
         <span className={`badge ${row.is_active ? 'badge-success' : 'badge-muted'}`}>
           {row.is_active ? 'Active' : 'Inactive'}
@@ -90,6 +97,7 @@ export default function UsersPage() {
     {
       header: 'Joined',
       key: 'created_at',
+      sortKey: 'created_at',
       render: (row: User) => (
         <span style={{ color: '#7c8fac' }}>
           {row.created_at ? new Date(row.created_at).toLocaleDateString() : '—'}
@@ -112,32 +120,43 @@ export default function UsersPage() {
         <div className="alert-error" style={{ marginBottom: 16 }}>{error}</div>
       )}
 
-      {/* Search bar */}
-      <div style={{ marginBottom: 16 }}>
-        <div style={{ position: 'relative', display: 'inline-block' }}>
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="#7c8fac"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}
-          >
-            <circle cx="11" cy="11" r="8" />
-            <line x1="21" y1="21" x2="16.65" y2="16.65" />
-          </svg>
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => handleSearch(e.target.value)}
-            placeholder="Search by email or name..."
-            className="dark-input"
-            style={{ paddingLeft: 36, width: 320 }}
-          />
+      {/* Toolbar */}
+      <div style={{ display: 'flex', gap: 12, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+        <input
+          type="text"
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          placeholder="Search by email or name..."
+          style={{
+            flex: '1 1 280px', maxWidth: 360,
+            padding: '8px 14px 8px 36px',
+            borderRadius: 7, border: '1px solid #333f55', background: '#202936',
+            color: '#eaeff4', fontSize: 13, fontFamily: 'inherit', outline: 'none',
+            backgroundImage: "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%237c8fac' stroke-width='2'><circle cx='11' cy='11' r='8'/><path d='M21 21l-4.35-4.35'/></svg>\")",
+            backgroundRepeat: 'no-repeat', backgroundPosition: '12px center',
+          }}
+        />
+        <div style={{ display: 'flex', gap: 4, padding: 4, background: '#202936', border: '1px solid #333f55', borderRadius: 7 }}>
+          {(['all','active','inactive'] as const).map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => { setStatusFilter(s); setPage(1); }}
+              style={{
+                padding: '6px 14px', borderRadius: 5, fontSize: 12, fontWeight: 600,
+                border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                background: statusFilter === s ? 'rgba(93,135,255,0.15)' : 'transparent',
+                color: statusFilter === s ? '#5d87ff' : '#7c8fac',
+                textTransform: 'capitalize',
+              }}
+            >
+              {s}
+            </button>
+          ))}
         </div>
+        <span style={{ marginLeft: 'auto', color: '#7c8fac', fontSize: 12 }}>
+          {total > 0 ? `${total} ${total === 1 ? 'user' : 'users'}` : ''}
+        </span>
       </div>
 
       <DataTable<User>
@@ -147,6 +166,12 @@ export default function UsersPage() {
         page={page}
         totalPages={totalPages}
         onPageChange={setPage}
+        total={total}
+        pageSize={pageSize}
+        onPageSizeChange={(s) => { setPageSize(s); setPage(1); }}
+        sortBy={sortBy}
+        sortOrder={sortOrder}
+        onSortChange={(by, order) => { setSortBy(by); setSortOrder(order); setPage(1); }}
         loading={loading}
         emptyMessage="No users found."
       />
