@@ -1,0 +1,137 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Floating bubble (Tier 1, no Accessibility Service):
+         SYSTEM_ALERT_WINDOW = draw the bubble over other apps.
+         FOREGROUND_SERVICE + FOREGROUND_SERVICE_SPECIAL_USE = keep the
+         service alive when the app is backgrounded so the bubble stays.
+         POST_NOTIFICATIONS = Android 13+ requires runtime grant for the
+         foreground-service notification. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Bug-report sheet (Settings → Report a bug) optionally attaches a
+         screenshot from the camera. Gallery access on Android 13+ uses
+         the system Photo Picker which doesn't require a permission. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+
+    <!-- DraftRight does not use advertising IDs. The AD_ID permission gets
+         auto-merged in by Google Play Services / google_sign_in / Facebook
+         SDK transitive deps even though we don't actually read the
+         identifier. Remove it from the merged manifest so Play Console's
+         Data Safety stays accurate and reviewers don't flag undeclared
+         AD_ID usage. -->
+    <uses-permission
+        android:name="com.google.android.gms.permission.AD_ID"
+        tools:node="remove" />
+    <application
+        android:label="DraftRight V2"
+        android:name="${applicationName}"
+        android:icon="@mipmap/ic_launcher">
+        <activity
+            android:name="com.draftright.draftright_mobile.MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+            <!-- Specifies an Android theme to apply to this Activity as soon as
+                 the Android process has started. This theme is visible to the user
+                 while the Flutter UI initializes. After that, this theme continues
+                 to determine the Window background behind the Flutter UI. -->
+            <meta-data
+              android:name="io.flutter.embedding.android.NormalTheme"
+              android:resource="@style/NormalTheme"
+              />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+            <!-- ACTION_SEND for text/plain — appears in any app's Share sheet.
+                 Reliable on Samsung One UI / Xiaomi MIUI / Huawei EMUI, which
+                 strip third-party PROCESS_TEXT actions out of the long-press
+                 overflow.  User selects text → Share → DraftRight → tone
+                 picker → result auto-copied → paste back. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
+        <!-- Don't delete the meta-data below.
+             This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+
+        <service
+            android:name="com.draftright.keyboard.DraftRightIME"
+            android:label="DraftRight Keyboard"
+            android:permission="android.permission.BIND_INPUT_METHOD"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.view.InputMethod" />
+            </intent-filter>
+            <meta-data
+                android:name="android.view.im"
+                android:resource="@xml/method" />
+        </service>
+
+        <!-- PROCESS_TEXT activity: appears in the text-selection toolbar of any app.
+             User selects text → taps overflow menu → "DraftRight" → tone picker. -->
+        <activity
+            android:name="com.draftright.keyboard.ProcessTextActivity"
+            android:label="DraftRight"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.PROCESS_TEXT" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
+
+        <!-- Floating bubble service. Runs as foreground service with a
+             low-priority persistent notification while the user has the
+             bubble enabled. Tier 1 — overlay only, no Accessibility. -->
+        <service
+            android:name="com.draftright.draftright_mobile.FloatingBubbleService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Floating overlay button that opens DraftRight rewrite UI from any app, similar to chat-head bubbles." />
+        </service>
+    </application>
+    <!-- Android 11+ package visibility (https://developer.android.com/training/package-visibility).
+         Without these <queries> declarations, url_launcher's canLaunchUrl()
+         returns false because the app cannot "see" any browser / mail
+         client — links in About screen become silent no-ops.
+
+         PROCESS_TEXT is also queried (used by Flutter's ProcessTextPlugin
+         to enumerate available rewrite targets). -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT"/>
+            <data android:mimeType="text/plain"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="http" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SENDTO" />
+            <data android:scheme="mailto" />
+        </intent>
+    </queries>
+</manifest>

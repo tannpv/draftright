@@ -1,0 +1,7 @@
+package_name "com.draftright.draftright_mobile.v2"
+
+# Service-account JSON key. Path is relative to android/ (the dir
+# `bundle exec fastlane` is run from). Override with environment var
+# PLAY_CONSOLE_JSON_KEY_PATH if you keep the key outside the repo
+# tree (recommended — repos can be cloned, leaked, etc.).
+json_key_file ENV["PLAY_CONSOLE_JSON_KEY_PATH"] || "play-console-key.json"
