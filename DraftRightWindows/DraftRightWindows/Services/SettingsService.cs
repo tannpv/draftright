@@ -28,7 +28,7 @@ public sealed class SettingsService
     // ── Settings properties ─────────────────────────────────
 
     /// <summary>Backend API base URL.</summary>
-    public string BackendUrl { get; set; } = "https://api.draftright.info";
+    public string BackendUrl { get; set; } = Constants.DefaultBackendUrl;
 
     /// <summary>Win32 modifier flags for the global hotkey (MOD_CONTROL | MOD_SHIFT = 0x0006).</summary>
     public int HotkeyModifiers { get; set; } = 0x0002 | 0x0004; // Ctrl + Shift
