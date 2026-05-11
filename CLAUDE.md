@@ -100,7 +100,7 @@ Standard GitFlow — see `~/.claude/CLAUDE.md` for full rules.
 - Branch from `develop`: `feature/<description>-<YYYYMMDD>`
 - Commit prefixes: `feat:`, `fix:`, `chore:`, `docs:`
 - Never commit directly to `main` or `develop`
-- `DraftRightMobile/` is a git submodule — commit inside it separately
+- `DraftRightMobile/` is a plain directory in the monorepo (absorbed from the standalone repo via `git subtree` 2026-05-11). To pull future upstream changes, use `git subtree pull --prefix=DraftRightMobile draftrightmobile main`. The `draftrightmobile` remote stays configured for that purpose.
 
 ## Subdirectory Docs
 

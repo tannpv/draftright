@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Plan, BillingPeriod } from './entities/plan.entity';
+import { ListQuery, ListResult, applyListQuery } from '../common/list-query';
 
 @Injectable()
 export class PlansService {
@@ -12,6 +13,26 @@ export class PlansService {
 
   async findAll(): Promise<Plan[]> {
     return this.plansRepo.find({ order: { created_at: 'ASC' } });
+  }
+
+  async findAllPaginated(query: ListQuery): Promise<ListResult<Plan>> {
+    const qb = this.plansRepo.createQueryBuilder('plan');
+    return applyListQuery(
+      qb,
+      query,
+      ['plan.name', 'plan.currency', 'plan.billing_period'],
+      {
+        name: 'plan.name',
+        price: 'plan.price_cents',
+        currency: 'plan.currency',
+        billing_period: 'plan.billing_period',
+        trial_days: 'plan.trial_days',
+        is_active: 'plan.is_active',
+        created_at: 'plan.created_at',
+      },
+      'plan.created_at',
+      'plan.is_active',
+    );
   }
 
   async findById(id: string): Promise<Plan | null> {

@@ -14,6 +14,8 @@ import { PaymentModule } from './payment/payment.module';
 import { UpdatesModule } from './updates/updates.module';
 import { EmailModule } from './email/email.module';
 import { LemonsqueezyModule } from './lemonsqueezy/lemonsqueezy.module';
+import { ErrorsModule } from './errors/errors.module';
+import { BugReportsModule } from './bug-reports/bug-reports.module';
 
 @Module({
   imports: [
@@ -31,6 +33,8 @@ import { LemonsqueezyModule } from './lemonsqueezy/lemonsqueezy.module';
     PaymentModule,
     UpdatesModule,
     LemonsqueezyModule,
+    ErrorsModule,
+    BugReportsModule,
   ],
 })
 export class AppModule {}

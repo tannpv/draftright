@@ -31,7 +31,11 @@ public class UpdateService
 {
     private readonly string _currentVersion;
     private readonly string _backendUrl;
+    // Short-timeout client for the small JSON metadata fetch.
     private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(10) };
+    // Long-timeout client for the multi-hundred-MB installer download.
+    // 10 minutes lets us cover slow connections without indefinite hangs.
+    private readonly HttpClient _downloadHttp = new() { Timeout = TimeSpan.FromMinutes(10) };
     private DateTime _lastCheck = DateTime.MinValue;
     private const int CheckIntervalHours = 24;
 
@@ -152,7 +156,7 @@ public class UpdateService
             }
             var tempPath = Path.Combine(Path.GetTempPath(), urlFileName);
 
-            using var response = await _http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
+            using var response = await _downloadHttp.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
             response.EnsureSuccessStatusCode();
             var totalBytes = response.Content.Headers.ContentLength ?? -1;
 

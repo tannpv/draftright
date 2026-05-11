@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import ReportBugWidget from './ReportBugWidget';
 
 const API_URL = (typeof import.meta !== 'undefined' && import.meta.env?.PUBLIC_API_URL) || 'https://api.draftright.info';
 
@@ -321,6 +322,12 @@ export default function Playground() {
           </a>
         </div>
       )}
+
+      {/* Report Bug — playground footer (subtle, distinct from the marketing-site
+          floating widget that lives bottom-right). */}
+      <ReportBugWidget
+        playgroundState={() => ({ text, tone, sourceLanguage, targetLanguage, result })}
+      />
     </section>
   );
 }

@@ -1,0 +1,5 @@
+# App identity for Fastlane.
+# https://docs.fastlane.tools/advanced/Appfile/
+app_identifier("com.draftright.draftrightMobile.v2")
+team_id("Y8NWQK9BZJ")
+itc_team_id("2026596172")

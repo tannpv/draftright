@@ -1,0 +1,81 @@
+# Fastfile — DraftRight iOS automation
+# https://docs.fastlane.tools/actions/
+
+default_platform(:ios)
+
+# App Store Connect API key — same key used by every lane below.
+def asc_api_key
+  app_store_connect_api_key(
+    key_id: "W8U3VAS72T",
+    issuer_id: "88b3df44-6aa5-4157-9598-ef2aa366690b",
+    key_filepath: File.expand_path("~/Downloads/AuthKey_W8U3VAS72T.p8"),
+    duration: 1200,
+    in_house: false,
+  )
+end
+
+platform :ios do
+
+  # Push every metadata field + screenshots to App Store Connect *without*
+  # uploading a new build. Use this once you've already uploaded the .ipa
+  # via Xcode or Transporter and the build is processed.
+  desc "Sync metadata + screenshots, save as draft"
+  lane :metadata do
+    deliver(
+      api_key: asc_api_key,
+      submit_for_review: false,
+      automatic_release: false,
+      force: true,                # don't preview, just push
+      skip_binary_upload: true,
+      skip_screenshots: false,
+      skip_metadata: false,
+      precheck_include_in_app_purchases: false,
+    )
+  end
+
+  # Sync metadata + screenshots and submit for App Review.
+  desc "Sync metadata + screenshots, submit for review"
+  lane :submit do
+    deliver(
+      api_key: asc_api_key,
+      submit_for_review: true,
+      automatic_release: false,    # don't auto-publish on approval
+      force: true,
+      skip_binary_upload: true,
+      skip_screenshots: false,
+      skip_metadata: false,
+      precheck_include_in_app_purchases: false,
+      # All the yes/no declarations Apple requires before review.
+      # Defaults below match a productivity-app posture: no IDFA, no
+      # third-party content, no encryption beyond HTTPS, no health
+      # topics, no unrestricted web access (we only call our own API).
+      submission_information: {
+        add_id_info_uses_idfa: false,
+        export_compliance_uses_encryption: false,
+        export_compliance_encryption_updated: false,
+        content_rights_contains_third_party_content: false,
+        content_rights_has_rights: true,
+      },
+    )
+  end
+
+  # Future use: build the .ipa via gym and upload via deliver.
+  # Disabled by default until distribution cert is seeded in keychain.
+  desc "Build .ipa and upload to App Store Connect (full release)"
+  lane :release do
+    build_app(
+      workspace: "Runner.xcworkspace",
+      scheme: "Runner",
+      export_method: "app-store",
+      output_directory: "build/",
+      clean: true,
+    )
+    upload_to_app_store(
+      api_key: asc_api_key,
+      submit_for_review: true,
+      automatic_release: false,
+      force: true,
+      precheck_include_in_app_purchases: false,
+    )
+  end
+end

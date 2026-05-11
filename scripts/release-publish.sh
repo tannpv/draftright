@@ -128,9 +128,11 @@ if [ -n "$DB_PLATFORM" ]; then
   echo "==> Updating app_releases.$DB_PLATFORM in prod DB..."
   SQL_URL="https://draftright.info$URL"
   ssh draftright "sudo docker exec -i draftright-postgres-1 psql -U draftright -d draftright -v ON_ERROR_STOP=1 <<EOF
-INSERT INTO app_releases (platform, version, download_url, release_notes, required)
-VALUES ('$DB_PLATFORM', '$VERSION', '$SQL_URL', '', false)
-ON CONFLICT (platform) DO UPDATE SET
+-- Always writes the 'direct' channel row. Store-channel rows are managed
+-- via the admin Versions page (POST /admin/releases with channel=store).
+INSERT INTO app_releases (platform, channel, version, download_url, release_notes, required, enabled)
+VALUES ('$DB_PLATFORM', 'direct', '$VERSION', '$SQL_URL', '', false, true)
+ON CONFLICT (platform, channel) DO UPDATE SET
   version = EXCLUDED.version,
   download_url = EXCLUDED.download_url,
   updated_at = now();

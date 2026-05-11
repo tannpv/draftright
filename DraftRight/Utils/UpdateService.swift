@@ -167,8 +167,24 @@ final class UpdateService {
                     }
                 }
             )
-            let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: .main)
-            session.downloadTask(with: url).resume()
+            // Ephemeral config so we never serve a cached prior 404/HTML body
+            // (we hit this exact bug today: Caddy 28KB HTML was cached and
+            // re-served instead of the fresh DMG). Explicit long timeouts
+            // because the default request timeout is wedging at ~30s on some
+            // connections — much longer than the 1s real download time.
+            let config = URLSessionConfiguration.ephemeral
+            config.timeoutIntervalForRequest = 120
+            config.timeoutIntervalForResource = 600
+            config.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+            // Background queue for delegate callbacks — main is busy showing
+            // the progress sheet and was occasionally starving the timer.
+            let opQueue = OperationQueue()
+            opQueue.maxConcurrentOperationCount = 1
+            let session = URLSession(configuration: config, delegate: delegate, delegateQueue: opQueue)
+            var request = URLRequest(url: url)
+            request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+            session.downloadTask(with: request).resume()
+            DRLogger.log("Update download started: \(url.absoluteString)", category: .app)
         }
     }
 

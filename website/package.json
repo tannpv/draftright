@@ -1,0 +1,25 @@
+{
+  "name": "draftright-website",
+  "type": "module",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "astro dev",
+    "start": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "astro": "astro"
+  },
+  "dependencies": {
+    "@astrojs/react": "^5.0.2",
+    "@astrojs/tailwind": "^6.0.2",
+    "@tailwindcss/typography": "^0.5.15",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "astro": "^5.18.1",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "tailwindcss": "^3.4.19",
+    "typescript": "^5.9.3"
+  }
+}

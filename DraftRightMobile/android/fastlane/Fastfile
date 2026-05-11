@@ -1,0 +1,96 @@
+default_platform(:android)
+
+# DraftRight V2 — Google Play Console upload lanes.
+#
+# Prerequisites:
+#   1. Google Cloud service account with the Google Play Android Developer
+#      API enabled (https://console.cloud.google.com/apis/library/androidpublisher.googleapis.com).
+#   2. Service account invited to Play Console (Setup → API access) with
+#      role "Release Manager" (or "Admin") on app
+#      com.draftright.draftright_mobile.v2.
+#   3. Service-account JSON key downloaded and saved at
+#      android/play-console-key.json (path is gitignored — never commit).
+#      Or, set PLAY_CONSOLE_JSON_KEY_PATH env var to point elsewhere.
+#   4. AAB built first via:
+#        flutter build appbundle --release
+#      (run from DraftRightMobile/ root, NOT from android/)
+#
+# Usage from DraftRightMobile/android/:
+#   bundle install                 # one-time, installs fastlane gem
+#   bundle exec fastlane internal  # upload to Internal Testing
+#   bundle exec fastlane closed    # upload to Closed Testing (alpha)
+#   bundle exec fastlane production_draft  # production track, draft state
+#                                          # (must promote in Play Console UI)
+
+AAB_PATH = File.expand_path("../../build/app/outputs/bundle/release/app-release.aab", __dir__)
+
+platform :android do
+  before_all do
+    unless File.exist?(AAB_PATH)
+      UI.user_error!(
+        "AAB not found at #{AAB_PATH}. Build it first with " \
+        "`flutter build appbundle --release` from the DraftRightMobile/ root."
+      )
+    end
+  end
+
+  desc "Upload AAB to Internal Testing track (smallest blast radius)."
+  lane :internal do
+    upload_to_play_store(
+      aab: AAB_PATH,
+      track: "internal",
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+      skip_upload_changelogs: false,
+      release_status: "completed",
+    )
+    UI.success("Uploaded #{AAB_PATH} to Internal Testing.")
+  end
+
+  desc "Upload AAB to Closed Testing (legacy name: 'alpha')."
+  lane :closed do
+    upload_to_play_store(
+      aab: AAB_PATH,
+      track: "alpha",
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+      skip_upload_changelogs: false,
+      release_status: "completed",
+    )
+    UI.success("Uploaded #{AAB_PATH} to Closed Testing.")
+  end
+
+  desc "Upload AAB to Production track as a DRAFT (manual promote required)."
+  lane :production_draft do
+    upload_to_play_store(
+      aab: AAB_PATH,
+      track: "production",
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+      skip_upload_changelogs: false,
+      release_status: "draft",  # safe default — does NOT roll out automatically
+    )
+    UI.success(
+      "Uploaded #{AAB_PATH} to Production as a draft. " \
+      "Promote and roll out from Play Console → Production → Releases."
+    )
+  end
+
+  desc "Upload AAB to Production with a 10% staged rollout (use deliberately)."
+  lane :production_rollout_10 do
+    upload_to_play_store(
+      aab: AAB_PATH,
+      track: "production",
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+      skip_upload_changelogs: false,
+      release_status: "inProgress",
+      rollout: "0.1",
+    )
+    UI.success("Started 10% staged rollout of #{AAB_PATH} on Production.")
+  end
+end

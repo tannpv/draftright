@@ -108,9 +108,9 @@ final class BackendClient {
            httpResponse.statusCode == 401,
            !refreshToken.isEmpty {
             DRLogger.log("rewrite got 401 — attempting silent refresh + retry", category: .api)
-            if let pair = await refreshTokens(refreshToken: refreshToken, backendUrl: backendUrl) {
-                onTokensRefreshed?(pair.access, pair.refresh)
-                request.setValue("Bearer \(pair.access)", forHTTPHeaderField: "Authorization")
+            if case .success(let access, let refresh) = await refreshTokens(refreshToken: refreshToken, backendUrl: backendUrl) {
+                onTokensRefreshed?(access, refresh)
+                request.setValue("Bearer \(access)", forHTTPHeaderField: "Authorization")
                 do {
                     (data, response) = try await session.data(for: request)
                 } catch let error as URLError where error.code == .timedOut {
@@ -140,12 +140,21 @@ final class BackendClient {
         return decoded.rewritten_text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// POSTs to /auth/refresh with the refresh token. Returns new (access, refresh) on success, nil on failure.
+    /// Result of a refresh attempt. Distinguishes a server-rejected token (401)
+    /// from a transient failure (network, 5xx, malformed body) so the caller can
+    /// decide whether to wipe credentials or keep them and retry later.
+    enum RefreshResult {
+        case success(access: String, refresh: String)
+        case unauthorized        // backend explicitly rejected the token — safe to clear
+        case transient           // network / 5xx / decode error — DO NOT clear
+    }
+
+    /// POSTs to /auth/refresh with the refresh token.
     /// Caller is responsible for persisting the new tokens.
-    func refreshTokens(refreshToken: String, backendUrl: String) async -> (access: String, refresh: String)? {
-        guard !refreshToken.isEmpty else { return nil }
+    func refreshTokens(refreshToken: String, backendUrl: String) async -> RefreshResult {
+        guard !refreshToken.isEmpty else { return .unauthorized }
         let base = backendUrl.strippingTrailingSlash
-        guard let url = URL(string: "\(base)/auth/refresh") else { return nil }
+        guard let url = URL(string: "\(base)/auth/refresh") else { return .transient }
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -155,21 +164,30 @@ final class BackendClient {
 
         do {
             let (data, response) = try await session.data(for: request)
-            guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-                DRLogger.log("refreshTokens FAILED: HTTP \((response as? HTTPURLResponse)?.statusCode ?? -1)", category: .auth)
-                return nil
+            guard let http = response as? HTTPURLResponse else {
+                DRLogger.log("refreshTokens FAILED: non-HTTP response", category: .auth)
+                return .transient
             }
-            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let access = json["access_token"] as? String,
-                  let refresh = json["refresh_token"] as? String else {
-                DRLogger.log("refreshTokens FAILED: bad response shape", category: .auth)
-                return nil
+            switch http.statusCode {
+            case 200...299:
+                guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      let access = json["access_token"] as? String,
+                      let refresh = json["refresh_token"] as? String else {
+                    DRLogger.log("refreshTokens FAILED: bad response shape", category: .auth)
+                    return .transient
+                }
+                DRLogger.log("refreshTokens SUCCESS", category: .auth)
+                return .success(access: access, refresh: refresh)
+            case 401, 403:
+                DRLogger.log("refreshTokens UNAUTHORIZED: HTTP \(http.statusCode) — clearing", category: .auth)
+                return .unauthorized
+            default:
+                DRLogger.log("refreshTokens TRANSIENT: HTTP \(http.statusCode) — keeping tokens", category: .auth)
+                return .transient
             }
-            DRLogger.log("refreshTokens SUCCESS", category: .auth)
-            return (access, refresh)
         } catch {
-            DRLogger.log("refreshTokens FAILED: \(error.localizedDescription)", category: .auth)
-            return nil
+            DRLogger.log("refreshTokens TRANSIENT: \(error.localizedDescription) — keeping tokens", category: .auth)
+            return .transient
         }
     }
 

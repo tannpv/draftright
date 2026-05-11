@@ -1,10 +1,18 @@
 import { Entity, PrimaryColumn, Column, UpdateDateColumn } from 'typeorm';
 
 /**
- * One row per platform we publish on. Single source of truth for the
- * /updates/latest endpoint that the desktop apps poll. Updated by
- * `scripts/release-publish.sh` via the admin API — no backend rebuild
- * needed per release.
+ * One row per (platform, channel) we publish on. Two channels exist:
+ *   - 'direct' — sideload / website download (DMG, APK, EXE, tarball)
+ *   - 'store'  — Apple App Store, Google Play, Microsoft Store deep link
+ *
+ * Which one /updates/latest returns is controlled by the per-platform row
+ * in `app_release_policies.preferred`. Both channels can coexist; only one
+ * is exposed to clients at a time. A channel can be temporarily hidden by
+ * setting `enabled = false`.
+ *
+ * Updated by `scripts/release-publish.sh` (always writes the 'direct' row)
+ * and the admin portal Versions page (writes either channel). No backend
+ * rebuild needed per release.
  *
  * Platform values: 'mac' | 'windows' | 'linux' | 'android' | 'ios'
  */
@@ -12,6 +20,9 @@ import { Entity, PrimaryColumn, Column, UpdateDateColumn } from 'typeorm';
 export class AppRelease {
   @PrimaryColumn({ type: 'varchar', length: 20 })
   platform: string;
+
+  @PrimaryColumn({ type: 'varchar', length: 20, default: 'direct' })
+  channel: string;
 
   @Column({ type: 'varchar', length: 50 })
   version: string;
@@ -24,6 +35,9 @@ export class AppRelease {
 
   @Column({ type: 'boolean', default: false })
   required: boolean;
+
+  @Column({ type: 'boolean', default: true })
+  enabled: boolean;
 
   @UpdateDateColumn()
   updated_at: Date;

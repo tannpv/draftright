@@ -19,6 +19,18 @@ struct AdvancedSettingsTab: View {
                 .help("Force macOS to re-scan available services")
             }
 
+            Section(header: Text("Feedback")) {
+                Text("Hit a bug? Send us a description (and a screenshot if you have one) and we'll take a look.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Button("Report a Bug…") {
+                    BugReportPresenter.present(appModel: appModel)
+                }
+                .help("Open the bug report form")
+            }
+
             Section(header: Text("Logs")) {
                 Toggle("Enable Logging", isOn: $loggingEnabled)
                     .onChange(of: loggingEnabled) { DRLogger.isEnabled = $0 }
