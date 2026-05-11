@@ -1,11 +1,14 @@
 import { Injectable, UnauthorizedException, ConflictException, BadRequestException, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import { UsersService } from '../users/users.service';
 import { PlansService } from '../plans/plans.service';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { EmailService } from '../email/email.service';
 import { AuthProvider } from '../users/entities/user.entity';
+import { AppSettings } from '../admin/entities/app-settings.entity';
 
 @Injectable()
 export class AuthService {
@@ -17,22 +20,27 @@ export class AuthService {
     private readonly plansService: PlansService,
     private readonly subscriptionsService: SubscriptionsService,
     private readonly emailService: EmailService,
+    @InjectRepository(AppSettings)
+    private readonly settingsRepo: Repository<AppSettings>,
   ) {}
 
-  private generateTokens(user: { id: string; email: string; role: string }) {
+  private async generateTokens(user: { id: string; email: string; role: string }) {
     const payload = { sub: user.id, email: user.email, role: user.role };
+
+    // Token lifetimes are admin-configurable via AppSettings.
+    // Defaults match historical behavior: 15min access, 90d refresh.
+    const settings = await this.settingsRepo.findOne({ where: {} });
+    const accessMinutes = settings?.token_expiry_minutes ?? 15;
+    const refreshDays = settings?.refresh_token_expiry_days ?? 90;
 
     const access_token = this.jwtService.sign(payload, {
       secret: process.env.JWT_SECRET || 'dev-secret',
-      expiresIn: process.env.NODE_ENV === 'production' ? '15m' : '24h',
+      expiresIn: `${accessMinutes}m`,
     });
 
     const refresh_token = this.jwtService.sign(payload, {
       secret: process.env.JWT_REFRESH_SECRET || 'dev-refresh-secret',
-      // 90 days — industry-standard for "keep me signed in" UX.
-      // Refresh tokens rotate on each use, so active users stay signed in
-      // indefinitely. Only inactivity > 90 days forces re-login.
-      expiresIn: '90d',
+      expiresIn: `${refreshDays}d`,
     });
 
     return { access_token, refresh_token };
@@ -63,7 +71,7 @@ export class AuthService {
       this.logger.error(`Failed to send verification email to ${normalizedEmail}: ${err.message}`);
     });
 
-    const tokens = this.generateTokens(user);
+    const tokens = await this.generateTokens(user);
     return {
       ...tokens,
       user: { id: user.id, email: user.email, name: user.name, email_verified: false },
@@ -118,7 +126,7 @@ export class AuthService {
 
     if (!user.is_active) throw new UnauthorizedException('Account disabled');
 
-    const tokens = this.generateTokens(user);
+    const tokens = await this.generateTokens(user);
     return { ...tokens, user: { id: user.id, email: user.email, name: user.name } };
   }
 
@@ -129,7 +137,7 @@ export class AuthService {
       });
       const user = await this.usersService.findById(payload.sub);
       if (!user || !user.is_active) throw new UnauthorizedException();
-      return this.generateTokens(user);
+      return await this.generateTokens(user);
     } catch {
       throw new UnauthorizedException('Invalid refresh token');
     }
@@ -176,7 +184,7 @@ export class AuthService {
 
     if (!user || !user.is_active) throw new UnauthorizedException('Account disabled');
 
-    const tokens = this.generateTokens(user!);
+    const tokens = await this.generateTokens(user!);
     return { ...tokens, user: { id: user!.id, email: user!.email, name: user!.name } };
   }
 

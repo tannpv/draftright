@@ -1,15 +1,20 @@
-import { Controller, Get } from '@nestjs/common';
-import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { Controller, Get, Query } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { ReleasesService } from './releases.service';
 
 /**
  * Public endpoint polled by every desktop app's "Check for Updates" flow.
- * Aggregates the per-platform `app_releases` rows into the legacy response
- * shape so existing 2.1.x clients keep working.
+ *
+ * Reads each platform's `preferred` channel from `app_release_policies`
+ * and returns the corresponding (platform, channel) row from
+ * `app_releases`. Clients can override with `?channel=store|direct` for
+ * testing — e.g. previewing the store URL before flipping the toggle.
+ *
+ * Response shape preserved from 2.1.x clients.
  *
  * Updates flow: scripts/release-publish.sh → POST /admin/releases (with
  * admin JWT) → DB row updated → next /updates/latest call reflects it.
- * No backend rebuild, no container restart.
+ * Or admin Versions page → flip preferred → channel switches instantly.
  */
 @ApiTags('updates')
 @Controller('updates')
@@ -18,11 +23,11 @@ export class UpdatesController {
 
   @Get('latest')
   @ApiOperation({ summary: 'Get latest app version info per platform' })
-  async getLatest() {
-    const all = await this.releases.listAll();
+  @ApiQuery({ name: 'channel', required: false, enum: ['direct', 'store'] })
+  async getLatest(@Query('channel') channelOverride?: string) {
+    const all = await this.releases.listEffective(channelOverride);
     // Use mac's release_notes + required as the "envelope" notes/required
     // since the 2.1.x clients only show notes for their own platform anyway.
-    // Each platform-specific URL falls back to '' if no row.
     const mac = all.mac;
     return {
       version: mac?.version ?? '',
@@ -42,6 +47,7 @@ export class UpdatesController {
             url: v!.download_url,
             notes: v!.release_notes,
             required: v!.required,
+            channel: v!.channel,
             updated_at: v!.updated_at,
           }]),
       ),

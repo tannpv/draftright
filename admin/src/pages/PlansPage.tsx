@@ -11,6 +11,9 @@ interface Plan {
   price_cents: number;
   billing_period: string;
   is_active: boolean;
+  currency: string | null;
+  trial_days: number;
+  stripe_price_id: string | null;
   [key: string]: unknown;
 }
 
@@ -25,7 +28,16 @@ const emptyForm = {
   price_cents: '',
   billing_period: 'monthly',
   is_active: true,
+  currency: 'USD',
+  trial_days: '30',
+  stripe_price_id: '',
 };
+
+function formatPrice(cents: number, currency: string | null): string {
+  // VND: stored as whole VND (Stripe convention); USD: cents
+  if ((currency || 'USD') === 'USD') return `$${(cents / 100).toFixed(2)}`;
+  return `${cents.toLocaleString('en-US')} ${currency}`;
+}
 
 export default function PlansPage() {
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -38,22 +50,46 @@ export default function PlansPage() {
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
 
+  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [total, setTotal] = useState(0);
+  const [sortBy, setSortBy] = useState<string>('created_at');
+  const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('DESC');
+
   const fetchPlans = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await apiFetch('/admin/plans') as Plan[];
-      setPlans(Array.isArray(data) ? data : []);
+      const params = new URLSearchParams({
+        page: String(page),
+        limit: String(pageSize),
+        status: statusFilter,
+        sort_by: sortBy,
+        sort_order: sortOrder,
+      });
+      if (search) params.set('search', search);
+      const data = await apiFetch(`/admin/plans?${params}`) as { rows: Plan[]; total: number };
+      setPlans(data.rows ?? []);
+      setTotal(data.total ?? 0);
       setError('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load plans');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page, pageSize, statusFilter, search, sortBy, sortOrder]);
 
   useEffect(() => {
     fetchPlans();
   }, [fetchPlans]);
+
+  // Debounce search input → search state.
+  useEffect(() => {
+    const t = setTimeout(() => { setSearch(searchInput); setPage(1); }, 300);
+    return () => clearTimeout(t);
+  }, [searchInput]);
 
   function openCreate() {
     setEditingPlan(null);
@@ -69,6 +105,9 @@ export default function PlansPage() {
       price_cents: String(plan.price_cents),
       billing_period: plan.billing_period,
       is_active: plan.is_active,
+      currency: plan.currency || 'USD',
+      trial_days: String(plan.trial_days ?? 30),
+      stripe_price_id: plan.stripe_price_id || '',
     });
     setShowModal(true);
   }
@@ -81,6 +120,9 @@ export default function PlansPage() {
       price_cents: Number(form.price_cents),
       billing_period: form.billing_period,
       is_active: form.is_active,
+      currency: form.currency,
+      trial_days: Number(form.trial_days),
+      stripe_price_id: form.stripe_price_id || null,
     };
     try {
       if (editingPlan) {
@@ -120,6 +162,7 @@ export default function PlansPage() {
     {
       header: 'Name',
       key: 'name',
+      sortKey: 'name',
       render: (row: Plan) => <span style={{ color: '#eaeff4', fontWeight: 600 }}>{row.name}</span>,
     },
     {
@@ -130,18 +173,36 @@ export default function PlansPage() {
     {
       header: 'Price',
       key: 'price_cents',
+      sortKey: 'price',
       render: (row: Plan) => (
-        <span style={{ color: '#eaeff4', fontWeight: 600 }}>${(row.price_cents / 100).toFixed(2)}</span>
+        <span style={{ color: '#eaeff4', fontWeight: 600 }}>{formatPrice(row.price_cents, row.currency)}</span>
       ),
     },
     {
       header: 'Billing Period',
       key: 'billing_period',
+      sortKey: 'billing_period',
       render: (row: Plan) => <span style={{ color: '#7c8fac', textTransform: 'capitalize' as const }}>{row.billing_period}</span>,
+    },
+    {
+      header: 'Trial',
+      key: 'trial_days',
+      sortKey: 'trial_days',
+      render: (row: Plan) => <span style={{ color: '#7c8fac' }}>{row.trial_days || 0}d</span>,
+    },
+    {
+      header: 'Stripe Price',
+      key: 'stripe_price_id',
+      render: (row: Plan) => (
+        <span style={{ color: '#7c8fac', fontFamily: 'monospace', fontSize: 11 }}>
+          {row.stripe_price_id ? `${row.stripe_price_id.slice(0, 14)}…` : '—'}
+        </span>
+      ),
     },
     {
       header: 'Active',
       key: 'is_active',
+      sortKey: 'is_active',
       render: (row: Plan) => (
         <span className={`badge ${row.is_active ? 'badge-success' : 'badge-muted'}`}>
           {row.is_active ? 'Yes' : 'No'}
@@ -187,11 +248,58 @@ export default function PlansPage() {
 
       {error && <div className="alert-error" style={{ marginBottom: 16 }}>{error}</div>}
 
+      {/* Toolbar */}
+      <div style={{ display: 'flex', gap: 12, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+        <input
+          type="text"
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          placeholder="Search by name, currency, or billing period..."
+          style={{
+            flex: '1 1 280px', maxWidth: 360,
+            padding: '8px 14px 8px 36px',
+            borderRadius: 7, border: '1px solid #333f55', background: '#202936',
+            color: '#eaeff4', fontSize: 13, fontFamily: 'inherit', outline: 'none',
+            backgroundImage: "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%237c8fac' stroke-width='2'><circle cx='11' cy='11' r='8'/><path d='M21 21l-4.35-4.35'/></svg>\")",
+            backgroundRepeat: 'no-repeat', backgroundPosition: '12px center',
+          }}
+        />
+        <div style={{ display: 'flex', gap: 4, padding: 4, background: '#202936', border: '1px solid #333f55', borderRadius: 7 }}>
+          {(['all','active','inactive'] as const).map((s) => (
+            <button
+              key={s}
+              onClick={() => { setStatusFilter(s); setPage(1); }}
+              style={{
+                padding: '6px 14px', borderRadius: 5, fontSize: 12, fontWeight: 600,
+                border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                background: statusFilter === s ? 'rgba(93,135,255,0.15)' : 'transparent',
+                color: statusFilter === s ? '#5d87ff' : '#7c8fac',
+                textTransform: 'capitalize',
+              }}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+        <span style={{ marginLeft: 'auto', color: '#7c8fac', fontSize: 12 }}>
+          {total > 0 ? `${total} ${total === 1 ? 'plan' : 'plans'}` : ''}
+        </span>
+      </div>
+
       <DataTable<Plan>
         columns={columns}
         rows={plans}
         loading={loading}
-        emptyMessage="No plans found. Create one to get started."
+        page={page}
+        totalPages={Math.max(1, Math.ceil(total / pageSize))}
+        onPageChange={setPage}
+        total={total}
+        pageSize={pageSize}
+        onPageSizeChange={(s) => { setPageSize(s); setPage(1); }}
+        sortBy={sortBy}
+        sortOrder={sortOrder}
+        onSortChange={(by, order) => { setSortBy(by); setSortOrder(order); setPage(1); }}
+        emptyMessage={search || statusFilter !== 'all' ? 'No matches.' : 'No plans found. Create one to get started.'}
       />
 
       {showModal && (
@@ -233,28 +341,70 @@ export default function PlansPage() {
                 className="dark-input"
               />
             </div>
-            <div>
-              <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Price (cents)</label>
-              <input
-                type="number"
-                value={form.price_cents}
-                onChange={(e) => setForm({ ...form, price_cents: e.target.value })}
-                placeholder="e.g. 999 for $9.99"
-                min="0"
-                className="dark-input"
-              />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div>
+                <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Currency</label>
+                <select
+                  value={form.currency}
+                  onChange={(e) => setForm({ ...form, currency: e.target.value })}
+                  className="dark-input"
+                >
+                  <option value="USD">USD ($)</option>
+                  <option value="VND">VND (₫)</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>
+                  Price ({form.currency === 'USD' ? 'cents' : 'whole VND'})
+                </label>
+                <input
+                  type="number"
+                  value={form.price_cents}
+                  onChange={(e) => setForm({ ...form, price_cents: e.target.value })}
+                  placeholder={form.currency === 'USD' ? '499 for $4.99' : '99000 for ₫99,000'}
+                  min="0"
+                  className="dark-input"
+                />
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div>
+                <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Billing Period</label>
+                <select
+                  value={form.billing_period}
+                  onChange={(e) => setForm({ ...form, billing_period: e.target.value })}
+                  className="dark-input"
+                >
+                  <option value="none">None (Free)</option>
+                  <option value="monthly">Monthly</option>
+                  <option value="yearly">Yearly</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Trial Days</label>
+                <input
+                  type="number"
+                  value={form.trial_days}
+                  onChange={(e) => setForm({ ...form, trial_days: e.target.value })}
+                  placeholder="0 = no trial"
+                  min="0"
+                  className="dark-input"
+                />
+              </div>
             </div>
             <div>
-              <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Billing Period</label>
-              <select
-                value={form.billing_period}
-                onChange={(e) => setForm({ ...form, billing_period: e.target.value })}
+              <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Stripe Price ID</label>
+              <input
+                type="text"
+                value={form.stripe_price_id}
+                onChange={(e) => setForm({ ...form, stripe_price_id: e.target.value })}
+                placeholder="price_1XXXX (leave blank to auto-create)"
                 className="dark-input"
-              >
-                <option value="none">None (Free)</option>
-                <option value="monthly">Monthly</option>
-                <option value="yearly">Yearly</option>
-              </select>
+                style={{ fontFamily: 'monospace', fontSize: 12 }}
+              />
+              <p style={{ color: '#7c8fac', fontSize: 11, margin: '6px 0 0' }}>
+                Run <code>scripts/sync-stripe-prices.js</code> after editing price to mint a fresh Stripe Price.
+              </p>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <input

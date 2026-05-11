@@ -21,6 +21,14 @@ import * as bcrypt from 'bcryptjs';
 import { GrantSubscriptionDto } from './dto/grant-subscription.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { ReleasesService } from '../updates/releases.service';
+import { PoliciesService } from '../updates/policies.service';
+import { ErrorsService } from '../errors/errors.service';
+import { FixProposalCron } from '../errors/fix-proposal.cron';
+import { EmailService } from '../email/email.service';
+import { parseListQuery, applyListQuery } from '../common/list-query';
+import { BugReportsService } from '../bug-reports/bug-reports.service';
+import { createReadStream } from 'fs';
+import { promises as fsp } from 'fs';
 
 @ApiTags('admin')
 @ApiBearerAuth()
@@ -41,7 +49,229 @@ export class AdminController {
     private readonly adminUserRepo: Repository<AdminUser>,
     private readonly paymentService: PaymentService,
     private readonly releasesService: ReleasesService,
+    private readonly policiesService: PoliciesService,
+    private readonly errorsService: ErrorsService,
+    private readonly fixProposalCron: FixProposalCron,
+    private readonly emailService: EmailService,
+    private readonly bugReportsService: BugReportsService,
   ) {}
+
+  // --- Bug reports (user-submitted feedback from any client) ---
+
+  @Get('bug-reports')
+  async listBugReports(@Query() q: Record<string, unknown>) {
+    const query = parseListQuery(q);
+    const status = typeof q.status === 'string' ? q.status : undefined;
+    // The list-query helper's `status` is the is_active filter; bug
+    // reports use a workflow status string (new/reviewing/...) so we
+    // strip it from the ListQuery and pass it as a separate field.
+    return this.bugReportsService.findAllPaginated({
+      ...query,
+      status: status as any,
+    });
+  }
+
+  @Get('bug-reports/:id')
+  async getBugReport(@Param('id') id: string) {
+    return this.bugReportsService.findById(id);
+  }
+
+  @Get('bug-reports/:id/screenshot')
+  async getBugReportScreenshot(
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    const result = await this.bugReportsService.getScreenshotPath(id);
+    if (!result) {
+      throw new BadRequestException('no screenshot for this report');
+    }
+    try {
+      await fsp.access(result.path);
+    } catch {
+      throw new BadRequestException('screenshot file missing on disk');
+    }
+    const ext = result.path.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
+    res.setHeader('Content-Type', ext);
+    res.setHeader(
+      'Content-Disposition',
+      `inline; filename="${result.filename.replace(/[^\w.\-]/g, '_')}"`,
+    );
+    createReadStream(result.path).pipe(res);
+  }
+
+  @Patch('bug-reports/:id')
+  async updateBugReport(
+    @Param('id') id: string,
+    @Body() body: { status?: string; admin_notes?: string },
+  ) {
+    return this.bugReportsService.update(id, body);
+  }
+
+  @Delete('bug-reports/:id')
+  async deleteBugReport(@Param('id') id: string) {
+    await this.bugReportsService.delete(id);
+    return { success: true };
+  }
+
+  /**
+   * Manually trigger an AI fix-proposal for one bug. Useful when you
+   * want analysis right now instead of waiting for the hourly cron.
+   */
+  @Post('bug-reports/:id/fix-proposal')
+  async suggestBugFix(@Param('id') id: string) {
+    return this.bugReportsService.suggestFix(id);
+  }
+
+  /**
+   * Unified inbox — merges error_reports + bug_reports into one
+   * time-sorted feed. Powers the admin /inbox page.
+   *
+   * Query params:
+   *   ?kind=error|bug   filter to one source
+   *   ?status=open      'open' = not resolved (status<4 for errors, status not in {resolved, wont_fix} for bugs)
+   *   ?limit=50         default 50, max 100
+   */
+  @Get('inbox')
+  async listInbox(
+    @Query('kind') kind?: string,
+    @Query('status') status?: string,
+    @Query('limit') limitStr?: string,
+  ) {
+    const limit = Math.min(parseInt(limitStr || '50', 10) || 50, 100);
+    const wantErrors = kind !== 'bug';
+    const wantBugs = kind !== 'error';
+    const openOnly = status === 'open';
+
+    const errorRows = wantErrors
+      ? await this.errorsService.list({
+          status: openOnly ? 0 : undefined,
+          limit,
+          offset: 0,
+        })
+      : { items: [], total: 0 };
+
+    const bugRows = wantBugs
+      ? await this.bugReportsService.findAllPaginated({
+          page: 1,
+          limit,
+          status: openOnly ? 'new' : undefined,
+          sort_by: 'created_at',
+          sort_order: 'DESC',
+        } as any)
+      : { rows: [], total: 0 };
+
+    type InboxItem = {
+      kind: 'error' | 'bug';
+      id: string;
+      title: string;
+      platform: string | null;
+      app_version: string | null;
+      status: string;
+      created_at: Date;
+      ai_fix_proposal: string | null;
+      // Kind-specific extras (so the UI can deep-link without another fetch)
+      error_type?: string | null;
+      severity?: string | null;
+      occurrence_count?: number;
+      user_email?: string | null;
+      has_screenshot?: boolean;
+    };
+
+    const errorItems: InboxItem[] = (errorRows.items as any[]).map(e => ({
+      kind: 'error',
+      id: e.id,
+      title: [e.error_type, e.message].filter(Boolean).join(': ').slice(0, 200) || '(no message)',
+      platform: e.platform ?? null,
+      app_version: e.app_version ?? null,
+      status: this.errorStatusLabel(e.status),
+      created_at: e.last_seen_at ?? e.first_seen_at ?? e.created_at,
+      ai_fix_proposal: e.ai_fix_proposal ?? null,
+      error_type: e.error_type ?? null,
+      severity: e.severity ?? null,
+      occurrence_count: e.count ?? 0,
+    }));
+
+    const bugItems: InboxItem[] = (bugRows.rows as any[]).map(b => ({
+      kind: 'bug',
+      id: b.id,
+      title: (b.description ?? '').slice(0, 200) || '(no description)',
+      platform: b.os_info ?? null,
+      app_version: b.app_version ?? null,
+      status: b.status,
+      created_at: b.created_at,
+      ai_fix_proposal: b.ai_fix_proposal ?? null,
+      user_email: b.user_email ?? null,
+      has_screenshot: !!b.screenshot_path,
+    }));
+
+    const merged = [...errorItems, ...bugItems]
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .slice(0, limit);
+
+    return {
+      items: merged,
+      counts: {
+        errors: errorRows.total,
+        bugs: bugRows.total,
+        returned: merged.length,
+      },
+    };
+  }
+
+  private errorStatusLabel(s: number): string {
+    // Mirrors the int-enum used by error_reports.status
+    return ['new', 'reviewing', 'resolved', 'fix_proposed', 'resolved', 'wont_fix'][s] ?? 'new';
+  }
+
+  // --- Error reports (Sentry-equivalent — collects bugs from all clients) ---
+
+  @Get('errors')
+  async listErrors(
+    @Query('platform') platform?: string,
+    @Query('status') status?: string,
+    @Query('severity') severity?: string,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    return this.errorsService.list({
+      platform,
+      status: status !== undefined ? Number(status) : undefined,
+      severity,
+      limit: limit ? Number(limit) : undefined,
+      offset: offset ? Number(offset) : undefined,
+    });
+  }
+
+  @Get('errors/:id')
+  async getError(@Param('id') id: string) {
+    const row = await this.errorsService.getOne(id);
+    if (!row) throw new BadRequestException('not found');
+    return row;
+  }
+
+  @Patch('errors/:id')
+  async updateErrorStatus(
+    @Param('id') id: string,
+    @Body() body: { status: number; resolved_by?: string },
+  ) {
+    if (body.status === undefined) {
+      throw new BadRequestException('status required');
+    }
+    return this.errorsService.setStatus(id, body.status, body.resolved_by);
+  }
+
+  @Post('errors/:id/suggest-fix')
+  async suggestFix(@Param('id') id: string) {
+    return this.errorsService.suggestFix(id);
+  }
+
+  @Post('errors/run-ai-cron')
+  async runFixProposalCron() {
+    // Manual trigger for the hourly cron — useful for testing or
+    // burning through a backlog without waiting for the schedule.
+    await this.fixProposalCron.run();
+    return { ok: true };
+  }
 
   // --- App releases (Mac/Windows/Linux/Android/iOS update channel) ---
 
@@ -50,23 +280,43 @@ export class AdminController {
     return this.releasesService.listAll();
   }
 
+  /**
+   * Backwards-compat: existing release-publish.sh script POSTs without
+   * a `channel` field. Defaults to 'direct'.
+   */
   @Post('releases')
   async upsertRelease(@Body() body: {
     platform: string;
+    channel?: string;
     version: string;
     download_url: string;
     release_notes?: string;
     required?: boolean;
+    enabled?: boolean;
   }) {
-    if (!['mac', 'windows', 'linux', 'android', 'ios'].includes(body.platform)) {
-      throw new BadRequestException(
-        `platform must be one of: mac, windows, linux, android, ios`,
-      );
-    }
-    if (!body.version || !body.download_url) {
-      throw new BadRequestException('version and download_url are required');
-    }
-    return this.releasesService.upsert(body);
+    return this.releasesService.upsertChannel({
+      ...body,
+      channel: body.channel ?? 'direct',
+    });
+  }
+
+  @Delete('releases/:platform/:channel')
+  async deleteRelease(
+    @Param('platform') platform: string,
+    @Param('channel') channel: string,
+  ) {
+    await this.releasesService.deleteChannel(platform, channel);
+    return { ok: true };
+  }
+
+  @Post('release-policies')
+  async upsertPolicy(@Body() body: {
+    platform: string;
+    preferred?: string;
+    store_status?: string;
+    notes?: string;
+  }) {
+    return this.policiesService.upsert(body);
   }
 
   // --- Settings ---
@@ -92,6 +342,15 @@ export class AdminController {
     return this.settingsRepo.findOne({ where: { id: settings.id } });
   }
 
+  @Post('settings/test-email')
+  async sendTestEmail(@Body() body: { to: string }) {
+    if (!body?.to || !body.to.includes('@')) {
+      throw new Error('Valid recipient email required');
+    }
+    await this.emailService.sendTestEmail(body.to);
+    return { sent: true, to: body.to };
+  }
+
   @Get('stats')
   async getStats() {
     const [total_users, active_subscriptions, rewrites_today, rewrites_this_month] = await Promise.all([
@@ -104,9 +363,21 @@ export class AdminController {
   }
 
   @Get('users')
-  async listUsers(@Query('search') search?: string, @Query('page') page?: string, @Query('limit') limit?: string) {
+  async listUsers(
+    @Query('search') search?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('status') status?: string,
+    @Query('sort_by') sort_by?: string,
+    @Query('sort_order') sort_order?: string,
+  ) {
     const result = await this.usersService.findAll({
-      search, page: page ? parseInt(page) : 1, limit: limit ? parseInt(limit) : 20,
+      search,
+      page: page ? parseInt(page) : 1,
+      limit: limit ? parseInt(limit) : 20,
+      status: (status === 'active' || status === 'inactive' || status === 'all') ? status : undefined,
+      sort_by,
+      sort_order: sort_order?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC',
     });
     const usersWithSubs = await Promise.all(
       result.users.map(async (user) => {
@@ -137,15 +408,21 @@ export class AdminController {
   }
 
   @Get('plans')
-  async listPlans() { return this.plansService.findAll(); }
+  async listPlans(@Query() q: Record<string, unknown>) {
+    // If no query params provided, fall back to legacy unpaginated response (used elsewhere e.g. UserDetailPage).
+    if (!q || (q.page === undefined && q.search === undefined && q.status === undefined && q.sort_by === undefined)) {
+      return this.plansService.findAll();
+    }
+    return this.plansService.findAllPaginated(parseListQuery(q));
+  }
 
   @Post('plans')
-  async createPlan(@Body() body: { name: string; daily_limit: number; price_cents: number; billing_period: string }) {
+  async createPlan(@Body() body: { name: string; daily_limit: number; price_cents: number; billing_period: string; currency?: string; trial_days?: number; stripe_price_id?: string }) {
     return this.plansService.create(body as any);
   }
 
   @Patch('plans/:id')
-  async updatePlan(@Param('id') id: string, @Body() body: Partial<{ name: string; daily_limit: number; price_cents: number; billing_period: string; is_active: boolean }>) {
+  async updatePlan(@Param('id') id: string, @Body() body: Partial<{ name: string; daily_limit: number; price_cents: number; billing_period: string; is_active: boolean; currency: string; trial_days: number; stripe_price_id: string }>) {
     return this.plansService.update(id, body as any);
   }
 
@@ -153,6 +430,11 @@ export class AdminController {
   async deletePlan(@Param('id') id: string) {
     await this.plansService.softDelete(id);
     return { success: true };
+  }
+
+  @Get('ai-providers/paginated')
+  async listProvidersPaginated(@Query() q: Record<string, unknown>) {
+    return this.aiProvidersService.findAllPaginated(parseListQuery(q));
   }
 
   @Get('ai-providers')
@@ -288,11 +570,21 @@ export class AdminController {
   }
 
   @Get('payments')
-  async listPayments(@Query('page') page?: string, @Query('limit') limit?: string, @Query('status') status?: string) {
+  async listPayments(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('status') status?: string,
+    @Query('search') search?: string,
+    @Query('sort_by') sort_by?: string,
+    @Query('sort_order') sort_order?: string,
+  ) {
     return this.paymentService.findAll({
       page: page ? parseInt(page) : 1,
       limit: limit ? parseInt(limit) : 20,
       status,
+      search,
+      sort_by,
+      sort_order: sort_order?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC',
     });
   }
 
@@ -301,12 +593,37 @@ export class AdminController {
     return this.paymentService.adminConfirm(id, body.notes);
   }
 
+  @Post('payments/:id/refund')
+  async refundPayment(@Param('id') id: string, @Body() body: { reason?: string }) {
+    return this.paymentService.refund(id, body.reason);
+  }
+
   // --- Admin Users CRUD ---
 
   @Get('admin-users')
-  async listAdminUsers() {
-    const users = await this.adminUserRepo.find({ order: { created_at: 'ASC' } });
-    return users.map(({ password_hash, ...rest }) => rest);
+  async listAdminUsers(@Query() q: Record<string, unknown>) {
+    const query = parseListQuery(q);
+    // Legacy callers that send no query params still get the full list shape.
+    if (q?.page === undefined && q?.search === undefined && q?.status === undefined && q?.sort_by === undefined) {
+      const users = await this.adminUserRepo.find({ order: { created_at: 'ASC' } });
+      return users.map(({ password_hash, ...rest }) => rest);
+    }
+    const qb = this.adminUserRepo.createQueryBuilder('admin');
+    const { rows, total } = await applyListQuery(
+      qb,
+      query,
+      ['admin.name', 'admin.email', 'admin.role'],
+      {
+        name: 'admin.name',
+        email: 'admin.email',
+        role: 'admin.role',
+        is_active: 'admin.is_active',
+        created_at: 'admin.created_at',
+      },
+      'admin.created_at',
+      'admin.is_active',
+    );
+    return { rows: rows.map(({ password_hash, ...rest }) => rest), total };
   }
 
   @Post('admin-users')

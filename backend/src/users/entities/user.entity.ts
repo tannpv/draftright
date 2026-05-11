@@ -48,6 +48,14 @@ export class User {
   @Column({ type: 'varchar', length: 500, nullable: true })
   avatar_url: string;
 
+  /**
+   * Stripe Customer ID (cus_XXXX) — created on first Stripe checkout, reused
+   * on subsequent checkouts so we don't create duplicate Customer records.
+   * NULL until the user makes their first Stripe payment.
+   */
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  stripe_customer_id: string | null;
+
   @Column({ type: 'boolean', default: false })
   email_verified: boolean;
 

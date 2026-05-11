@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { PaymentStrategy, CheckoutResult } from './payment-strategy.interface';
+import { PaymentStrategy, CheckoutResult, WebhookAction, CreateCheckoutOptions } from './payment-strategy.interface';
 import { Payment } from '../entities/payment.entity';
 
 @Injectable()
@@ -25,7 +25,7 @@ export class PayPalStrategy implements PaymentStrategy {
     return data.access_token;
   }
 
-  async createCheckout(payment: Payment, options?: { success_url?: string; cancel_url?: string }): Promise<CheckoutResult> {
+  async createCheckout(payment: Payment, options?: CreateCheckoutOptions): Promise<CheckoutResult> {
     if (!this.clientId) throw new Error('PayPal payments are not available yet. Please use VietQR or Bank Transfer.');
 
     const token = await this.getAccessToken();
@@ -65,14 +65,17 @@ export class PayPalStrategy implements PaymentStrategy {
     };
   }
 
-  async verifyWebhook(payload: any, _headers: any): Promise<{ reference_code: string; status: 'completed' | 'failed' } | null> {
-    // PayPal sends webhook with event_type CHECKOUT.ORDER.APPROVED
+  async verifyWebhook(payload: any, _headers: any): Promise<WebhookAction> {
+    // ⚠️ Phase 3a: this strategy is gated off via PAYMENT_ENABLED_METHODS.
+    // The signature verification (calling PayPal's verify-webhook-signature endpoint)
+    // is not implemented — accepting unsigned webhooks would let anyone fake a
+    // payment. Enabling PayPal in 3b requires implementing that verify call first.
     if (payload.event_type === 'CHECKOUT.ORDER.APPROVED' || payload.event_type === 'PAYMENT.CAPTURE.COMPLETED') {
       const referenceCode = payload.resource?.purchase_units?.[0]?.reference_id;
       if (referenceCode) {
-        return { reference_code: referenceCode, status: 'completed' };
+        return { type: 'payment_completed', reference_code: referenceCode };
       }
     }
-    return null;
+    return { type: 'ignored' };
   }
 }

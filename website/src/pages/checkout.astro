@@ -1,0 +1,12 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Checkout from '../components/Checkout.tsx';
+---
+<BaseLayout
+  title="Checkout — DraftRight"
+  description="AI-powered text rewriting. Select text, pick a tone, get a polished rewrite. Available on iOS, Android, macOS, Windows, and Linux."
+>
+  <div class="pt-8">
+    <Checkout client:load />
+  </div>
+</BaseLayout>

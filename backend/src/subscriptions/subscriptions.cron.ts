@@ -1,0 +1,93 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository, Between, LessThan } from 'typeorm';
+import { Subscription, SubscriptionStatus } from './entities/subscription.entity';
+import { EmailService } from '../email/email.service';
+
+/**
+ * Subscription lifecycle cron — runs daily at 09:00 UTC.
+ *
+ * Two responsibilities:
+ *   1. Renewal reminders: send a heads-up email to anyone whose ACTIVE
+ *      subscription expires in roughly 3 days, so they can update their
+ *      card or cancel before being charged.
+ *   2. Lapse handling: any subscription past its expires_at gets flipped
+ *      to EXPIRED so the rewrite quota guard demotes them to free-tier
+ *      limits. Stripe-cancelled subs reach expires_at first; this is the
+ *      cleanup pass.
+ *
+ * The cron is intentionally simple — Stripe Smart Retries handles dunning
+ * (3 automatic retries before customer.subscription.deleted fires). We only
+ * notify, we don't try to retry charges ourselves.
+ */
+@Injectable()
+export class SubscriptionsCron {
+  private readonly logger = new Logger(SubscriptionsCron.name);
+
+  constructor(
+    @InjectRepository(Subscription)
+    private readonly subsRepo: Repository<Subscription>,
+    private readonly emailService: EmailService,
+  ) {}
+
+  @Cron(CronExpression.EVERY_DAY_AT_9AM)
+  async runDailyMaintenance(): Promise<void> {
+    this.logger.log('Daily subscription maintenance running...');
+    await this.sendRenewalReminders();
+    await this.expireLapsedSubscriptions();
+    this.logger.log('Daily subscription maintenance done.');
+  }
+
+  /**
+   * Find ACTIVE subscriptions expiring in roughly 3 days (between 2.5 and 3.5
+   * days from now), send a renewal reminder email. Window is wide enough to
+   * tolerate the cron firing a few hours late.
+   */
+  private async sendRenewalReminders(): Promise<void> {
+    const now = Date.now();
+    const lower = new Date(now + 2.5 * 86400_000);
+    const upper = new Date(now + 3.5 * 86400_000);
+
+    const due = await this.subsRepo.find({
+      where: {
+        status: SubscriptionStatus.ACTIVE,
+        expires_at: Between(lower, upper),
+      },
+      relations: ['user', 'plan'],
+    });
+
+    this.logger.log(`Renewal reminder window: ${due.length} subscription(s)`);
+
+    for (const sub of due) {
+      if (!sub.user?.email || !sub.plan || !sub.expires_at) continue;
+      try {
+        await this.emailService.sendRenewalReminder(
+          sub.user.email,
+          sub.user.name || sub.user.email,
+          sub.plan.name,
+          sub.expires_at,
+          (sub.plan as any).currency || 'USD',
+          sub.plan.price_cents,
+        );
+      } catch (err: any) {
+        this.logger.error(`Failed to send renewal reminder for sub ${sub.id}: ${err.message}`);
+      }
+    }
+  }
+
+  /**
+   * Flip any ACTIVE or CANCELLED row past its expires_at to EXPIRED.
+   * After this, the rewrite-quota guard treats the user as free-tier.
+   */
+  private async expireLapsedSubscriptions(): Promise<void> {
+    const result = await this.subsRepo
+      .createQueryBuilder()
+      .update(Subscription)
+      .set({ status: SubscriptionStatus.EXPIRED })
+      .where('status IN (:...statuses)', { statuses: [SubscriptionStatus.ACTIVE, SubscriptionStatus.CANCELLED] })
+      .andWhere('expires_at IS NOT NULL AND expires_at < NOW()')
+      .execute();
+    this.logger.log(`Expired ${result.affected ?? 0} lapsed subscription(s)`);
+  }
+}

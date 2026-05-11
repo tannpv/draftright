@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { createHmac } from 'crypto';
-import { PaymentStrategy, CheckoutResult } from './payment-strategy.interface';
+import { PaymentStrategy, CheckoutResult, WebhookAction, CreateCheckoutOptions } from './payment-strategy.interface';
 import { Payment } from '../entities/payment.entity';
 
 @Injectable()
@@ -14,7 +14,7 @@ export class MomoStrategy implements PaymentStrategy {
       : 'https://test-payment.momo.vn';
   }
 
-  async createCheckout(payment: Payment, options?: { success_url?: string; cancel_url?: string }): Promise<CheckoutResult> {
+  async createCheckout(payment: Payment, options?: CreateCheckoutOptions): Promise<CheckoutResult> {
     if (!this.partnerCode || !this.secretKey) {
       throw new Error('Momo payments are not available yet. Please use VietQR or Bank Transfer.');
     }
@@ -67,19 +67,18 @@ export class MomoStrategy implements PaymentStrategy {
     };
   }
 
-  async verifyWebhook(payload: any, _headers: any): Promise<{ reference_code: string; status: 'completed' | 'failed' } | null> {
+  async verifyWebhook(payload: any, _headers: any): Promise<WebhookAction> {
+    // ⚠️ Phase 3a: Momo strategy is gated off via PAYMENT_ENABLED_METHODS.
+    // The IPN signature verification (HMAC SHA256 over a fixed-order param string
+    // per Momo spec) is not implemented — accepting unsigned IPN would let anyone
+    // fake a payment by POSTing { resultCode: 0, orderId: anything } to the
+    // webhook URL. Enabling Momo in 3b requires implementing that HMAC verify.
     if (payload.resultCode === 0 && payload.orderId) {
-      return {
-        reference_code: payload.orderId,
-        status: 'completed',
-      };
+      return { type: 'payment_completed', reference_code: payload.orderId };
     }
     if (payload.orderId) {
-      return {
-        reference_code: payload.orderId,
-        status: 'failed',
-      };
+      return { type: 'payment_failed', reference_code: payload.orderId };
     }
-    return null;
+    return { type: 'ignored' };
   }
 }

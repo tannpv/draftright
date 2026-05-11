@@ -14,7 +14,7 @@ struct RewriteSettingsTab: View {
                 .pickerStyle(.segmented)
 
                 if appModel.appMode == .oneClick {
-                    Picker("One-Click Tone", selection: $appModel.oneClickTone) {
+                    Picker("Simple Mode Tone", selection: $appModel.oneClickTone) {
                         ForEach(Tone.allCases) { tone in
                             Text(tone.displayName).tag(tone)
                         }

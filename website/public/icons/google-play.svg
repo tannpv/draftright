@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="56" viewBox="0 0 180 56">
+  <rect width="180" height="56" rx="10" fill="#000"/>
+  <rect x="0.5" y="0.5" width="179" height="55" rx="9.5" fill="none" stroke="#a1a1a1" stroke-width="1"/>
+  <text x="90" y="22" text-anchor="middle" font-size="10" fill="#a1a1a1" font-family="sans-serif">GET IT ON</text>
+  <text x="90" y="39" text-anchor="middle" font-size="16" fill="#fff" font-family="sans-serif" font-weight="600">Google Play</text>
+</svg>
