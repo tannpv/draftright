@@ -83,7 +83,7 @@ class QwertyKeyboardView(
         listOf(
             KeyDef("?123", KeyCode.SYMBOLS, 1.5f),
             KeyDef("\uD83C\uDF10", KeyCode.GLOBE, 1.0f),
-            KeyDef("\u2630", KeyCode.GLOBE_PICKER, 1.0f),
+            KeyDef("\u2261", KeyCode.GLOBE_PICKER, 1.0f),
             KeyDef(",", KeyCode.CHAR, 1.0f),
             KeyDef(" ", KeyCode.SPACE, 4.0f),
             KeyDef(".", KeyCode.CHAR, 1.0f),
@@ -113,7 +113,7 @@ class QwertyKeyboardView(
         listOf(
             KeyDef("ABC", KeyCode.ALPHA, 1.5f),
             KeyDef("\uD83C\uDF10", KeyCode.GLOBE, 1.0f),
-            KeyDef("\u2630", KeyCode.GLOBE_PICKER, 1.0f),
+            KeyDef("\u2261", KeyCode.GLOBE_PICKER, 1.0f),
             KeyDef(",", KeyCode.CHAR, 1.0f),
             KeyDef(" ", KeyCode.SPACE, 4.0f),
             KeyDef(".", KeyCode.CHAR, 1.0f),
@@ -143,7 +143,7 @@ class QwertyKeyboardView(
         listOf(
             KeyDef("ABC", KeyCode.ALPHA, 1.5f),
             KeyDef("\uD83C\uDF10", KeyCode.GLOBE, 1.0f),
-            KeyDef("\u2630", KeyCode.GLOBE_PICKER, 1.0f),
+            KeyDef("\u2261", KeyCode.GLOBE_PICKER, 1.0f),
             KeyDef(",", KeyCode.CHAR, 1.0f),
             KeyDef(" ", KeyCode.SPACE, 4.0f),
             KeyDef(".", KeyCode.CHAR, 1.0f),

@@ -4,6 +4,10 @@
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Used to attach a screenshot when reporting a bug.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Used to attach a screenshot when reporting a bug.</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>CFBundleDevelopmentRegion</key>
