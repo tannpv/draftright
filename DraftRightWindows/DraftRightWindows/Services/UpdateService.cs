@@ -125,54 +125,26 @@ public class UpdateService
 
     private async Task DownloadAndInstallAsync(string url, string version)
     {
-        var progressForm = new System.Windows.Forms.Form
-        {
-            Text = "Updating DraftRight",
-            Width = 400, Height = 150,
-            StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen,
-            FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog,
-            MaximizeBox = false, MinimizeBox = false,
-            TopMost = true,
-            BackColor = System.Drawing.Color.FromArgb(15, 23, 42),
-            ForeColor = System.Drawing.Color.FromArgb(226, 232, 240),
-        };
+        // The progress form must live on a thread that has a WinForms message
+        // pump. The caller of this method (the update check) runs on a
+        // thread-pool thread, which has no pump — so creating a non-modal form
+        // there and calling Application.DoEvents() does nothing, the form
+        // never paints (you get the blank/black "Updating... (Not Responding)"
+        // window) and the user thinks the app froze.
+        //
+        // Fix: spin a dedicated STA thread that runs Application.Run(form).
+        // The download itself runs on the original thread (async I/O — no UI
+        // needed), and we marshal status / progress updates onto the form's
+        // thread via BeginInvoke.
 
-        var statusLabel = new System.Windows.Forms.Label
-        {
-            Text = $"Downloading DraftRight v{version}...",
-            Location = new System.Drawing.Point(20, 20),
-            Size = new System.Drawing.Size(340, 20),
-            Font = new System.Drawing.Font("Segoe UI", 10),
-            ForeColor = System.Drawing.Color.FromArgb(226, 232, 240),
-        };
-
-        var progressBar = new System.Windows.Forms.ProgressBar
-        {
-            Location = new System.Drawing.Point(20, 50),
-            Size = new System.Drawing.Size(340, 25),
-            Minimum = 0, Maximum = 100, Value = 0,
-            Style = System.Windows.Forms.ProgressBarStyle.Continuous,
-        };
-
-        var percentLabel = new System.Windows.Forms.Label
-        {
-            Text = "0%",
-            Location = new System.Drawing.Point(20, 80),
-            Size = new System.Drawing.Size(340, 20),
-            TextAlign = System.Drawing.ContentAlignment.MiddleCenter,
-            Font = new System.Drawing.Font("Segoe UI", 9),
-            ForeColor = System.Drawing.Color.FromArgb(148, 163, 184),
-        };
-
-        progressForm.Controls.AddRange(new System.Windows.Forms.Control[] { statusLabel, progressBar, percentLabel });
-        progressForm.Show();
-
+        UpdateProgressUI? ui = null;
         try
         {
+            ui = UpdateProgressUI.ShowOnNewThread(version);
+
             // Derive the temp filename from the URL so we keep the actual
             // file extension (.exe, .msi, .msix). Hardcoding ".msix" was a
             // legacy assumption from when we shipped the MSIX installer.
-            // Now we ship a self-contained single-file .exe.
             var urlFileName = Path.GetFileName(new Uri(url).LocalPath);
             if (string.IsNullOrEmpty(urlFileName))
             {
@@ -190,6 +162,7 @@ public class UpdateService
                 var buffer = new byte[8192];
                 long downloaded = 0;
                 int bytesRead;
+                int lastReportedPercent = -1;
 
                 while ((bytesRead = await stream.ReadAsync(buffer)) > 0)
                 {
@@ -198,19 +171,16 @@ public class UpdateService
                     if (totalBytes > 0)
                     {
                         var percent = (int)(downloaded * 100 / totalBytes);
-                        progressBar.Value = percent;
-                        percentLabel.Text = $"{percent}%";
+                        if (percent != lastReportedPercent)
+                        {
+                            ui.SetProgress(percent);
+                            lastReportedPercent = percent;
+                        }
                     }
-                    System.Windows.Forms.Application.DoEvents();
                 }
             }
 
-            statusLabel.Text = "Installing...";
-            progressBar.Style = System.Windows.Forms.ProgressBarStyle.Marquee;
-            percentLabel.Text = "";
-            System.Windows.Forms.Application.DoEvents();
-
-            progressForm.Close();
+            ui.SetIndeterminate("Installing...");
 
             // For .msi and .msix, just shell-execute and let the OS installer
             // handle replacement. For our self-contained .exe distribution,
@@ -231,11 +201,12 @@ public class UpdateService
                 });
             }
 
+            ui.Close();
             Environment.Exit(0);
         }
         catch (Exception ex)
         {
-            progressForm.Close();
+            ui?.Close();
             System.Windows.Forms.MessageBox.Show(
                 $"Update failed: {ex.Message}",
                 "Update Error",
@@ -279,5 +250,121 @@ public class UpdateService
             UseShellExecute = false,
             CreateNoWindow = true
         });
+    }
+}
+
+/// <summary>
+/// The update progress window. Runs on its own STA thread with a WinForms
+/// message pump (Application.Run) so it paints reliably even though the
+/// caller (update check) lives on a thread-pool thread.
+///
+/// Cross-thread API: ShowOnNewThread starts the pump; SetProgress /
+/// SetIndeterminate / Close marshal back to the form's thread via
+/// BeginInvoke and are safe to call from anywhere.
+/// </summary>
+internal sealed class UpdateProgressUI
+{
+    private readonly System.Windows.Forms.Form _form;
+    private readonly System.Windows.Forms.Label _statusLabel;
+    private readonly System.Windows.Forms.ProgressBar _progressBar;
+    private readonly System.Windows.Forms.Label _percentLabel;
+    private readonly System.Threading.ManualResetEventSlim _ready = new(false);
+
+    private UpdateProgressUI(string version)
+    {
+        _form = new System.Windows.Forms.Form
+        {
+            Text = "Updating DraftRight",
+            Width = 420, Height = 160,
+            StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen,
+            FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog,
+            MaximizeBox = false, MinimizeBox = false, ControlBox = false,
+            TopMost = true,
+            BackColor = System.Drawing.Color.FromArgb(15, 23, 42),
+            ForeColor = System.Drawing.Color.FromArgb(226, 232, 240),
+        };
+
+        _statusLabel = new System.Windows.Forms.Label
+        {
+            Text = $"Downloading DraftRight v{version}...",
+            Location = new System.Drawing.Point(20, 20),
+            Size = new System.Drawing.Size(360, 22),
+            Font = new System.Drawing.Font("Segoe UI", 10),
+            ForeColor = System.Drawing.Color.FromArgb(226, 232, 240),
+        };
+        _progressBar = new System.Windows.Forms.ProgressBar
+        {
+            Location = new System.Drawing.Point(20, 50),
+            Size = new System.Drawing.Size(360, 25),
+            Minimum = 0, Maximum = 100, Value = 0,
+            Style = System.Windows.Forms.ProgressBarStyle.Continuous,
+        };
+        _percentLabel = new System.Windows.Forms.Label
+        {
+            Text = "0%",
+            Location = new System.Drawing.Point(20, 82),
+            Size = new System.Drawing.Size(360, 20),
+            TextAlign = System.Drawing.ContentAlignment.MiddleCenter,
+            Font = new System.Drawing.Font("Segoe UI", 9),
+            ForeColor = System.Drawing.Color.FromArgb(148, 163, 184),
+        };
+        _form.Controls.AddRange(new System.Windows.Forms.Control[] { _statusLabel, _progressBar, _percentLabel });
+
+        // The handle isn't created until the form is shown. We need a handle
+        // before any BeginInvoke call from another thread can succeed, so
+        // signal _ready from HandleCreated on the form's own thread.
+        _form.HandleCreated += (_, _) => _ready.Set();
+    }
+
+    public static UpdateProgressUI ShowOnNewThread(string version)
+    {
+        var ui = new UpdateProgressUI(version);
+        var thread = new System.Threading.Thread(() =>
+        {
+            System.Windows.Forms.Application.Run(ui._form);
+        });
+        thread.SetApartmentState(System.Threading.ApartmentState.STA);
+        thread.IsBackground = true;
+        thread.Start();
+        // Block until the form's handle is created — callers can BeginInvoke immediately after.
+        ui._ready.Wait(TimeSpan.FromSeconds(5));
+        return ui;
+    }
+
+    public void SetProgress(int percent)
+    {
+        if (!_form.IsHandleCreated) return;
+        try
+        {
+            _form.BeginInvoke(new Action(() =>
+            {
+                _progressBar.Style = System.Windows.Forms.ProgressBarStyle.Continuous;
+                _progressBar.Value = Math.Max(0, Math.Min(100, percent));
+                _percentLabel.Text = $"{percent}%";
+            }));
+        }
+        catch (InvalidOperationException) { /* form closing */ }
+    }
+
+    public void SetIndeterminate(string statusText)
+    {
+        if (!_form.IsHandleCreated) return;
+        try
+        {
+            _form.BeginInvoke(new Action(() =>
+            {
+                _statusLabel.Text = statusText;
+                _progressBar.Style = System.Windows.Forms.ProgressBarStyle.Marquee;
+                _percentLabel.Text = "";
+            }));
+        }
+        catch (InvalidOperationException) { /* form closing */ }
+    }
+
+    public void Close()
+    {
+        if (!_form.IsHandleCreated) return;
+        try { _form.BeginInvoke(new Action(() => _form.Close())); }
+        catch (InvalidOperationException) { /* already closing */ }
     }
 }
