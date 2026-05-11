@@ -28,7 +28,7 @@ public sealed class SettingsService
     // ── Settings properties ─────────────────────────────────
 
     /// <summary>Backend API base URL.</summary>
-    public string BackendUrl { get; set; } = "https://api.draftright.info";
+    public string BackendUrl { get; set; } = Constants.DefaultBackendUrl;
 
     /// <summary>Win32 modifier flags for the global hotkey (MOD_CONTROL | MOD_SHIFT = 0x0006).</summary>
     public int HotkeyModifiers { get; set; } = 0x0002 | 0x0004; // Ctrl + Shift
@@ -53,6 +53,9 @@ public sealed class SettingsService
 
     /// <summary>Preset tone used by One-Click mode. Stored as the tone's API value.</summary>
     public string OneClickTone { get; set; } = "polished";
+
+    /// <summary>When false, DRLogger.Log short-circuits — no file writes.</summary>
+    public bool LoggingEnabled { get; set; } = true;
 
     // ── Persistence ─────────────────────────────────────────
 
@@ -83,6 +86,7 @@ public sealed class SettingsService
             DefaultTone = loaded.DefaultTone ?? DefaultTone;
             AppMode = AppModeExtensions.FromApiValue(loaded.AppMode);
             OneClickTone = loaded.OneClickTone ?? OneClickTone;
+            LoggingEnabled = loaded.LoggingEnabled ?? LoggingEnabled;
         }
         catch
         {
@@ -109,7 +113,8 @@ public sealed class SettingsService
                 EnabledTones = EnabledTones,
                 DefaultTone = DefaultTone,
                 AppMode = AppMode.ApiValue(),
-                OneClickTone = OneClickTone
+                OneClickTone = OneClickTone,
+                LoggingEnabled = LoggingEnabled
             };
 
             var json = JsonSerializer.Serialize(data, JsonOptions);
@@ -137,5 +142,6 @@ public sealed class SettingsService
         public string? DefaultTone { get; set; }
         public string? AppMode { get; set; }
         public string? OneClickTone { get; set; }
+        public bool? LoggingEnabled { get; set; }
     }
 }

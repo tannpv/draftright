@@ -32,7 +32,7 @@ public static class AppModeExtensions
     public static string DisplayName(this AppMode mode) => mode switch
     {
         AppMode.Advanced => "Advanced",
-        AppMode.OneClick => "One-Click",
+        AppMode.OneClick => "Simple",
         _ => "Advanced"
     };
 }
