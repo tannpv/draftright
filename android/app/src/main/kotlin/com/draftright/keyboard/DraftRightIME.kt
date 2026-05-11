@@ -74,13 +74,17 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
     }
 
     override fun onSwitchKeyboard() {
-        // Show IME picker dialog instead of forcibly switching to the next IME.
-        // User can pick another keyboard OR dismiss to stay on DraftRight.
-        // (Previous behavior: switchToNextInputMethod() always switched away — fixes
-        //  bug where one tap kicked the user to Gboard with no way back without going
-        //  through Settings.)
-        val imeManager = getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
-        imeManager.showInputMethodPicker()
+        // Both globe and ≡ buttons open the IME picker. User can pick another
+        // keyboard OR dismiss back to DraftRight. Cycling-by-tap was tested but
+        // produced a "stuck on next IME" UX — the next IME's globe doesn't
+        // reliably bring users back to DraftRight.
+        val imm = getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+        imm.showInputMethodPicker()
+    }
+
+    override fun onSwitchKeyboardLongPress() {
+        val imm = getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+        imm.showInputMethodPicker()
     }
 
     // --- Existing tone/rewrite logic ---

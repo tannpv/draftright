@@ -1,7 +1,7 @@
 name: draftright_mobile
 description: AI-powered text rewriting keyboard toolbar
 publish_to: 'none'
-version: 2.2.2+31
+version: 2.2.2+37
 
 environment:
   sdk: ^3.0.0
@@ -22,6 +22,7 @@ dependencies:
   hotkey_manager: ^0.2.0
   window_manager: ^0.3.0
   screen_retriever: ^0.1.0
+  image_picker: ^1.2.2
 
 dev_dependencies:
   flutter_test:

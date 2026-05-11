@@ -13,6 +13,12 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Bug-report sheet (Settings → Report a bug) optionally attaches a
+         screenshot from the camera. Gallery access on Android 13+ uses
+         the system Photo Picker which doesn't require a permission. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+
     <!-- DraftRight does not use advertising IDs. The AD_ID permission gets
          auto-merged in by Google Play Services / google_sign_in / Facebook
          SDK transitive deps even though we don't actually read the

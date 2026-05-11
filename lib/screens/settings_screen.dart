@@ -6,6 +6,7 @@ import 'package:draftright_mobile/screens/subscription_screen.dart';
 import 'package:draftright_mobile/screens/change_password_screen.dart';
 import 'package:draftright_mobile/screens/about_screen.dart';
 import 'package:draftright_mobile/services/share_service.dart';
+import 'package:draftright_mobile/widgets/report_bug_sheet.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -222,7 +223,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
 
               const SizedBox(height: 24),
-              const Text('About', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const Text('Help', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const SizedBox(height: 8),
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.bug_report_outlined),
+                  title: const Text('Report a bug'),
+                  subtitle: const Text(
+                    'Tell us what went wrong and attach a screenshot.',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    showReportBugSheet(
+                      context,
+                      currentRoute: ModalRoute.of(context)?.settings.name ??
+                          'SettingsScreen',
+                    );
+                  },
+                ),
+              ),
               const SizedBox(height: 8),
               Card(
                 child: ListTile(
