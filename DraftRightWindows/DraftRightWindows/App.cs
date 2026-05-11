@@ -857,9 +857,11 @@ internal static class SettingsFormBuilder
         // Updates section
         tab.Controls.Add(MakeSectionHeader("Updates", y));
         y += 30;
+        var asmVer = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "?";
+        var displayVer = asmVer.EndsWith(".0") ? asmVer.Substring(0, asmVer.Length - 2) : asmVer;
         tab.Controls.Add(new WinForms.Label
         {
-            Text = "Version: 1.0.0",
+            Text = $"Version: {displayVer}",
             ForeColor = TextMuted,
             Font = new Font("Segoe UI", 9),
             Location = new Point(16, y),
