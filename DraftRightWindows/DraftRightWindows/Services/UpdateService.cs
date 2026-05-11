@@ -186,18 +186,25 @@ public class UpdateService
 
             ui.SetIndeterminate("Installing...");
 
-            // For .msi and .msix, just shell-execute and let the OS installer
-            // handle replacement. For our self-contained .exe distribution,
-            // we need a helper script: wait for the current process to exit,
-            // copy new exe over current exe, launch new exe.
+            // Three cases:
+            //  - Inno Setup installer ("DraftRight-Setup-Windows-x.y.z-arch.exe"):
+            //    just run it. Its own [Code] PrepareToInstall hook kills the
+            //    running app, then it overwrites the install in place. Running
+            //    it through LaunchExeReplacer would clobber DraftRightWindows.exe
+            //    with the installer binary and then have it taskkill itself.
+            //  - Raw self-contained app exe ("DraftRight-Windows-...exe"):
+            //    LaunchExeReplacer — wait for exit, copy over current exe, relaunch.
+            //  - .msi / .msix: hand off to the OS shell.
             var ext = Path.GetExtension(tempPath).ToLowerInvariant();
-            if (ext == ".exe")
+            var name = Path.GetFileNameWithoutExtension(tempPath).ToLowerInvariant();
+            var looksLikeInstaller = name.Contains("setup") || name.Contains("install");
+            if (ext == ".exe" && !looksLikeInstaller)
             {
                 LaunchExeReplacer(tempPath);
             }
             else
             {
-                // .msi / .msix / anything else: hand off to OS shell.
+                // Installer .exe / .msi / .msix / anything else: hand off to OS shell.
                 Process.Start(new ProcessStartInfo
                 {
                     FileName = tempPath,
