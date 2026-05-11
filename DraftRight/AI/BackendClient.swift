@@ -63,7 +63,9 @@ final class BackendClient {
         tone: Tone,
         accessToken: String,
         backendUrl: String,
-        targetLanguage: String = "English"
+        targetLanguage: String = "English",
+        refreshToken: String = "",
+        onTokensRefreshed: ((String, String) -> Void)? = nil
     ) async throws -> String {
         DRLogger.log("rewrite request: tone=\(tone.apiValue) textLen=\(text.count) url=\(backendUrl)", category: .api)
         guard !accessToken.isEmpty else {
@@ -90,12 +92,31 @@ final class BackendClient {
         request.addValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.httpBody = try JSONEncoder().encode(body)
 
-        let (data, response): (Data, URLResponse)
+        var (data, response): (Data, URLResponse)
         do {
             (data, response) = try await session.data(for: request)
         } catch let error as URLError where error.code == .timedOut {
             DRLogger.log("rewrite FAILED: timeout", category: .api)
             throw BackendClientError.timeout
+        }
+
+        // Auto-refresh + retry once on 401. The 30s health-check loop
+        // also refreshes silently in the background, but a rewrite that
+        // fires *between* health checks (right after access token expires)
+        // would otherwise return 401 to the user. Closing that window.
+        if let httpResponse = response as? HTTPURLResponse,
+           httpResponse.statusCode == 401,
+           !refreshToken.isEmpty {
+            DRLogger.log("rewrite got 401 — attempting silent refresh + retry", category: .api)
+            if let pair = await refreshTokens(refreshToken: refreshToken, backendUrl: backendUrl) {
+                onTokensRefreshed?(pair.access, pair.refresh)
+                request.setValue("Bearer \(pair.access)", forHTTPHeaderField: "Authorization")
+                do {
+                    (data, response) = try await session.data(for: request)
+                } catch let error as URLError where error.code == .timedOut {
+                    throw BackendClientError.timeout
+                }
+            }
         }
 
         let httpStatus = (response as? HTTPURLResponse)?.statusCode ?? -1

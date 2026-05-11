@@ -1,9 +1,9 @@
 ---
 // Per-platform versions so they can bump independently.
-const ANDROID_VERSION = '2.1.7';
+const ANDROID_VERSION = '2.1.8';
 const IOS_VERSION = '2.1.0';
-const MACOS_VERSION = '2.1.0';
-const WINDOWS_VERSION = '2.1.0';
+const MACOS_VERSION = '2.1.7';
+const WINDOWS_VERSION = '2.1.7';
 const LINUX_VERSION = '2.1.0';
 const BASE = '/downloads';
 ---
@@ -31,7 +31,7 @@ const BASE = '/downloads';
           <div class="text-4xl">&#129302;</div>
           <div class="flex-1">
             <h4 class="text-lg font-semibold text-white">Android <span class="text-xs text-gray-500">v{ANDROID_VERSION}</span></h4>
-            <p class="text-sm text-gray-400 mt-1">APK · 50 MB · Android 7.0+</p>
+            <p class="text-sm text-gray-400 mt-1">APK · 57 MB · Android 7.0+</p>
             <div class="mt-3 inline-flex items-center gap-2 text-brand-400 font-medium text-sm group-hover:translate-x-1 transition-transform">
               Download APK <span>→</span>
             </div>
@@ -59,27 +59,27 @@ const BASE = '/downloads';
     <h3 class="text-2xl font-semibold mb-6 text-center">Desktop</h3>
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-16">
       <!-- macOS -->
-      <a href={`${BASE}/DraftRight-macOS-${MACOS_VERSION}.zip`}
+      <a href={`${BASE}/DraftRight-macOS-${MACOS_VERSION}.dmg`}
          class="group rounded-2xl border border-dark-border bg-dark-card p-6 hover:border-brand-400 transition-all">
         <div class="text-center">
           <div class="text-4xl mb-3">&#127815;</div>
-          <h4 class="text-lg font-semibold text-white">macOS</h4>
-          <p class="text-sm text-gray-400 mt-1">Universal · 617 KB · macOS 13+</p>
+          <h4 class="text-lg font-semibold text-white">macOS <span class="text-xs text-gray-500">v{MACOS_VERSION}</span></h4>
+          <p class="text-sm text-gray-400 mt-1">Universal · 2.2 MB · macOS 13+</p>
           <div class="mt-4 inline-flex items-center gap-2 text-brand-400 font-medium text-sm group-hover:translate-x-1 transition-transform">
-            Download .app <span>→</span>
+            Download .dmg <span>→</span>
           </div>
         </div>
       </a>
 
       <!-- Windows -->
-      <a href={`${BASE}/DraftRight-Windows-Source-${WINDOWS_VERSION}.zip`}
+      <a href={`${BASE}/DraftRight-Setup-Windows-${WINDOWS_VERSION}-x64.exe`}
          class="group rounded-2xl border border-dark-border bg-dark-card p-6 hover:border-brand-400 transition-all">
         <div class="text-center">
           <div class="text-4xl mb-3">&#128421;&#65039;</div>
-          <h4 class="text-lg font-semibold text-white">Windows</h4>
-          <p class="text-sm text-gray-400 mt-1">Source · 86 KB · Win 10/11 · .NET 8</p>
+          <h4 class="text-lg font-semibold text-white">Windows <span class="text-xs text-gray-500">v{WINDOWS_VERSION}</span></h4>
+          <p class="text-sm text-gray-400 mt-1">Installer · 130 MB · Win 10/11 x64</p>
           <div class="mt-4 inline-flex items-center gap-2 text-brand-400 font-medium text-sm group-hover:translate-x-1 transition-transform">
-            Download source <span>→</span>
+            Download .exe <span>→</span>
           </div>
         </div>
       </a>
@@ -106,21 +106,19 @@ const BASE = '/downloads';
       <div class="mt-4 space-y-4 text-sm text-gray-300">
         <div>
           <h5 class="font-semibold text-white mb-1">macOS</h5>
-          <pre class="bg-dark-bg/50 rounded p-3 overflow-x-auto"><code>unzip DraftRight-macOS-{MACOS_VERSION}.zip
-mv DraftRight.app /Applications/
-# First launch: right-click → Open (unsigned)</code></pre>
+          <p>Open the .dmg, drag DraftRight to Applications. First launch: right-click → Open (unsigned).</p>
+          <p class="text-xs text-gray-500 mt-1">Once installed, the app auto-updates via Settings → General → Check for Updates.</p>
         </div>
         <div>
           <h5 class="font-semibold text-white mb-1">Android</h5>
-          <p>Tap the APK on your phone. Allow "Install unknown apps" when prompted. After install, enable the DraftRight keyboard in Settings → System → Languages & input.</p>
+          <p>Tap the APK on your phone. Allow "Install unknown apps" when prompted.</p>
+          <p class="mt-2"><strong>How to use:</strong> long-press text in any app → tap <strong>DraftRight</strong> in the popup → pick a tone. Works with your phone's keyboard, in any language (Vietnamese, Chinese, Japanese, etc.).</p>
+          <p class="text-xs text-gray-500 mt-1">Optional: install the DraftRight keyboard from the in-app onboarding for one-tap rewriting while typing in English.</p>
         </div>
         <div>
-          <h5 class="font-semibold text-white mb-1">Windows (build from source)</h5>
-          <pre class="bg-dark-bg/50 rounded p-3 overflow-x-auto"><code>Expand-Archive DraftRight-Windows-Source-{WINDOWS_VERSION}.zip
-cd DraftRightWindows
-dotnet restore
-dotnet build DraftRightWindows.sln -c Release
-dotnet run --project DraftRightWindows</code></pre>
+          <h5 class="font-semibold text-white mb-1">Windows</h5>
+          <p>Run the .exe installer. SmartScreen may warn — click "More info" → "Run anyway" (unsigned).</p>
+          <p class="text-xs text-gray-500 mt-1">After install, press Ctrl+Shift+R anywhere to rewrite selected text.</p>
         </div>
         <div>
           <h5 class="font-semibold text-white mb-1">Linux</h5>

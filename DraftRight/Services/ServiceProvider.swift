@@ -67,7 +67,13 @@ final class ServiceProvider: NSObject {
                             text: text, tone: newTone,
                             accessToken: self.appModel.accessToken,
                             backendUrl: self.appModel.backendUrl,
-                            targetLanguage: self.appModel.translateLanguage
+                            targetLanguage: self.appModel.translateLanguage,
+                            refreshToken: self.appModel.refreshToken,
+                            onTokensRefreshed: { newAccess, newRefresh in
+                                Task { @MainActor [weak self] in
+                                    self?.appModel.storeTokens(access: newAccess, refresh: newRefresh)
+                                }
+                            }
                         )
                         self.diffWindow.model.handleRewriteResponse(result, tone: newTone)
                     } catch {
@@ -97,7 +103,13 @@ final class ServiceProvider: NSObject {
                     text: text, tone: tone,
                     accessToken: appModel.accessToken,
                     backendUrl: appModel.backendUrl,
-                    targetLanguage: appModel.translateLanguage
+                    targetLanguage: appModel.translateLanguage,
+                    refreshToken: appModel.refreshToken,
+                    onTokensRefreshed: { [weak self] newAccess, newRefresh in
+                        Task { @MainActor in
+                            self?.appModel.storeTokens(access: newAccess, refresh: newRefresh)
+                        }
+                    }
                 )
                 diffWindow.model.handleRewriteResponse(rewritten, tone: tone)
             } catch {

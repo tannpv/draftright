@@ -141,6 +141,31 @@ Filename: "{cmd}"; Parameters: "/C taskkill /IM {#AppExeName} /F"; \
   Flags: runhidden; RunOnceId: "KillRunningApp"
 
 [Code]
+{ ── Pre-install hook: stop any running DraftRight before we try to overwrite
+  its files.
+
+  Without this, upgrade installs (running setup with an existing install
+  whose app is still running) fail with:
+      DeleteFile failed; code 32.
+      The process cannot access the file because it is being used by
+      another process.
+  ... and dump the user in the "Try again / Skip / Cancel" dialog.
+
+  taskkill is fire-and-forget — if the process isn't running, taskkill
+  returns non-zero but we ignore that. We also tolerate a brief delay so
+  Windows fully releases the lock before extraction begins. }
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  ResultCode: Integer;
+begin
+  Exec(ExpandConstant('{cmd}'),
+       '/C taskkill /IM ' + '{#AppExeName}' + ' /F >NUL 2>&1',
+       '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  { Small grace period so the OS releases the file handle. }
+  Sleep(500);
+  Result := '';
+end;
+
 { ── Post-install hook: copy Microsoft.UI.Xaml.Controls.pri to resources.pri.
 
   WinUI 3 unpackaged apps can't resolve ms-appx:///Microsoft.UI.Xaml/Themes/
