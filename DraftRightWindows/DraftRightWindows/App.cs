@@ -143,6 +143,44 @@ public class App : Application
         Hotkey = new HotkeyService();
         DRLogger.Log("OnLaunched: services constructed (Api, Auth, Clipboard, Injector, Hotkey)", DRLogger.Category.APP);
 
+        // Auto-refresh on 401: backend access tokens expire after 15 min; the
+        // stored refresh_token (7-day) is exchanged for a fresh pair via
+        // /auth/refresh. If refresh itself fails, clear tokens so the user is
+        // prompted to sign in again instead of looping on 401s.
+        Api.OnUnauthorized = async () =>
+        {
+            var refreshToken = Auth.RefreshToken;
+            if (string.IsNullOrEmpty(refreshToken))
+            {
+                DRLogger.Log("Auto-refresh: no refresh_token stored — clearing session.", DRLogger.Category.AUTH);
+                Auth.ClearTokens();
+                Api.ClearToken();
+                return false;
+            }
+            try
+            {
+                var result = await Api.RefreshAsync(refreshToken);
+                if (string.IsNullOrEmpty(result.AccessToken))
+                {
+                    DRLogger.Log("Auto-refresh: backend returned empty access_token — clearing session.", DRLogger.Category.AUTH);
+                    Auth.ClearTokens();
+                    Api.ClearToken();
+                    return false;
+                }
+                Auth.SaveTokens(result.AccessToken, result.RefreshToken, Auth.CurrentEmail);
+                Api.SetToken(result.AccessToken);
+                DRLogger.Log("Auto-refresh: succeeded.", DRLogger.Category.AUTH);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                DRLogger.Log($"Auto-refresh: failed — {ex.Message}", DRLogger.Category.AUTH);
+                Auth.ClearTokens();
+                Api.ClearToken();
+                return false;
+            }
+        };
+
         // Install a WndProc subclass on the hidden window so WM_HOTKEY messages
         // reach HotkeyService.ProcessHotkeyMessage.  The delegate MUST be stored
         // in _subclassProc (a field) so the GC never collects it while it is active.
