@@ -29,6 +29,9 @@ public sealed class AuthService
     /// <summary>Current access token (null if not logged in).</summary>
     public string? AccessToken => _accessToken;
 
+    /// <summary>Current refresh token (null if not logged in).</summary>
+    public string? RefreshToken => _refreshToken;
+
     /// <summary>Current user email (empty string if not logged in).</summary>
     public string CurrentEmail => _email ?? string.Empty;
 

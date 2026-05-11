@@ -59,10 +59,20 @@ public class App : Application
         // post-mortem debugging works even if the Local AppData folder is
         // unreachable.
 
+        // Configure the server-side error reporter so the three handlers
+        // below send to /errors as well as logging locally. The bearer token
+        // provider is resolved lazily — Auth doesn't exist yet at this point,
+        // but a crash early in startup is rare and would just send anonymously.
+        ErrorReporter.Configure(
+            backendUrl: Constants.DefaultBackendUrl,
+            bearerTokenProvider: () => Auth?.AccessToken
+        );
+
         UnhandledException += (sender, e) =>
         {
             DRLogger.Log($"WinUI UnhandledException: {e.Exception}", DRLogger.Category.APP);
             WriteCrashFile("WinUI", e.Exception);
+            ErrorReporter.Report(e.Exception, source: "WinUI", severity: "fatal");
             e.Handled = true;
         };
 
@@ -72,12 +82,14 @@ public class App : Application
             DRLogger.Log($"AppDomain UnhandledException (terminating={e.IsTerminating}): {ex}",
                 DRLogger.Category.APP);
             WriteCrashFile("AppDomain", ex);
+            if (ex != null) ErrorReporter.Report(ex, source: "AppDomain", severity: "fatal");
         };
 
         TaskScheduler.UnobservedTaskException += (sender, e) =>
         {
             DRLogger.Log($"UnobservedTaskException: {e.Exception}", DRLogger.Category.APP);
             WriteCrashFile("UnobservedTask", e.Exception);
+            ErrorReporter.Report(e.Exception, source: "UnobservedTask", severity: "error");
             e.SetObserved();
         };
 
@@ -133,6 +145,9 @@ public class App : Application
 
         Settings = new SettingsService();
         Settings.Load();
+        // Mirror the saved logging flag into DRLogger before any further Log()
+        // calls so the user's preference takes effect from the next line on.
+        DRLogger.IsEnabled = Settings.LoggingEnabled;
         DRLogger.Log($"OnLaunched: settings loaded — BackendUrl={Settings.BackendUrl} AppMode={Settings.AppMode} Hotkey={Settings.HotkeyModifiers:X}+{Settings.HotkeyKey:X}",
             DRLogger.Category.APP);
 
@@ -142,6 +157,44 @@ public class App : Application
         Injector = new TextInjector(Clipboard);
         Hotkey = new HotkeyService();
         DRLogger.Log("OnLaunched: services constructed (Api, Auth, Clipboard, Injector, Hotkey)", DRLogger.Category.APP);
+
+        // Auto-refresh on 401: backend access tokens expire after 15 min; the
+        // stored refresh_token (7-day) is exchanged for a fresh pair via
+        // /auth/refresh. If refresh itself fails, clear tokens so the user is
+        // prompted to sign in again instead of looping on 401s.
+        Api.OnUnauthorized = async () =>
+        {
+            var refreshToken = Auth.RefreshToken;
+            if (string.IsNullOrEmpty(refreshToken))
+            {
+                DRLogger.Log("Auto-refresh: no refresh_token stored — clearing session.", DRLogger.Category.AUTH);
+                Auth.ClearTokens();
+                Api.ClearToken();
+                return false;
+            }
+            try
+            {
+                var result = await Api.RefreshAsync(refreshToken);
+                if (string.IsNullOrEmpty(result.AccessToken))
+                {
+                    DRLogger.Log("Auto-refresh: backend returned empty access_token — clearing session.", DRLogger.Category.AUTH);
+                    Auth.ClearTokens();
+                    Api.ClearToken();
+                    return false;
+                }
+                Auth.SaveTokens(result.AccessToken, result.RefreshToken, Auth.CurrentEmail);
+                Api.SetToken(result.AccessToken);
+                DRLogger.Log("Auto-refresh: succeeded.", DRLogger.Category.AUTH);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                DRLogger.Log($"Auto-refresh: failed — {ex.Message}", DRLogger.Category.AUTH);
+                Auth.ClearTokens();
+                Api.ClearToken();
+                return false;
+            }
+        };
 
         // Install a WndProc subclass on the hidden window so WM_HOTKEY messages
         // reach HotkeyService.ProcessHotkeyMessage.  The delegate MUST be stored
@@ -832,28 +885,35 @@ internal static class SettingsFormBuilder
     {
         var tab = MakeTab("Rewrite");
         int y = 16;
+        var allTones = Enum.GetValues<Tone>();
 
-        // Mode section
+        // ── Mode section (always visible) ───────────────────
         tab.Controls.Add(MakeSectionHeader("Mode", y));
         y += 30;
         tab.Controls.Add(MakeFieldLabel("Interaction Mode", y));
         y += 18;
         var modeCombo = MakeComboBox(y);
-        modeCombo.Items.Add("Advanced");
-        modeCombo.Items.Add("One-Click");
+        modeCombo.Items.Add(AppMode.Advanced.DisplayName());
+        modeCombo.Items.Add(AppMode.OneClick.DisplayName());
         modeCombo.SelectedIndex = App.Settings.AppMode == AppMode.OneClick ? 1 : 0;
         tab.Controls.Add(modeCombo);
         y += 44;
 
-        // One-Click Tone (conditionally visible)
-        var oneClickLabel = MakeFieldLabel("One-Click Tone", y);
-        tab.Controls.Add(oneClickLabel);
-        y += 18;
-        var oneClickCombo = MakeComboBox(y);
-        var allTones = Enum.GetValues<Tone>();
-        foreach (var t in allTones)
-            oneClickCombo.Items.Add(t.DisplayName());
-        // Set initial selection
+        // ── Simple + Advanced blocks share the same starting Y ──
+        // Only one block is visible at a time; the other is hidden so the
+        // user never sees an empty gap between Mode and the visible block.
+        int conditionalY = y;
+
+        var simpleOnlyControls = new List<WinForms.Control>();
+        var advancedOnlyControls = new List<WinForms.Control>();
+
+        // ── Simple block: Simple Tone + Default Tone ────────
+        int sy = conditionalY;
+        var oneClickLabel = MakeFieldLabel($"{AppMode.OneClick.DisplayName()} Tone", sy);
+        tab.Controls.Add(oneClickLabel); simpleOnlyControls.Add(oneClickLabel);
+        sy += 18;
+        var oneClickCombo = MakeComboBox(sy);
+        foreach (var t in allTones) oneClickCombo.Items.Add(t.DisplayName());
         int initialIdx = 0;
         for (int i = 0; i < allTones.Length; i++)
         {
@@ -864,24 +924,6 @@ internal static class SettingsFormBuilder
             }
         }
         oneClickCombo.SelectedIndex = initialIdx;
-        tab.Controls.Add(oneClickCombo);
-        int oneClickBottomY = y + 44;
-
-        // Visibility helper
-        void UpdateOneClickVisibility()
-        {
-            bool visible = modeCombo.SelectedIndex == 1;
-            oneClickLabel.Visible = visible;
-            oneClickCombo.Visible = visible;
-        }
-        UpdateOneClickVisibility();
-
-        modeCombo.SelectedIndexChanged += (_, _) =>
-        {
-            App.Settings.AppMode = modeCombo.SelectedIndex == 1 ? AppMode.OneClick : AppMode.Advanced;
-            App.Settings.Save();
-            UpdateOneClickVisibility();
-        };
         oneClickCombo.SelectedIndexChanged += (_, _) =>
         {
             if (oneClickCombo.SelectedIndex >= 0 && oneClickCombo.SelectedIndex < allTones.Length)
@@ -890,18 +932,44 @@ internal static class SettingsFormBuilder
                 App.Settings.Save();
             }
         };
+        tab.Controls.Add(oneClickCombo); simpleOnlyControls.Add(oneClickCombo);
+        sy += 44;
 
-        y = oneClickBottomY;
+        var defaultToneLabel = MakeFieldLabel("Default Tone (auto-run)", sy);
+        tab.Controls.Add(defaultToneLabel); simpleOnlyControls.Add(defaultToneLabel);
+        sy += 18;
+        var defaultCombo = MakeComboBox(sy);
+        int defaultSelected = 0;
+        for (int i = 0; i < allTones.Length; i++)
+        {
+            defaultCombo.Items.Add(allTones[i].DisplayName());
+            if (allTones[i].ApiValue() == App.Settings.DefaultTone)
+                defaultSelected = i;
+        }
+        defaultCombo.SelectedIndex = defaultSelected;
+        defaultCombo.SelectedIndexChanged += (_, _) =>
+        {
+            if (defaultCombo.SelectedIndex >= 0 && defaultCombo.SelectedIndex < allTones.Length)
+            {
+                App.Settings.DefaultTone = allTones[defaultCombo.SelectedIndex].ApiValue();
+                App.Settings.Save();
+            }
+        };
+        tab.Controls.Add(defaultCombo); simpleOnlyControls.Add(defaultCombo);
+        sy += 30;
+        int simpleBlockHeight = sy - conditionalY;
 
-        // Panel Tones section
-        tab.Controls.Add(MakeSectionHeader("Panel Tones", y));
-        y += 30;
+        // ── Advanced block: Panel Tones ─────────────────────
+        int ay = conditionalY;
+        var panelTonesHeader = MakeSectionHeader("Panel Tones", ay);
+        tab.Controls.Add(panelTonesHeader); advancedOnlyControls.Add(panelTonesHeader);
+        ay += 30;
         foreach (var tone in allTones)
         {
             var cb = MakeCheckBox(
                 $"{tone.Icon()}  {tone.DisplayName()}",
                 App.Settings.EnabledTones.Contains(tone.ApiValue()),
-                y);
+                ay);
             cb.CheckedChanged += (_, _) =>
             {
                 var apiVal = tone.ApiValue();
@@ -916,47 +984,70 @@ internal static class SettingsFormBuilder
                 }
                 App.Settings.Save();
             };
-            tab.Controls.Add(cb);
-            y += 26;
+            tab.Controls.Add(cb); advancedOnlyControls.Add(cb);
+            ay += 26;
         }
-        y += 12;
+        int advancedBlockHeight = ay - conditionalY;
 
-        // Default Tone (auto-run)
-        tab.Controls.Add(MakeFieldLabel("Default Tone (auto-run)", y));
-        y += 18;
-        var defaultCombo = MakeComboBox(y);
-        defaultCombo.Items.Add("(None)");
-        int defaultSelected = 0;
-        foreach (var tone in allTones)
+        // ── Translation section (always visible, position depends on mode) ──
+        // Constructed at y=0 then re-positioned by UpdateModeVisibility so it
+        // always sits directly below the visible block — no gaps, no overlap.
+        var translationHeader = MakeSectionHeader("Translation", 0);
+        var translationLabel = MakeFieldLabel("Target Language", 0);
+
+        // Editable ComboBox: pre-populated with common languages but the user
+        // can type any value for niche ones — the backend passes the string
+        // straight to the AI, so anything human-readable works.
+        var langBox = new WinForms.ComboBox
         {
-            defaultCombo.Items.Add(tone.DisplayName());
-            if (tone.ApiValue() == App.Settings.DefaultTone)
-                defaultSelected = defaultCombo.Items.Count - 1;
-        }
-        defaultCombo.SelectedIndex = defaultSelected;
-        defaultCombo.SelectedIndexChanged += (_, _) =>
-        {
-            if (defaultCombo.SelectedIndex == 0)
-                App.Settings.DefaultTone = "";
-            else
-                App.Settings.DefaultTone = allTones[defaultCombo.SelectedIndex - 1].ApiValue();
-            App.Settings.Save();
+            Location = new Point(16, 0),
+            Size = new Size(448, 30),
+            BackColor = CardBg,
+            ForeColor = TextPrimary,
+            Font = new Font("Segoe UI", 10),
+            DropDownStyle = WinForms.ComboBoxStyle.DropDown,
+            FlatStyle = WinForms.FlatStyle.Flat,
+            AutoCompleteMode = WinForms.AutoCompleteMode.SuggestAppend,
+            AutoCompleteSource = WinForms.AutoCompleteSource.ListItems,
         };
-        tab.Controls.Add(defaultCombo);
-        y += 44;
-
-        // Translation section
-        tab.Controls.Add(MakeSectionHeader("Translation", y));
-        y += 30;
-        tab.Controls.Add(MakeFieldLabel("Target Language", y));
-        y += 18;
-        var langBox = MakeTextBox(y, App.Settings.TranslateLanguage);
+        string[] commonLanguages =
+        {
+            "English", "Vietnamese", "Spanish", "French", "German", "Italian",
+            "Portuguese", "Dutch", "Russian", "Japanese", "Korean",
+            "Chinese (Simplified)", "Chinese (Traditional)", "Arabic", "Hindi",
+            "Thai", "Indonesian", "Turkish", "Polish",
+        };
+        langBox.Items.AddRange(commonLanguages);
+        langBox.Text = App.Settings.TranslateLanguage ?? "";
         langBox.TextChanged += (_, _) =>
         {
             App.Settings.TranslateLanguage = langBox.Text.Trim();
             App.Settings.Save();
         };
+        tab.Controls.Add(translationHeader);
+        tab.Controls.Add(translationLabel);
         tab.Controls.Add(langBox);
+
+        void UpdateModeVisibility()
+        {
+            bool isSimple = modeCombo.SelectedIndex == 1;
+            foreach (var c in simpleOnlyControls) c.Visible = isSimple;
+            foreach (var c in advancedOnlyControls) c.Visible = !isSimple;
+
+            int visibleHeight = isSimple ? simpleBlockHeight : advancedBlockHeight;
+            int translationY = conditionalY + visibleHeight + 14;
+            translationHeader.Top = translationY;
+            translationLabel.Top  = translationY + 30;
+            langBox.Top           = translationY + 48;
+        }
+        UpdateModeVisibility();
+
+        modeCombo.SelectedIndexChanged += (_, _) =>
+        {
+            App.Settings.AppMode = modeCombo.SelectedIndex == 1 ? AppMode.OneClick : AppMode.Advanced;
+            App.Settings.Save();
+            UpdateModeVisibility();
+        };
 
         return tab;
     }
@@ -1012,8 +1103,26 @@ internal static class SettingsFormBuilder
     private static WinForms.TabPage BuildAccountTab()
     {
         var tab = MakeTab("Account");
-        int y = 16;
+        PopulateAccountTab(tab);
+        return tab;
+    }
 
+    /// <summary>
+    /// Renders the Account tab body based on current auth state. Called once
+    /// at tab construction, then again whenever the user signs in or out so
+    /// the UI flips between Sign In and Signed In without requiring the
+    /// Settings window to be reopened.
+    /// </summary>
+    private static void PopulateAccountTab(WinForms.TabPage tab)
+    {
+        // Tear down existing controls before re-rendering. Dispose explicitly so
+        // event handlers don't keep references to disposed boxes/buttons alive.
+        var existing = new System.Collections.Generic.List<WinForms.Control>();
+        foreach (WinForms.Control c in tab.Controls) existing.Add(c);
+        tab.Controls.Clear();
+        foreach (var c in existing) c.Dispose();
+
+        int y = 16;
         var signedIn = !string.IsNullOrEmpty(App.Auth.AccessToken);
 
         if (signedIn)
@@ -1039,11 +1148,7 @@ internal static class SettingsFormBuilder
             {
                 App.Auth.ClearTokens();
                 App.Api.ClearToken();
-                WinForms.MessageBox.Show(
-                    "Signed out successfully. Please reopen Settings to sign in again.",
-                    "DraftRight",
-                    WinForms.MessageBoxButtons.OK,
-                    WinForms.MessageBoxIcon.Information);
+                PopulateAccountTab(tab);
             };
             tab.Controls.Add(signOutBtn);
         }
@@ -1137,7 +1242,8 @@ internal static class SettingsFormBuilder
                     {
                         App.Auth.SaveTokens(result.AccessToken, result.RefreshToken, result.User?.Email);
                         App.Api.SetToken(result.AccessToken);
-                        setStatus("Signed in! Please reopen Settings.", SuccessGreen);
+                        // Flip the tab to the Signed In view immediately.
+                        PopulateAccountTab(tab);
                     }
                     else
                     {
@@ -1151,13 +1257,12 @@ internal static class SettingsFormBuilder
                 }
                 finally
                 {
-                    signInBtn.Enabled = true;
+                    // signInBtn may have been disposed if PopulateAccountTab ran.
+                    try { signInBtn.Enabled = true; } catch (ObjectDisposedException) { }
                 }
             };
             tab.Controls.Add(signInBtn);
         }
-
-        return tab;
     }
 
     private static WinForms.TabPage BuildAdvancedTab()
@@ -1168,9 +1273,13 @@ internal static class SettingsFormBuilder
         tab.Controls.Add(MakeSectionHeader("Logs", y));
         y += 30;
 
-        // DRLogger has LogFilePath but no IsEnabled — the checkbox is cosmetic
-        var loggingEnabled = MakeCheckBox("Enable Logging", true, y);
-        loggingEnabled.Enabled = false; // read-only; logging is always-on in this build
+        var loggingEnabled = MakeCheckBox("Enable Logging", App.Settings.LoggingEnabled, y);
+        loggingEnabled.CheckedChanged += (_, _) =>
+        {
+            App.Settings.LoggingEnabled = loggingEnabled.Checked;
+            App.Settings.Save();
+            DRLogger.IsEnabled = loggingEnabled.Checked;
+        };
         tab.Controls.Add(loggingEnabled);
         y += 34;
 

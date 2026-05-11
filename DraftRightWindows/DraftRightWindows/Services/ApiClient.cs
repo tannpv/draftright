@@ -35,6 +35,16 @@ public sealed class ApiClient : IDisposable
     }
 
     /// <summary>
+    /// Invoked when an authenticated request receives 401. Implementations
+    /// should attempt to refresh the access token (calling RefreshAsync) and
+    /// return true if the retry should proceed, false to surface the 401 to
+    /// the caller. Single-flight: parallel 401s are not coordinated here, so
+    /// the callback may be invoked concurrently — keep it idempotent or guard
+    /// it externally.
+    /// </summary>
+    public Func<Task<bool>>? OnUnauthorized { get; set; }
+
+    /// <summary>
     /// Sets the Bearer authorization header for subsequent requests.
     /// </summary>
     public void SetBaseUrl(string url) => _baseUrl = url.StripTrailingSlash();
@@ -58,13 +68,23 @@ public sealed class ApiClient : IDisposable
     public async Task<AuthResponse> LoginAsync(string email, string password)
     {
         var body = new LoginRequest { Email = email, Password = password };
-        return await PostAsync<AuthResponse>("/auth/login", body);
+        return await PostAsync<AuthResponse>("/auth/login", body, autoRefresh: false);
     }
 
     public async Task<AuthResponse> RegisterAsync(string email, string password, string name)
     {
         var body = new RegisterRequest { Email = email, Password = password, Name = name };
-        return await PostAsync<AuthResponse>("/auth/register", body);
+        return await PostAsync<AuthResponse>("/auth/register", body, autoRefresh: false);
+    }
+
+    /// <summary>
+    /// Exchanges a refresh token for a fresh access/refresh pair.
+    /// Does not auto-retry on 401 — a 401 here means the refresh token itself is invalid.
+    /// </summary>
+    public async Task<AuthResponse> RefreshAsync(string refreshToken)
+    {
+        var body = new { refresh_token = refreshToken };
+        return await PostAsync<AuthResponse>("/auth/refresh", body, autoRefresh: false);
     }
 
     // ── Rewrite ─────────────────────────────────────────────
@@ -129,19 +149,59 @@ public sealed class ApiClient : IDisposable
 
     // ── Helpers ─────────────────────────────────────────────
 
-    private async Task<T> PostAsync<T>(string path, object payload)
+    private async Task<T> PostAsync<T>(string path, object payload, bool autoRefresh = true)
     {
         var json = JsonSerializer.Serialize(payload, JsonOptions);
-        using var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-        using var response = await _http.PostAsync($"{_baseUrl}{path}", content);
-        return await HandleResponse<T>(response);
+        return await SendWithAutoRefreshAsync<T>(
+            () =>
+            {
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+                return _http.PostAsync($"{_baseUrl}{path}", content);
+            },
+            autoRefresh);
     }
 
-    private async Task<T> GetAsync<T>(string path)
+    private async Task<T> GetAsync<T>(string path, bool autoRefresh = true)
     {
-        using var response = await _http.GetAsync($"{_baseUrl}{path}");
-        return await HandleResponse<T>(response);
+        return await SendWithAutoRefreshAsync<T>(
+            () => _http.GetAsync($"{_baseUrl}{path}"),
+            autoRefresh);
+    }
+
+    /// <summary>
+    /// Sends the request once; if it 401s and auto-refresh is on (and an
+    /// OnUnauthorized callback is wired), invokes the callback and retries
+    /// exactly once. If the callback returns false, surfaces a clear
+    /// session-expired error rather than the raw 401.
+    /// </summary>
+    private async Task<T> SendWithAutoRefreshAsync<T>(
+        Func<Task<HttpResponseMessage>> send,
+        bool autoRefresh)
+    {
+        var response = await send();
+        try
+        {
+            if (autoRefresh
+                && response.StatusCode == System.Net.HttpStatusCode.Unauthorized
+                && OnUnauthorized != null)
+            {
+                response.Dispose();
+                response = null!;
+                var refreshed = await OnUnauthorized();
+                if (!refreshed)
+                {
+                    throw new ApiException(
+                        "API 401 Unauthorized: Session expired. Please sign in again.",
+                        System.Net.HttpStatusCode.Unauthorized);
+                }
+                response = await send();
+            }
+            return await HandleResponse<T>(response);
+        }
+        finally
+        {
+            response?.Dispose();
+        }
     }
 
     private static async Task<T> HandleResponse<T>(HttpResponseMessage response)

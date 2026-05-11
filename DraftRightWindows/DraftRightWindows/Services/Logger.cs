@@ -14,6 +14,13 @@ public static class DRLogger
 
     public enum Category { APP, AUTH, API, PANEL, SETTINGS, HOTKEY }
 
+    /// <summary>
+    /// Master switch — when false, Log() short-circuits without writing.
+    /// Settings.LoggingEnabled is mirrored here at startup and on toggle so
+    /// hot paths don't have to reach into SettingsService.
+    /// </summary>
+    public static bool IsEnabled { get; set; } = true;
+
     static DRLogger()
     {
         Directory.CreateDirectory(LogDir);
@@ -21,6 +28,8 @@ public static class DRLogger
 
     public static void Log(string message, Category category = Category.APP)
     {
+        if (!IsEnabled) return;
+
         var line = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] [{category}] {message}";
         lock (Lock)
         {
