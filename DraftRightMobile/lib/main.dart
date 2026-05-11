@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -23,36 +25,195 @@ bool get isDesktop =>
      defaultTargetPlatform == TargetPlatform.linux ||
      defaultTargetPlatform == TargetPlatform.macOS);
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await DRLogger.init();
-  DRLogger.log('App started', category: 'APP');
-  final settings = SettingsService();
-  await settings.init();
-
-  final auth = AuthService();
-  await auth.init(settings.backendUrl);
-
-  // Wire global error reporter — sends unhandled crashes to /errors so the
-  // team can triage. Listen to auth changes so the bearer token is current
-  // even if the user signs in/out mid-session.
-  auth.addListener(() async {
-    final token = await auth.getAccessToken();
-    ErrorReporter.setBearerToken(token);
+/// Entry point.
+///
+/// Renders a splash *immediately* — no `await` before `runApp` — so a slow
+/// or hanging platform-channel call during startup can never leave the user
+/// staring at a blank screen. (App Store Connect rejected build 31 / 2.2.2
+/// under Guideline 2.1(a) for exactly that: "Upon launching the app, a blank
+/// screen is displayed." The old `main()` did six sequential `await`s before
+/// `runApp`.) All real init now happens in [_Bootstrap], after the first
+/// frame, with each step guarded by a timeout.
+void main() {
+  runZonedGuarded(() {
+    WidgetsFlutterBinding.ensureInitialized();
+    runApp(const _BootstrapApp());
+  }, (error, stack) {
+    // Best-effort — ErrorReporter may not be attached yet this early.
+    try {
+      ErrorReporter.reportHandled(error, stack: stack, severity: 'fatal');
+    } catch (_) {/* swallow — never let the reporter crash startup */}
   });
-  final initialToken = await auth.getAccessToken();
+}
 
-  await ErrorReporter.run(
-    () {
-      if (isDesktop) {
-        runApp(DesktopApp(settings: settings, auth: auth));
-      } else {
-        runApp(DraftRightApp(settings: settings, auth: auth));
-      }
-    },
-    backendUrl: settings.backendUrl,
-    bearerToken: initialToken,
-  );
+const Duration _bootstrapStepTimeout = Duration(seconds: 8);
+
+class _BootstrapApp extends StatelessWidget {
+  const _BootstrapApp();
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'DraftRight',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+        useMaterial3: true,
+      ),
+      darkTheme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+            seedColor: Colors.blue, brightness: Brightness.dark),
+        useMaterial3: true,
+      ),
+      home: const _Bootstrap(),
+    );
+  }
+}
+
+/// Runs all startup init *after* the first frame, swapping in the real app
+/// (or, in the worst case, a "couldn't start" screen) when done. Never a
+/// blank screen: the splash below is the floor of what the user can see.
+class _Bootstrap extends StatefulWidget {
+  const _Bootstrap();
+
+  @override
+  State<_Bootstrap> createState() => _BootstrapState();
+}
+
+class _BootstrapState extends State<_Bootstrap> {
+  SettingsService? _settings;
+  AuthService? _auth;
+  bool _failed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _init());
+  }
+
+  /// Run one init step with a hard timeout. Failures are logged + reported
+  /// but never abort startup — a degraded app beats a blank screen.
+  Future<void> _step(String label, Future<void> Function() body) async {
+    try {
+      await body().timeout(_bootstrapStepTimeout);
+    } catch (e, st) {
+      try {
+        DRLogger.log('bootstrap step "$label" failed: $e', category: 'APP');
+      } catch (_) {}
+      try {
+        ErrorReporter.reportHandled(e,
+            stack: st,
+            severity: 'warning',
+            context: {'bootstrap_step': label});
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _init() async {
+    try {
+      await _step('logger', () => DRLogger.init());
+      try {
+        DRLogger.log('App started', category: 'APP');
+      } catch (_) {}
+
+      final settings = SettingsService();
+      await _step('settings', () => settings.init());
+
+      final auth = AuthService();
+      await _step('auth', () => auth.init(settings.backendUrl));
+
+      String? initialToken;
+      await _step('token', () async {
+        initialToken = await auth.getAccessToken();
+      });
+
+      auth.addListener(() async {
+        final token = await auth.getAccessToken();
+        ErrorReporter.setBearerToken(token);
+      });
+
+      // Wire crash reporting now that we know the backend URL. Synchronous
+      // and non-blocking — see ErrorReporter.attach.
+      try {
+        ErrorReporter.attach(
+          backendUrl: settings.backendUrl,
+          bearerToken: initialToken,
+        );
+      } catch (_) {/* reporter must never block startup */}
+
+      if (!mounted) return;
+      setState(() {
+        _settings = settings;
+        _auth = auth;
+      });
+    } catch (e, st) {
+      // Should be unreachable (every step is already guarded) — but if the
+      // bootstrap itself throws, show a retry screen, never a blank one.
+      try {
+        DRLogger.log('bootstrap failed catastrophically: $e\n$st',
+            category: 'APP');
+      } catch (_) {}
+      if (mounted) setState(() => _failed = true);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = _settings;
+    final auth = _auth;
+    if (settings != null && auth != null) {
+      return isDesktop
+          ? DesktopApp(settings: settings, auth: auth)
+          : DraftRightApp(settings: settings, auth: auth);
+    }
+    if (_failed) {
+      return Scaffold(
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.error_outline, size: 56),
+                const SizedBox(height: 16),
+                const Text("DraftRight couldn't start",
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 8),
+                const Text('Please check your connection and try again.',
+                    textAlign: TextAlign.center),
+                const SizedBox(height: 20),
+                FilledButton(
+                  onPressed: () {
+                    setState(() => _failed = false);
+                    WidgetsBinding.instance
+                        .addPostFrameCallback((_) => _init());
+                  },
+                  child: const Text('Retry'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+    // Splash — the worst case the reviewer (or any user) can ever see.
+    return const Scaffold(
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.edit_note, size: 64),
+            SizedBox(height: 20),
+            SizedBox(
+              width: 28,
+              height: 28,
+              child: CircularProgressIndicator(strokeWidth: 3),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 // ── Mobile app ───────────────────────────────────────────────────────────────

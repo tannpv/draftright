@@ -23,16 +23,17 @@ class ErrorReporter {
   static const _persistKey = 'draftright.error_reporter.queue';
   static bool _flushScheduled = false;
 
-  /// Wrap `runApp` so anything that throws on the Dart side gets reported.
-  static Future<void> run(
-    void Function() startApp, {
-    required String backendUrl,
-    String? bearerToken,
-  }) async {
+  /// Install crash handlers + record the backend URL / bearer token.
+  ///
+  /// Synchronous and non-blocking on purpose: the app must already be on
+  /// screen before this runs. (A previous version `await`ed app-version
+  /// and queue loads before `runApp`, which — if those platform-channel
+  /// calls stalled on a clean install — produced a permanent blank screen
+  /// and an App Store rejection. Now `runApp` happens first; this just
+  /// wires error capture afterward and warms up in the background.)
+  static void attach({required String backendUrl, String? bearerToken}) {
     _backendUrl = backendUrl.replaceAll(RegExp(r'/+$'), '');
     _bearerToken = bearerToken;
-    await _loadAppVersion();
-    await _loadPersistedQueue();
 
     // Synchronous Flutter framework errors (build phase, etc.)
     FlutterError.onError = (FlutterErrorDetails details) {
@@ -59,16 +60,10 @@ class ErrorReporter {
       return true; // mark handled — we've recorded it
     };
 
-    // Wrap the app in an error-catching zone for sync exceptions thrown
-    // outside the Flutter framework path
-    runZonedGuarded(startApp, (error, stack) {
-      _enqueue(
-        errorType: error.runtimeType.toString(),
-        message: error.toString(),
-        stack: stack.toString(),
-        severity: 'fatal',
-      );
-    });
+    // Warm-up (app version + persisted queue) — fire-and-forget so a slow
+    // platform channel can never block the UI.
+    unawaited(_loadAppVersion());
+    unawaited(_loadPersistedQueue());
   }
 
   /// Update the bearer token after sign-in/out so future reports get
