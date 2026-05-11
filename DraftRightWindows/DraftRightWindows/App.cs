@@ -193,8 +193,18 @@ public class App : Application
         // Start health check — immediate first check, then every 30 seconds
         _healthTimer = new System.Threading.Timer(async _ => await PerformHealthCheckAsync(), null, TimeSpan.Zero, TimeSpan.FromSeconds(30));
 
-        // Start update check — 10 seconds after launch
-        UpdateService = new UpdateService("1.0.0", Settings.BackendUrl);
+        // Start update check — 10 seconds after launch.
+        // Read the real assembly version. Previously hardcoded to "1.0.0", which
+        // meant every backend release looked newer (the user got an "update
+        // available" prompt for versions OLDER than what they had installed).
+        var asmVer = System.Reflection.Assembly.GetExecutingAssembly()
+            .GetName().Version?.ToString() ?? "0.0.0";
+        // Drop trailing ".0" if present so the local string compares cleanly
+        // against semver-style backend versions ("2.1.1" not "2.1.1.0").
+        var currentVersion = asmVer.EndsWith(".0") ? asmVer.Substring(0, asmVer.Length - 2) : asmVer;
+        DRLogger.Log($"UpdateService current version: {currentVersion} (assembly {asmVer})",
+            DRLogger.Category.APP);
+        UpdateService = new UpdateService(currentVersion, Settings.BackendUrl);
         _ = Task.Delay(TimeSpan.FromSeconds(10)).ContinueWith(_ => UpdateService.CheckIfNeededAsync());
     }
 
