@@ -1328,6 +1328,23 @@ internal static class SettingsFormBuilder
             }
         };
         tab.Controls.Add(clearBtn);
+        y += 50;
+
+        // Feedback section — opens the bug-report dialog (mirrors macOS).
+        tab.Controls.Add(MakeSectionHeader("Feedback", y));
+        y += 30;
+        tab.Controls.Add(new WinForms.Label
+        {
+            Text = "Hit a bug? Send us a description (and a screenshot if you have one) and we'll take a look.",
+            ForeColor = TextMuted,
+            Font = new Font("Segoe UI", 9),
+            Location = new Point(16, y),
+            Size = new Size(448, 36),
+        });
+        y += 40;
+        var bugBtn = MakeSecondaryButton("Report a Bug…", 16, y, 160);
+        bugBtn.Click += (_, _) => Views.ReportBugDialog.Show();
+        tab.Controls.Add(bugBtn);
 
         return tab;
     }
