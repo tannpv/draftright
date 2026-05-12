@@ -1,21 +1,66 @@
 import Foundation
 import AppKit
 
+/// One platform's entry in the `platforms` map of `/updates/latest`.
+struct PlatformRelease: Codable {
+    let version: String
+    let url: String
+    let notes: String?
+    let required: Bool?
+}
+
 struct UpdateInfo: Codable {
+    // Legacy top-level fields (kept for older clients). The top-level
+    // `version` is now the highest version across all platforms, so it's
+    // still safe to compare against — but always download via the
+    // per-platform entry below when it's present.
     let version: String
     let mac_url: String
     let windows_url: String
     let linux_url: String
     let release_notes: String
     let required: Bool
+    // Per-platform expansion. Prefer this when present.
+    let platforms: [String: PlatformRelease]?
+
+    /// Resolve the release applicable to `platform` ("mac"), preferring the
+    /// `platforms` map and falling back to the legacy top-level fields.
+    func resolved(for platform: String) -> ResolvedUpdate {
+        if let p = platforms?[platform] {
+            return ResolvedUpdate(version: p.version, url: p.url,
+                                  notes: p.notes ?? release_notes,
+                                  required: p.required ?? required)
+        }
+        let legacyURL: String
+        switch platform {
+        case "windows": legacyURL = windows_url
+        case "linux": legacyURL = linux_url
+        default: legacyURL = mac_url
+        }
+        return ResolvedUpdate(version: version, url: legacyURL,
+                              notes: release_notes, required: required)
+    }
+}
+
+/// A concrete update target the UI can act on.
+struct ResolvedUpdate: Equatable {
+    let version: String
+    let url: String
+    let notes: String
+    let required: Bool
 }
 
 @MainActor
-final class UpdateService {
+final class UpdateService: ObservableObject {
     private let currentVersion: String
     private let backendUrl: String
     private var lastCheck: Date = .distantPast
     private let checkInterval: TimeInterval = 86400 // 24 hours
+
+    /// Newest release applicable to this Mac (strictly newer + non-empty
+    /// URL), or nil if up to date / not yet checked. Drives the menu-bar
+    /// "Update available" item and the Settings link.
+    @Published private(set) var availableUpdate: ResolvedUpdate?
 
     init(currentVersion: String, backendUrl: String) {
         self.currentVersion = currentVersion
@@ -24,32 +69,45 @@ final class UpdateService {
 
     func checkIfNeeded() async {
         guard Date().timeIntervalSince(lastCheck) > checkInterval else { return }
-        await checkNow()
+        lastCheck = Date()
+        if let update = await refreshAvailableUpdate() {
+            showUpdateDialog(update)
+        }
     }
 
     /// Manual check — skips the 24h throttle. Called from Settings > Check for Updates.
     func checkNow() async {
         lastCheck = Date()
+        guard let update = await refreshAvailableUpdate() else {
+            let alert = NSAlert()
+            alert.messageText = "No Updates Available"
+            alert.informativeText = "You're running the latest version (v\(currentVersion))."
+            alert.alertStyle = .informational
+            alert.runModal()
+            return
+        }
+        showUpdateDialog(update)
+    }
 
+    /// Fetch `/updates/latest`, recompute `availableUpdate`, return it (or nil).
+    @discardableResult
+    func refreshAvailableUpdate() async -> ResolvedUpdate? {
         guard let info = await fetchLatestVersion() else {
-            let alert = NSAlert()
-            alert.messageText = "No Updates Available"
-            alert.informativeText = "You're running the latest version (v\(currentVersion))."
-            alert.alertStyle = .informational
-            alert.runModal()
-            return
+            availableUpdate = nil
+            return nil
         }
-        guard isNewer(remote: info.version, local: currentVersion) else {
-            let alert = NSAlert()
-            alert.messageText = "No Updates Available"
-            alert.informativeText = "You're running the latest version (v\(currentVersion))."
-            alert.alertStyle = .informational
-            alert.runModal()
-            return
-        }
-        guard !info.mac_url.isEmpty else { return }
+        let candidate = info.resolved(for: "mac")
+        let applicable = (isNewer(remote: candidate.version, local: currentVersion)
+                          && !candidate.url.isEmpty) ? candidate : nil
+        availableUpdate = applicable
+        return applicable
+    }
 
-        showUpdateDialog(info: info)
+    /// Begin downloading + installing the given update. Public entry point
+    /// for the menu-bar item / Settings link.
+    func startInstall(_ update: ResolvedUpdate) {
+        guard !update.url.isEmpty else { return }
+        Task { await downloadAndInstall(url: update.url, version: update.version) }
     }
 
     private func fetchLatestVersion() async -> UpdateInfo? {
@@ -77,21 +135,19 @@ final class UpdateService {
         return false
     }
 
-    private func showUpdateDialog(info: UpdateInfo) {
+    private func showUpdateDialog(_ update: ResolvedUpdate) {
         let alert = NSAlert()
         alert.messageText = "Update Available"
-        alert.informativeText = "DraftRight v\(info.version) is available.\n\n\(info.release_notes)"
+        alert.informativeText = "DraftRight v\(update.version) is available.\n\n\(update.notes)"
         alert.alertStyle = .informational
         alert.addButton(withTitle: "Install Now")
-        if !info.required {
+        if !update.required {
             alert.addButton(withTitle: "Later")
         }
 
         let response = alert.runModal()
         if response == .alertFirstButtonReturn {
-            Task {
-                await downloadAndInstall(url: info.mac_url, version: info.version)
-            }
+            startInstall(update)
         }
     }
 

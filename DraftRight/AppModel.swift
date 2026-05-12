@@ -81,6 +81,9 @@ final class AppModel: ObservableObject {
     /// on successful sign-in. Distinct from a transient network failure where
     /// the user just needs to wait, not re-authenticate.
     @Published var sessionExpired: Bool = false
+    /// Mirrors `updateService.availableUpdate` so SwiftUI views (menu bar,
+    /// Settings) can show an "Update X available" affordance.
+    @Published var availableUpdate: ResolvedUpdate?
     var cancellables = Set<AnyCancellable>()
 
     private let defaults = UserDefaults.standard
@@ -140,7 +143,12 @@ final class AppModel: ObservableObject {
 
         // Start update check — 10 seconds after launch
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
-        updateService = UpdateService(currentVersion: version, backendUrl: backendUrl)
+        let svc = UpdateService(currentVersion: version, backendUrl: backendUrl)
+        updateService = svc
+        svc.$availableUpdate
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in self?.availableUpdate = $0 }
+            .store(in: &cancellables)
         DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
             Task { @MainActor in
                 await self?.updateService?.checkIfNeeded()

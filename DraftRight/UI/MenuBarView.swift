@@ -23,6 +23,14 @@ struct MenuBarView: View {
                 .font(.caption)
                 .foregroundColor(.secondary)
 
+            if let update = appModel.availableUpdate {
+                Divider()
+                Button("⬆ Update \(update.version) available — install now") {
+                    appModel.updateService?.startInstall(update)
+                }
+                .foregroundColor(.green)
+            }
+
             Divider()
 
             Button("Settings...") {
