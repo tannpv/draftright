@@ -26,6 +26,7 @@ public class App : Application
     private WinForms.NotifyIcon? _trayIcon;
     private System.Threading.Timer? _healthTimer;
     private WinForms.ToolStripMenuItem? _statusMenuItem;
+    private WinForms.ToolStripMenuItem? _updateMenuItem;
     public static BackendStatus CurrentStatus { get; private set; } = BackendStatus.Offline;
     private DateTime _lastAutoRecovery = DateTime.MinValue;
     public static UpdateService? UpdateService { get; private set; }
@@ -517,6 +518,17 @@ public class App : Application
         var menu = new WinForms.ContextMenuStrip();
         _statusMenuItem = new WinForms.ToolStripMenuItem("Offline") { Enabled = false };
         menu.Items.Add(_statusMenuItem);
+        _updateMenuItem = new WinForms.ToolStripMenuItem("Update available")
+        {
+            Visible = false,
+            ForeColor = Color.FromArgb(34, 197, 94),
+        };
+        _updateMenuItem.Click += (_, _) =>
+        {
+            var u = UpdateService?.AvailableUpdate;
+            if (u != null) UpdateService!.StartInstall(u);
+        };
+        menu.Items.Add(_updateMenuItem);
         menu.Items.Add(new WinForms.ToolStripSeparator());
         menu.Items.Add("Settings", null, (_, _) => OpenSettings());
         menu.Items.Add(new WinForms.ToolStripSeparator());
@@ -527,7 +539,36 @@ public class App : Application
         _trayIcon.DoubleClick += (_, _) => OpenSettings();
         _trayIcon.Visible = true;
 
+        // Reflect "update available" in the tray menu — both now (in case the
+        // 10s-after-launch check already finished) and whenever it changes.
+        if (UpdateService != null)
+        {
+            UpdateService.AvailableUpdateChanged += () =>
+            {
+                try { menu.BeginInvoke(new Action(RefreshUpdateMenuItem)); }
+                catch { /* tray menu gone */ }
+            };
+            RefreshUpdateMenuItem();
+        }
+
         WinForms.Application.Run();
+    }
+
+    // Show/hide + relabel the tray "update available" item from the current
+    // UpdateService.AvailableUpdate. Must run on the tray thread.
+    private void RefreshUpdateMenuItem()
+    {
+        if (_updateMenuItem == null) return;
+        var u = UpdateService?.AvailableUpdate;
+        if (u != null)
+        {
+            _updateMenuItem.Text = $"Update {u.Version} available — install now";
+            _updateMenuItem.Visible = true;
+        }
+        else
+        {
+            _updateMenuItem.Visible = false;
+        }
     }
 
     private async Task PerformHealthCheckAsync()
@@ -876,6 +917,57 @@ internal static class SettingsFormBuilder
             AutoSize = true,
         });
         y += 24;
+
+        // "Update X.Y.Z available — click here to download and install" link.
+        // Hidden when up to date. Driven by UpdateService.AvailableUpdate so
+        // it reflects the background check without the user pressing the
+        // button below.
+        var updateLink = new WinForms.LinkLabel
+        {
+            AutoSize = true,
+            Location = new Point(16, y),
+            Font = new Font("Segoe UI", 9, FontStyle.Bold),
+            LinkColor = Color.FromArgb(96, 165, 250),
+            ActiveLinkColor = Color.FromArgb(147, 197, 253),
+            Visible = false,
+        };
+        updateLink.LinkClicked += (_, _) =>
+        {
+            var u = App.UpdateService?.AvailableUpdate;
+            if (u != null) App.UpdateService!.StartInstall(u);
+        };
+        tab.Controls.Add(updateLink);
+        y += 26;
+
+        void RefreshUpdateLink()
+        {
+            var u = App.UpdateService?.AvailableUpdate;
+            if (u != null)
+            {
+                updateLink.Text = $"Update {u.Version} available — click here to download and install";
+                updateLink.Visible = true;
+            }
+            else
+            {
+                updateLink.Visible = false;
+            }
+        }
+        RefreshUpdateLink();
+        // Re-poll in the background so a newly-published update appears here
+        // even if the 10s-after-launch check ran before it went live.
+        if (App.UpdateService != null)
+        {
+            _ = App.UpdateService.RefreshAvailableUpdateAsync().ContinueWith(_ =>
+            {
+                try
+                {
+                    if (!updateLink.IsDisposed)
+                        updateLink.BeginInvoke(new Action(RefreshUpdateLink));
+                }
+                catch { /* settings window closed */ }
+            });
+        }
+
         var updateBtn = MakeSecondaryButton("Check for Updates", 16, y, 180);
         updateBtn.Click += async (_, _) =>
         {
@@ -883,6 +975,7 @@ internal static class SettingsFormBuilder
             updateBtn.Text = "Checking...";
             if (App.UpdateService != null)
                 await App.UpdateService.CheckNowAsync();
+            RefreshUpdateLink();
             updateBtn.Text = "Check for Updates";
             updateBtn.Enabled = true;
         };
