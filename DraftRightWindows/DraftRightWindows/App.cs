@@ -148,6 +148,11 @@ public class App : Application
         // Mirror the saved logging flag into DRLogger before any further Log()
         // calls so the user's preference takes effect from the next line on.
         DRLogger.IsEnabled = Settings.LoggingEnabled;
+        // Heal the run-at-login registration if the setting says it should be on
+        // but the Run key is missing (re-points it at the current exe too).
+        // Never delete here — so the installer's autostart task isn't undone.
+        if (Settings.AutoStart && !StartupRegistration.IsEnabled())
+            StartupRegistration.SetEnabled(true);
         DRLogger.Log($"OnLaunched: settings loaded — BackendUrl={Settings.BackendUrl} AppMode={Settings.AppMode} Hotkey={Settings.HotkeyModifiers:X}+{Settings.HotkeyKey:X}",
             DRLogger.Category.APP);
 
@@ -845,9 +850,12 @@ internal static class SettingsFormBuilder
         // General section
         tab.Controls.Add(MakeSectionHeader("General", y));
         y += 30;
-        var autoStart = MakeCheckBox("Launch at Login", App.Settings.AutoStart, y);
+        // Reflect the actual registry state (the installer's autostart task or a
+        // prior toggle may have set it), not just the saved bool.
+        var autoStart = MakeCheckBox("Launch at Login", StartupRegistration.IsEnabled(), y);
         autoStart.CheckedChanged += (_, _) =>
         {
+            StartupRegistration.SetEnabled(autoStart.Checked);
             App.Settings.AutoStart = autoStart.Checked;
             App.Settings.Save();
         };
