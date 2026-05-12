@@ -13,14 +13,20 @@ import 'package:draftright_mobile/services/bug_report_service.dart';
 ///
 /// [currentRoute] is included in the report's `context` JSON so triagers
 /// can see what screen the user was on when they reported.
+/// [endpointOverride] redirects the submission target — production by
+/// default; integration tests point it at a local stub server.
 Future<void> showReportBugSheet(
   BuildContext context, {
   String? currentRoute,
+  String? endpointOverride,
 }) async {
   if (Platform.isIOS) {
     await showCupertinoModalPopup<void>(
       context: context,
-      builder: (ctx) => _ReportBugSheet(currentRoute: currentRoute),
+      builder: (ctx) => _ReportBugSheet(
+        currentRoute: currentRoute,
+        endpointOverride: endpointOverride,
+      ),
     );
   } else {
     await showModalBottomSheet<void>(
@@ -30,14 +36,18 @@ Future<void> showReportBugSheet(
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      builder: (ctx) => _ReportBugSheet(currentRoute: currentRoute),
+      builder: (ctx) => _ReportBugSheet(
+        currentRoute: currentRoute,
+        endpointOverride: endpointOverride,
+      ),
     );
   }
 }
 
 class _ReportBugSheet extends StatefulWidget {
   final String? currentRoute;
-  const _ReportBugSheet({this.currentRoute});
+  final String? endpointOverride;
+  const _ReportBugSheet({this.currentRoute, this.endpointOverride});
 
   @override
   State<_ReportBugSheet> createState() => _ReportBugSheetState();
@@ -110,6 +120,7 @@ class _ReportBugSheetState extends State<_ReportBugSheet> {
         if (widget.currentRoute != null) 'route': widget.currentRoute,
         'platform': Platform.isIOS ? 'ios' : 'android',
       },
+      endpointOverride: widget.endpointOverride,
     );
 
     if (!mounted) return;
