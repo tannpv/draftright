@@ -2,6 +2,22 @@ import { Controller, Get, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { ReleasesService } from './releases.service';
 
+/** Compare two dotted numeric version strings ("2.2.10" > "2.2.9"). */
+function compareVersions(a: string, b: string): number {
+  const pa = a.split('.').map((n) => parseInt(n, 10) || 0);
+  const pb = b.split('.').map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const diff = (pa[i] ?? 0) - (pb[i] ?? 0);
+    if (diff !== 0) return diff;
+  }
+  return 0;
+}
+
+/** Highest version in the list, or '' if the list is empty. */
+function maxVersion(versions: string[]): string {
+  return versions.reduce((max, v) => (compareVersions(v, max) > 0 ? v : max), '');
+}
+
 /**
  * Public endpoint polled by every desktop app's "Check for Updates" flow.
  *
@@ -29,8 +45,18 @@ export class UpdatesController {
     // Use mac's release_notes + required as the "envelope" notes/required
     // since the 2.1.x clients only show notes for their own platform anyway.
     const mac = all.mac;
+    // The legacy top-level `version` is what older clients compare against to
+    // decide "is there an update?" — but they then download their *own*
+    // platform's `*_url`. If it were just mac's version, a Windows-only
+    // release would be invisible to Windows clients until macOS also bumped.
+    // Report the highest version across all platforms so every client at
+    // least *sees* that something newer exists; the per-platform `platforms`
+    // map (and the `*_url` fields) carry the actual target.
+    const topVersion = maxVersion(
+      Object.values(all).map((r) => r?.version).filter((v): v is string => !!v),
+    );
     return {
-      version: mac?.version ?? '',
+      version: topVersion || mac?.version || '',
       mac_url: mac?.download_url ?? '',
       windows_url: all.windows?.download_url ?? '',
       linux_url: all.linux?.download_url ?? '',
