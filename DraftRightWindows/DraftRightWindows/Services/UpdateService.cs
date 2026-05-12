@@ -39,6 +39,20 @@ public class UpdateService
     private DateTime _lastCheck = DateTime.MinValue;
     private const int CheckIntervalHours = 24;
 
+    /// <summary>
+    /// The newest release that is actually applicable to this install
+    /// (strictly newer version + a non-empty Windows download URL), or null
+    /// if we're up to date / haven't checked yet. Updated by
+    /// <see cref="RefreshAvailableUpdateAsync"/>. Read by the Settings
+    /// "update available" link and the tray menu.
+    /// </summary>
+    public UpdateInfo? AvailableUpdate { get; private set; }
+
+    /// <summary>Raised whenever <see cref="AvailableUpdate"/> changes.</summary>
+    public event Action? AvailableUpdateChanged;
+
+    public string CurrentVersion => _currentVersion;
+
     public UpdateService(string currentVersion, string backendUrl)
     {
         _currentVersion = currentVersion;
@@ -50,20 +64,16 @@ public class UpdateService
         if ((DateTime.UtcNow - _lastCheck).TotalHours < CheckIntervalHours) return;
         _lastCheck = DateTime.UtcNow;
 
-        var info = await FetchLatestVersionAsync();
-        if (info == null) return;
-        if (!IsNewer(info.Version, _currentVersion)) return;
-        if (string.IsNullOrEmpty(info.WindowsUrl)) return;
-
-        ShowUpdateDialog(info);
+        var info = await RefreshAvailableUpdateAsync();
+        if (info != null) ShowUpdateDialog(info);
     }
 
     public async Task CheckNowAsync()
     {
         _lastCheck = DateTime.UtcNow;
 
-        var info = await FetchLatestVersionAsync();
-        if (info == null || !IsNewer(info.Version, _currentVersion))
+        var info = await RefreshAvailableUpdateAsync();
+        if (info == null)
         {
             System.Windows.Forms.MessageBox.Show(
                 $"You're running the latest version (v{_currentVersion}).",
@@ -73,9 +83,42 @@ public class UpdateService
             );
             return;
         }
-        if (string.IsNullOrEmpty(info.WindowsUrl)) return;
 
         ShowUpdateDialog(info);
+    }
+
+    /// <summary>
+    /// Fetches /updates/latest, recomputes <see cref="AvailableUpdate"/>,
+    /// fires <see cref="AvailableUpdateChanged"/> if it changed, and returns
+    /// the applicable update (or null). Safe to call from any thread.
+    /// </summary>
+    public async Task<UpdateInfo?> RefreshAvailableUpdateAsync()
+    {
+        var info = await FetchLatestVersionAsync();
+        var applicable =
+            info != null
+            && IsNewer(info.Version, _currentVersion)
+            && !string.IsNullOrEmpty(info.WindowsUrl)
+                ? info
+                : null;
+
+        var changed = applicable?.Version != AvailableUpdate?.Version;
+        AvailableUpdate = applicable;
+        if (changed)
+        {
+            try { AvailableUpdateChanged?.Invoke(); } catch { /* listener errors are not our problem */ }
+        }
+        return applicable;
+    }
+
+    /// <summary>
+    /// Begins downloading + installing the given update. Public entry point
+    /// for the Settings link / tray menu "update available" affordances.
+    /// </summary>
+    public void StartInstall(UpdateInfo info)
+    {
+        if (string.IsNullOrEmpty(info.WindowsUrl)) return;
+        _ = DownloadAndInstallAsync(info.WindowsUrl, info.Version);
     }
 
     private async Task<UpdateInfo?> FetchLatestVersionAsync()
