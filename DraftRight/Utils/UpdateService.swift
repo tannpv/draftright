@@ -62,6 +62,13 @@ final class UpdateService: ObservableObject {
     /// "Update available" item and the Settings link.
     @Published private(set) var availableUpdate: ResolvedUpdate?
 
+    /// True once `availableUpdate`'s DMG has been silently pre-downloaded and
+    /// is sitting on disk — "install" is then instant (no download, no hang).
+    @Published private(set) var updateStaged: Bool = false
+
+    private var stagedDMGPath: String?
+    private var stagedVersion: String?
+
     init(currentVersion: String, backendUrl: String) {
         self.currentVersion = currentVersion
         self.backendUrl = backendUrl.strippingTrailingSlash
@@ -90,24 +97,100 @@ final class UpdateService: ObservableObject {
     }
 
     /// Fetch `/updates/latest`, recompute `availableUpdate`, return it (or nil).
+    /// Kicks off a silent background download of the new DMG when one applies.
     @discardableResult
     func refreshAvailableUpdate() async -> ResolvedUpdate? {
         guard let info = await fetchLatestVersion() else {
-            availableUpdate = nil
+            setAvailable(nil)
             return nil
         }
         let candidate = info.resolved(for: "mac")
         let applicable = (isNewer(remote: candidate.version, local: currentVersion)
                           && !candidate.url.isEmpty) ? candidate : nil
-        availableUpdate = applicable
+        setAvailable(applicable)
+        if let applicable, !(updateStaged && stagedVersion == applicable.version) {
+            Task { await stageUpdate(applicable) }
+        }
         return applicable
     }
 
-    /// Begin downloading + installing the given update. Public entry point
-    /// for the menu-bar item / Settings link.
+    private func setAvailable(_ update: ResolvedUpdate?) {
+        if update?.version != availableUpdate?.version {
+            // Different (or no) update — any staged DMG is stale.
+            updateStaged = false
+            stagedDMGPath = nil
+            stagedVersion = nil
+        }
+        availableUpdate = update
+    }
+
+    /// Silently downloads the update's DMG to a temp file in the background
+    /// (retries on stalls/failures, no progress window). When it lands,
+    /// `updateStaged` flips true and "install" becomes instant.
+    private func stageUpdate(_ update: ResolvedUpdate) async {
+        guard !update.url.isEmpty, let url = URL(string: update.url) else { return }
+        if updateStaged, stagedVersion == update.version { return }
+        let dmgPath = NSTemporaryDirectory() + "DraftRight-\(update.version).dmg"
+        let dmgURL = URL(fileURLWithPath: dmgPath)
+        for attempt in 1...3 {
+            do {
+                try? FileManager.default.removeItem(at: dmgURL)
+                let tempURL = try await downloadWithProgress(from: url, onProgress: { _ in })
+                try FileManager.default.moveItem(at: tempURL, to: dmgURL)
+                // The available update may have changed while downloading.
+                guard availableUpdate?.version == update.version else {
+                    try? FileManager.default.removeItem(at: dmgURL)
+                    return
+                }
+                stagedDMGPath = dmgPath
+                stagedVersion = update.version
+                updateStaged = true
+                DRLogger.log("Update \(update.version) staged at \(dmgPath)", category: .app)
+                return
+            } catch {
+                DRLogger.log("Update staging attempt \(attempt)/3 failed: \(error.localizedDescription)", category: .app)
+                try? FileManager.default.removeItem(at: dmgURL)
+                if attempt < 3 {
+                    try? await Task.sleep(nanoseconds: UInt64(attempt) * 5_000_000_000)
+                }
+            }
+        }
+    }
+
+    /// Install the given update. If its DMG was already staged in the
+    /// background, mounts and installs it immediately (no download wait);
+    /// otherwise falls back to download-then-install with a progress window.
+    /// Public entry point for the menu-bar item / Settings link.
     func startInstall(_ update: ResolvedUpdate) {
         guard !update.url.isEmpty else { return }
-        Task { await downloadAndInstall(url: update.url, version: update.version) }
+        if updateStaged, stagedVersion == update.version, let path = stagedDMGPath,
+           FileManager.default.fileExists(atPath: path) {
+            Task { await installStagedDMG(at: path, version: update.version) }
+        } else {
+            Task { await downloadAndInstall(url: update.url, version: update.version) }
+        }
+    }
+
+    /// Install from a DMG that's already on disk — brief "Installing…" window,
+    /// then mount/copy/relaunch.
+    private func installStagedDMG(at dmgPath: String, version: String) async {
+        let progressWindow = UpdateProgressWindow(version: version)
+        progressWindow.show()
+        progressWindow.updateStatus("Installing...")
+        progressWindow.setIndeterminate()
+        do {
+            try installDMG(at: dmgPath)
+            progressWindow.close()
+            relaunch()
+        } catch {
+            progressWindow.close()
+            DRLogger.log("Update install failed: \(error.localizedDescription)", category: .app)
+            let alert = NSAlert()
+            alert.messageText = "Update Failed"
+            alert.informativeText = "Could not install the update: \(error.localizedDescription)"
+            alert.alertStyle = .critical
+            alert.runModal()
+        }
     }
 
     private func fetchLatestVersion() async -> UpdateInfo? {
@@ -166,30 +249,15 @@ final class UpdateService: ObservableObject {
             try? FileManager.default.removeItem(at: dmgURL)
 
             // Download with progress tracking
-            let tempURL = try await downloadWithProgress(from: downloadURL, progressWindow: progressWindow)
+            let tempURL = try await downloadWithProgress(from: downloadURL) { fraction in
+                Task { @MainActor in progressWindow.updateProgress(fraction) }
+            }
             try FileManager.default.moveItem(at: tempURL, to: dmgURL)
 
             progressWindow.updateStatus("Installing...")
             progressWindow.setIndeterminate()
 
-            let mountPoint = try mountDMG(at: dmgPath)
-
-            let contents = try FileManager.default.contentsOfDirectory(atPath: mountPoint)
-            guard let appName = contents.first(where: { $0.hasSuffix(".app") }) else {
-                DRLogger.log("No .app found in DMG", category: .app)
-                unmountDMG(mountPoint)
-                progressWindow.close()
-                return
-            }
-
-            let source = "\(mountPoint)/\(appName)"
-            let dest = "/Applications/DraftRight.app"
-
-            try? FileManager.default.removeItem(atPath: dest)
-            try FileManager.default.copyItem(atPath: source, toPath: dest)
-
-            unmountDMG(mountPoint)
-            try? FileManager.default.removeItem(at: dmgURL)
+            try installDMG(at: dmgPath)
 
             progressWindow.close()
             relaunch()
@@ -204,14 +272,29 @@ final class UpdateService: ObservableObject {
         }
     }
 
-    private func downloadWithProgress(from url: URL, progressWindow: UpdateProgressWindow) async throws -> URL {
+    /// Mount the DMG at `dmgPath`, copy the .app inside it to /Applications
+    /// (replacing the current one), unmount, and delete the DMG.
+    private func installDMG(at dmgPath: String) throws {
+        let mountPoint = try mountDMG(at: dmgPath)
+        defer { unmountDMG(mountPoint) }
+
+        let contents = try FileManager.default.contentsOfDirectory(atPath: mountPoint)
+        guard let appName = contents.first(where: { $0.hasSuffix(".app") }) else {
+            throw NSError(domain: "UpdateService", code: 4,
+                          userInfo: [NSLocalizedDescriptionKey: "No .app found in the disk image"])
+        }
+        let source = "\(mountPoint)/\(appName)"
+        let dest = "/Applications/DraftRight.app"
+        try? FileManager.default.removeItem(atPath: dest)
+        try FileManager.default.copyItem(atPath: source, toPath: dest)
+        try? FileManager.default.removeItem(atPath: dmgPath)
+    }
+
+    private func downloadWithProgress(from url: URL,
+                                      onProgress: @escaping @Sendable (Double) -> Void) async throws -> URL {
         try await withCheckedThrowingContinuation { continuation in
             let delegate = DownloadDelegate(
-                onProgress: { fraction in
-                    Task { @MainActor in
-                        progressWindow.updateProgress(fraction)
-                    }
-                },
+                onProgress: onProgress,
                 onComplete: { tempURL, error in
                     if let error {
                         continuation.resume(throwing: error)

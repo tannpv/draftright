@@ -25,7 +25,9 @@ struct MenuBarView: View {
 
             if let update = appModel.availableUpdate {
                 Divider()
-                Button("⬆ Update \(update.version) available — install now") {
+                Button(appModel.updateStaged
+                       ? "⬆ Update \(update.version) ready — restart & install"
+                       : "⬆ Update \(update.version) available — install now") {
                     appModel.updateService?.startInstall(update)
                 }
                 .foregroundColor(.green)

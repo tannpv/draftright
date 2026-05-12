@@ -22,7 +22,9 @@ struct GeneralSettingsTab: View {
                         .foregroundColor(.secondary)
                 }
                 if let update = appModel.availableUpdate {
-                    Button("Update \(update.version) available — click here to download and install") {
+                    Button(appModel.updateStaged
+                           ? "Update \(update.version) downloaded — click here to restart and install"
+                           : "Update \(update.version) available — click here to download and install") {
                         appModel.updateService?.startInstall(update)
                     }
                     .foregroundColor(.accentColor)
