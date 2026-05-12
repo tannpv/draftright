@@ -48,10 +48,24 @@ public class UpdateService
     /// </summary>
     public UpdateInfo? AvailableUpdate { get; private set; }
 
-    /// <summary>Raised whenever <see cref="AvailableUpdate"/> changes.</summary>
+    /// <summary>Raised whenever <see cref="AvailableUpdate"/> or the staged
+    /// state changes (so UI affordances can re-render).</summary>
     public event Action? AvailableUpdateChanged;
 
     public string CurrentVersion => _currentVersion;
+
+    // Path to a fully pre-downloaded installer for AvailableUpdate (staged
+    // silently in the background), and the version it's for. When this matches
+    // AvailableUpdate, "install" is instant — no download wait, no hang.
+    private string? _stagedInstallerPath;
+    private string? _stagedVersion;
+
+    /// <summary>True when the available update's installer is already on disk
+    /// and ready to run.</summary>
+    public bool UpdateStaged =>
+        _stagedInstallerPath != null
+        && _stagedVersion == AvailableUpdate?.Version
+        && File.Exists(_stagedInstallerPath);
 
     public UpdateService(string currentVersion, string backendUrl)
     {
@@ -106,19 +120,128 @@ public class UpdateService
         AvailableUpdate = applicable;
         if (changed)
         {
+            // A different (or no) update — last stage is stale.
+            _stagedInstallerPath = null;
+            _stagedVersion = null;
             try { AvailableUpdateChanged?.Invoke(); } catch { /* listener errors are not our problem */ }
+        }
+        // Silently pre-download the installer so "install" is instant later.
+        if (applicable != null && !UpdateStaged)
+        {
+            _ = StageInstallerAsync(applicable);
         }
         return applicable;
     }
 
     /// <summary>
-    /// Begins downloading + installing the given update. Public entry point
-    /// for the Settings link / tray menu "update available" affordances.
+    /// Begins installing the given update. If its installer was already
+    /// staged in the background, runs it immediately (no download wait);
+    /// otherwise falls back to download-then-install with a progress window.
+    /// Public entry point for the Settings link / tray menu affordances.
     /// </summary>
     public void StartInstall(UpdateInfo info)
     {
         if (string.IsNullOrEmpty(info.WindowsUrl)) return;
-        _ = DownloadAndInstallAsync(info.WindowsUrl, info.Version);
+        if (UpdateStaged && _stagedInstallerPath != null && _stagedVersion == info.Version)
+        {
+            RunStagedInstaller(_stagedInstallerPath, info.Version);
+        }
+        else
+        {
+            _ = DownloadAndInstallAsync(info.WindowsUrl, info.Version);
+        }
+    }
+
+    /// <summary>
+    /// Silently downloads the available update's installer to a temp file in
+    /// the background — no UI, retries on stalls/failures. When it lands,
+    /// <see cref="UpdateStaged"/> flips true and <see cref="AvailableUpdateChanged"/>
+    /// fires so the "update available" affordances can say "ready to install".
+    /// </summary>
+    private async Task StageInstallerAsync(UpdateInfo info)
+    {
+        try
+        {
+            var path = await TryDownloadInstallerAsync(info.WindowsUrl, info.Version);
+            if (path == null) return;
+            // Guard against AvailableUpdate having changed while we downloaded.
+            if (AvailableUpdate?.Version != info.Version)
+            {
+                try { File.Delete(path); } catch { }
+                return;
+            }
+            _stagedInstallerPath = path;
+            _stagedVersion = info.Version;
+            DRLogger.Log($"Update {info.Version} staged at {path}", DRLogger.Category.APP);
+            try { AvailableUpdateChanged?.Invoke(); } catch { }
+        }
+        catch (Exception ex)
+        {
+            DRLogger.Log($"Update staging failed: {ex.Message}", DRLogger.Category.APP);
+        }
+    }
+
+    /// <summary>
+    /// Downloads <paramref name="url"/> to a temp file, retrying on failure
+    /// (stalled connections, transient errors). Cache-busting + a per-attempt
+    /// timeout so a dead socket can't hang forever. Returns the path or null.
+    /// </summary>
+    private async Task<string?> TryDownloadInstallerAsync(string url, string version, int attempts = 3)
+    {
+        var name = Path.GetFileName(new Uri(url).LocalPath);
+        if (string.IsNullOrEmpty(name)) name = $"DraftRight-{version}-setup.exe";
+        var dest = Path.Combine(Path.GetTempPath(), name);
+
+        for (int attempt = 1; attempt <= attempts; attempt++)
+        {
+            try
+            {
+                using var req = new HttpRequestMessage(HttpMethod.Get, url);
+                req.Headers.CacheControl =
+                    new System.Net.Http.Headers.CacheControlHeaderValue { NoCache = true };
+                using var resp = await _downloadHttp.SendAsync(req, HttpCompletionOption.ResponseHeadersRead);
+                resp.EnsureSuccessStatusCode();
+                using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromMinutes(10));
+                using (var src = await resp.Content.ReadAsStreamAsync())
+                using (var dst = new FileStream(dest, FileMode.Create, FileAccess.Write))
+                {
+                    await src.CopyToAsync(dst, cts.Token);
+                }
+                return dest;
+            }
+            catch (Exception ex)
+            {
+                DRLogger.Log($"Update download attempt {attempt}/{attempts} failed: {ex.Message}", DRLogger.Category.APP);
+                try { File.Delete(dest); } catch { }
+                if (attempt < attempts) await Task.Delay(TimeSpan.FromSeconds(5 * attempt));
+            }
+        }
+        return null;
+    }
+
+    /// <summary>Runs an installer that's already on disk: brief "Installing…"
+    /// indicator, hand off to the installer, exit.</summary>
+    private static void RunStagedInstaller(string path, string version)
+    {
+        UpdateProgressUI? ui = null;
+        try
+        {
+            ui = UpdateProgressUI.ShowOnNewThread(version);
+            ui.SetIndeterminate("Installing...");
+            LaunchInstaller(path);
+            ui.Close();
+            Environment.Exit(0);
+        }
+        catch (Exception ex)
+        {
+            ui?.Close();
+            System.Windows.Forms.MessageBox.Show(
+                $"Update failed: {ex.Message}",
+                "Update Error",
+                System.Windows.Forms.MessageBoxButtons.OK,
+                System.Windows.Forms.MessageBoxIcon.Error
+            );
+        }
     }
 
     private async Task<UpdateInfo?> FetchLatestVersionAsync()
@@ -228,33 +351,7 @@ public class UpdateService
             }
 
             ui.SetIndeterminate("Installing...");
-
-            // Three cases:
-            //  - Inno Setup installer ("DraftRight-Setup-Windows-x.y.z-arch.exe"):
-            //    just run it. Its own [Code] PrepareToInstall hook kills the
-            //    running app, then it overwrites the install in place. Running
-            //    it through LaunchExeReplacer would clobber DraftRightWindows.exe
-            //    with the installer binary and then have it taskkill itself.
-            //  - Raw self-contained app exe ("DraftRight-Windows-...exe"):
-            //    LaunchExeReplacer — wait for exit, copy over current exe, relaunch.
-            //  - .msi / .msix: hand off to the OS shell.
-            var ext = Path.GetExtension(tempPath).ToLowerInvariant();
-            var name = Path.GetFileNameWithoutExtension(tempPath).ToLowerInvariant();
-            var looksLikeInstaller = name.Contains("setup") || name.Contains("install");
-            if (ext == ".exe" && !looksLikeInstaller)
-            {
-                LaunchExeReplacer(tempPath);
-            }
-            else
-            {
-                // Installer .exe / .msi / .msix / anything else: hand off to OS shell.
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = tempPath,
-                    UseShellExecute = true
-                });
-            }
-
+            LaunchInstaller(tempPath);
             ui.Close();
             Environment.Exit(0);
         }
@@ -267,6 +364,32 @@ public class UpdateService
                 System.Windows.Forms.MessageBoxButtons.OK,
                 System.Windows.Forms.MessageBoxIcon.Error
             );
+        }
+    }
+
+    /// <summary>
+    /// Hands a downloaded artifact off for installation. Three cases:
+    ///  - Inno Setup installer ("DraftRight-Setup-Windows-x.y.z-arch.exe"):
+    ///    just run it — its own [Code] PrepareToInstall hook kills the running
+    ///    app, then it overwrites the install in place. Running it through
+    ///    LaunchExeReplacer would clobber DraftRightWindows.exe with the
+    ///    installer binary and then have it taskkill itself.
+    ///  - Raw self-contained app exe ("DraftRight-Windows-...exe"):
+    ///    LaunchExeReplacer — wait for exit, copy over current exe, relaunch.
+    ///  - .msi / .msix / anything else: hand off to the OS shell.
+    /// </summary>
+    private static void LaunchInstaller(string path)
+    {
+        var ext = Path.GetExtension(path).ToLowerInvariant();
+        var name = Path.GetFileNameWithoutExtension(path).ToLowerInvariant();
+        var looksLikeInstaller = name.Contains("setup") || name.Contains("install");
+        if (ext == ".exe" && !looksLikeInstaller)
+        {
+            LaunchExeReplacer(path);
+        }
+        else
+        {
+            Process.Start(new ProcessStartInfo { FileName = path, UseShellExecute = true });
         }
     }
 

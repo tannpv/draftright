@@ -562,7 +562,10 @@ public class App : Application
         var u = UpdateService?.AvailableUpdate;
         if (u != null)
         {
-            _updateMenuItem.Text = $"Update {u.Version} available — install now";
+            var staged = UpdateService?.UpdateStaged ?? false;
+            _updateMenuItem.Text = staged
+                ? $"Update {u.Version} ready — restart & install"
+                : $"Update {u.Version} available — install now";
             _updateMenuItem.Visible = true;
         }
         else
@@ -944,7 +947,10 @@ internal static class SettingsFormBuilder
             var u = App.UpdateService?.AvailableUpdate;
             if (u != null)
             {
-                updateLink.Text = $"Update {u.Version} available — click here to download and install";
+                var staged = App.UpdateService?.UpdateStaged ?? false;
+                updateLink.Text = staged
+                    ? $"Update {u.Version} downloaded — click here to restart and install"
+                    : $"Update {u.Version} available — click here to download and install";
                 updateLink.Visible = true;
             }
             else

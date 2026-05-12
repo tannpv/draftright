@@ -84,6 +84,9 @@ final class AppModel: ObservableObject {
     /// Mirrors `updateService.availableUpdate` so SwiftUI views (menu bar,
     /// Settings) can show an "Update X available" affordance.
     @Published var availableUpdate: ResolvedUpdate?
+    /// Mirrors `updateService.updateStaged` — true once the new DMG is
+    /// pre-downloaded and "install" is instant.
+    @Published var updateStaged: Bool = false
     var cancellables = Set<AnyCancellable>()
 
     private let defaults = UserDefaults.standard
@@ -148,6 +151,10 @@ final class AppModel: ObservableObject {
         svc.$availableUpdate
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in self?.availableUpdate = $0 }
+            .store(in: &cancellables)
+        svc.$updateStaged
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in self?.updateStaged = $0 }
             .store(in: &cancellables)
         DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
             Task { @MainActor in
