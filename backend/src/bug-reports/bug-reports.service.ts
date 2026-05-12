@@ -384,6 +384,7 @@ Do not output anything outside this format. Do not pad. Do not apologize.`;
     return this.repo
       .createQueryBuilder('br')
       .where('br.status = :st', { st: 'new' })
+      .andWhere("br.kind = 'bug'")
       .andWhere('br.ai_fix_proposal IS NULL')
       .orderBy('br.created_at', 'DESC')
       .limit(limit)
