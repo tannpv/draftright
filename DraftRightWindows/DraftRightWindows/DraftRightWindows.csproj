@@ -8,7 +8,7 @@
            - .exe FileVersion / ProductVersion (read by Inno Setup for the installer)
            - Installer filename: DraftRight-Setup-{Version}-{arch}.exe
          Bump here on every release. -->
-    <Version>2.2.1</Version>
+    <Version>2.2.2</Version>
     <!-- RuntimeIdentifier is supplied at publish time via `dotnet publish -r <rid>`
          (CI passes win-x64/win-arm64 from a matrix). Hardcoding it here would force
          the value even when the CLI overrides, breaking local x64 dev builds. -->
