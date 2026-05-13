@@ -29,6 +29,11 @@ struct AdvancedSettingsTab: View {
                     BugReportPresenter.present(appModel: appModel)
                 }
                 .help("Open the bug report form")
+
+                Button("Suggest a Feature…") {
+                    FeedbackPresenter.present(appModel: appModel)
+                }
+                .help("Open the feature request form")
             }
 
             Section(header: Text("Logs")) {
