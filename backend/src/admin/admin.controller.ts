@@ -62,12 +62,13 @@ export class AdminController {
   async listBugReports(@Query() q: Record<string, unknown>) {
     const query = parseListQuery(q);
     const status = typeof q.status === 'string' ? q.status : undefined;
-    // The list-query helper's `status` is the is_active filter; bug
-    // reports use a workflow status string (new/reviewing/...) so we
-    // strip it from the ListQuery and pass it as a separate field.
+    const kind = typeof q.kind === 'string' ? q.kind : undefined;
+    const target_platform = typeof q.target_platform === 'string' ? q.target_platform : undefined;
     return this.bugReportsService.findAllPaginated({
       ...query,
       status: status as any,
+      kind,
+      target_platform,
     });
   }
 
@@ -102,7 +103,7 @@ export class AdminController {
   @Patch('bug-reports/:id')
   async updateBugReport(
     @Param('id') id: string,
-    @Body() body: { status?: string; admin_notes?: string },
+    @Body() body: { status?: string; admin_notes?: string; title?: string; target_platform?: string; is_public?: boolean },
   ) {
     return this.bugReportsService.update(id, body);
   }

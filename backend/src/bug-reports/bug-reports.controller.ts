@@ -5,9 +5,9 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiConsumes } from '@nestjs/swagger';
 import { Request } from 'express';
-import * as jwt from 'jsonwebtoken';
 import { BugReportsService } from './bug-reports.service';
 import { CreateBugReportDto } from './dto/create-bug-report.dto';
+import { decodeOptionalUserId } from './jwt-user';
 
 const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
 const ALLOWED_MIMES = ['image/png', 'image/jpeg', 'image/jpg'];
@@ -45,20 +45,7 @@ export class BugReportsController {
     @UploadedFile() file: any,
     @Req() req: Request,
   ) {
-    let userId: string | null = null;
-    const authHeader = req.headers['authorization'];
-    if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.slice(7);
-      try {
-        const decoded = jwt.verify(
-          token,
-          process.env.JWT_SECRET || 'change_me',
-        ) as { sub?: string; user_id?: string };
-        userId = decoded.sub || decoded.user_id || null;
-      } catch {
-        // Bad token — fall through, treat as anonymous.
-      }
-    }
+    const userId = decodeOptionalUserId(req);
 
     const row = await this.bugReports.create(
       dto,

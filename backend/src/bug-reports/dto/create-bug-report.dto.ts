@@ -1,4 +1,4 @@
-import { IsString, IsOptional, MaxLength, MinLength } from 'class-validator';
+import { IsString, IsOptional, MaxLength, MinLength, IsBoolean } from 'class-validator';
 
 export class CreateBugReportDto {
   @IsString()
@@ -32,4 +32,16 @@ export class UpdateBugReportDto {
 
   @IsOptional() @IsString()
   admin_notes?: string;
+
+  /** Feature requests: edit the title. */
+  @IsOptional() @IsString() @MaxLength(80)
+  title?: string;
+
+  /** Feature requests: re-classify the target platform. */
+  @IsOptional() @IsString() @MaxLength(20)
+  target_platform?: string;
+
+  /** Feature requests: hide/show on the public board. */
+  @IsOptional() @IsBoolean()
+  is_public?: boolean;
 }

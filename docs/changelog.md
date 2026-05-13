@@ -2,6 +2,12 @@
 
 ## 2026-05-12
 
+### Feedback / feature-request backend (Spec A)
+- `bug_reports` gains `kind`/`title`/`target_platform`/`vote_count`/`is_public`; new `feature_votes` table (one vote per user per feature, `vote_count` derived).
+- Public `POST /feedback` (bug or feature; JWT optional → user_id), `GET /feedback` (board feed: kind=feature & is_public, votes desc, `?status=`/`?target_platform=` filters), `POST /feedback/:id/vote` (toggle upvote, JWT required).
+- Admin bug-reports list/patch gain `kind`+`target_platform` filters and `title`/`target_platform`/`is_public` patch fields; AI fix-proposal cron scoped to `kind='bug'`.
+- `POST /bug-reports` (multipart, screenshots) contract unchanged. Migration: `backend/sql/2026-05-12-feedback.sql`. Specs B (native submit forms) + C (public board page) pending.
+
 ### Desktop auto-update overhaul (macOS + Windows → 2.2.4)
 - Persistent "Update X.Y.Z available" affordance: Windows tray menu item + Settings→Advanced→Updates link; macOS menu-bar item + Settings→Updates button. No longer have to click "Check for Updates" to learn about a release.
 - Silent background pre-download: when a check finds an update, the installer/DMG downloads quietly in the background (3 retries, cache-busting, per-attempt timeout — a stalled socket can't hang the progress window anymore). Once staged, the affordance becomes "ready — restart & install" and the install is instant. Install + restart still requires one user click; nothing auto-restarts.
