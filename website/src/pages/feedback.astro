@@ -1,0 +1,33 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import FeedbackBoard from '../components/FeedbackBoard';
+
+// API base resolution mirrors the rest of the site (ReportBugWidget etc.).
+const apiUrl = import.meta.env.PUBLIC_API_URL || 'https://api.draftright.info';
+
+const statusParam = Astro.url.searchParams.get('status') ?? 'all';
+const platformParam = Astro.url.searchParams.get('target_platform') ?? 'all';
+
+const qs = new URLSearchParams({ page: '1', limit: '20' });
+if (statusParam !== 'all') qs.set('status', statusParam);
+if (platformParam !== 'all') qs.set('target_platform', platformParam);
+
+// Server-fetch the first page so the board renders with content on first
+// paint (SEO + perceived speed). If the API is down we still render an
+// empty shell — the client island will retry on filter change.
+let initial: { rows: any[]; total: number } = { rows: [], total: 0 };
+try {
+  const res = await fetch(`${apiUrl}/feedback?${qs.toString()}`);
+  if (res.ok) initial = await res.json();
+} catch {
+  // Render an empty board; client takes over.
+}
+---
+<BaseLayout title="Feature Requests · DraftRight"
+            description="Vote on what we build next. Public feature requests across DraftRight's apps for macOS, Windows, Linux, iOS, Android, and the web.">
+  <FeedbackBoard client:load
+    apiUrl={apiUrl}
+    initial={initial}
+    initialStatus={statusParam}
+    initialPlatform={platformParam} />
+</BaseLayout>
