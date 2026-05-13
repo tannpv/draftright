@@ -171,7 +171,11 @@ export default function FeedbackBoard({ apiUrl, initial, initialStatus, initialP
 
 interface SubmitProps { apiUrl: string; hasToken: boolean; onCreated: () => void }
 
-/** Inline "Suggest a feature" form rendered on the board page. */
+/**
+ * "+ Suggest a feature" button + modal popup form. Always renders the
+ * button; the form appears in a full-viewport overlay when opened, with
+ * Esc and click-outside-to-close.
+ */
 function SubmitFeatureForm({ apiUrl, hasToken, onCreated }: SubmitProps) {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
@@ -180,6 +184,28 @@ function SubmitFeatureForm({ apiUrl, hasToken, onCreated }: SubmitProps) {
   const [email, setEmail] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Esc-to-close + lock body scroll while the modal is open.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  function close() {
+    setOpen(false); setError(null);
+  }
+
+  function reset() {
+    close();
+    setTitle(''); setDescription(''); setEmail(''); setPlatform('playground');
+  }
 
   const canSubmit = title.trim() && description.trim() && !busy;
 
@@ -200,56 +226,62 @@ function SubmitFeatureForm({ apiUrl, hasToken, onCreated }: SubmitProps) {
         method: 'POST', headers, body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error(`server returned ${res.status}`);
-      setOpen(false); setTitle(''); setDescription(''); setEmail(''); setPlatform('playground');
+      reset();
       onCreated();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'something went wrong');
     } finally { setBusy(false); }
   }
 
-  if (!open) {
-    return (
+  return (
+    <>
       <button type="button" onClick={() => setOpen(true)}
         className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-500">
         + Suggest a feature
       </button>
-    );
-  }
-
-  return (
-    <form onSubmit={submit}
-      className="w-full max-w-md rounded-xl border border-zinc-700 bg-zinc-900/80 p-4 text-sm">
-      <h3 className="mb-2 text-base font-semibold">Suggest a feature</h3>
-      <label className="text-xs text-zinc-400">Title</label>
-      <input value={title} maxLength={80} onChange={(e) => setTitle(e.target.value)}
-        placeholder="One line — what should we build?"
-        className="mb-3 mt-1 w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2" />
-      <label className="text-xs text-zinc-400">Which platform is this for?</label>
-      <select value={platform} onChange={(e) => setPlatform(e.target.value)}
-        className="mb-3 mt-1 w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2">
-        {PLATFORM_OPTIONS.filter(p => p.value !== 'all').map(p =>
-          <option key={p.value} value={p.value}>{p.label}</option>)}
-      </select>
-      <label className="text-xs text-zinc-400">Details</label>
-      <textarea value={description} maxLength={2000} onChange={(e) => setDescription(e.target.value)}
-        placeholder="What problem does it solve?"
-        className="mb-3 mt-1 min-h-[80px] w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2" />
-      {!hasToken && (
-        <>
-          <label className="text-xs text-zinc-400">Email (optional)</label>
-          <input value={email} type="email" onChange={(e) => setEmail(e.target.value)}
-            className="mb-3 mt-1 w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2" />
-        </>
+      {open && (
+        <div role="dialog" aria-modal="true" aria-labelledby="suggest-feature-title"
+          onClick={(e) => { if (e.target === e.currentTarget) close(); }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-6">
+          <form onSubmit={submit}
+            className="w-full max-w-md rounded-xl border border-zinc-700 bg-zinc-900 p-5 text-sm shadow-2xl">
+            <h3 id="suggest-feature-title" className="mb-1 text-base font-semibold">Suggest a feature</h3>
+            <p className="mb-4 text-xs text-zinc-500">
+              {hasToken ? 'Submitted under your account.' : 'Public on the feature board.'}
+            </p>
+            <label className="text-xs text-zinc-400">Title</label>
+            <input value={title} maxLength={80} onChange={(e) => setTitle(e.target.value)}
+              placeholder="One line — what should we build?" autoFocus
+              className="mb-3 mt-1 w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2" />
+            <label className="text-xs text-zinc-400">Which platform is this for?</label>
+            <select value={platform} onChange={(e) => setPlatform(e.target.value)}
+              className="mb-3 mt-1 w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2">
+              {PLATFORM_OPTIONS.filter(p => p.value !== 'all').map(p =>
+                <option key={p.value} value={p.value}>{p.label}</option>)}
+            </select>
+            <label className="text-xs text-zinc-400">Details</label>
+            <textarea value={description} maxLength={2000} onChange={(e) => setDescription(e.target.value)}
+              placeholder="What problem does it solve? How would it work?"
+              className="mb-3 mt-1 min-h-[100px] w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2" />
+            {!hasToken && (
+              <>
+                <label className="text-xs text-zinc-400">Email (optional — to follow up)</label>
+                <input value={email} type="email" onChange={(e) => setEmail(e.target.value)}
+                  className="mb-3 mt-1 w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2" />
+              </>
+            )}
+            {error && <p className="mb-2 text-xs text-rose-400">{error}</p>}
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={close}
+                className="rounded-md border border-zinc-700 px-3 py-1.5 text-zinc-400 hover:text-zinc-200">Cancel</button>
+              <button type="submit" disabled={!canSubmit}
+                className={`rounded-md px-4 py-1.5 font-semibold ${canSubmit ? 'bg-emerald-500 text-emerald-950' : 'bg-zinc-800 text-zinc-500'}`}>
+                {busy ? 'Submitting…' : 'Submit request'}
+              </button>
+            </div>
+          </form>
+        </div>
       )}
-      {error && <p className="mb-2 text-xs text-rose-400">{error}</p>}
-      <div className="flex justify-end gap-2">
-        <button type="button" onClick={() => setOpen(false)}
-          className="rounded-md border border-zinc-700 px-3 py-1.5 text-zinc-400">Cancel</button>
-        <button type="submit" disabled={!canSubmit}
-          className={`rounded-md px-4 py-1.5 font-semibold ${canSubmit ? 'bg-emerald-500 text-emerald-950' : 'bg-zinc-800 text-zinc-500'}`}>
-          {busy ? 'Submitting…' : 'Submit'}
-        </button>
-      </div>
-    </form>
+    </>
   );
 }
