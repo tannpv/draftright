@@ -15,7 +15,7 @@ export class CreateFeedbackDto {
   @IsIn(FEEDBACK_KINDS)
   kind: FeedbackKind;
 
-  /** Required when kind === 'feature'; ignored for bugs. Validated in the service against length 3-80. */
+  /** Required when kind === 'feature'; ignored for bugs. Validated in the service against length 1-80. */
   @IsOptional() @IsString() @MaxLength(80)
   title?: string;
 

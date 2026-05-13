@@ -56,7 +56,7 @@ export class BugReport {
   @Column({ type: 'varchar', length: 20, default: 'bug' })
   kind: string;
 
-  /** Feature requests only: short one-line title (3-80 chars). Null for bugs. */
+  /** Feature requests only: short one-line title (1-80 chars). Null for bugs. */
   @Column({ type: 'varchar', length: 80, nullable: true })
   title: string | null;
 

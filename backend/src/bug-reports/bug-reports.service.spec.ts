@@ -9,7 +9,15 @@ import { AiProvidersService } from '../ai-providers/ai-providers.service';
 // In-memory fakes — enough to exercise the feature/vote logic without a DB.
 class FakeRepo<T extends { id: string }> {
   rows: T[] = [];
-  private match(r: any, where: any) { return !where || Object.entries(where).every(([k, v]) => v === undefined || r[k] === v); }
+  private match(r: any, where: any) {
+    return !where || Object.entries(where).every(([k, v]) => {
+      if (v === undefined) return true;
+      if (v && typeof v === 'object' && '_type' in (v as any) && (v as any)._type === 'in') {
+        return ((v as any)._value as any[]).includes(r[k]);
+      }
+      return r[k] === v;
+    });
+  }
   create(p: Partial<T>): T { return { ...(p as any) }; }
   async save(r: any) { if (!r.id) r.id = 'id-' + (this.rows.length + 1); const i = this.rows.findIndex(x => x.id === r.id); if (i >= 0) this.rows[i] = r; else this.rows.push(r); return r; }
   async findOne({ where }: any) { return this.rows.find(r => this.match(r, where)) ?? null; }

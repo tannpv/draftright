@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { randomUUID } from 'crypto';
 import { promises as fs } from 'fs';
 import * as path from 'path';
@@ -99,7 +99,7 @@ export class BugReportsService {
 
   /**
    * Create a feedback row from `POST /feedback`. For kind='feature',
-   * `title` (3-80 chars) and `target_platform` (∈ TARGET_PLATFORMS) are
+   * `title` (1-80 chars) and `target_platform` (∈ TARGET_PLATFORMS) are
    * required and stamped; for kind='bug' they're forced null (the legacy
    * `POST /bug-reports` route handles screenshots; this route does not).
    */
@@ -206,7 +206,7 @@ export class BugReportsService {
 
     let votedIds = new Set<string>();
     if (userId && rows.length > 0) {
-      const myVotes = await this.votes.find({ where: { user_id: userId } });
+      const myVotes = await this.votes.find({ where: { feature_id: In(rows.map(r => r.id)), user_id: userId } });
       votedIds = new Set(myVotes.map(v => v.feature_id));
     }
     return {
