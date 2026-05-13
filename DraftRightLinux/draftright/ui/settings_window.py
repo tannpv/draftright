@@ -10,6 +10,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, GLib, Gtk
 
 from draftright.models.tone import Tone
+from draftright.ui.suggest_feature_dialog import open_suggest_feature_dialog
 
 # Languages available for translation
 TRANSLATE_LANGUAGES = [
@@ -246,6 +247,20 @@ class SettingsWindow(Adw.PreferencesWindow):
         log_row.add_suffix(open_log_btn)
         logs_group.add(log_row)
 
+        # --- Feedback group ---
+        feedback_group = Adw.PreferencesGroup(title="Feedback")
+        prefs_page.add(feedback_group)
+
+        suggest_row = Adw.ActionRow(
+            title="Suggest a feature",
+            subtitle="Tell us what to build next",
+        )
+        suggest_btn = Gtk.Button(label="Open…", valign=Gtk.Align.CENTER)
+        suggest_btn.add_css_class("flat")
+        suggest_btn.connect("clicked", self._on_suggest_feature)
+        suggest_row.add_suffix(suggest_btn)
+        feedback_group.add(suggest_row)
+
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
@@ -442,3 +457,12 @@ class SettingsWindow(Adw.PreferencesWindow):
         import subprocess
         log_path = get_log_path()
         subprocess.Popen(["xdg-open", os.path.dirname(log_path)])
+
+    def _on_suggest_feature(self, _button):
+        """Open the Suggest a Feature dialog."""
+        token = (
+            self.app.auth_service.access_token
+            if self.app.auth_service is not None
+            else None
+        )
+        open_suggest_feature_dialog(self, bearer_token=token)

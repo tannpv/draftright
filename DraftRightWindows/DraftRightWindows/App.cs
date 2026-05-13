@@ -1455,6 +1455,10 @@ internal static class SettingsFormBuilder
         bugBtn.Click += (_, _) => Views.ReportBugDialog.Show();
         tab.Controls.Add(bugBtn);
 
+        var featureBtn = MakeSecondaryButton("Suggest a feature…", 188, y, 180);
+        featureBtn.Click += (_, _) => Views.SuggestFeatureDialog.Show();
+        tab.Controls.Add(featureBtn);
+
         return tab;
     }
 }

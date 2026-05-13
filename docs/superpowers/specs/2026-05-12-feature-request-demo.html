@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DraftRight — Feature Requests (mockup)</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2230; --line:#2a3240;
+    --txt:#e6edf3; --muted:#8b949e; --accent:#6aa6ff; --accent2:#3b82f6;
+    --green:#22c55e; --amber:#f59e0b; --violet:#a78bfa; --pink:#f472b6;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  body{background:var(--bg);color:var(--txt);line-height:1.5;padding:32px 20px 80px}
+  .wrap{max-width:860px;margin:0 auto}
+  header.top{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+  header.top h1{font-size:22px;font-weight:700}
+  header.top h1 .dot{color:var(--accent)}
+  .sub{color:var(--muted);font-size:14px;margin-bottom:24px}
+  .bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:18px}
+  .tabs{display:flex;gap:4px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:4px}
+  .tabs button{background:transparent;border:0;color:var(--muted);padding:6px 12px;border-radius:7px;font-size:13px;cursor:pointer}
+  .tabs button.active{background:var(--accent2);color:#fff}
+  select.platform{margin-left:auto;background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:9px;padding:7px 10px;font-size:13px}
+  .new-btn{background:var(--accent2);color:#fff;border:0;border-radius:9px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer}
+  ul.cards{list-style:none;display:flex;flex-direction:column;gap:10px}
+  li.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;display:flex;gap:14px}
+  .vote{display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:54px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:6px 0;cursor:pointer;user-select:none}
+  .vote:hover{border-color:var(--accent)}
+  .vote.voted{border-color:var(--accent);background:#1d2a44}
+  .vote .arrow{font-size:14px;color:var(--accent)}
+  .vote .n{font-size:16px;font-weight:700}
+  .body{flex:1;min-width:0}
+  .body h3{font-size:15px;font-weight:600;margin-bottom:3px}
+  .body p{color:var(--muted);font-size:13px;margin-bottom:8px}
+  .meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .badge{font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+  .badge.plat{color:var(--txt)}
+  .badge.plat.windows{background:#0a3d62aa;border-color:#1e6091}
+  .badge.plat.mac{background:#3a3a3aaa;border-color:#555}
+  .badge.plat.linux{background:#5c3a00aa;border-color:#8a5a00}
+  .badge.plat.mobile{background:#0d4429aa;border-color:#1a7a45}
+  .badge.plat.playground{background:#3a235caa;border-color:#6b3fa0}
+  .badge.st-open{color:var(--muted)}
+  .badge.st-planned{color:var(--accent);border-color:var(--accent)}
+  .badge.st-in_progress{color:var(--amber);border-color:var(--amber)}
+  .badge.st-done{color:var(--green);border-color:var(--green)}
+  .badge.src{margin-left:auto}
+  /* modal */
+  .overlay{position:fixed;inset:0;background:#0008;display:none;align-items:center;justify-content:center;padding:20px}
+  .overlay.show{display:flex}
+  .modal{background:var(--panel);border:1px solid var(--line);border-radius:14px;width:100%;max-width:460px;padding:20px}
+  .modal h2{font-size:17px;margin-bottom:4px}
+  .modal .hint{color:var(--muted);font-size:12px;margin-bottom:16px}
+  .field{margin-bottom:14px}
+  .field label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px}
+  .field input,.field textarea,.field select{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:9px;color:var(--txt);padding:9px 11px;font-size:14px}
+  .field textarea{resize:vertical;min-height:90px}
+  .field .count{float:right;font-size:11px;color:var(--muted)}
+  .modal .actions{display:flex;justify-content:flex-end;gap:8px;margin-top:6px}
+  .modal .actions .cancel{background:transparent;border:1px solid var(--line);color:var(--muted);border-radius:9px;padding:9px 14px;font-size:13px;cursor:pointer}
+  .modal .actions .submit{background:var(--green);border:0;color:#04210f;font-weight:700;border-radius:9px;padding:9px 16px;font-size:13px;cursor:pointer}
+  .note{margin-top:30px;color:var(--muted);font-size:12px;border-top:1px solid var(--line);padding-top:14px}
+  .note code{background:var(--panel);padding:1px 5px;border-radius:5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>DraftRight<span class="dot">.</span> Feature Requests</h1>
+    <button class="new-btn" onclick="openModal()">+ Suggest a feature</button>
+  </header>
+  <div class="sub">Vote on what we build next. <em>(mockup — buttons are fake except the modal)</em></div>
+
+  <div class="bar">
+    <div class="tabs">
+      <button class="active">All</button><button>Open</button><button>Planned</button><button>In progress</button><button>Done</button>
+    </div>
+    <select class="platform" title="Filter by platform">
+      <option>All platforms</option><option>Playground</option><option>Mobile</option><option>Windows</option><option>macOS</option><option>Linux</option>
+    </select>
+  </div>
+
+  <ul class="cards">
+    <li class="card">
+      <div class="vote voted" onclick="toggleVote(this,127)"><span class="arrow">▲</span><span class="n">128</span></div>
+      <div class="body">
+        <h3>Custom tone presets</h3>
+        <p>Let me save my own rewrite tones (name + prompt) and reuse them across devices.</p>
+        <div class="meta">
+          <span class="badge plat playground">Playground</span>
+          <span class="badge st-planned">planned</span>
+          <span class="badge src">via web</span>
+        </div>
+      </div>
+    </li>
+    <li class="card">
+      <div class="vote" onclick="toggleVote(this,84)"><span class="arrow">▲</span><span class="n">84</span></div>
+      <div class="body">
+        <h3>Floating bubble on iPad</h3>
+        <p>The Android floating-bubble flow is great — bring it to iPadOS multitasking.</p>
+        <div class="meta">
+          <span class="badge plat mobile">Mobile</span>
+          <span class="badge st-in_progress">in progress</span>
+          <span class="badge src">via ios-app</span>
+        </div>
+      </div>
+    </li>
+    <li class="card">
+      <div class="vote" onclick="toggleVote(this,61)"><span class="arrow">▲</span><span class="n">61</span></div>
+      <div class="body">
+        <h3>Right-click "Rewrite" in File Explorer</h3>
+        <p>Add a Windows shell context-menu entry so I can rewrite text from any app's selection.</p>
+        <div class="meta">
+          <span class="badge plat windows">Windows</span>
+          <span class="badge st-open">open</span>
+          <span class="badge src">via windows-app</span>
+        </div>
+      </div>
+    </li>
+    <li class="card">
+      <div class="vote" onclick="toggleVote(this,38)"><span class="arrow">▲</span><span class="n">38</span></div>
+      <div class="body">
+        <h3>GNOME Shell extension</h3>
+        <p>A top-bar indicator + global shortcut for the Linux app, like the macOS menu-bar item.</p>
+        <div class="meta">
+          <span class="badge plat linux">Linux</span>
+          <span class="badge st-open">open</span>
+          <span class="badge src">via linux-app</span>
+        </div>
+      </div>
+    </li>
+    <li class="card">
+      <div class="vote" onclick="toggleVote(this,22)"><span class="arrow">▲</span><span class="n">22</span></div>
+      <div class="body">
+        <h3>Dark mode for the menu-bar panel</h3>
+        <p>The macOS diff panel ignores the system appearance — please follow Dark Mode.</p>
+        <div class="meta">
+          <span class="badge plat mac">macOS</span>
+          <span class="badge st-done">done</span>
+          <span class="badge src">via macos-app</span>
+        </div>
+      </div>
+    </li>
+  </ul>
+
+  <div class="note">
+    Mirrors the design at <code>docs/superpowers/specs/2026-05-12-feature-request-system-design.md</code>.
+    Same submit form ships natively in macOS / Windows / Linux / iOS / Android (and as this modal on web): <strong>title + platform dropdown + description</strong>.
+    Backend: <code>POST /feedback</code> · board feed: <code>GET /feedback</code> · vote: <code>POST /feedback/:id/vote</code>.
+  </div>
+</div>
+
+<!-- submit modal -->
+<div class="overlay" id="ov" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <h2>Suggest a feature</h2>
+    <div class="hint">You're signed in as <strong>tan@draftright.com</strong>. Requests are public on the board.</div>
+    <div class="field">
+      <label>Title</label>
+      <input maxlength="80" placeholder="One line — what should we build?" />
+    </div>
+    <div class="field">
+      <label>Which platform is this for?</label>
+      <select>
+        <option>Playground (web)</option><option selected>Windows</option><option>macOS</option><option>Linux</option><option>Mobile (iOS / Android)</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Details <span class="count">0 / 2000</span></label>
+      <textarea placeholder="What problem does it solve? How would it work?"></textarea>
+    </div>
+    <div class="actions">
+      <button class="cancel" onclick="closeModal()">Cancel</button>
+      <button class="submit" onclick="closeModal()">Submit request</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  function openModal(){document.getElementById('ov').classList.add('show')}
+  function closeModal(){document.getElementById('ov').classList.remove('show')}
+  function toggleVote(el,base){
+    const n=el.querySelector('.n');
+    if(el.classList.toggle('voted')){n.textContent=base+1}else{n.textContent=base}
+  }
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});
+</script>
+</body>
+</html>

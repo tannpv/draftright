@@ -1,11 +1,13 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { randomUUID } from 'crypto';
 import { promises as fs } from 'fs';
 import * as path from 'path';
 import { BugReport } from './entities/bug-report.entity';
 import { CreateBugReportDto, UpdateBugReportDto } from './dto/create-bug-report.dto';
+import { FeatureVote } from './entities/feature-vote.entity';
+import { CreateFeedbackDto, TARGET_PLATFORMS } from './dto/create-feedback.dto';
 import { applyListQuery, ListQuery } from '../common/list-query';
 import { AiProvidersService } from '../ai-providers/ai-providers.service';
 
@@ -31,6 +33,8 @@ export class BugReportsService {
   constructor(
     @InjectRepository(BugReport)
     private readonly repo: Repository<BugReport>,
+    @InjectRepository(FeatureVote)
+    private readonly votes: Repository<FeatureVote>,
     private readonly aiProviders: AiProvidersService,
   ) {}
 
@@ -93,8 +97,128 @@ export class BugReportsService {
     return this.repo.save(row);
   }
 
-  /** Admin: paginated list with search/sort/status filter. */
-  async findAllPaginated(query: ListQuery & { status?: string }) {
+  /**
+   * Create a feedback row from `POST /feedback`. For kind='feature',
+   * `title` (1-80 chars) and `target_platform` (∈ TARGET_PLATFORMS) are
+   * required and stamped; for kind='bug' they're forced null (the legacy
+   * `POST /bug-reports` route handles screenshots; this route does not).
+   */
+  async createFeedback(dto: CreateFeedbackDto, userId: string | null): Promise<BugReport> {
+    if (!dto.description || dto.description.trim().length === 0) {
+      throw new BadRequestException('description is required');
+    }
+    if (!dto.source || dto.source.trim().length === 0) {
+      throw new BadRequestException('source is required');
+    }
+    const kind = dto.kind === 'feature' ? 'feature' : 'bug';
+
+    let title: string | null = null;
+    let targetPlatform: string | null = null;
+    if (kind === 'feature') {
+      const t = (dto.title ?? '').trim();
+      if (t.length < 1 || t.length > 80) {
+        throw new BadRequestException('title is required for a feature request (1-80 characters)');
+      }
+      if (!dto.target_platform || !TARGET_PLATFORMS.includes(dto.target_platform as any)) {
+        throw new BadRequestException(
+          `target_platform must be one of: ${TARGET_PLATFORMS.join(', ')}`,
+        );
+      }
+      title = t;
+      targetPlatform = dto.target_platform;
+    }
+
+    const row = this.repo.create({
+      kind,
+      title,
+      target_platform: targetPlatform,
+      vote_count: 0,
+      is_public: true,
+      source: dto.source.trim().slice(0, 50),
+      description: dto.description.trim(),
+      screenshot_path: null,
+      screenshot_filename: null,
+      app_version: dto.app_version ? dto.app_version.slice(0, 50) : null,
+      os_info: dto.os_info ? dto.os_info.slice(0, 100) : null,
+      user_id: userId,
+      user_email: dto.user_email ? dto.user_email.slice(0, 255) : null,
+      context: null,
+      status: 'new',
+    });
+    return this.repo.save(row);
+  }
+
+  /** Loads a feature row (kind='feature') or throws NotFound. */
+  private async findFeatureById(id: string): Promise<BugReport> {
+    const row = await this.repo.findOne({ where: { id } });
+    if (!row || row.kind !== 'feature') throw new NotFoundException('feature request not found');
+    return row;
+  }
+
+  /**
+   * Toggle the caller's upvote on a feature, then recompute and persist
+   * `vote_count = COUNT(feature_votes for this feature)`. Idempotent.
+   */
+  async toggleVote(featureId: string, userId: string): Promise<{ vote_count: number; hasVoted: boolean }> {
+    const row = await this.findFeatureById(featureId);
+    const existing = await this.votes.findOne({ where: { feature_id: featureId, user_id: userId } });
+    let hasVoted: boolean;
+    if (existing) {
+      await this.votes.delete({ feature_id: featureId, user_id: userId });
+      hasVoted = false;
+    } else {
+      await this.votes.save(this.votes.create({ feature_id: featureId, user_id: userId }));
+      hasVoted = true;
+    }
+    const count = await this.votes.count({ where: { feature_id: featureId } });
+    row.vote_count = count;
+    await this.repo.save(row);
+    return { vote_count: count, hasVoted };
+  }
+
+  /**
+   * Public board feed: kind='feature' AND is_public, sorted by
+   * vote_count DESC then created_at DESC, optional status / target_platform
+   * filters, paginated. Each row carries `viewerHasVoted` (always false
+   * when userId is null).
+   */
+  async listPublicFeatures(
+    query: { page?: number | string; limit?: number | string; status?: string; target_platform?: string },
+    userId: string | null,
+  ): Promise<{ rows: Array<BugReport & { viewerHasVoted: boolean }>; total: number }> {
+    const where: Record<string, any> = { kind: 'feature', is_public: true };
+    if (query.status && query.status !== 'all' && ALLOWED_STATUSES.includes(query.status)) {
+      where.status = query.status;
+    }
+    if (query.target_platform && TARGET_PLATFORMS.includes(query.target_platform as any)) {
+      where.target_platform = query.target_platform;
+    }
+    const page = Math.max(1, Number(query.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(query.limit) || 20));
+
+    const total = await this.repo.count({ where });
+    const rows = await this.repo.find({
+      where,
+      order: { vote_count: 'DESC', created_at: 'DESC' },
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+
+    let votedIds = new Set<string>();
+    if (userId && rows.length > 0) {
+      const myVotes = await this.votes.find({ where: { feature_id: In(rows.map(r => r.id)), user_id: userId } });
+      votedIds = new Set(myVotes.map(v => v.feature_id));
+    }
+    return {
+      rows: rows.map(r => Object.assign(r, { viewerHasVoted: votedIds.has(r.id) })),
+      total,
+    };
+  }
+
+  /** Admin: paginated list with search/sort/status/kind/target_platform filter. */
+  async findAllPaginated(
+    query: ListQuery & { status?: string; kind?: string; target_platform?: string },
+  ) {
     const qb = this.repo.createQueryBuilder('br');
 
     // Status filter is custom (not is_active) — apply it before
@@ -103,18 +227,33 @@ export class BugReportsService {
         ALLOWED_STATUSES.includes(query.status)) {
       qb.andWhere('br.status = :st', { st: query.status });
     }
+    if (query.kind === 'bug' || query.kind === 'feature') {
+      qb.andWhere('br.kind = :k', { k: query.kind });
+    }
+    if (query.target_platform && TARGET_PLATFORMS.includes(query.target_platform as any)) {
+      qb.andWhere('br.target_platform = :tp', { tp: query.target_platform });
+    }
 
+    // Build a clean ListQuery — omit the custom fields so applyListQuery
+    // doesn't try to apply them as is_active.
+    const listQ: ListQuery = {
+      search: query.search,
+      sort_by: query.sort_by,
+      sort_order: query.sort_order,
+      page: query.page,
+      limit: query.limit,
+    };
     const result = await applyListQuery(
       qb,
-      // strip status from the ListQuery so the helper doesn't try to
-      // apply it as is_active.
-      { ...query, status: undefined as any },
-      ['br.description', 'br.user_email', 'br.source'],
+      listQ,
+      ['br.description', 'br.title', 'br.user_email', 'br.source'],
       {
         created_at: 'br.created_at',
         updated_at: 'br.updated_at',
         status: 'br.status',
         source: 'br.source',
+        kind: 'br.kind',
+        vote_count: 'br.vote_count',
       },
       'br.created_at',
       null, // no is_active column on this entity
@@ -138,9 +277,23 @@ export class BugReportsService {
       }
       row.status = dto.status;
     }
-    if (dto.admin_notes !== undefined) {
-      row.admin_notes = dto.admin_notes;
+    if (dto.admin_notes !== undefined) row.admin_notes = dto.admin_notes;
+    if (dto.title !== undefined) {
+      const t = (dto.title ?? '').trim();
+      if (t.length < 1 || t.length > 80) {
+        throw new BadRequestException('title is required (1-80 characters)');
+      }
+      row.title = t;
     }
+    if (dto.target_platform !== undefined) {
+      if (!TARGET_PLATFORMS.includes(dto.target_platform as any)) {
+        throw new BadRequestException(
+          `target_platform must be one of: ${TARGET_PLATFORMS.join(', ')}`,
+        );
+      }
+      row.target_platform = dto.target_platform;
+    }
+    if (dto.is_public !== undefined) row.is_public = dto.is_public;
     return this.repo.save(row);
   }
 
@@ -231,6 +384,7 @@ Do not output anything outside this format. Do not pad. Do not apologize.`;
     return this.repo
       .createQueryBuilder('br')
       .where('br.status = :st', { st: 'new' })
+      .andWhere("br.kind = 'bug'")
       .andWhere('br.ai_fix_proposal IS NULL')
       .orderBy('br.created_at', 'DESC')
       .limit(limit)

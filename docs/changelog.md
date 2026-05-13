@@ -1,6 +1,23 @@
 # DraftRight Changelog
 
+## 2026-05-13
+
+### Feedback public board (Spec C)
+- New page `draftright.info/feedback` — card list of feature requests sorted by votes, status + target-platform filters, "Load more" pagination, inline "+ Suggest a feature" form. Server-fetches the initial page for SEO; React island (`FeedbackBoard`) handles re-fetch, optimistic upvotes (JWT required, `dr_access_token`), and submit. Logged-out visitors see read-only board + "Sign in to vote" tooltip on the upvote buttons.
+- Nav link added (`Feedback`); all client "See all requests →" deep-links (Spec B) now land on a real page.
+
+### Feedback / feature-request client surfaces (Spec B)
+- "Suggest a feature" form (title + target-platform dropdown + description) added to every client: web playground (`SuggestFeatureWidget`), macOS (menu-bar + Advanced settings), Windows (Settings → Feedback), Flutter iOS/Android (Settings → Help), Linux (Settings + tray). All POST JSON `{kind:"feature", title, target_platform, description, source}` to `/feedback`, attaching the user's Bearer token when signed in.
+- Each surface carries a "See all requests →" link to `https://draftright.info/feedback` (board page = Spec C, pending).
+- Per-client `FeedbackService` (Swift/C#/Python/Dart) + matching dialog/widget; Flutter ships with 3 unit tests for the payload shape.
+
 ## 2026-05-12
+
+### Feedback / feature-request backend (Spec A)
+- `bug_reports` gains `kind`/`title`/`target_platform`/`vote_count`/`is_public`; new `feature_votes` table (one vote per user per feature, `vote_count` derived).
+- Public `POST /feedback` (bug or feature; JWT optional → user_id), `GET /feedback` (board feed: kind=feature & is_public, votes desc, `?status=`/`?target_platform=` filters), `POST /feedback/:id/vote` (toggle upvote, JWT required).
+- Admin bug-reports list/patch gain `kind`+`target_platform` filters and `title`/`target_platform`/`is_public` patch fields; AI fix-proposal cron scoped to `kind='bug'`.
+- `POST /bug-reports` (multipart, screenshots) contract unchanged. Migration: `backend/sql/2026-05-12-feedback.sql`. Specs B (native submit forms) + C (public board page) pending.
 
 ### Desktop auto-update overhaul (macOS + Windows → 2.2.4)
 - Persistent "Update X.Y.Z available" affordance: Windows tray menu item + Settings→Advanced→Updates link; macOS menu-bar item + Settings→Updates button. No longer have to click "Check for Updates" to learn about a release.

@@ -45,6 +45,9 @@ struct DraftRightApp: App {
             Button("Report a Bug…") {
                 BugReportPresenter.present(appModel: appModel)
             }
+            Button("Suggest a Feature…") {
+                FeedbackPresenter.present(appModel: appModel)
+            }
             Divider()
             Button("Quit DraftRight V2") {
                 NSApp.terminate(nil)
