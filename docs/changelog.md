@@ -2,6 +2,10 @@
 
 ## 2026-05-13
 
+### Feedback public board (Spec C)
+- New page `draftright.info/feedback` — card list of feature requests sorted by votes, status + target-platform filters, "Load more" pagination, inline "+ Suggest a feature" form. Server-fetches the initial page for SEO; React island (`FeedbackBoard`) handles re-fetch, optimistic upvotes (JWT required, `dr_access_token`), and submit. Logged-out visitors see read-only board + "Sign in to vote" tooltip on the upvote buttons.
+- Nav link added (`Feedback`); all client "See all requests →" deep-links (Spec B) now land on a real page.
+
 ### Feedback / feature-request client surfaces (Spec B)
 - "Suggest a feature" form (title + target-platform dropdown + description) added to every client: web playground (`SuggestFeatureWidget`), macOS (menu-bar + Advanced settings), Windows (Settings → Feedback), Flutter iOS/Android (Settings → Help), Linux (Settings + tray). All POST JSON `{kind:"feature", title, target_platform, description, source}` to `/feedback`, attaching the user's Bearer token when signed in.
 - Each surface carries a "See all requests →" link to `https://draftright.info/feedback` (board page = Spec C, pending).
