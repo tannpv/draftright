@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import ReportBugWidget from './ReportBugWidget';
+import SuggestFeatureWidget from './SuggestFeatureWidget';
 
 const API_URL = (typeof import.meta !== 'undefined' && import.meta.env?.PUBLIC_API_URL) || 'https://api.draftright.info';
 
@@ -328,6 +329,7 @@ export default function Playground() {
       <ReportBugWidget
         playgroundState={() => ({ text, tone, sourceLanguage, targetLanguage, result })}
       />
+      <SuggestFeatureWidget />
     </section>
   );
 }

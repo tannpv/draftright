@@ -1,5 +1,12 @@
 # DraftRight Changelog
 
+## 2026-05-13
+
+### Feedback / feature-request client surfaces (Spec B)
+- "Suggest a feature" form (title + target-platform dropdown + description) added to every client: web playground (`SuggestFeatureWidget`), macOS (menu-bar + Advanced settings), Windows (Settings → Feedback), Flutter iOS/Android (Settings → Help), Linux (Settings + tray). All POST JSON `{kind:"feature", title, target_platform, description, source}` to `/feedback`, attaching the user's Bearer token when signed in.
+- Each surface carries a "See all requests →" link to `https://draftright.info/feedback` (board page = Spec C, pending).
+- Per-client `FeedbackService` (Swift/C#/Python/Dart) + matching dialog/widget; Flutter ships with 3 unit tests for the payload shape.
+
 ## 2026-05-12
 
 ### Feedback / feature-request backend (Spec A)

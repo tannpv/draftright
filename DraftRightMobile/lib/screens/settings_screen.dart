@@ -7,6 +7,7 @@ import 'package:draftright_mobile/screens/change_password_screen.dart';
 import 'package:draftright_mobile/screens/about_screen.dart';
 import 'package:draftright_mobile/services/share_service.dart';
 import 'package:draftright_mobile/widgets/report_bug_sheet.dart';
+import 'package:draftright_mobile/widgets/suggest_feature_sheet.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -240,6 +241,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           'SettingsScreen',
                     );
                   },
+                ),
+              ),
+              const SizedBox(height: 8),
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.lightbulb_outline),
+                  title: const Text('Suggest a feature'),
+                  subtitle: const Text(
+                    'Got an idea? Tell us what you\'d like to see.',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => showSuggestFeatureSheet(context),
                 ),
               ),
               const SizedBox(height: 8),

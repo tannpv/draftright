@@ -83,6 +83,11 @@ class TrayIcon:
         item_settings.connect("activate", self._on_open_settings)
         menu.append(item_settings)
 
+        # Suggest a feature
+        item_suggest = Gtk3.MenuItem(label="Suggest a feature…")
+        item_suggest.connect("activate", self._on_suggest_feature)
+        menu.append(item_suggest)
+
         # Separator
         menu.append(Gtk3.SeparatorMenuItem())
 
@@ -106,6 +111,18 @@ class TrayIcon:
     def _on_open_settings(self, _widget):
         """Open the settings window."""
         self.app.show_settings()
+
+    def _on_suggest_feature(self, _widget):
+        """Open the Suggest a Feature dialog."""
+        from draftright.ui.suggest_feature_dialog import open_suggest_feature_dialog
+        token = (
+            self.app.auth_service.access_token
+            if getattr(self.app, "auth_service", None) is not None
+            else None
+        )
+        parent = getattr(self.app, "props", None)
+        active_window = parent.active_window if parent is not None else None
+        open_suggest_feature_dialog(active_window, bearer_token=token)
 
     def _on_sign_out(self, _widget):
         """Sign the user out."""
