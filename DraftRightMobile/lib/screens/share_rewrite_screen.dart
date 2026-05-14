@@ -8,6 +8,10 @@ import 'package:draftright_mobile/services/auth_service.dart';
 import 'package:draftright_mobile/services/backend_client.dart';
 import 'package:draftright_mobile/services/settings_service.dart';
 import 'package:draftright_mobile/services/share_service.dart';
+import 'package:draftright_mobile/models/entity.dart';
+import 'package:draftright_mobile/services/entity_extractor.dart';
+import 'package:draftright_mobile/services/extraction_api.dart';
+import 'package:draftright_mobile/screens/entity_sheet_screen.dart';
 
 /// Lightweight tone-picker that shows when the user reaches DraftRight via
 /// the system Share sheet.  Optimised for speed: paste the shared text in
@@ -25,6 +29,31 @@ class _ShareRewriteScreenState extends State<ShareRewriteScreen> {
   String? _result;
   String? _error;
   Timer? _autoCloseTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final List<Entity> entities = EntityExtractor.extract(widget.sharedText);
+      if (entities.isEmpty) return; // fall through to existing tone picker
+      if (!mounted) return;
+      final auth = context.read<AuthService>();
+      final settings = context.read<SettingsService>();
+      final api = ExtractionApi(
+        baseUrl: settings.backendUrl,
+        tokenProvider: () async => auth.accessToken,
+      );
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute<void>(
+          builder: (_) => EntitySheetScreen(
+            text: widget.sharedText,
+            initial: entities,
+            smartScan: api.llmExtract,
+          ),
+        ),
+      );
+    });
+  }
 
   @override
   void dispose() {
