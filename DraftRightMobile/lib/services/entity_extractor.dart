@@ -1,4 +1,5 @@
 import '../models/entity.dart';
+import 'entity_extractor/bank_account_detector.dart';
 import 'entity_extractor/credit_card_detector.dart';
 import 'entity_extractor/detector.dart';
 import 'entity_extractor/email_detector.dart';
@@ -13,6 +14,7 @@ class EntityExtractor {
     UrlDetector(),
     OtpDetector(),
     CreditCardDetector(),
+    BankAccountDetector(),
   ];
 
   /// Pure-function entry. Runs every detector, dedupes by (kind, value)
