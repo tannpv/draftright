@@ -3,7 +3,7 @@ import 'package:draftright_mobile/models/entity.dart';
 
 void main() {
   group('Entity', () {
-    test('equality uses kind + value (case-insensitive)', () {
+    test('dedupeKey collapses case-insensitive duplicates regardless of offsets/source', () {
       final a = Entity(
         kind: EntityKind.email,
         value: 'TAN@X.COM',
@@ -41,6 +41,10 @@ void main() {
       expect(round.kind, EntityKind.bankAccount);
       expect(round.value, '0123456789');
       expect(round.meta['bank'], 'Vietcombank');
+      expect(round.start, 10);
+      expect(round.end, 20);
+      expect(round.source, 'regex');
+      expect(round.confidence, 0.95);
     });
   });
 }
