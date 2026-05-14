@@ -1,10 +1,10 @@
 import '../models/entity.dart';
 import 'entity_extractor/detector.dart';
+import 'entity_extractor/phone_detector.dart';
 
 class EntityExtractor {
   static final List<EntityDetector> _detectors = <EntityDetector>[
-    // Detectors registered in subsequent tasks. Order does not matter —
-    // dedupe is applied after collecting from all detectors.
+    PhoneDetector(),
   ];
 
   /// Pure-function entry. Runs every detector, dedupes by (kind, value)
