@@ -1,10 +1,12 @@
 import '../models/entity.dart';
 import 'entity_extractor/detector.dart';
+import 'entity_extractor/email_detector.dart';
 import 'entity_extractor/phone_detector.dart';
 
 class EntityExtractor {
   static final List<EntityDetector> _detectors = <EntityDetector>[
     PhoneDetector(),
+    EmailDetector(),
   ];
 
   /// Pure-function entry. Runs every detector, dedupes by (kind, value)
