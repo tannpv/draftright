@@ -10,6 +10,17 @@ struct DraftRightApp: App {
         let model = AppModel()
         _appModel = StateObject(wrappedValue: model)
 
+        // Auto-pop the sign-in alert the moment the backend rejects our
+        // refresh token. Without this the user only learns the session
+        // expired on the next hotkey press or by opening Settings, which
+        // can leave the app silently dead for hours.
+        model.onSessionExpired = { [weak model] in
+            guard let model else { return }
+            DispatchQueue.main.async {
+                Self.showSignInRequiredAlert(appModel: model)
+            }
+        }
+
         DispatchQueue.main.async {
             Self.startServices(appModel: model)
         }

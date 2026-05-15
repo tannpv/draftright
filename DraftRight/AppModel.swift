@@ -81,6 +81,12 @@ final class AppModel: ObservableObject {
     /// on successful sign-in. Distinct from a transient network failure where
     /// the user just needs to wait, not re-authenticate.
     @Published var sessionExpired: Bool = false
+    /// Guards the auto-popup so the "session expired" alert fires at most once
+    /// per session-loss event. Reset when the user successfully signs in.
+    private var didPromptForReauth: Bool = false
+    /// Callback invoked when `sessionExpired` transitions false→true so the
+    /// hosting scene can pop a modal. Set by `DraftRightApp` at launch.
+    var onSessionExpired: (() -> Void)?
     /// Mirrors `updateService.availableUpdate` so SwiftUI views (menu bar,
     /// Settings) can show an "Update X available" affordance.
     @Published var availableUpdate: ResolvedUpdate?
@@ -207,6 +213,8 @@ final class AppModel: ObservableObject {
         accessToken = access
         refreshToken = refresh
         isLoggedIn = true
+        sessionExpired = false
+        didPromptForReauth = false
     }
 
     nonisolated deinit {
@@ -254,7 +262,12 @@ final class AppModel: ObservableObject {
                 DRLogger.log("Refresh rejected by backend — clearing tokens, surfacing sessionExpired", category: .auth)
                 accessToken = ""
                 refreshToken = ""
+                let wasExpired = sessionExpired
                 sessionExpired = true
+                if !wasExpired && !didPromptForReauth {
+                    didPromptForReauth = true
+                    onSessionExpired?()
+                }
             case .transient:
                 DRLogger.log("Refresh transient failure — keeping tokens, will retry next cycle", category: .auth)
                 // Intentionally do NOT clear. Next 30s health check tries again.
