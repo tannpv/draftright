@@ -31,11 +31,30 @@ public class UpdateService
 {
     private readonly string _currentVersion;
     private readonly string _backendUrl;
+
+    // Both HTTP clients share a SocketsHttpHandler with an explicit
+    // ConnectTimeout (15s). Without it, a stalled TLS handshake can sit
+    // inside Get/SendAsync for the full request-level Timeout — that's how
+    // 2.2.3 ended up with an "Updating DraftRight" window open for 20+ min
+    // with zero bytes written and no progress. With ConnectTimeout=15s an
+    // unreachable server fails fast, the retry loop kicks in, and the user
+    // sees a real error instead of a hang.
+    private static HttpClient MakeClient(TimeSpan totalTimeout)
+    {
+        var handler = new SocketsHttpHandler
+        {
+            ConnectTimeout = TimeSpan.FromSeconds(15),
+            PooledConnectionLifetime = TimeSpan.FromMinutes(10),
+        };
+        return new HttpClient(handler, disposeHandler: true) { Timeout = totalTimeout };
+    }
+
     // Short-timeout client for the small JSON metadata fetch.
-    private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(10) };
+    private readonly HttpClient _http = MakeClient(TimeSpan.FromSeconds(10));
     // Long-timeout client for the multi-hundred-MB installer download.
-    // 10 minutes lets us cover slow connections without indefinite hangs.
-    private readonly HttpClient _downloadHttp = new() { Timeout = TimeSpan.FromMinutes(10) };
+    // 10 minutes covers slow connections; ConnectTimeout above prevents
+    // hangs *before* the first byte arrives.
+    private readonly HttpClient _downloadHttp = MakeClient(TimeSpan.FromMinutes(10));
     private DateTime _lastCheck = DateTime.MinValue;
     private const int CheckIntervalHours = 24;
 
@@ -108,7 +127,16 @@ public class UpdateService
     /// </summary>
     public async Task<UpdateInfo?> RefreshAvailableUpdateAsync()
     {
+        DRLogger.Log($"Update check: GET {_backendUrl}/updates/latest (current {_currentVersion})", DRLogger.Category.APP);
         var info = await FetchLatestVersionAsync();
+        if (info == null)
+        {
+            DRLogger.Log("Update check: /updates/latest returned null (network or parse error)", DRLogger.Category.APP);
+        }
+        else
+        {
+            DRLogger.Log($"Update check: server reports {info.Version} (windows_url={(string.IsNullOrEmpty(info.WindowsUrl) ? "(empty)" : "set")})", DRLogger.Category.APP);
+        }
         var applicable =
             info != null
             && IsNewer(info.Version, _currentVersion)
@@ -141,13 +169,19 @@ public class UpdateService
     /// </summary>
     public void StartInstall(UpdateInfo info)
     {
-        if (string.IsNullOrEmpty(info.WindowsUrl)) return;
+        if (string.IsNullOrEmpty(info.WindowsUrl))
+        {
+            DRLogger.Log($"StartInstall {info.Version}: refused — empty windows_url", DRLogger.Category.APP);
+            return;
+        }
         if (UpdateStaged && _stagedInstallerPath != null && _stagedVersion == info.Version)
         {
+            DRLogger.Log($"StartInstall {info.Version}: using staged installer at {_stagedInstallerPath}", DRLogger.Category.APP);
             RunStagedInstaller(_stagedInstallerPath, info.Version);
         }
         else
         {
+            DRLogger.Log($"StartInstall {info.Version}: not staged, falling back to download-then-install from {info.WindowsUrl}", DRLogger.Category.APP);
             _ = DownloadAndInstallAsync(info.WindowsUrl, info.Version);
         }
     }
@@ -196,26 +230,32 @@ public class UpdateService
         {
             try
             {
+                DRLogger.Log($"Update download attempt {attempt}/{attempts}: GET {url} → {dest}", DRLogger.Category.APP);
                 using var req = new HttpRequestMessage(HttpMethod.Get, url);
                 req.Headers.CacheControl =
                     new System.Net.Http.Headers.CacheControlHeaderValue { NoCache = true };
                 using var resp = await _downloadHttp.SendAsync(req, HttpCompletionOption.ResponseHeadersRead);
                 resp.EnsureSuccessStatusCode();
+                var size = resp.Content.Headers.ContentLength;
+                DRLogger.Log($"Update download attempt {attempt}: headers OK (status {(int)resp.StatusCode}, content-length {(size?.ToString() ?? "?")} bytes)", DRLogger.Category.APP);
                 using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromMinutes(10));
                 using (var src = await resp.Content.ReadAsStreamAsync())
                 using (var dst = new FileStream(dest, FileMode.Create, FileAccess.Write))
                 {
                     await src.CopyToAsync(dst, cts.Token);
                 }
+                var actual = new FileInfo(dest).Length;
+                DRLogger.Log($"Update download attempt {attempt}: wrote {actual} bytes to {dest}", DRLogger.Category.APP);
                 return dest;
             }
             catch (Exception ex)
             {
-                DRLogger.Log($"Update download attempt {attempt}/{attempts} failed: {ex.Message}", DRLogger.Category.APP);
+                DRLogger.Log($"Update download attempt {attempt}/{attempts} failed: {ex.GetType().Name}: {ex.Message}", DRLogger.Category.APP);
                 try { File.Delete(dest); } catch { }
                 if (attempt < attempts) await Task.Delay(TimeSpan.FromSeconds(5 * attempt));
             }
         }
+        DRLogger.Log($"Update download: all {attempts} attempts failed for {url}", DRLogger.Category.APP);
         return null;
     }
 
