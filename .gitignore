@@ -48,3 +48,4 @@ DraftRightLinux/data/
 store-assets/windows/*.exe
 store-assets/windows/*.msix
 store-assets/windows/*.msi
+.superpowers/

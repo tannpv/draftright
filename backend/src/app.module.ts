@@ -16,6 +16,7 @@ import { EmailModule } from './email/email.module';
 import { LemonsqueezyModule } from './lemonsqueezy/lemonsqueezy.module';
 import { ErrorsModule } from './errors/errors.module';
 import { BugReportsModule } from './bug-reports/bug-reports.module';
+import { ExtractionModule } from './extraction/extraction.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { BugReportsModule } from './bug-reports/bug-reports.module';
     LemonsqueezyModule,
     ErrorsModule,
     BugReportsModule,
+    ExtractionModule,
   ],
 })
 export class AppModule {}
