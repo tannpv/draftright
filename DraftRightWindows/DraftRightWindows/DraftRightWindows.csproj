@@ -41,6 +41,11 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
+  <ItemGroup>
+    <!-- Lets DraftRightWindows.Tests reach the internal UpdateService test seams
+         (the (currentVersion, backendUrl, http, downloadHttp) ctor and IsNewerForTest). -->
+    <InternalsVisibleTo Include="DraftRightWindows.Tests" />
+  </ItemGroup>
   <!-- VS-only AppX MSBuild target stubs live in DraftRightWindows/Directory.Build.targets
        (auto-imported by MSBuild after Sdk.targets). They're gated on
        EnableMsixTooling != true so CI builds are unaffected. -->
