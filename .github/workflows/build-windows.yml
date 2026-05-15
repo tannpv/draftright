@@ -152,3 +152,120 @@ jobs:
           files: |
             DraftRightWindows/DraftRightWindows/publish/${{ env.ARTIFACT_NAME }}
             DraftRightWindows/installer/Output/${{ env.INSTALLER_NAME }}
+
+  # ── Auto-deploy installer to update server ────────────────────────────
+  # Fires ONLY on `release` events (not every push to main) so deliberate
+  # GitHub releases trigger user-visible installs while routine commits do
+  # not. Picks the x64 installer — arm64 users can still grab the .exe
+  # from the GitHub Release page until we ramp arm64 to the update server.
+  #
+  # Required repo secrets:
+  #   DROPLET_SSH_KEY     — private key for deploy@droplet (same key used
+  #                         by scripts/release-publish.sh locally)
+  #   DROPLET_HOST        — IP or hostname of the production droplet
+  #   BACKEND_ADMIN_TOKEN — long-lived JWT for an admin user, scoped only
+  #                         for `/admin/releases`. Rotate periodically.
+  publish-to-update-server:
+    name: Publish to update server
+    needs: build
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download x64 installer artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: DraftRight-Setup-win-x64
+          path: dist
+
+      - name: Resolve version + remote filename
+        id: meta
+        env:
+          GITHUB_REF_NAME_SAFE: ${{ github.ref_name }}
+        run: |
+          INSTALLER=$(ls dist/*.exe | head -n1)
+          if [ -z "$INSTALLER" ]; then
+            echo "::error::No installer .exe found in dist/"
+            exit 1
+          fi
+          # github.ref_name on a release event is the tag name, e.g. "v2.2.5".
+          # Strip leading "v" + reject anything that is not a strict semver
+          # so a maliciously named tag cannot inject shell metacharacters.
+          TAG="$GITHUB_REF_NAME_SAFE"
+          VERSION="${TAG#v}"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+            echo "::error::Refusing unsafe version string: $VERSION"
+            exit 1
+          fi
+          REMOTE="DraftRight-Setup-Windows-${VERSION}-x64.exe"
+          {
+            echo "installer=$INSTALLER"
+            echo "version=$VERSION"
+            echo "remote=$REMOTE"
+          } >> "$GITHUB_OUTPUT"
+          ls -lh "$INSTALLER"
+
+      - name: SCP installer to droplet
+        env:
+          DROPLET_SSH_KEY: ${{ secrets.DROPLET_SSH_KEY }}
+          DROPLET_HOST: ${{ secrets.DROPLET_HOST }}
+          INSTALLER_PATH: ${{ steps.meta.outputs.installer }}
+          REMOTE_NAME: ${{ steps.meta.outputs.remote }}
+        run: |
+          umask 077
+          printf '%s\n' "$DROPLET_SSH_KEY" > /tmp/deploy_key
+          chmod 600 /tmp/deploy_key
+          scp -i /tmp/deploy_key \
+              -o StrictHostKeyChecking=accept-new \
+              -o UserKnownHostsFile=/tmp/known_hosts \
+              "$INSTALLER_PATH" \
+              "deploy@${DROPLET_HOST}:/tmp/${REMOTE_NAME}"
+          ssh -i /tmp/deploy_key \
+              -o StrictHostKeyChecking=accept-new \
+              -o UserKnownHostsFile=/tmp/known_hosts \
+              "deploy@${DROPLET_HOST}" \
+              "sudo mv /tmp/\"${REMOTE_NAME}\" /var/www/draftright/downloads/\"${REMOTE_NAME}\""
+
+      - name: Upsert app_releases.windows via /admin/releases
+        env:
+          BACKEND_ADMIN_TOKEN: ${{ secrets.BACKEND_ADMIN_TOKEN }}
+          NEW_VERSION: ${{ steps.meta.outputs.version }}
+          REMOTE_NAME: ${{ steps.meta.outputs.remote }}
+        run: |
+          PAYLOAD=$(jq -nc \
+            --arg version "$NEW_VERSION" \
+            --arg url "https://draftright.info/downloads/$REMOTE_NAME" \
+            '{platform:"windows",channel:"direct",version:$version,download_url:$url,enabled:true}')
+          curl -fsS -X POST https://api.draftright.info/admin/releases \
+            -H "Authorization: Bearer $BACKEND_ADMIN_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD"
+
+      - name: Verify /updates/latest reports new version
+        env:
+          EXPECTED: ${{ steps.meta.outputs.version }}
+        run: |
+          ACTUAL=$(curl -fsS "https://api.draftright.info/updates/latest?platform=windows" \
+            | jq -r '.platforms.windows.version')
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "::error::/updates/latest reports $ACTUAL, expected $EXPECTED"
+            exit 1
+          fi
+          echo "✓ /updates/latest reports windows $ACTUAL"
+
+      - name: Verify installer serves real bytes
+        env:
+          REMOTE_NAME: ${{ steps.meta.outputs.remote }}
+        run: |
+          URL="https://draftright.info/downloads/$REMOTE_NAME"
+          CT=$(curl -sSI -m 10 "$URL" | awk -F': ' '/^content-type:/ { print $2 }' | tr -d '\r')
+          CL=$(curl -sSI -m 10 "$URL" | awk -F': ' '/^content-length:/ { print $2 }' | tr -d '\r')
+          if [[ "$CT" == text/html* ]]; then
+            echo "::error::$URL returned content-type=$CT (Caddy HTML fallback). Restore manually."
+            exit 1
+          fi
+          if [ "${CL:-0}" -lt 1000000 ]; then
+            echo "::error::$URL content-length=$CL is too small for an installer."
+            exit 1
+          fi
+          echo "✓ installer serving — $CT, $CL bytes"
