@@ -38,6 +38,12 @@ public sealed class AuthService
     // ── Public API ──────────────────────────────────────────
 
     /// <summary>
+    /// Raised after tokens are successfully persisted. Subscribers can use it
+    /// to reset session-expired UI state — see <c>App.cs</c> wiring.
+    /// </summary>
+    public event Action? TokensSaved;
+
+    /// <summary>
     /// Persists tokens and email to encrypted storage and updates in-memory state.
     /// </summary>
     public void SaveTokens(string accessToken, string? refreshToken, string? email = null)
@@ -60,6 +66,8 @@ public sealed class AuthService
         var encrypted = ProtectedData.Protect(plainBytes, null, DataProtectionScope.CurrentUser);
 
         File.WriteAllBytes(AuthFilePath, encrypted);
+
+        TokensSaved?.Invoke();
     }
 
     /// <summary>
