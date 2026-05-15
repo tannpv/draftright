@@ -31,6 +31,15 @@ public class App : Application
     private DateTime _lastAutoRecovery = DateTime.MinValue;
     public static UpdateService? UpdateService { get; private set; }
 
+    /// <summary>True after the backend has explicitly rejected our refresh
+    /// token (HTTP 401/403). Cleared on successful re-login. Mirrors the
+    /// macOS AppModel.sessionExpired flag.</summary>
+    public static bool SessionExpired { get; private set; }
+    /// <summary>One-shot guard so the "session expired" alert fires at most
+    /// once per session-loss event — the 30-s health-check timer would
+    /// otherwise re-trigger it on every cycle.</summary>
+    private static bool _didPromptForReauth;
+
     // ── Rewrite flow ────────────────────────────────────────
     private DispatcherQueue? _dispatcherQueue;
     // The WinUI RewritePanel relies on theme XAML resources (themeresources.xaml,
@@ -176,6 +185,7 @@ public class App : Application
                 DRLogger.Log("Auto-refresh: no refresh_token stored — clearing session.", DRLogger.Category.AUTH);
                 Auth.ClearTokens();
                 Api.ClearToken();
+                RaiseSessionExpired();
                 return false;
             }
             try
@@ -186,6 +196,7 @@ public class App : Application
                     DRLogger.Log("Auto-refresh: backend returned empty access_token — clearing session.", DRLogger.Category.AUTH);
                     Auth.ClearTokens();
                     Api.ClearToken();
+                    RaiseSessionExpired();
                     return false;
                 }
                 Auth.SaveTokens(result.AccessToken, result.RefreshToken, Auth.CurrentEmail);
@@ -198,8 +209,17 @@ public class App : Application
                 DRLogger.Log($"Auto-refresh: failed — {ex.Message}", DRLogger.Category.AUTH);
                 Auth.ClearTokens();
                 Api.ClearToken();
+                RaiseSessionExpired();
                 return false;
             }
+        };
+
+        // Clear the session-expired guard whenever the user successfully
+        // signs in again (or auto-refresh succeeds against a fresh token).
+        Auth.TokensSaved += () =>
+        {
+            SessionExpired = false;
+            _didPromptForReauth = false;
         };
 
         // Install a WndProc subclass on the hidden window so WM_HOTKEY messages
@@ -1460,5 +1480,44 @@ internal static class SettingsFormBuilder
         tab.Controls.Add(featureBtn);
 
         return tab;
+    }
+
+    /// <summary>
+    /// Pops a one-shot "Session expired — please sign in" alert when the
+    /// backend rejects our refresh token. Guarded by <c>_didPromptForReauth</c>
+    /// so the 30-s health-check timer can't re-trigger it. Fires the dialog on
+    /// a worker thread (MessageBox runs its own modal loop) to avoid blocking
+    /// the OnUnauthorized callback. Clicking "Open Settings" surfaces the
+    /// existing sign-in UI; "Cancel" leaves the app silent until the user
+    /// opens Settings themselves.
+    /// </summary>
+    private static void RaiseSessionExpired()
+    {
+        if (_didPromptForReauth) return;
+        _didPromptForReauth = true;
+        SessionExpired = true;
+        DRLogger.Log("Session expired — surfacing sign-in prompt.", DRLogger.Category.AUTH);
+
+        Task.Run(() =>
+        {
+            try
+            {
+                var result = WinForms.MessageBox.Show(
+                    "Your DraftRight session has expired. Please sign in again to keep using rewrite.",
+                    "DraftRight — Session expired",
+                    WinForms.MessageBoxButtons.OKCancel,
+                    WinForms.MessageBoxIcon.Warning);
+
+                if (result == WinForms.DialogResult.OK
+                    && Application.Current is App app)
+                {
+                    app._dispatcherQueue?.TryEnqueue(() => app.OpenSettings());
+                }
+            }
+            catch (Exception ex)
+            {
+                DRLogger.Log($"RaiseSessionExpired alert failed: {ex.Message}", DRLogger.Category.AUTH);
+            }
+        });
     }
 }
