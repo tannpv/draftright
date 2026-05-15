@@ -50,11 +50,11 @@ public class UpdateService
     }
 
     // Short-timeout client for the small JSON metadata fetch.
-    private readonly HttpClient _http = MakeClient(TimeSpan.FromSeconds(10));
+    private readonly HttpClient _http;
     // Long-timeout client for the multi-hundred-MB installer download.
     // 10 minutes covers slow connections; ConnectTimeout above prevents
     // hangs *before* the first byte arrives.
-    private readonly HttpClient _downloadHttp = MakeClient(TimeSpan.FromMinutes(10));
+    private readonly HttpClient _downloadHttp;
     private DateTime _lastCheck = DateTime.MinValue;
     private const int CheckIntervalHours = 24;
 
@@ -87,10 +87,25 @@ public class UpdateService
         && File.Exists(_stagedInstallerPath);
 
     public UpdateService(string currentVersion, string backendUrl)
+        : this(currentVersion, backendUrl, MakeClient(TimeSpan.FromSeconds(10)), MakeClient(TimeSpan.FromMinutes(10)))
+    { }
+
+    /// <summary>
+    /// Test seam: lets unit tests inject pre-built HttpClients wired to a fake
+    /// HttpMessageHandler. Production uses the param-less ctor which delegates
+    /// here with real <see cref="MakeClient"/>-built clients (SocketsHttpHandler
+    /// with ConnectTimeout).
+    /// </summary>
+    internal UpdateService(string currentVersion, string backendUrl, HttpClient http, HttpClient downloadHttp)
     {
         _currentVersion = currentVersion;
         _backendUrl = backendUrl.StripTrailingSlash();
+        _http = http;
+        _downloadHttp = downloadHttp;
     }
+
+    /// <summary>Test seam: exposes <see cref="IsNewer"/> for pure-logic tests.</summary>
+    internal static bool IsNewerForTest(string remote, string local) => IsNewer(remote, local);
 
     public async Task CheckIfNeededAsync()
     {
