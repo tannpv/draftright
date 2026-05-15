@@ -716,6 +716,45 @@ public class App : Application
         WinForms.Application.ExitThread();
         Environment.Exit(0);
     }
+
+    /// <summary>
+    /// Pops a one-shot "Session expired — please sign in" alert when the
+    /// backend rejects our refresh token. Guarded by <c>_didPromptForReauth</c>
+    /// so the 30-s health-check timer can't re-trigger it. Fires the dialog on
+    /// a worker thread (MessageBox runs its own modal loop) to avoid blocking
+    /// the OnUnauthorized callback. Clicking "Open Settings" surfaces the
+    /// existing sign-in UI; "Cancel" leaves the app silent until the user
+    /// opens Settings themselves.
+    /// </summary>
+    private static void RaiseSessionExpired()
+    {
+        if (_didPromptForReauth) return;
+        _didPromptForReauth = true;
+        SessionExpired = true;
+        DRLogger.Log("Session expired — surfacing sign-in prompt.", DRLogger.Category.AUTH);
+
+        Task.Run(() =>
+        {
+            try
+            {
+                var result = WinForms.MessageBox.Show(
+                    "Your DraftRight session has expired. Please sign in again to keep using rewrite.",
+                    "DraftRight — Session expired",
+                    WinForms.MessageBoxButtons.OKCancel,
+                    WinForms.MessageBoxIcon.Warning);
+
+                if (result == WinForms.DialogResult.OK
+                    && Application.Current is App app)
+                {
+                    app._dispatcherQueue?.TryEnqueue(() => app.OpenSettings());
+                }
+            }
+            catch (Exception ex)
+            {
+                DRLogger.Log($"RaiseSessionExpired alert failed: {ex.Message}", DRLogger.Category.AUTH);
+            }
+        });
+    }
 }
 
 // ── Tabbed WinForms Settings Form builder ──
@@ -1480,44 +1519,5 @@ internal static class SettingsFormBuilder
         tab.Controls.Add(featureBtn);
 
         return tab;
-    }
-
-    /// <summary>
-    /// Pops a one-shot "Session expired — please sign in" alert when the
-    /// backend rejects our refresh token. Guarded by <c>_didPromptForReauth</c>
-    /// so the 30-s health-check timer can't re-trigger it. Fires the dialog on
-    /// a worker thread (MessageBox runs its own modal loop) to avoid blocking
-    /// the OnUnauthorized callback. Clicking "Open Settings" surfaces the
-    /// existing sign-in UI; "Cancel" leaves the app silent until the user
-    /// opens Settings themselves.
-    /// </summary>
-    private static void RaiseSessionExpired()
-    {
-        if (_didPromptForReauth) return;
-        _didPromptForReauth = true;
-        SessionExpired = true;
-        DRLogger.Log("Session expired — surfacing sign-in prompt.", DRLogger.Category.AUTH);
-
-        Task.Run(() =>
-        {
-            try
-            {
-                var result = WinForms.MessageBox.Show(
-                    "Your DraftRight session has expired. Please sign in again to keep using rewrite.",
-                    "DraftRight — Session expired",
-                    WinForms.MessageBoxButtons.OKCancel,
-                    WinForms.MessageBoxIcon.Warning);
-
-                if (result == WinForms.DialogResult.OK
-                    && Application.Current is App app)
-                {
-                    app._dispatcherQueue?.TryEnqueue(() => app.OpenSettings());
-                }
-            }
-            catch (Exception ex)
-            {
-                DRLogger.Log($"RaiseSessionExpired alert failed: {ex.Message}", DRLogger.Category.AUTH);
-            }
-        });
     }
 }
