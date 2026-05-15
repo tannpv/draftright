@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { createHash } from 'crypto';
 import { AiProvidersService } from '../ai-providers/ai-providers.service';
 import {
   EntityKind,
@@ -35,7 +36,10 @@ export class ExtractionService {
       const cleaned = this.stripCodeFences(rawOutput);
       parsed = JSON.parse(cleaned);
     } catch (e) {
-      this.logger.warn(`extraction_llm_unparseable: ${rawOutput.slice(0, 200)}`);
+      const sha = createHash('sha1').update(rawOutput).digest('hex').slice(0, 8);
+      this.logger.warn(
+        `extraction_llm_unparseable: len=${rawOutput.length} sha1=${sha}`,
+      );
       return { entities: [], provider: provider.name, tokensUsed: 0 };
     }
     if (!Array.isArray(parsed)) {
@@ -93,7 +97,9 @@ export class ExtractionService {
     if (!value) return null;
     const start = text.indexOf(value);
     if (start < 0) {
-      this.logger.warn(`extraction_hallucination: ${kind}=${value}`);
+      this.logger.warn(
+        `extraction_hallucination: kind=${kind} value_len=${value.length}`,
+      );
       return null;
     }
     const display =

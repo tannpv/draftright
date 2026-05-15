@@ -43,7 +43,7 @@ class _ShareRewriteScreenState extends State<ShareRewriteScreen> {
         baseUrl: settings.backendUrl,
         tokenProvider: () async => auth.accessToken,
       );
-      Navigator.of(context).pushReplacement(
+      Navigator.of(context).push(
         MaterialPageRoute<void>(
           builder: (_) => EntitySheetScreen(
             text: widget.sharedText,

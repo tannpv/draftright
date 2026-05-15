@@ -71,4 +71,24 @@ void main() {
     expect(api.llmExtract('x'),
         throwsA(isA<ExtractionUnavailableException>()));
   });
+
+  test('null token throws ExtractionUnavailableException', () async {
+    final api = ExtractionApi(
+      baseUrl: 'https://api.test',
+      tokenProvider: () async => null,
+      httpClient: _FakeClient((_) => http.Response('{}', 200)),
+    );
+    expect(api.llmExtract('x'),
+        throwsA(isA<ExtractionUnavailableException>()));
+  });
+
+  test('empty token throws ExtractionUnavailableException', () async {
+    final api = ExtractionApi(
+      baseUrl: 'https://api.test',
+      tokenProvider: () async => '',
+      httpClient: _FakeClient((_) => http.Response('{}', 200)),
+    );
+    expect(api.llmExtract('x'),
+        throwsA(isA<ExtractionUnavailableException>()));
+  });
 }

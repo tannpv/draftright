@@ -180,9 +180,23 @@ class _EntitySheetScreenState extends State<EntitySheetScreen> {
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(12),
-          child: OutlinedButton(
-            onPressed: () => Navigator.of(context).maybePop(),
-            child: const Text('Done'),
+          child: Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => Navigator.of(context).maybePop(),
+                  icon: const Icon(Icons.edit_note, size: 18),
+                  label: const Text('Rewrite with tones'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: FilledButton(
+                  onPressed: () => Navigator.of(context).maybePop(),
+                  child: const Text('Done'),
+                ),
+              ),
+            ],
           ),
         ),
       ),

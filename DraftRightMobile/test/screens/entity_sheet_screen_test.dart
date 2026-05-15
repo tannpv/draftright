@@ -75,4 +75,58 @@ void main() {
     ));
     expect(find.text('**** **** **** 4242'), findsOneWidget);
   });
+
+  testWidgets('smart scan dedupes LLM entities matching regex by (kind, value)', (tester) async {
+    final regex = [
+      Entity(
+        kind: EntityKind.phone,
+        value: '+84912345678',
+        display: '0912 345 678',
+        start: 0,
+        end: 11,
+        source: 'regex',
+        confidence: 0.95,
+      ),
+    ];
+    // LLM returns the same phone (already detected by regex) PLUS an address.
+    Future<List<Entity>> fakeSmartScan(String _) async => [
+          Entity(
+            kind: EntityKind.phone,
+            value: '+84912345678',
+            display: '+84912345678',
+            start: 0,
+            end: 12,
+            source: 'llm',
+            confidence: 0.8,
+          ),
+          Entity(
+            kind: EntityKind.address,
+            value: '123 Lê Lợi',
+            display: '123 Lê Lợi',
+            start: 20,
+            end: 30,
+            source: 'llm',
+            confidence: 0.85,
+          ),
+        ];
+
+    await tester.pumpWidget(MaterialApp(
+      home: EntitySheetScreen(
+        text: '0912 345 678 ... 123 Lê Lợi',
+        initial: regex,
+        smartScan: fakeSmartScan,
+      ),
+    ));
+    expect(find.text('Phone'), findsOneWidget);
+    expect(find.text('Address'), findsNothing);  // not yet — smart scan not triggered
+
+    // Tap Smart scan
+    await tester.tap(find.text('Smart scan for addresses, names…'));
+    await tester.pumpAndSettle();
+
+    // Phone group should still have exactly 1 row (no duplicate)
+    expect(find.text('0912 345 678'), findsOneWidget);
+    // Address row now appears
+    expect(find.text('123 Lê Lợi'), findsOneWidget);
+  });
 }
