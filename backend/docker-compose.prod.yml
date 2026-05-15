@@ -1,0 +1,43 @@
+services:
+  backend:
+    build: .
+    ports:
+      - "127.0.0.1:3000:3000"
+    env_file:
+      - .env
+    environment:
+      - PORT=3000
+      - DATABASE_URL=postgresql://draftright:${POSTGRES_PASSWORD}@postgres:5432/draftright
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - /var/lib/draftright/bug-reports:/var/lib/draftright/bug-reports
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=draftright
+      - POSTGRES_DB=draftright
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "draftright"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - /data
+    restart: unless-stopped
+
+volumes:
+  pgdata:
