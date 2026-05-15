@@ -160,11 +160,15 @@ jobs:
   # from the GitHub Release page until we ramp arm64 to the update server.
   #
   # Required repo secrets:
-  #   DROPLET_SSH_KEY     — private key for deploy@droplet (same key used
-  #                         by scripts/release-publish.sh locally)
+  #   DROPLET_SSH_KEY     — private key for deploy@droplet (dedicated
+  #                         ~/.ssh/draftright_deploy keypair, NOT a
+  #                         personal key)
   #   DROPLET_HOST        — IP or hostname of the production droplet
-  #   BACKEND_ADMIN_TOKEN — long-lived JWT for an admin user, scoped only
-  #                         for `/admin/releases`. Rotate periodically.
+  #   ADMIN_EMAIL         — admin user email (e.g. admin@draftright.info)
+  #   ADMIN_PASSWORD      — admin user password. CI mints a fresh 15-min
+  #                         JWT every release rather than caching one in
+  #                         a secret (access tokens are too short-lived
+  #                         to be useful as long-lived secrets).
   publish-to-update-server:
     name: Publish to update server
     needs: build
@@ -226,9 +230,32 @@ jobs:
               "deploy@${DROPLET_HOST}" \
               "sudo mv /tmp/\"${REMOTE_NAME}\" /var/www/draftright/downloads/\"${REMOTE_NAME}\""
 
+      - name: Mint admin JWT
+        id: jwt
+        env:
+          ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+        run: |
+          # Backend access tokens are short-lived (15 min) so we can't store
+          # one in a long-lived secret. Mint a fresh JWT every release by
+          # logging in with admin credentials, then mask it from the log.
+          BODY=$(jq -nc \
+            --arg e "$ADMIN_EMAIL" \
+            --arg p "$ADMIN_PASSWORD" \
+            '{email:$e,password:$p}')
+          TOKEN=$(curl -fsS -X POST https://api.draftright.info/auth/login \
+                       -H 'Content-Type: application/json' \
+                       -d "$BODY" | jq -r '.access_token')
+          if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
+            echo "::error::Admin login did not return access_token"
+            exit 1
+          fi
+          echo "::add-mask::$TOKEN"
+          echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
+
       - name: Upsert app_releases.windows via /admin/releases
         env:
-          BACKEND_ADMIN_TOKEN: ${{ secrets.BACKEND_ADMIN_TOKEN }}
+          BACKEND_ADMIN_TOKEN: ${{ steps.jwt.outputs.token }}
           NEW_VERSION: ${{ steps.meta.outputs.version }}
           REMOTE_NAME: ${{ steps.meta.outputs.remote }}
         run: |
