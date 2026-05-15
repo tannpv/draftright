@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- Same TFM as the main project so System.Windows.Forms / Microsoft.WindowsAppSDK
+         dependencies referenced by UpdateService resolve identically. -->
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <RootNamespace>DraftRightWindows.Tests</RootNamespace>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <!-- Test project doesn't need WinUI / MSIX / PRI machinery. -->
+    <UseWinUI>false</UseWinUI>
+    <EnableMsixTooling>false</EnableMsixTooling>
+    <WindowsPackageType>None</WindowsPackageType>
+    <EnableDefaultPageItems>false</EnableDefaultPageItems>
+    <EnableDefaultApplicationDefinition>false</EnableDefaultApplicationDefinition>
+    <GeneratePriFile>false</GeneratePriFile>
+    <DisableMrtCodeGen>true</DisableMrtCodeGen>
+    <AppxPackage>false</AppxPackage>
+    <MrtCoreGeneratePriFiles>false</MrtCoreGeneratePriFiles>
+    <EnableMrtTooling>false</EnableMrtTooling>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.10.0" />
+    <PackageReference Include="xunit" Version="2.9.0" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\DraftRightWindows\DraftRightWindows.csproj" />
+  </ItemGroup>
+</Project>
