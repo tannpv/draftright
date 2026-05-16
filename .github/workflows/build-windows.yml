@@ -17,6 +17,14 @@ on:
   release:
     types: [created]
 
+# Release-triggered runs attach artifacts to the GitHub release; without
+# this the default GITHUB_TOKEN can't update release assets and the
+# softprops/action-gh-release step fails with "Resource not accessible
+# by integration", which cascades to fail the whole build job and skip
+# the publish-to-update-server step.
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build ${{ matrix.runtime }}
