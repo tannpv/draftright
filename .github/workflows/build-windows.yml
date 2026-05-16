@@ -278,14 +278,23 @@ jobs:
           REMOTE_NAME: ${{ steps.meta.outputs.remote }}
         run: |
           URL="https://draftright.info/downloads/$REMOTE_NAME"
-          CT=$(curl -sSI -m 10 "$URL" | awk -F': ' '/^content-type:/ { print $2 }' | tr -d '\r')
-          CL=$(curl -sSI -m 10 "$URL" | awk -F': ' '/^content-length:/ { print $2 }' | tr -d '\r')
+          # HEAD via HTTP/2 occasionally returns "stream not closed cleanly"
+          # — retry up to 5 times with a 3-s backoff, and force HTTP/1.1 so a
+          # bad HTTP/2 stream can't poison the whole check.
+          for attempt in 1 2 3 4 5; do
+            HEADERS=$(curl -sS --http1.1 -I -m 15 "$URL" 2>&1 || true)
+            CT=$(printf '%s' "$HEADERS" | awk -F': ' '/^content-type:/ { print $2 }' | tr -d '\r')
+            CL=$(printf '%s' "$HEADERS" | awk -F': ' '/^content-length:/ { print $2 }' | tr -d '\r')
+            if [ -n "$CT" ] && [ -n "$CL" ]; then break; fi
+            echo "Verify attempt $attempt empty — retrying"
+            sleep 3
+          done
           if [[ "$CT" == text/html* ]]; then
             echo "::error::$URL returned content-type=$CT (Caddy HTML fallback). Restore manually."
             exit 1
           fi
           if [ "${CL:-0}" -lt 1000000 ]; then
-            echo "::error::$URL content-length=$CL is too small for an installer."
+            echo "::error::$URL content-length=$CL is too small for an installer (after 5 retries)."
             exit 1
           fi
           echo "✓ installer serving — $CT, $CL bytes"
