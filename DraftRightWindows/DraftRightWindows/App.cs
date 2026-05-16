@@ -163,6 +163,15 @@ public class App : Application
         // Never delete here — so the installer's autostart task isn't undone.
         if (Settings.AutoStart && !StartupRegistration.IsEnabled())
             StartupRegistration.SetEnabled(true);
+
+        // Reconcile the Scheduled Task that supervises the running process.
+        // The legacy Run-key registration above only fires at logon; it does
+        // nothing if DraftRight dies mid-session. KeepAliveAgent installs a
+        // Task Scheduler entry whose RestartOnFailure trigger respawns the
+        // app within ~10 s of any abnormal exit (crash, OS kill, etc.). The
+        // Run-key registration and the Scheduled Task are intentionally
+        // independent so removing one doesn't break the other.
+        Services.KeepAliveAgent.Reconcile(desiredRunAtLogon: Settings.AutoStart);
         DRLogger.Log($"OnLaunched: settings loaded — BackendUrl={Settings.BackendUrl} AppMode={Settings.AppMode} Hotkey={Settings.HotkeyModifiers:X}+{Settings.HotkeyKey:X}",
             DRLogger.Category.APP);
 
@@ -961,6 +970,10 @@ internal static class SettingsFormBuilder
             StartupRegistration.SetEnabled(autoStart.Checked);
             App.Settings.AutoStart = autoStart.Checked;
             App.Settings.Save();
+            // Mirror the toggle in the Scheduled Task that supervises the
+            // running process. Toggle ON installs (logon launch + crash
+            // respawn). Toggle OFF removes the task entirely.
+            Services.KeepAliveAgent.Reconcile(desiredRunAtLogon: autoStart.Checked);
         };
         tab.Controls.Add(autoStart);
         y += 34;
