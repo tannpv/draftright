@@ -31,7 +31,14 @@ final class AppModel: ObservableObject {
         didSet { defaults.set(backendUrl, forKey: Keys.backendUrl) }
     }
     @Published var launchAtLogin: Bool {
-        didSet { defaults.set(launchAtLogin, forKey: Keys.launchAtLogin) }
+        didSet {
+            defaults.set(launchAtLogin, forKey: Keys.launchAtLogin)
+            // Sync the on-disk launchd agent. Toggle ON installs the
+            // agent with RunAtLoad=true + KeepAlive (respawn on crash).
+            // Toggle OFF uninstalls the agent entirely so the app
+            // neither boots at login nor respawns mid-session.
+            KeepAliveAgent.reconcile(desiredRunAtLoad: launchAtLogin)
+        }
     }
     @Published var translateLanguage: String {
         didSet { defaults.set(translateLanguage, forKey: Keys.translateLanguage) }
@@ -112,6 +119,13 @@ final class AppModel: ObservableObject {
     }
 
     init() {
+        // Reconcile the launchd KeepAlive agent on every launch so the
+        // installed plist tracks the current executable path (the app may
+        // have moved since last launch) and matches the user's stored
+        // preference. Idempotent — no-op when state is already correct.
+        let storedLaunchAtLogin = UserDefaults.standard.bool(forKey: Keys.launchAtLogin)
+        KeepAliveAgent.reconcile(desiredRunAtLoad: storedLaunchAtLogin)
+
         self.backendUrl = UserDefaults.standard.string(forKey: Keys.backendUrl) ?? "http://localhost:3000"
         self.launchAtLogin = UserDefaults.standard.bool(forKey: Keys.launchAtLogin)
         self.translateLanguage = UserDefaults.standard.string(forKey: Keys.translateLanguage) ?? "Vietnamese"
