@@ -168,15 +168,11 @@ jobs:
   # from the GitHub Release page until we ramp arm64 to the update server.
   #
   # Required repo secrets:
-  #   DROPLET_SSH_KEY     — private key for deploy@droplet (dedicated
-  #                         ~/.ssh/draftright_deploy keypair, NOT a
-  #                         personal key)
-  #   DROPLET_HOST        — IP or hostname of the production droplet
-  #   ADMIN_EMAIL         — admin user email (e.g. admin@draftright.info)
-  #   ADMIN_PASSWORD      — admin user password. CI mints a fresh 15-min
-  #                         JWT every release rather than caching one in
-  #                         a secret (access tokens are too short-lived
-  #                         to be useful as long-lived secrets).
+  #   DROPLET_SSH_KEY  — private key for deploy@droplet (dedicated
+  #                      ~/.ssh/draftright_deploy keypair, NOT a personal key)
+  #   DROPLET_HOST     — IP or hostname of the production droplet
+  # No admin credentials needed — DB write is done over ssh+psql with the
+  # same key that SCPs the installer.
   publish-to-update-server:
     name: Publish to update server
     needs: build
@@ -238,43 +234,32 @@ jobs:
               "deploy@${DROPLET_HOST}" \
               "sudo mv /tmp/\"${REMOTE_NAME}\" /var/www/draftright/downloads/\"${REMOTE_NAME}\""
 
-      - name: Mint admin JWT
-        id: jwt
+      - name: Upsert app_releases.windows row via ssh+psql
         env:
-          ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
-          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
-        run: |
-          # Backend access tokens are short-lived (15 min) so we can't store
-          # one in a long-lived secret. Mint a fresh JWT every release by
-          # logging in with admin credentials, then mask it from the log.
-          BODY=$(jq -nc \
-            --arg e "$ADMIN_EMAIL" \
-            --arg p "$ADMIN_PASSWORD" \
-            '{email:$e,password:$p}')
-          TOKEN=$(curl -fsS -X POST https://api.draftright.info/auth/login \
-                       -H 'Content-Type: application/json' \
-                       -d "$BODY" | jq -r '.access_token')
-          if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
-            echo "::error::Admin login did not return access_token"
-            exit 1
-          fi
-          echo "::add-mask::$TOKEN"
-          echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
-
-      - name: Upsert app_releases.windows via /admin/releases
-        env:
-          BACKEND_ADMIN_TOKEN: ${{ steps.jwt.outputs.token }}
+          DROPLET_HOST: ${{ secrets.DROPLET_HOST }}
           NEW_VERSION: ${{ steps.meta.outputs.version }}
           REMOTE_NAME: ${{ steps.meta.outputs.remote }}
         run: |
-          PAYLOAD=$(jq -nc \
-            --arg version "$NEW_VERSION" \
-            --arg url "https://draftright.info/downloads/$REMOTE_NAME" \
-            '{platform:"windows",channel:"direct",version:$version,download_url:$url,enabled:true}')
-          curl -fsS -X POST https://api.draftright.info/admin/releases \
-            -H "Authorization: Bearer $BACKEND_ADMIN_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "$PAYLOAD"
+          # Match what scripts/release-publish.sh does locally: write to
+          # app_releases via psql over the SSH tunnel rather than the HTTP
+          # /admin/releases endpoint. The endpoint enforces role=admin, but
+          # the deploy user on the droplet is already trusted (it owns the
+          # backend container) so a direct DB upsert is the simpler path.
+          # Avoids needing to mint a fresh admin JWT every release.
+          SQL=$(cat <<SQL_EOF
+          INSERT INTO app_releases (platform, channel, version, download_url, release_notes, required, enabled)
+          VALUES ('windows', 'direct', '$NEW_VERSION', 'https://draftright.info/downloads/$REMOTE_NAME', '', false, true)
+          ON CONFLICT (platform, channel) DO UPDATE SET
+            version = EXCLUDED.version,
+            download_url = EXCLUDED.download_url,
+            updated_at = now();
+          SQL_EOF
+          )
+          ssh -i /tmp/deploy_key \
+              -o StrictHostKeyChecking=accept-new \
+              -o UserKnownHostsFile=/tmp/known_hosts \
+              "deploy@${DROPLET_HOST}" \
+              "sudo docker exec -i draftright-postgres-1 psql -U draftright -d draftright -v ON_ERROR_STOP=1" <<<"$SQL"
 
       - name: Verify /updates/latest reports new version
         env:
