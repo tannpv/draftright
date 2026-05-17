@@ -203,6 +203,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
 
               const SizedBox(height: 24),
+              const Text('Keyboard languages',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const Text(
+                'Pick which languages the DraftRight keyboard cycles through. '
+                'Tap the globe key on the keyboard to switch.',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+              const SizedBox(height: 8),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: SettingsService.keyboardLanguageCatalog.entries.map((entry) {
+                      final id = entry.key;
+                      final label = entry.value;
+                      final isEnabled = settings.enabledLanguageIds.contains(id);
+                      return FilterChip(
+                        label: Text(label),
+                        selected: isEnabled,
+                        onSelected: (selected) {
+                          final next = List<String>.from(settings.enabledLanguageIds);
+                          if (selected) {
+                            if (!next.contains(id)) next.add(id);
+                          } else {
+                            next.remove(id);
+                          }
+                          settings.setEnabledLanguageIds(next);
+                        },
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 24),
               const Text('Floating Bubble',
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
               const SizedBox(height: 8),

@@ -198,7 +198,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Best for English. For Vietnamese, Chinese, Japanese, Korean, Thai — use your phone\'s keyboard with the long-press flow on the previous page.',
+                    'Now types English, Tiếng Việt, Français, Español, Deutsch, Italiano, and Português. Tap the globe key to switch. For Chinese, Japanese, Korean, Thai — use your phone\'s keyboard with the long-press flow on the previous page.',
                     style: TextStyle(fontSize: 12, color: Colors.black87),
                   ),
                 ),
