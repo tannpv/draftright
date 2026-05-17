@@ -173,6 +173,47 @@ public class UpdateServiceTests
         Assert.Equal(3, dl.CallCount);
     }
 
+    // ── StartInstall: staged file must short-circuit the download ───────────
+    //
+    // Regression: 2.2.6 users saw "Downloading DraftRight" hang for minutes
+    // after clicking Yes on the auto-update prompt, even though the silent
+    // background staging had already finished. ShowUpdateDialog used to call
+    // DownloadAndInstallAsync directly, ignoring UpdateStaged — kicking off a
+    // redundant 130MB download with no per-attempt timeout, no retries, no
+    // logging. Now ShowUpdateDialog routes through StartInstall, which honors
+    // the staged file. This test enforces that.
+
+    [Fact]
+    public async Task StartInstall_UsesStagedInstaller_WithoutRedownloading()
+    {
+        var installerBytes = new byte[] { 0x4D, 0x5A, 0x90, 0x00, 0x03, 0x00, 0x00, 0x00 };
+        var meta = TestHttpHandler.Always(HttpStatusCode.OK,
+            """{"version":"2.2.6","windows_url":"https://x/installer-2.2.6.exe"}""");
+        var dl = TestHttpHandler.Bytes(installerBytes);
+        var svc = BuildService("2.2.5", meta, dl);
+
+        string? launchedPath = null;
+        string? launchedVersion = null;
+        svc.StagedInstallerLauncherForTest = (path, version) =>
+        {
+            launchedPath = path;
+            launchedVersion = version;
+        };
+
+        var info = await svc.RefreshAvailableUpdateAsync();
+        Assert.NotNull(info);
+        await WaitFor(() => svc.UpdateStaged, TimeSpan.FromSeconds(5));
+        Assert.True(svc.UpdateStaged, "precondition: stage must complete before testing the install path");
+
+        var downloadCallsAfterStaging = dl.CallCount;
+
+        svc.StartInstall(info!);
+
+        Assert.Equal(downloadCallsAfterStaging, dl.CallCount);
+        Assert.NotNull(launchedPath);
+        Assert.Equal("2.2.6", launchedVersion);
+    }
+
     // ── Helpers ─────────────────────────────────────────────────────────────
 
     private static async Task WaitFor(Func<bool> condition, TimeSpan timeout)
