@@ -24,6 +24,8 @@ class SettingsService extends ChangeNotifier {
   String _defaultTone = '';
   bool _floatingBubbleEnabled = false;
   bool _autoCloseAfterRewrite = true;
+  List<String> _enabledLanguageIds = const ['en'];
+  String _activeLanguageId = 'en';
 
   String get backendUrl => _backendUrl;
   String get translateLanguage => _translateLanguage;
@@ -31,6 +33,8 @@ class SettingsService extends ChangeNotifier {
   String get defaultTone => _defaultTone;
   bool get floatingBubbleEnabled => _floatingBubbleEnabled;
   bool get autoCloseAfterRewrite => _autoCloseAfterRewrite;
+  List<String> get enabledLanguageIds => List.unmodifiable(_enabledLanguageIds);
+  String get activeLanguageId => _activeLanguageId;
 
   Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
@@ -43,6 +47,13 @@ class SettingsService extends ChangeNotifier {
     _defaultTone = _prefs.getString('draftright.defaultTone') ?? '';
     _floatingBubbleEnabled = _prefs.getBool('draftright.floatingBubbleEnabled') ?? false;
     _autoCloseAfterRewrite = _prefs.getBool('draftright.autoCloseAfterRewrite') ?? true;
+    _enabledLanguageIds = _prefs.getStringList('draftright.enabledLanguageIds')
+        ?? const ['en'];
+    if (_enabledLanguageIds.isEmpty) _enabledLanguageIds = const ['en'];
+    _activeLanguageId = _prefs.getString('draftright.activeLanguageId') ?? 'en';
+    if (!_enabledLanguageIds.contains(_activeLanguageId)) {
+      _activeLanguageId = _enabledLanguageIds.first;
+    }
 
     // Sync backend URL to SharedPreferences for keyboard extensions
     await _prefs.setString('draftright.backendUrl', _backendUrl);
@@ -87,6 +98,35 @@ class SettingsService extends ChangeNotifier {
     await _prefs.setBool('draftright.autoCloseAfterRewrite', value);
     notifyListeners();
   }
+
+  Future<void> setEnabledLanguageIds(List<String> ids) async {
+    _enabledLanguageIds = ids.isEmpty ? const ['en'] : List<String>.from(ids);
+    await _prefs.setStringList('draftright.enabledLanguageIds', _enabledLanguageIds);
+    if (!_enabledLanguageIds.contains(_activeLanguageId)) {
+      _activeLanguageId = _enabledLanguageIds.first;
+      await _prefs.setString('draftright.activeLanguageId', _activeLanguageId);
+    }
+    notifyListeners();
+  }
+
+  Future<void> setActiveLanguageId(String id) async {
+    if (!_enabledLanguageIds.contains(id)) return;
+    _activeLanguageId = id;
+    await _prefs.setString('draftright.activeLanguageId', id);
+    notifyListeners();
+  }
+
+  /// Catalog of keyboard languages the Android IME ships. Keep in sync with
+  /// LanguageRegistry.PRODUCTION on the Kotlin side.
+  static const Map<String, String> keyboardLanguageCatalog = {
+    'en': 'English',
+    'vi': 'Tiếng Việt',
+    'fr': 'Français',
+    'es': 'Español',
+    'de': 'Deutsch',
+    'it': 'Italiano',
+    'pt': 'Português',
+  };
 
   static const List<String> supportedLanguages = [
     'Arabic', 'Chinese (Simplified)', 'Chinese (Traditional)',

@@ -13,25 +13,7 @@ import android.view.View
 import android.widget.LinearLayout
 import android.widget.PopupWindow
 import android.widget.TextView
-
-enum class KeyCode {
-    CHAR,
-    BACKSPACE,
-    SHIFT,
-    ENTER,
-    SPACE,
-    SYMBOLS,
-    ALPHA,
-    SYMBOLS2,
-    GLOBE,
-    GLOBE_PICKER
-}
-
-data class KeyDef(
-    val label: String,
-    val code: KeyCode,
-    val widthWeight: Float = 1.0f
-)
+import com.draftright.keyboard.lang.EnglishLanguagePack
 
 interface KeyboardActionListener {
     fun onCharTyped(char: String)
@@ -60,96 +42,13 @@ class QwertyKeyboardView(
     private val handler = Handler(Looper.getMainLooper())
     private var backspaceRepeating = false
 
-    // Key layout definitions
-    private val alphaRows = listOf(
-        listOf(
-            KeyDef("q", KeyCode.CHAR), KeyDef("w", KeyCode.CHAR), KeyDef("e", KeyCode.CHAR),
-            KeyDef("r", KeyCode.CHAR), KeyDef("t", KeyCode.CHAR), KeyDef("y", KeyCode.CHAR),
-            KeyDef("u", KeyCode.CHAR), KeyDef("i", KeyCode.CHAR), KeyDef("o", KeyCode.CHAR),
-            KeyDef("p", KeyCode.CHAR)
-        ),
-        listOf(
-            KeyDef("a", KeyCode.CHAR), KeyDef("s", KeyCode.CHAR), KeyDef("d", KeyCode.CHAR),
-            KeyDef("f", KeyCode.CHAR), KeyDef("g", KeyCode.CHAR), KeyDef("h", KeyCode.CHAR),
-            KeyDef("j", KeyCode.CHAR), KeyDef("k", KeyCode.CHAR), KeyDef("l", KeyCode.CHAR)
-        ),
-        listOf(
-            KeyDef("\u2B06", KeyCode.SHIFT, 1.5f),
-            KeyDef("z", KeyCode.CHAR), KeyDef("x", KeyCode.CHAR), KeyDef("c", KeyCode.CHAR),
-            KeyDef("v", KeyCode.CHAR), KeyDef("b", KeyCode.CHAR), KeyDef("n", KeyCode.CHAR),
-            KeyDef("m", KeyCode.CHAR),
-            KeyDef("\u2190", KeyCode.BACKSPACE, 1.5f)
-        ),
-        listOf(
-            KeyDef("?123", KeyCode.SYMBOLS, 1.5f),
-            KeyDef("\uD83C\uDF10", KeyCode.GLOBE, 1.0f),
-            KeyDef("\u2261", KeyCode.GLOBE_PICKER, 1.0f),
-            KeyDef(",", KeyCode.CHAR, 1.0f),
-            KeyDef(" ", KeyCode.SPACE, 4.0f),
-            KeyDef(".", KeyCode.CHAR, 1.0f),
-            KeyDef("\u21B5", KeyCode.ENTER, 1.5f)
-        )
-    )
-
-    private val symbols1Rows = listOf(
-        listOf(
-            KeyDef("1", KeyCode.CHAR), KeyDef("2", KeyCode.CHAR), KeyDef("3", KeyCode.CHAR),
-            KeyDef("4", KeyCode.CHAR), KeyDef("5", KeyCode.CHAR), KeyDef("6", KeyCode.CHAR),
-            KeyDef("7", KeyCode.CHAR), KeyDef("8", KeyCode.CHAR), KeyDef("9", KeyCode.CHAR),
-            KeyDef("0", KeyCode.CHAR)
-        ),
-        listOf(
-            KeyDef("@", KeyCode.CHAR), KeyDef("#", KeyCode.CHAR), KeyDef("$", KeyCode.CHAR),
-            KeyDef("%", KeyCode.CHAR), KeyDef("&", KeyCode.CHAR), KeyDef("-", KeyCode.CHAR),
-            KeyDef("+", KeyCode.CHAR), KeyDef("(", KeyCode.CHAR), KeyDef(")", KeyCode.CHAR)
-        ),
-        listOf(
-            KeyDef("#+=", KeyCode.SYMBOLS2, 1.5f),
-            KeyDef("!", KeyCode.CHAR), KeyDef("\"", KeyCode.CHAR), KeyDef("'", KeyCode.CHAR),
-            KeyDef(":", KeyCode.CHAR), KeyDef(";", KeyCode.CHAR), KeyDef("/", KeyCode.CHAR),
-            KeyDef("?", KeyCode.CHAR),
-            KeyDef("\u2190", KeyCode.BACKSPACE, 1.5f)
-        ),
-        listOf(
-            KeyDef("ABC", KeyCode.ALPHA, 1.5f),
-            KeyDef("\uD83C\uDF10", KeyCode.GLOBE, 1.0f),
-            KeyDef("\u2261", KeyCode.GLOBE_PICKER, 1.0f),
-            KeyDef(",", KeyCode.CHAR, 1.0f),
-            KeyDef(" ", KeyCode.SPACE, 4.0f),
-            KeyDef(".", KeyCode.CHAR, 1.0f),
-            KeyDef("\u21B5", KeyCode.ENTER, 1.5f)
-        )
-    )
-
-    private val symbols2Rows = listOf(
-        listOf(
-            KeyDef("~", KeyCode.CHAR), KeyDef("`", KeyCode.CHAR), KeyDef("|", KeyCode.CHAR),
-            KeyDef("\u2022", KeyCode.CHAR), KeyDef("\u221A", KeyCode.CHAR), KeyDef("\u03C0", KeyCode.CHAR),
-            KeyDef("\u00F7", KeyCode.CHAR), KeyDef("\u00D7", KeyCode.CHAR), KeyDef("\u00B6", KeyCode.CHAR),
-            KeyDef("\u0394", KeyCode.CHAR)
-        ),
-        listOf(
-            KeyDef("\u00A3", KeyCode.CHAR), KeyDef("\u20AC", KeyCode.CHAR), KeyDef("\u00A5", KeyCode.CHAR),
-            KeyDef("^", KeyCode.CHAR), KeyDef("[", KeyCode.CHAR), KeyDef("]", KeyCode.CHAR),
-            KeyDef("{", KeyCode.CHAR), KeyDef("}", KeyCode.CHAR)
-        ),
-        listOf(
-            KeyDef("?123", KeyCode.SYMBOLS, 1.5f),
-            KeyDef("\u00A9", KeyCode.CHAR), KeyDef("\u00AE", KeyCode.CHAR), KeyDef("\u2122", KeyCode.CHAR),
-            KeyDef("\\", KeyCode.CHAR), KeyDef("<", KeyCode.CHAR), KeyDef(">", KeyCode.CHAR),
-            KeyDef("=", KeyCode.CHAR),
-            KeyDef("\u2190", KeyCode.BACKSPACE, 1.5f)
-        ),
-        listOf(
-            KeyDef("ABC", KeyCode.ALPHA, 1.5f),
-            KeyDef("\uD83C\uDF10", KeyCode.GLOBE, 1.0f),
-            KeyDef("\u2261", KeyCode.GLOBE_PICKER, 1.0f),
-            KeyDef(",", KeyCode.CHAR, 1.0f),
-            KeyDef(" ", KeyCode.SPACE, 4.0f),
-            KeyDef(".", KeyCode.CHAR, 1.0f),
-            KeyDef("\u21B5", KeyCode.ENTER, 1.5f)
-        )
-    )
+    var languagePack: LanguagePack = EnglishLanguagePack
+        set(value) {
+            field = value
+            currentLayer = 0
+            shiftState = ShiftState.OFF
+            buildKeyboard()
+        }
 
     private val keyColor: Int
     private val keyColorSpecial: Int
@@ -160,7 +59,6 @@ class QwertyKeyboardView(
     init {
         orientation = VERTICAL
 
-        // Detect dark mode via UI_MODE flag (theme attrs are unreliable in IME context)
         val uiMode = context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK
         val isDark = uiMode == android.content.res.Configuration.UI_MODE_NIGHT_YES
 
@@ -182,12 +80,15 @@ class QwertyKeyboardView(
         buildKeyboard()
     }
 
-    private fun buildKeyboard() {
+    private fun isCharKey(code: Int): Boolean = code >= 0 && code != ' '.code
+    private fun isSpaceKey(code: Int): Boolean = code == ' '.code
+
+    fun buildKeyboard() {
         removeAllViews()
         val rows = when (currentLayer) {
-            0 -> alphaRows
-            1 -> symbols1Rows
-            else -> symbols2Rows
+            0 -> languagePack.alphaRows
+            1 -> languagePack.symbols1Rows
+            else -> languagePack.symbols2Rows
         }
 
         for ((rowIndex, row) in rows.withIndex()) {
@@ -214,9 +115,12 @@ class QwertyKeyboardView(
         }
     }
 
+    private var accentPopup: AccentPopupView? = null
+
     private fun createKeyView(keyDef: KeyDef): View {
-        val isSpecial = keyDef.code != KeyCode.CHAR && keyDef.code != KeyCode.SPACE
-        val isShiftActive = keyDef.code == KeyCode.SHIFT && shiftState != ShiftState.OFF
+        val code = keyDef.code
+        val isSpecial = !isCharKey(code) && !isSpaceKey(code)
+        val isShiftActive = code == SpecialKeys.SHIFT && shiftState != ShiftState.OFF
 
         val bgColor = when {
             isShiftActive -> keyColorPressed
@@ -230,16 +134,16 @@ class QwertyKeyboardView(
         }
 
         val displayLabel = when {
-            keyDef.code == KeyCode.CHAR && currentLayer == 0 && shiftState != ShiftState.OFF ->
-                keyDef.label.uppercase()
-            keyDef.code == KeyCode.SPACE -> ""
-            keyDef.code == KeyCode.SHIFT && shiftState == ShiftState.CAPS_LOCK -> "\u2B06\uFE0F"
+            isCharKey(code) && currentLayer == 0 && shiftState != ShiftState.OFF ->
+                keyDef.label.uppercase(languagePack.locale)
+            isSpaceKey(code) -> languagePack.displayName
+            code == SpecialKeys.SHIFT && shiftState == ShiftState.CAPS_LOCK -> "⬆️"
             else -> keyDef.label
         }
 
-        val textSize = when (keyDef.code) {
-            KeyCode.SYMBOLS, KeyCode.SYMBOLS2, KeyCode.ALPHA -> 12f
-            else -> 18f
+        val textSize = when (code) {
+            SpecialKeys.SYMBOLS, SpecialKeys.SYMBOLS2, SpecialKeys.ALPHA -> 12f
+            else -> if (isSpaceKey(code)) 12f else 18f
         }
 
         val tv = TextView(context).apply {
@@ -253,32 +157,63 @@ class QwertyKeyboardView(
             typeface = Typeface.DEFAULT
         }
 
+        var longPressFired = false
+        val accentChars: List<Char>? = if (isCharKey(code) && keyDef.label.length == 1) {
+            languagePack.longPressAccents[keyDef.label[0]]
+        } else null
+        val longPressRunnable = Runnable {
+            longPressFired = true
+            dismissKeyPopup()
+            if (accentChars != null && accentChars.isNotEmpty()) {
+                accentPopup?.dismiss()
+                val options = listOf(keyDef.label[0]) + accentChars
+                val popup = AccentPopupView(context, tv, options) { picked ->
+                    val out = if (currentLayer == 0 && shiftState != ShiftState.OFF) {
+                        picked.toString().uppercase(languagePack.locale)
+                    } else picked.toString()
+                    listener.onCharTyped(out)
+                    if (shiftState == ShiftState.SINGLE) {
+                        shiftState = ShiftState.OFF
+                        buildKeyboard()
+                    }
+                    accentPopup = null
+                }
+                accentPopup = popup
+                popup.show()
+            }
+        }
+
         tv.setOnTouchListener { v, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
                     bg.setColor(keyColorPressed)
                     v.invalidate()
-                    if (keyDef.code == KeyCode.CHAR && keyDef.label.length == 1 && keyDef.label != "," && keyDef.label != ".") {
+                    longPressFired = false
+                    if (isCharKey(code) && keyDef.label.length == 1 && keyDef.label != "," && keyDef.label != ".") {
                         showKeyPopup(v, displayLabel)
                     }
-                    if (keyDef.code == KeyCode.BACKSPACE) {
+                    if (accentChars != null && accentChars.isNotEmpty()) {
+                        handler.postDelayed(longPressRunnable, LONG_PRESS_MS)
+                    }
+                    if (code == SpecialKeys.BACKSPACE) {
                         handleKeyPress(keyDef)
                         startBackspaceRepeat()
                     }
                     true
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    handler.removeCallbacks(longPressRunnable)
                     val restoreColor = when {
-                        isShiftActive && keyDef.code == KeyCode.SHIFT -> keyColorPressed
+                        isShiftActive && code == SpecialKeys.SHIFT -> keyColorPressed
                         isSpecial -> keyColorSpecial
                         else -> keyColor
                     }
                     bg.setColor(restoreColor)
                     v.invalidate()
                     dismissKeyPopup()
-                    if (keyDef.code == KeyCode.BACKSPACE) {
+                    if (code == SpecialKeys.BACKSPACE) {
                         stopBackspaceRepeat()
-                    } else if (event.action == MotionEvent.ACTION_UP) {
+                    } else if (event.action == MotionEvent.ACTION_UP && !longPressFired) {
                         handleKeyPress(keyDef)
                     }
                     true
@@ -290,11 +225,16 @@ class QwertyKeyboardView(
         return tv
     }
 
+    companion object {
+        private const val LONG_PRESS_MS = 300L
+    }
+
     private fun handleKeyPress(keyDef: KeyDef) {
-        when (keyDef.code) {
-            KeyCode.CHAR -> {
+        val code = keyDef.code
+        when {
+            isCharKey(code) -> {
                 val char = if (currentLayer == 0 && shiftState != ShiftState.OFF) {
-                    keyDef.label.uppercase()
+                    keyDef.label.uppercase(languagePack.locale)
                 } else {
                     keyDef.label
                 }
@@ -304,16 +244,10 @@ class QwertyKeyboardView(
                     buildKeyboard()
                 }
             }
-            KeyCode.BACKSPACE -> {
-                listener.onBackspace()
-            }
-            KeyCode.ENTER -> {
-                listener.onEnter()
-            }
-            KeyCode.SPACE -> {
-                listener.onSpace()
-            }
-            KeyCode.SHIFT -> {
+            isSpaceKey(code) -> listener.onSpace()
+            code == SpecialKeys.BACKSPACE -> listener.onBackspace()
+            code == SpecialKeys.ENTER -> listener.onEnter()
+            code == SpecialKeys.SHIFT -> {
                 val now = System.currentTimeMillis()
                 if (now - lastShiftTap < 300) {
                     shiftState = if (shiftState == ShiftState.CAPS_LOCK) ShiftState.OFF else ShiftState.CAPS_LOCK
@@ -327,24 +261,20 @@ class QwertyKeyboardView(
                 lastShiftTap = now
                 buildKeyboard()
             }
-            KeyCode.SYMBOLS -> {
+            code == SpecialKeys.SYMBOLS -> {
                 currentLayer = 1
                 buildKeyboard()
             }
-            KeyCode.SYMBOLS2 -> {
+            code == SpecialKeys.SYMBOLS2 -> {
                 currentLayer = 2
                 buildKeyboard()
             }
-            KeyCode.ALPHA -> {
+            code == SpecialKeys.ALPHA -> {
                 currentLayer = 0
                 buildKeyboard()
             }
-            KeyCode.GLOBE -> {
-                listener.onSwitchKeyboard()
-            }
-            KeyCode.GLOBE_PICKER -> {
-                listener.onSwitchKeyboardLongPress()
-            }
+            code == SpecialKeys.GLOBE -> listener.onSwitchKeyboard()
+            code == SpecialKeys.GLOBE_PICKER -> listener.onSwitchKeyboardLongPress()
         }
     }
 
@@ -356,7 +286,6 @@ class QwertyKeyboardView(
             }
         }
     }
-
 
     private fun startBackspaceRepeat() {
         backspaceRepeating = true
