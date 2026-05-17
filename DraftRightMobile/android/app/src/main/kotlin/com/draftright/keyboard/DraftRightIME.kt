@@ -13,7 +13,6 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import com.draftright.keyboard.lang.EnglishLanguagePack
-import com.draftright.keyboard.lang.VietnameseLanguagePack
 
 class DraftRightIME : InputMethodService(), KeyboardActionListener {
 
@@ -28,9 +27,7 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
     private var rootLayout: LinearLayout? = null
     private var originalText: String? = null
 
-    private val registry: LanguageRegistry by lazy {
-        LanguageRegistry(listOf(EnglishLanguagePack, VietnameseLanguagePack))
-    }
+    private val registry: LanguageRegistry by lazy { LanguageRegistry.PRODUCTION }
 
     override fun onCreateInputView(): View {
         settings = SharedSettings(this)

@@ -20,4 +20,20 @@ class LanguageRegistry(private val packs: List<LanguagePack>) {
         if (idx < 0) return packs.first()
         return packs[(idx + 1) % packs.size]
     }
+
+    companion object {
+        val PRODUCTION: LanguageRegistry by lazy {
+            LanguageRegistry(
+                listOf(
+                    com.draftright.keyboard.lang.EnglishLanguagePack,
+                    com.draftright.keyboard.lang.VietnameseLanguagePack,
+                    com.draftright.keyboard.lang.FrenchLanguagePack,
+                    com.draftright.keyboard.lang.SpanishLanguagePack,
+                    com.draftright.keyboard.lang.GermanLanguagePack,
+                    com.draftright.keyboard.lang.ItalianLanguagePack,
+                    com.draftright.keyboard.lang.PortugueseLanguagePack,
+                ),
+            )
+        }
+    }
 }
