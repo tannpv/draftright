@@ -13,25 +13,7 @@ import android.view.View
 import android.widget.LinearLayout
 import android.widget.PopupWindow
 import android.widget.TextView
-
-enum class LegacyKeyCode {
-    CHAR,
-    BACKSPACE,
-    SHIFT,
-    ENTER,
-    SPACE,
-    SYMBOLS,
-    ALPHA,
-    SYMBOLS2,
-    GLOBE,
-    GLOBE_PICKER
-}
-
-data class LegacyKeyDef(
-    val label: String,
-    val code: LegacyKeyCode,
-    val widthWeight: Float = 1.0f
-)
+import com.draftright.keyboard.lang.EnglishLanguagePack
 
 interface KeyboardActionListener {
     fun onCharTyped(char: String)
@@ -60,96 +42,13 @@ class QwertyKeyboardView(
     private val handler = Handler(Looper.getMainLooper())
     private var backspaceRepeating = false
 
-    // Key layout definitions
-    private val alphaRows = listOf(
-        listOf(
-            LegacyKeyDef("q", LegacyKeyCode.CHAR), LegacyKeyDef("w", LegacyKeyCode.CHAR), LegacyKeyDef("e", LegacyKeyCode.CHAR),
-            LegacyKeyDef("r", LegacyKeyCode.CHAR), LegacyKeyDef("t", LegacyKeyCode.CHAR), LegacyKeyDef("y", LegacyKeyCode.CHAR),
-            LegacyKeyDef("u", LegacyKeyCode.CHAR), LegacyKeyDef("i", LegacyKeyCode.CHAR), LegacyKeyDef("o", LegacyKeyCode.CHAR),
-            LegacyKeyDef("p", LegacyKeyCode.CHAR)
-        ),
-        listOf(
-            LegacyKeyDef("a", LegacyKeyCode.CHAR), LegacyKeyDef("s", LegacyKeyCode.CHAR), LegacyKeyDef("d", LegacyKeyCode.CHAR),
-            LegacyKeyDef("f", LegacyKeyCode.CHAR), LegacyKeyDef("g", LegacyKeyCode.CHAR), LegacyKeyDef("h", LegacyKeyCode.CHAR),
-            LegacyKeyDef("j", LegacyKeyCode.CHAR), LegacyKeyDef("k", LegacyKeyCode.CHAR), LegacyKeyDef("l", LegacyKeyCode.CHAR)
-        ),
-        listOf(
-            LegacyKeyDef("\u2B06", LegacyKeyCode.SHIFT, 1.5f),
-            LegacyKeyDef("z", LegacyKeyCode.CHAR), LegacyKeyDef("x", LegacyKeyCode.CHAR), LegacyKeyDef("c", LegacyKeyCode.CHAR),
-            LegacyKeyDef("v", LegacyKeyCode.CHAR), LegacyKeyDef("b", LegacyKeyCode.CHAR), LegacyKeyDef("n", LegacyKeyCode.CHAR),
-            LegacyKeyDef("m", LegacyKeyCode.CHAR),
-            LegacyKeyDef("\u2190", LegacyKeyCode.BACKSPACE, 1.5f)
-        ),
-        listOf(
-            LegacyKeyDef("?123", LegacyKeyCode.SYMBOLS, 1.5f),
-            LegacyKeyDef("\uD83C\uDF10", LegacyKeyCode.GLOBE, 1.0f),
-            LegacyKeyDef("\u2261", LegacyKeyCode.GLOBE_PICKER, 1.0f),
-            LegacyKeyDef(",", LegacyKeyCode.CHAR, 1.0f),
-            LegacyKeyDef(" ", LegacyKeyCode.SPACE, 4.0f),
-            LegacyKeyDef(".", LegacyKeyCode.CHAR, 1.0f),
-            LegacyKeyDef("\u21B5", LegacyKeyCode.ENTER, 1.5f)
-        )
-    )
-
-    private val symbols1Rows = listOf(
-        listOf(
-            LegacyKeyDef("1", LegacyKeyCode.CHAR), LegacyKeyDef("2", LegacyKeyCode.CHAR), LegacyKeyDef("3", LegacyKeyCode.CHAR),
-            LegacyKeyDef("4", LegacyKeyCode.CHAR), LegacyKeyDef("5", LegacyKeyCode.CHAR), LegacyKeyDef("6", LegacyKeyCode.CHAR),
-            LegacyKeyDef("7", LegacyKeyCode.CHAR), LegacyKeyDef("8", LegacyKeyCode.CHAR), LegacyKeyDef("9", LegacyKeyCode.CHAR),
-            LegacyKeyDef("0", LegacyKeyCode.CHAR)
-        ),
-        listOf(
-            LegacyKeyDef("@", LegacyKeyCode.CHAR), LegacyKeyDef("#", LegacyKeyCode.CHAR), LegacyKeyDef("$", LegacyKeyCode.CHAR),
-            LegacyKeyDef("%", LegacyKeyCode.CHAR), LegacyKeyDef("&", LegacyKeyCode.CHAR), LegacyKeyDef("-", LegacyKeyCode.CHAR),
-            LegacyKeyDef("+", LegacyKeyCode.CHAR), LegacyKeyDef("(", LegacyKeyCode.CHAR), LegacyKeyDef(")", LegacyKeyCode.CHAR)
-        ),
-        listOf(
-            LegacyKeyDef("#+=", LegacyKeyCode.SYMBOLS2, 1.5f),
-            LegacyKeyDef("!", LegacyKeyCode.CHAR), LegacyKeyDef("\"", LegacyKeyCode.CHAR), LegacyKeyDef("'", LegacyKeyCode.CHAR),
-            LegacyKeyDef(":", LegacyKeyCode.CHAR), LegacyKeyDef(";", LegacyKeyCode.CHAR), LegacyKeyDef("/", LegacyKeyCode.CHAR),
-            LegacyKeyDef("?", LegacyKeyCode.CHAR),
-            LegacyKeyDef("\u2190", LegacyKeyCode.BACKSPACE, 1.5f)
-        ),
-        listOf(
-            LegacyKeyDef("ABC", LegacyKeyCode.ALPHA, 1.5f),
-            LegacyKeyDef("\uD83C\uDF10", LegacyKeyCode.GLOBE, 1.0f),
-            LegacyKeyDef("\u2261", LegacyKeyCode.GLOBE_PICKER, 1.0f),
-            LegacyKeyDef(",", LegacyKeyCode.CHAR, 1.0f),
-            LegacyKeyDef(" ", LegacyKeyCode.SPACE, 4.0f),
-            LegacyKeyDef(".", LegacyKeyCode.CHAR, 1.0f),
-            LegacyKeyDef("\u21B5", LegacyKeyCode.ENTER, 1.5f)
-        )
-    )
-
-    private val symbols2Rows = listOf(
-        listOf(
-            LegacyKeyDef("~", LegacyKeyCode.CHAR), LegacyKeyDef("`", LegacyKeyCode.CHAR), LegacyKeyDef("|", LegacyKeyCode.CHAR),
-            LegacyKeyDef("\u2022", LegacyKeyCode.CHAR), LegacyKeyDef("\u221A", LegacyKeyCode.CHAR), LegacyKeyDef("\u03C0", LegacyKeyCode.CHAR),
-            LegacyKeyDef("\u00F7", LegacyKeyCode.CHAR), LegacyKeyDef("\u00D7", LegacyKeyCode.CHAR), LegacyKeyDef("\u00B6", LegacyKeyCode.CHAR),
-            LegacyKeyDef("\u0394", LegacyKeyCode.CHAR)
-        ),
-        listOf(
-            LegacyKeyDef("\u00A3", LegacyKeyCode.CHAR), LegacyKeyDef("\u20AC", LegacyKeyCode.CHAR), LegacyKeyDef("\u00A5", LegacyKeyCode.CHAR),
-            LegacyKeyDef("^", LegacyKeyCode.CHAR), LegacyKeyDef("[", LegacyKeyCode.CHAR), LegacyKeyDef("]", LegacyKeyCode.CHAR),
-            LegacyKeyDef("{", LegacyKeyCode.CHAR), LegacyKeyDef("}", LegacyKeyCode.CHAR)
-        ),
-        listOf(
-            LegacyKeyDef("?123", LegacyKeyCode.SYMBOLS, 1.5f),
-            LegacyKeyDef("\u00A9", LegacyKeyCode.CHAR), LegacyKeyDef("\u00AE", LegacyKeyCode.CHAR), LegacyKeyDef("\u2122", LegacyKeyCode.CHAR),
-            LegacyKeyDef("\\", LegacyKeyCode.CHAR), LegacyKeyDef("<", LegacyKeyCode.CHAR), LegacyKeyDef(">", LegacyKeyCode.CHAR),
-            LegacyKeyDef("=", LegacyKeyCode.CHAR),
-            LegacyKeyDef("\u2190", LegacyKeyCode.BACKSPACE, 1.5f)
-        ),
-        listOf(
-            LegacyKeyDef("ABC", LegacyKeyCode.ALPHA, 1.5f),
-            LegacyKeyDef("\uD83C\uDF10", LegacyKeyCode.GLOBE, 1.0f),
-            LegacyKeyDef("\u2261", LegacyKeyCode.GLOBE_PICKER, 1.0f),
-            LegacyKeyDef(",", LegacyKeyCode.CHAR, 1.0f),
-            LegacyKeyDef(" ", LegacyKeyCode.SPACE, 4.0f),
-            LegacyKeyDef(".", LegacyKeyCode.CHAR, 1.0f),
-            LegacyKeyDef("\u21B5", LegacyKeyCode.ENTER, 1.5f)
-        )
-    )
+    var languagePack: LanguagePack = EnglishLanguagePack
+        set(value) {
+            field = value
+            currentLayer = 0
+            shiftState = ShiftState.OFF
+            buildKeyboard()
+        }
 
     private val keyColor: Int
     private val keyColorSpecial: Int
@@ -160,7 +59,6 @@ class QwertyKeyboardView(
     init {
         orientation = VERTICAL
 
-        // Detect dark mode via UI_MODE flag (theme attrs are unreliable in IME context)
         val uiMode = context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK
         val isDark = uiMode == android.content.res.Configuration.UI_MODE_NIGHT_YES
 
@@ -182,12 +80,15 @@ class QwertyKeyboardView(
         buildKeyboard()
     }
 
-    private fun buildKeyboard() {
+    private fun isCharKey(code: Int): Boolean = code >= 0 && code != ' '.code
+    private fun isSpaceKey(code: Int): Boolean = code == ' '.code
+
+    fun buildKeyboard() {
         removeAllViews()
         val rows = when (currentLayer) {
-            0 -> alphaRows
-            1 -> symbols1Rows
-            else -> symbols2Rows
+            0 -> languagePack.alphaRows
+            1 -> languagePack.symbols1Rows
+            else -> languagePack.symbols2Rows
         }
 
         for ((rowIndex, row) in rows.withIndex()) {
@@ -214,9 +115,10 @@ class QwertyKeyboardView(
         }
     }
 
-    private fun createKeyView(keyDef: LegacyKeyDef): View {
-        val isSpecial = keyDef.code != LegacyKeyCode.CHAR && keyDef.code != LegacyKeyCode.SPACE
-        val isShiftActive = keyDef.code == LegacyKeyCode.SHIFT && shiftState != ShiftState.OFF
+    private fun createKeyView(keyDef: KeyDef): View {
+        val code = keyDef.code
+        val isSpecial = !isCharKey(code) && !isSpaceKey(code)
+        val isShiftActive = code == SpecialKeys.SHIFT && shiftState != ShiftState.OFF
 
         val bgColor = when {
             isShiftActive -> keyColorPressed
@@ -230,16 +132,16 @@ class QwertyKeyboardView(
         }
 
         val displayLabel = when {
-            keyDef.code == LegacyKeyCode.CHAR && currentLayer == 0 && shiftState != ShiftState.OFF ->
-                keyDef.label.uppercase()
-            keyDef.code == LegacyKeyCode.SPACE -> ""
-            keyDef.code == LegacyKeyCode.SHIFT && shiftState == ShiftState.CAPS_LOCK -> "\u2B06\uFE0F"
+            isCharKey(code) && currentLayer == 0 && shiftState != ShiftState.OFF ->
+                keyDef.label.uppercase(languagePack.locale)
+            isSpaceKey(code) -> languagePack.displayName
+            code == SpecialKeys.SHIFT && shiftState == ShiftState.CAPS_LOCK -> "⬆️"
             else -> keyDef.label
         }
 
-        val textSize = when (keyDef.code) {
-            LegacyKeyCode.SYMBOLS, LegacyKeyCode.SYMBOLS2, LegacyKeyCode.ALPHA -> 12f
-            else -> 18f
+        val textSize = when (code) {
+            SpecialKeys.SYMBOLS, SpecialKeys.SYMBOLS2, SpecialKeys.ALPHA -> 12f
+            else -> if (isSpaceKey(code)) 12f else 18f
         }
 
         val tv = TextView(context).apply {
@@ -258,10 +160,10 @@ class QwertyKeyboardView(
                 MotionEvent.ACTION_DOWN -> {
                     bg.setColor(keyColorPressed)
                     v.invalidate()
-                    if (keyDef.code == LegacyKeyCode.CHAR && keyDef.label.length == 1 && keyDef.label != "," && keyDef.label != ".") {
+                    if (isCharKey(code) && keyDef.label.length == 1 && keyDef.label != "," && keyDef.label != ".") {
                         showKeyPopup(v, displayLabel)
                     }
-                    if (keyDef.code == LegacyKeyCode.BACKSPACE) {
+                    if (code == SpecialKeys.BACKSPACE) {
                         handleKeyPress(keyDef)
                         startBackspaceRepeat()
                     }
@@ -269,14 +171,14 @@ class QwertyKeyboardView(
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     val restoreColor = when {
-                        isShiftActive && keyDef.code == LegacyKeyCode.SHIFT -> keyColorPressed
+                        isShiftActive && code == SpecialKeys.SHIFT -> keyColorPressed
                         isSpecial -> keyColorSpecial
                         else -> keyColor
                     }
                     bg.setColor(restoreColor)
                     v.invalidate()
                     dismissKeyPopup()
-                    if (keyDef.code == LegacyKeyCode.BACKSPACE) {
+                    if (code == SpecialKeys.BACKSPACE) {
                         stopBackspaceRepeat()
                     } else if (event.action == MotionEvent.ACTION_UP) {
                         handleKeyPress(keyDef)
@@ -290,11 +192,12 @@ class QwertyKeyboardView(
         return tv
     }
 
-    private fun handleKeyPress(keyDef: LegacyKeyDef) {
-        when (keyDef.code) {
-            LegacyKeyCode.CHAR -> {
+    private fun handleKeyPress(keyDef: KeyDef) {
+        val code = keyDef.code
+        when {
+            isCharKey(code) -> {
                 val char = if (currentLayer == 0 && shiftState != ShiftState.OFF) {
-                    keyDef.label.uppercase()
+                    keyDef.label.uppercase(languagePack.locale)
                 } else {
                     keyDef.label
                 }
@@ -304,16 +207,10 @@ class QwertyKeyboardView(
                     buildKeyboard()
                 }
             }
-            LegacyKeyCode.BACKSPACE -> {
-                listener.onBackspace()
-            }
-            LegacyKeyCode.ENTER -> {
-                listener.onEnter()
-            }
-            LegacyKeyCode.SPACE -> {
-                listener.onSpace()
-            }
-            LegacyKeyCode.SHIFT -> {
+            isSpaceKey(code) -> listener.onSpace()
+            code == SpecialKeys.BACKSPACE -> listener.onBackspace()
+            code == SpecialKeys.ENTER -> listener.onEnter()
+            code == SpecialKeys.SHIFT -> {
                 val now = System.currentTimeMillis()
                 if (now - lastShiftTap < 300) {
                     shiftState = if (shiftState == ShiftState.CAPS_LOCK) ShiftState.OFF else ShiftState.CAPS_LOCK
@@ -327,24 +224,20 @@ class QwertyKeyboardView(
                 lastShiftTap = now
                 buildKeyboard()
             }
-            LegacyKeyCode.SYMBOLS -> {
+            code == SpecialKeys.SYMBOLS -> {
                 currentLayer = 1
                 buildKeyboard()
             }
-            LegacyKeyCode.SYMBOLS2 -> {
+            code == SpecialKeys.SYMBOLS2 -> {
                 currentLayer = 2
                 buildKeyboard()
             }
-            LegacyKeyCode.ALPHA -> {
+            code == SpecialKeys.ALPHA -> {
                 currentLayer = 0
                 buildKeyboard()
             }
-            LegacyKeyCode.GLOBE -> {
-                listener.onSwitchKeyboard()
-            }
-            LegacyKeyCode.GLOBE_PICKER -> {
-                listener.onSwitchKeyboardLongPress()
-            }
+            code == SpecialKeys.GLOBE -> listener.onSwitchKeyboard()
+            code == SpecialKeys.GLOBE_PICKER -> listener.onSwitchKeyboardLongPress()
         }
     }
 
@@ -356,7 +249,6 @@ class QwertyKeyboardView(
             }
         }
     }
-
 
     private fun startBackspaceRepeat() {
         backspaceRepeating = true

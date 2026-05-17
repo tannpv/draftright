@@ -34,4 +34,25 @@ class SharedSettings(context: Context) {
 
     val translateLanguage: String
         get() = prefs.getString("flutter.draftright.translateLanguage", "Vietnamese") ?: "Vietnamese"
+
+    /** IDs of enabled keyboard languages, in user-chosen order.
+     *  Stored as a JSON array string from the Flutter side, parsed by
+     *  removing brackets and splitting on commas — Flutter's
+     *  shared_preferences StringList is JSON-encoded that way. */
+    val enabledLanguageIds: List<String>
+        get() = parseStringList(prefs.getString("flutter.draftright.enabledLanguageIds", null))
+            .ifEmpty { listOf("en") }
+
+    /** Currently active keyboard language id. Defaults to "en". */
+    val activeLanguageId: String
+        get() = prefs.getString("flutter.draftright.activeLanguageId", "en") ?: "en"
+
+    private fun parseStringList(raw: String?): List<String> {
+        if (raw.isNullOrBlank()) return emptyList()
+        return raw.trim()
+            .removePrefix("[").removeSuffix("]")
+            .split(",")
+            .map { it.trim().removeSurrounding("\"") }
+            .filter { it.isNotEmpty() }
+    }
 }

@@ -12,24 +12,40 @@ import android.view.inputmethod.ExtractedTextRequest
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import com.draftright.keyboard.lang.EnglishLanguagePack
 
 class DraftRightIME : InputMethodService(), KeyboardActionListener {
 
     private lateinit var settings: SharedSettings
+    private lateinit var controller: KeyboardController
     private val aiClient = BackendClient()
     private val mainHandler = Handler(Looper.getMainLooper())
     private var toolbar: ToolbarView? = null
     private var keyboard: QwertyKeyboardView? = null
+    private var languageStrip: LanguageStripView? = null
     private var diffSheet: DiffSheetView? = null
     private var rootLayout: LinearLayout? = null
     private var originalText: String? = null
 
+    private val registry: LanguageRegistry by lazy {
+        LanguageRegistry(listOf(EnglishLanguagePack))
+    }
+
     override fun onCreateInputView(): View {
         settings = SharedSettings(this)
+        controller = KeyboardController(
+            registry,
+            enabledIds = settings.enabledLanguageIds,
+            activeId = settings.activeLanguageId,
+        )
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
         }
+
+        val strip = LanguageStripView(this, controller) { refreshKeyboardForActiveLanguage() }
+        languageStrip = strip
+        root.addView(strip)
 
         val tb = ToolbarView(this,
             onToneSelected = { tone -> handleToneSelected(tone) },
@@ -39,11 +55,17 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
         root.addView(tb)
 
         val kb = QwertyKeyboardView(this, this)
+        kb.languagePack = controller.current
         keyboard = kb
         root.addView(kb)
 
         rootLayout = root
         return root
+    }
+
+    private fun refreshKeyboardForActiveLanguage() {
+        keyboard?.languagePack = controller.current
+        languageStrip?.refresh()
     }
 
     // --- KeyboardActionListener ---
@@ -74,12 +96,13 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
     }
 
     override fun onSwitchKeyboard() {
-        // Both globe and ≡ buttons open the IME picker. User can pick another
-        // keyboard OR dismiss back to DraftRight. Cycling-by-tap was tested but
-        // produced a "stuck on next IME" UX — the next IME's globe doesn't
-        // reliably bring users back to DraftRight.
-        val imm = getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
-        imm.showInputMethodPicker()
+        if (controller.enabled.size > 1) {
+            controller.cycleLanguage()
+            refreshKeyboardForActiveLanguage()
+        } else {
+            val imm = getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+            imm.showInputMethodPicker()
+        }
     }
 
     override fun onSwitchKeyboardLongPress() {
