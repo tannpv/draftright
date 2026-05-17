@@ -6,6 +6,12 @@ on:
     paths:
       - 'DraftRightWindows/**'
       - '.github/workflows/build-windows.yml'
+    # Tag pushes (`git push origin v2.2.x`) auto-ship: pairs with the
+    # publish-to-update-server condition below so a tag push alone is enough
+    # to land a release on the update server — no GitHub Release object
+    # required. Every release tag points at a merge commit that bumped the
+    # .csproj, so the path filter is always satisfied.
+    tags: ['v*']
   workflow_dispatch:
     inputs:
       runtime:
@@ -162,10 +168,11 @@ jobs:
             DraftRightWindows/installer/Output/${{ env.INSTALLER_NAME }}
 
   # ── Auto-deploy installer to update server ────────────────────────────
-  # Fires ONLY on `release` events (not every push to main) so deliberate
-  # GitHub releases trigger user-visible installs while routine commits do
-  # not. Picks the x64 installer — arm64 users can still grab the .exe
-  # from the GitHub Release page until we ramp arm64 to the update server.
+  # Fires on either a GitHub Release being created OR a `v*` tag being
+  # pushed — either path is treated as a deliberate release intent. Routine
+  # branch pushes (develop/main) skip this job. Picks the x64 installer —
+  # arm64 users can still grab the .exe from the GitHub Release page until
+  # we ramp arm64 to the update server.
   #
   # Required repo secrets:
   #   DROPLET_SSH_KEY  — private key for deploy@droplet (dedicated
@@ -176,7 +183,7 @@ jobs:
   publish-to-update-server:
     name: Publish to update server
     needs: build
-    if: github.event_name == 'release'
+    if: github.event_name == 'release' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
