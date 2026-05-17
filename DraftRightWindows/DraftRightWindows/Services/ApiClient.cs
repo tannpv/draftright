@@ -32,6 +32,7 @@ public sealed class ApiClient : IDisposable
         {
             Timeout = TimeSpan.FromSeconds(30)
         };
+        DRLogger.Log($"ApiClient: constructed baseUrl={_baseUrl}", DRLogger.Category.API);
     }
 
     /// <summary>
@@ -47,12 +48,18 @@ public sealed class ApiClient : IDisposable
     /// <summary>
     /// Sets the Bearer authorization header for subsequent requests.
     /// </summary>
-    public void SetBaseUrl(string url) => _baseUrl = url.StripTrailingSlash();
+    public void SetBaseUrl(string url)
+    {
+        var normalized = url.StripTrailingSlash();
+        DRLogger.Log($"SetBaseUrl: {_baseUrl} → {normalized}", DRLogger.Category.API);
+        _baseUrl = normalized;
+    }
 
     public void SetToken(string token)
     {
         _http.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", token);
+        DRLogger.Log($"SetToken: bearer={MaskToken(token)}", DRLogger.Category.API);
     }
 
     /// <summary>
@@ -61,18 +68,29 @@ public sealed class ApiClient : IDisposable
     public void ClearToken()
     {
         _http.DefaultRequestHeaders.Authorization = null;
+        DRLogger.Log("ClearToken: bearer cleared", DRLogger.Category.API);
+    }
+
+    private static string MaskToken(string? token)
+    {
+        if (token is null) return "(null)";
+        if (token.Length == 0) return "(empty)";
+        if (token.Length <= 4) return "***";
+        return "***" + token.Substring(token.Length - 4);
     }
 
     // ── Auth ────────────────────────────────────────────────
 
     public async Task<AuthResponse> LoginAsync(string email, string password)
     {
+        DRLogger.Log($"LoginAsync: email={email}", DRLogger.Category.API);
         var body = new LoginRequest { Email = email, Password = password };
         return await PostAsync<AuthResponse>("/auth/login", body, autoRefresh: false);
     }
 
     public async Task<AuthResponse> RegisterAsync(string email, string password, string name)
     {
+        DRLogger.Log($"RegisterAsync: email={email} name={name}", DRLogger.Category.API);
         var body = new RegisterRequest { Email = email, Password = password, Name = name };
         return await PostAsync<AuthResponse>("/auth/register", body, autoRefresh: false);
     }
@@ -83,6 +101,7 @@ public sealed class ApiClient : IDisposable
     /// </summary>
     public async Task<AuthResponse> RefreshAsync(string refreshToken)
     {
+        DRLogger.Log($"RefreshAsync: refresh={MaskToken(refreshToken)}", DRLogger.Category.API);
         var body = new { refresh_token = refreshToken };
         return await PostAsync<AuthResponse>("/auth/refresh", body, autoRefresh: false);
     }
@@ -91,6 +110,9 @@ public sealed class ApiClient : IDisposable
 
     public async Task<RewriteResponse> RewriteAsync(string text, string tone, string? targetLanguage = null)
     {
+        DRLogger.Log(
+            $"RewriteAsync: tone={tone} targetLanguage={targetLanguage ?? "(none)"} textLen={text.Length}",
+            DRLogger.Category.API);
         var body = new RewriteRequest
         {
             Text = text,
@@ -104,6 +126,7 @@ public sealed class ApiClient : IDisposable
 
     public async Task<SubscriptionResponse> GetSubscriptionAsync()
     {
+        DRLogger.Log("GetSubscriptionAsync", DRLogger.Category.API);
         return await GetAsync<SubscriptionResponse>("/subscription");
     }
 
@@ -111,6 +134,7 @@ public sealed class ApiClient : IDisposable
 
     public async Task<BackendStatus> CheckHealthAsync()
     {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         try
         {
             // Step 1: Check /health for app identity
@@ -118,6 +142,9 @@ public sealed class ApiClient : IDisposable
 
             using var healthRequest = new HttpRequestMessage(HttpMethod.Get, $"{_baseUrl}/health");
             using var healthResponse = await _http.SendAsync(healthRequest, cts.Token);
+            DRLogger.Log(
+                $"CheckHealthAsync: /health → {(int)healthResponse.StatusCode} {healthResponse.ReasonPhrase} ({sw.ElapsedMilliseconds}ms)",
+                DRLogger.Category.API);
 
             if (!healthResponse.IsSuccessStatusCode)
                 return BackendStatus.Offline;
@@ -127,22 +154,32 @@ public sealed class ApiClient : IDisposable
             var app = doc.RootElement.TryGetProperty("app", out var appProp) ? appProp.GetString() : null;
 
             if (app != "draftright")
+            {
+                DRLogger.Log($"CheckHealthAsync: /health.app={app ?? "(null)"} (expected 'draftright') → WrongServer",
+                    DRLogger.Category.API);
                 return BackendStatus.WrongServer;
+            }
 
             // Step 2: Check /auth/me for login state
             using var authRequest = new HttpRequestMessage(HttpMethod.Get, $"{_baseUrl}/auth/me");
             authRequest.Headers.Authorization = _http.DefaultRequestHeaders.Authorization;
             using var authResponse = await _http.SendAsync(authRequest, cts.Token);
-
-            return authResponse.StatusCode switch
+            var result = authResponse.StatusCode switch
             {
                 System.Net.HttpStatusCode.OK => BackendStatus.Connected,
                 System.Net.HttpStatusCode.Unauthorized => BackendStatus.NotLoggedIn,
                 _ => BackendStatus.Offline
             };
+            DRLogger.Log(
+                $"CheckHealthAsync: /auth/me → {(int)authResponse.StatusCode} → {result} (total {sw.ElapsedMilliseconds}ms)",
+                DRLogger.Category.API);
+            return result;
         }
-        catch
+        catch (Exception ex)
         {
+            DRLogger.Log(
+                $"CheckHealthAsync: failed after {sw.ElapsedMilliseconds}ms — {ex.GetType().Name}: {ex.Message}",
+                DRLogger.Category.API);
             return BackendStatus.Offline;
         }
     }
@@ -178,23 +215,34 @@ public sealed class ApiClient : IDisposable
         Func<Task<HttpResponseMessage>> send,
         bool autoRefresh)
     {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         var response = await send();
+        DRLogger.Log(
+            $"HTTP {response.RequestMessage?.Method?.Method} {response.RequestMessage?.RequestUri} → {(int)response.StatusCode} {response.ReasonPhrase} ({sw.ElapsedMilliseconds}ms)",
+            DRLogger.Category.API);
         try
         {
             if (autoRefresh
                 && response.StatusCode == System.Net.HttpStatusCode.Unauthorized
                 && OnUnauthorized != null)
             {
+                DRLogger.Log("Auto-refresh: 401 received, invoking OnUnauthorized callback",
+                    DRLogger.Category.API);
                 response.Dispose();
                 response = null!;
                 var refreshed = await OnUnauthorized();
+                DRLogger.Log($"Auto-refresh: callback returned {refreshed}", DRLogger.Category.API);
                 if (!refreshed)
                 {
                     throw new ApiException(
                         "API 401 Unauthorized: Session expired. Please sign in again.",
                         System.Net.HttpStatusCode.Unauthorized);
                 }
+                sw.Restart();
                 response = await send();
+                DRLogger.Log(
+                    $"HTTP retry {response.RequestMessage?.Method?.Method} {response.RequestMessage?.RequestUri} → {(int)response.StatusCode} {response.ReasonPhrase} ({sw.ElapsedMilliseconds}ms)",
+                    DRLogger.Category.API);
             }
             return await HandleResponse<T>(response);
         }
@@ -223,6 +271,13 @@ public sealed class ApiClient : IDisposable
             {
                 detail = body;
             }
+
+            // Truncated body preview so error log entries don't bloat the log
+            // with multi-KB stack traces from the backend.
+            var preview = detail.Length > 200 ? detail.Substring(0, 200) + "…" : detail;
+            DRLogger.Log(
+                $"HandleResponse: non-success {(int)response.StatusCode} {response.ReasonPhrase} body={preview}",
+                DRLogger.Category.API);
 
             throw new ApiException(
                 $"API {(int)response.StatusCode} {response.ReasonPhrase}: {detail}",
