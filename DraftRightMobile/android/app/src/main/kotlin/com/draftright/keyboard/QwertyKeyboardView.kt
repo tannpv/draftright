@@ -115,6 +115,8 @@ class QwertyKeyboardView(
         }
     }
 
+    private var accentPopup: AccentPopupView? = null
+
     private fun createKeyView(keyDef: KeyDef): View {
         val code = keyDef.code
         val isSpecial = !isCharKey(code) && !isSpaceKey(code)
@@ -155,13 +157,43 @@ class QwertyKeyboardView(
             typeface = Typeface.DEFAULT
         }
 
+        var longPressFired = false
+        val accentChars: List<Char>? = if (isCharKey(code) && keyDef.label.length == 1) {
+            languagePack.longPressAccents[keyDef.label[0]]
+        } else null
+        val longPressRunnable = Runnable {
+            longPressFired = true
+            dismissKeyPopup()
+            if (accentChars != null && accentChars.isNotEmpty()) {
+                accentPopup?.dismiss()
+                val options = listOf(keyDef.label[0]) + accentChars
+                val popup = AccentPopupView(context, tv, options) { picked ->
+                    val out = if (currentLayer == 0 && shiftState != ShiftState.OFF) {
+                        picked.toString().uppercase(languagePack.locale)
+                    } else picked.toString()
+                    listener.onCharTyped(out)
+                    if (shiftState == ShiftState.SINGLE) {
+                        shiftState = ShiftState.OFF
+                        buildKeyboard()
+                    }
+                    accentPopup = null
+                }
+                accentPopup = popup
+                popup.show()
+            }
+        }
+
         tv.setOnTouchListener { v, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
                     bg.setColor(keyColorPressed)
                     v.invalidate()
+                    longPressFired = false
                     if (isCharKey(code) && keyDef.label.length == 1 && keyDef.label != "," && keyDef.label != ".") {
                         showKeyPopup(v, displayLabel)
+                    }
+                    if (accentChars != null && accentChars.isNotEmpty()) {
+                        handler.postDelayed(longPressRunnable, LONG_PRESS_MS)
                     }
                     if (code == SpecialKeys.BACKSPACE) {
                         handleKeyPress(keyDef)
@@ -170,6 +202,7 @@ class QwertyKeyboardView(
                     true
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    handler.removeCallbacks(longPressRunnable)
                     val restoreColor = when {
                         isShiftActive && code == SpecialKeys.SHIFT -> keyColorPressed
                         isSpecial -> keyColorSpecial
@@ -180,7 +213,7 @@ class QwertyKeyboardView(
                     dismissKeyPopup()
                     if (code == SpecialKeys.BACKSPACE) {
                         stopBackspaceRepeat()
-                    } else if (event.action == MotionEvent.ACTION_UP) {
+                    } else if (event.action == MotionEvent.ACTION_UP && !longPressFired) {
                         handleKeyPress(keyDef)
                     }
                     true
@@ -190,6 +223,10 @@ class QwertyKeyboardView(
         }
 
         return tv
+    }
+
+    companion object {
+        private const val LONG_PRESS_MS = 300L
     }
 
     private fun handleKeyPress(keyDef: KeyDef) {
