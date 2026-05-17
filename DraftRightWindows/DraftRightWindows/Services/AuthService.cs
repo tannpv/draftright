@@ -48,6 +48,10 @@ public sealed class AuthService
     /// </summary>
     public void SaveTokens(string accessToken, string? refreshToken, string? email = null)
     {
+        DRLogger.Log(
+            $"SaveTokens: email={email ?? "(null)"} access={Mask(accessToken)} refresh={Mask(refreshToken)}",
+            DRLogger.Category.AUTH);
+
         _accessToken = accessToken;
         _refreshToken = refreshToken;
         _email = email;
@@ -61,11 +65,22 @@ public sealed class AuthService
             Email = email
         };
 
-        var json = JsonSerializer.Serialize(payload);
-        var plainBytes = Encoding.UTF8.GetBytes(json);
-        var encrypted = ProtectedData.Protect(plainBytes, null, DataProtectionScope.CurrentUser);
+        try
+        {
+            var json = JsonSerializer.Serialize(payload);
+            var plainBytes = Encoding.UTF8.GetBytes(json);
+            var encrypted = ProtectedData.Protect(plainBytes, null, DataProtectionScope.CurrentUser);
 
-        File.WriteAllBytes(AuthFilePath, encrypted);
+            File.WriteAllBytes(AuthFilePath, encrypted);
+            DRLogger.Log($"SaveTokens: persisted to {AuthFilePath} ({encrypted.Length} bytes encrypted)",
+                DRLogger.Category.AUTH);
+        }
+        catch (Exception ex)
+        {
+            DRLogger.Log($"SaveTokens: failed to persist — {ex.GetType().Name}: {ex.Message}",
+                DRLogger.Category.AUTH);
+            throw;
+        }
 
         TokensSaved?.Invoke();
     }
@@ -75,6 +90,9 @@ public sealed class AuthService
     /// </summary>
     public void ClearTokens()
     {
+        DRLogger.Log($"ClearTokens: had email={_email ?? "(null)"} access={Mask(_accessToken)}",
+            DRLogger.Category.AUTH);
+
         _accessToken = null;
         _refreshToken = null;
         _email = null;
@@ -82,11 +100,15 @@ public sealed class AuthService
         try
         {
             if (File.Exists(AuthFilePath))
+            {
                 File.Delete(AuthFilePath);
+                DRLogger.Log($"ClearTokens: deleted {AuthFilePath}", DRLogger.Category.AUTH);
+            }
         }
-        catch
+        catch (Exception ex)
         {
-            // Best-effort cleanup
+            DRLogger.Log($"ClearTokens: failed to delete auth file — {ex.GetType().Name}: {ex.Message}",
+                DRLogger.Category.AUTH);
         }
     }
 
@@ -96,10 +118,14 @@ public sealed class AuthService
     /// </summary>
     public bool RestoreSession()
     {
+        DRLogger.Log("RestoreSession: starting", DRLogger.Category.AUTH);
         try
         {
             if (!File.Exists(AuthFilePath))
+            {
+                DRLogger.Log($"RestoreSession: no auth file at {AuthFilePath}", DRLogger.Category.AUTH);
                 return false;
+            }
 
             var encrypted = File.ReadAllBytes(AuthFilePath);
             var decrypted = ProtectedData.Unprotect(encrypted, null, DataProtectionScope.CurrentUser);
@@ -107,18 +133,36 @@ public sealed class AuthService
             var stored = JsonSerializer.Deserialize<StoredTokens>(json);
 
             if (stored is null || string.IsNullOrEmpty(stored.AccessToken))
+            {
+                DRLogger.Log("RestoreSession: stored payload empty / missing access token",
+                    DRLogger.Category.AUTH);
                 return false;
+            }
 
             _accessToken = stored.AccessToken;
             _refreshToken = stored.RefreshToken;
             _email = stored.Email;
+            DRLogger.Log(
+                $"RestoreSession: restored email={_email ?? "(null)"} access={Mask(_accessToken)} refresh={Mask(_refreshToken)}",
+                DRLogger.Category.AUTH);
             return true;
         }
-        catch
+        catch (Exception ex)
         {
-            // Corrupted or inaccessible file — start fresh
+            DRLogger.Log($"RestoreSession: failed — {ex.GetType().Name}: {ex.Message}",
+                DRLogger.Category.AUTH);
             return false;
         }
+    }
+
+    /// <summary>Last 4 characters of a token for logs. Returns "(null)" / "(empty)"
+    /// for missing values so log entries are never silently empty.</summary>
+    private static string Mask(string? token)
+    {
+        if (token is null) return "(null)";
+        if (token.Length == 0) return "(empty)";
+        if (token.Length <= 4) return "***";
+        return "***" + token.Substring(token.Length - 4);
     }
 
     // ── Internal model ──────────────────────────────────────
