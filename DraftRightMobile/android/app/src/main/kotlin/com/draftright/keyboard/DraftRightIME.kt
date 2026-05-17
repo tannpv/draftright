@@ -13,6 +13,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import com.draftright.keyboard.lang.EnglishLanguagePack
+import com.draftright.keyboard.lang.VietnameseLanguagePack
 
 class DraftRightIME : InputMethodService(), KeyboardActionListener {
 
@@ -28,7 +29,7 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
     private var originalText: String? = null
 
     private val registry: LanguageRegistry by lazy {
-        LanguageRegistry(listOf(EnglishLanguagePack))
+        LanguageRegistry(listOf(EnglishLanguagePack, VietnameseLanguagePack))
     }
 
     override fun onCreateInputView(): View {
@@ -64,18 +65,40 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
     }
 
     private fun refreshKeyboardForActiveLanguage() {
+        currentInputConnection?.finishComposingText()
         keyboard?.languagePack = controller.current
         languageStrip?.refresh()
+    }
+
+    override fun onStartInput(attribute: EditorInfo?, restarting: Boolean) {
+        super.onStartInput(attribute, restarting)
+        controller.composer?.reset()
     }
 
     // --- KeyboardActionListener ---
 
     override fun onCharTyped(char: String) {
-        currentInputConnection?.commitText(char, 1)
+        val ic = currentInputConnection ?: return
+        if (char.length == 1) {
+            when (val outcome = controller.onKey(char[0])) {
+                is KeystrokeOutcome.Commit -> ic.commitText(outcome.text, 1)
+                is KeystrokeOutcome.Composing -> ic.setComposingText(outcome.text, 1)
+                KeystrokeOutcome.DeleteOne -> ic.deleteSurroundingText(1, 0)
+                KeystrokeOutcome.NoChange -> { /* no-op */ }
+            }
+        } else {
+            ic.commitText(char, 1)
+        }
     }
 
     override fun onBackspace() {
-        currentInputConnection?.deleteSurroundingText(1, 0)
+        val ic = currentInputConnection ?: return
+        when (val outcome = controller.onBackspace()) {
+            is KeystrokeOutcome.Commit -> ic.commitText(outcome.text, 1)
+            is KeystrokeOutcome.Composing -> ic.setComposingText(outcome.text, 1)
+            KeystrokeOutcome.DeleteOne -> ic.deleteSurroundingText(1, 0)
+            KeystrokeOutcome.NoChange -> { /* no-op */ }
+        }
     }
 
     override fun onEnter() {

@@ -33,4 +33,31 @@ class KeyboardController(
         current = target
         composer = current.composer()
     }
+
+    fun onKey(char: Char): KeystrokeOutcome {
+        val c = composer ?: return KeystrokeOutcome.Commit(char.toString())
+        return when (val r = c.onKey(char)) {
+            is ComposeResult.Commit -> KeystrokeOutcome.Commit(r.text)
+            is ComposeResult.Composing -> KeystrokeOutcome.Composing(r.text)
+            ComposeResult.PassThrough -> KeystrokeOutcome.Commit(char.toString())
+            ComposeResult.Consumed -> KeystrokeOutcome.NoChange
+        }
+    }
+
+    fun onBackspace(): KeystrokeOutcome {
+        val c = composer ?: return KeystrokeOutcome.DeleteOne
+        return when (val r = c.onBackspace()) {
+            is ComposeResult.Composing -> KeystrokeOutcome.Composing(r.text)
+            ComposeResult.Consumed -> KeystrokeOutcome.NoChange
+            ComposeResult.PassThrough -> KeystrokeOutcome.DeleteOne
+            is ComposeResult.Commit -> KeystrokeOutcome.Commit(r.text)
+        }
+    }
+}
+
+sealed class KeystrokeOutcome {
+    data class Commit(val text: String) : KeystrokeOutcome()
+    data class Composing(val text: String) : KeystrokeOutcome()
+    object DeleteOne : KeystrokeOutcome()
+    object NoChange : KeystrokeOutcome()
 }
