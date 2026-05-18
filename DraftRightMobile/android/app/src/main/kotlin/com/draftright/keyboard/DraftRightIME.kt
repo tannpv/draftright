@@ -114,7 +114,14 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
             is KeystrokeOutcome.Commit -> ic.commitText(outcome.text, 1)
             is KeystrokeOutcome.Composing -> ic.setComposingText(outcome.text, 1)
             KeystrokeOutcome.DeleteOne -> ic.deleteSurroundingText(1, 0)
-            KeystrokeOutcome.NoChange -> { /* no-op */ }
+            KeystrokeOutcome.NoChange -> {
+                // Composer's buffer was just emptied by stripOneLayer. The IC's
+                // marked-text composing region still shows the last displayed
+                // value — we have to explicitly clear it here, otherwise the
+                // user appears to be stuck on the first character.
+                ic.setComposingText("", 1)
+                ic.finishComposingText()
+            }
         }
     }
 
@@ -132,7 +139,22 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
     }
 
     override fun onSpace() {
-        currentInputConnection?.commitText(" ", 1)
+        val ic = currentInputConnection ?: return
+        // Route through the composer so any pending Telex composition gets
+        // committed FIRST, then the space appended. Without this, ic.commitText
+        // would replace the marked-text region (e.g. "viet") with just " ",
+        // looking like the whole word was deleted.
+        val c = controller
+        if (c == null) {
+            ic.commitText(" ", 1)
+            return
+        }
+        when (val outcome = c.onKey(' ')) {
+            is KeystrokeOutcome.Commit -> ic.commitText(outcome.text, 1)
+            is KeystrokeOutcome.Composing -> ic.setComposingText(outcome.text, 1)
+            KeystrokeOutcome.DeleteOne -> ic.deleteSurroundingText(1, 0)
+            KeystrokeOutcome.NoChange -> ic.commitText(" ", 1)
+        }
     }
 
     override fun onSwitchKeyboard() {
