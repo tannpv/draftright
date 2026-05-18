@@ -21,6 +21,7 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var toolbar: ToolbarView? = null
     private var keyboard: QwertyKeyboardView? = null
+    private var languageStrip: LanguageStripView? = null
     private var diffSheet: DiffSheetView? = null
     private var rootLayout: LinearLayout? = null
     private var originalText: String? = null
@@ -52,6 +53,13 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
         }
+
+        // Step C: add LanguageStripView to view tree. With only EN enabled,
+        // strip.visibility = View.GONE in its init {}. View tree now has
+        // an extra (GONE) child as the first row of the root LinearLayout.
+        val strip = LanguageStripView(this, controller!!) { /* no-op step C */ }
+        languageStrip = strip
+        root.addView(strip)
 
         val tb = ToolbarView(this,
             onToneSelected = { tone -> handleToneSelected(tone) },
