@@ -12,6 +12,7 @@ import android.view.inputmethod.ExtractedTextRequest
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import com.draftright.keyboard.lang.EnglishLanguagePack
 
 class DraftRightIME : InputMethodService(), KeyboardActionListener {
 
@@ -24,8 +25,29 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
     private var rootLayout: LinearLayout? = null
     private var originalText: String? = null
 
+    // Step B: construct LanguageRegistry + KeyboardController but do NOT wire
+    // any UI for them yet. Goal: prove that loading 7 LanguagePack singletons
+    // + a KeyboardController in the IME process doesn't break the view.
+    private val registry: LanguageRegistry by lazy {
+        try {
+            LanguageRegistry.PRODUCTION
+        } catch (t: Throwable) {
+            android.util.Log.e("DraftRightIME", "registry init failed", t)
+            LanguageRegistry(listOf(EnglishLanguagePack))
+        }
+    }
+    private var controller: KeyboardController? = null
+
     override fun onCreateInputView(): View {
         settings = SharedSettings(this)
+
+        // Step B: build controller. No-op for now — we just want to make sure
+        // construction + 7-pack load doesn't break anything.
+        controller = KeyboardController(
+            registry,
+            enabledIds = settings.enabledLanguageIds,
+            activeId = settings.activeLanguageId,
+        )
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
