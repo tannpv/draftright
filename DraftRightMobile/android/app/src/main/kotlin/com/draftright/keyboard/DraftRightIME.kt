@@ -42,12 +42,16 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
     override fun onCreateInputView(): View {
         settings = SharedSettings(this)
 
-        // Step B: build controller. No-op for now — we just want to make sure
-        // construction + 7-pack load doesn't break anything.
+        // Step E: HARDCODE EN + VI as enabled so the strip becomes VISIBLE
+        // regardless of user settings. This isolates "strip-visible" as a
+        // bisection signal independent of whether the user remembered to
+        // toggle chips. Real production code will read from settings — this
+        // hardcode reverts once we know strip-visible doesn't trigger the
+        // blank-keyboard bug.
         controller = KeyboardController(
             registry,
-            enabledIds = settings.enabledLanguageIds,
-            activeId = settings.activeLanguageId,
+            enabledIds = listOf("en", "vi"),
+            activeId = "en",
         )
 
         val root = LinearLayout(this).apply {
