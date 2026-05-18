@@ -42,26 +42,19 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
     override fun onCreateInputView(): View {
         settings = SharedSettings(this)
 
-        // Step E: HARDCODE EN + VI as enabled so the strip becomes VISIBLE
-        // regardless of user settings. This isolates "strip-visible" as a
-        // bisection signal independent of whether the user remembered to
-        // toggle chips. Real production code will read from settings — this
-        // hardcode reverts once we know strip-visible doesn't trigger the
-        // blank-keyboard bug.
         controller = KeyboardController(
             registry,
-            enabledIds = listOf("en", "vi"),
-            activeId = "en",
+            enabledIds = settings.enabledLanguageIds,
+            activeId = settings.activeLanguageId,
         )
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
         }
 
-        // Step C: add LanguageStripView to view tree. With only EN enabled,
-        // strip.visibility = View.GONE in its init {}. View tree now has
-        // an extra (GONE) child as the first row of the root LinearLayout.
-        val strip = LanguageStripView(this, controller!!) { /* no-op step C */ }
+        val strip = LanguageStripView(this, controller!!) {
+            refreshKeyboardForActiveLanguage()
+        }
         languageStrip = strip
         root.addView(strip)
 
@@ -89,12 +82,40 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
 
     // --- KeyboardActionListener ---
 
+    private fun refreshKeyboardForActiveLanguage() {
+        currentInputConnection?.finishComposingText()
+        controller?.let { keyboard?.languagePack = it.current }
+        languageStrip?.refresh()
+    }
+
     override fun onCharTyped(char: String) {
-        currentInputConnection?.commitText(char, 1)
+        val ic = currentInputConnection ?: return
+        val c = controller
+        if (c == null || char.length != 1) {
+            ic.commitText(char, 1)
+            return
+        }
+        when (val outcome = c.onKey(char[0])) {
+            is KeystrokeOutcome.Commit -> ic.commitText(outcome.text, 1)
+            is KeystrokeOutcome.Composing -> ic.setComposingText(outcome.text, 1)
+            KeystrokeOutcome.DeleteOne -> ic.deleteSurroundingText(1, 0)
+            KeystrokeOutcome.NoChange -> { /* no-op */ }
+        }
     }
 
     override fun onBackspace() {
-        currentInputConnection?.deleteSurroundingText(1, 0)
+        val ic = currentInputConnection ?: return
+        val c = controller
+        if (c == null) {
+            ic.deleteSurroundingText(1, 0)
+            return
+        }
+        when (val outcome = c.onBackspace()) {
+            is KeystrokeOutcome.Commit -> ic.commitText(outcome.text, 1)
+            is KeystrokeOutcome.Composing -> ic.setComposingText(outcome.text, 1)
+            KeystrokeOutcome.DeleteOne -> ic.deleteSurroundingText(1, 0)
+            KeystrokeOutcome.NoChange -> { /* no-op */ }
+        }
     }
 
     override fun onEnter() {
@@ -115,12 +136,14 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
     }
 
     override fun onSwitchKeyboard() {
-        // Both globe and ≡ buttons open the IME picker. User can pick another
-        // keyboard OR dismiss back to DraftRight. Cycling-by-tap was tested but
-        // produced a "stuck on next IME" UX — the next IME's globe doesn't
-        // reliably bring users back to DraftRight.
-        val imm = getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
-        imm.showInputMethodPicker()
+        val c = controller
+        if (c != null && c.enabled.size > 1) {
+            c.cycleLanguage()
+            refreshKeyboardForActiveLanguage()
+        } else {
+            val imm = getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+            imm.showInputMethodPicker()
+        }
     }
 
     override fun onSwitchKeyboardLongPress() {
