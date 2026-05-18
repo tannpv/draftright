@@ -160,10 +160,13 @@ public sealed class ApiClient : IDisposable
                 return BackendStatus.WrongServer;
             }
 
-            // Step 2: Check /auth/me for login state
-            using var authRequest = new HttpRequestMessage(HttpMethod.Get, $"{_baseUrl}/auth/me");
-            authRequest.Headers.Authorization = _http.DefaultRequestHeaders.Authorization;
-            using var authResponse = await _http.SendAsync(authRequest, cts.Token);
+            // Step 2: Check /auth/me for login state. Goes through the
+            // auto-refresh wrapper so an expired access token gets refreshed
+            // before we mistakenly tell the tray "Not Logged In" — the bug
+            // was: raw _http.SendAsync skipped OnUnauthorized, so health
+            // ticks stayed on NotLoggedIn even though rewrite/subscription
+            // calls (which DO use SendWithAutoRefresh) kept refreshing fine.
+            using var authResponse = await SendAuthMeWithRefreshAsync(cts.Token);
             var result = authResponse.StatusCode switch
             {
                 System.Net.HttpStatusCode.OK => BackendStatus.Connected,
@@ -182,6 +185,47 @@ public sealed class ApiClient : IDisposable
                 DRLogger.Category.API);
             return BackendStatus.Offline;
         }
+    }
+
+    /// <summary>
+    /// Mirrors <see cref="SendWithAutoRefreshAsync{T}"/> but returns the raw
+    /// <see cref="HttpResponseMessage"/> — used by <see cref="CheckHealthAsync"/>
+    /// which cares only about the status code, not a deserialized body. Sends
+    /// once, on 401 invokes <see cref="OnUnauthorized"/>, and retries exactly
+    /// once with the refreshed bearer. Caller owns disposal of the returned
+    /// response.
+    /// </summary>
+    private async Task<HttpResponseMessage> SendAuthMeWithRefreshAsync(
+        System.Threading.CancellationToken ct)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var first = await _http.GetAsync($"{_baseUrl}/auth/me", ct);
+        DRLogger.Log(
+            $"HTTP GET /auth/me → {(int)first.StatusCode} {first.ReasonPhrase} ({sw.ElapsedMilliseconds}ms)",
+            DRLogger.Category.API);
+
+        if (first.StatusCode != System.Net.HttpStatusCode.Unauthorized || OnUnauthorized == null)
+            return first;
+
+        DRLogger.Log("CheckHealthAsync: 401 from /auth/me, invoking OnUnauthorized for refresh",
+            DRLogger.Category.API);
+        first.Dispose();
+
+        var refreshed = await OnUnauthorized();
+        DRLogger.Log($"CheckHealthAsync: OnUnauthorized returned {refreshed}", DRLogger.Category.API);
+        if (!refreshed)
+        {
+            // Refresh failed — return a synthetic 401 so the caller still
+            // maps to NotLoggedIn rather than treating it as Offline.
+            return new HttpResponseMessage(System.Net.HttpStatusCode.Unauthorized);
+        }
+
+        sw.Restart();
+        var second = await _http.GetAsync($"{_baseUrl}/auth/me", ct);
+        DRLogger.Log(
+            $"HTTP GET retry /auth/me → {(int)second.StatusCode} {second.ReasonPhrase} ({sw.ElapsedMilliseconds}ms)",
+            DRLogger.Category.API);
+        return second;
     }
 
     // ── Helpers ─────────────────────────────────────────────
