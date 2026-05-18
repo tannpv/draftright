@@ -17,10 +17,12 @@ class KeyboardController(
     var composer: Composer? = current.composer()
         private set
 
-    fun cycleLanguage() {
+    fun cycleLanguage(reverse: Boolean = false) {
         if (enabled.size <= 1) return
         val idx = enabled.indexOfFirst { it.id == current.id }
-        val nextIdx = if (idx < 0) 0 else (idx + 1) % enabled.size
+        val step = if (reverse) -1 else 1
+        val rawIdx = (if (idx < 0) 0 else idx) + step
+        val nextIdx = ((rawIdx % enabled.size) + enabled.size) % enabled.size
         composer?.reset()
         current = enabled[nextIdx]
         composer = current.composer()
