@@ -183,8 +183,17 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
 
     private fun replaceAllText(newText: String) {
         val ic = currentInputConnection ?: return
+        // 1. Commit any in-flight Telex composition (the setMarkedText region)
+        //    so it becomes part of the extractable text. Without this, the
+        //    composing region survives the selection and the replacement
+        //    appears partial.
+        ic.finishComposingText()
+        controller?.composer?.reset()
+        // 2. Read the full extractable text (now including the
+        //    just-finalized composition).
         val extracted = ic.getExtractedText(ExtractedTextRequest(), 0) ?: return
         val length = extracted.text?.length ?: 0
+        // 3. Replace the entire field.
         ic.setSelection(0, length)
         ic.commitText(newText, 1)
     }
