@@ -22,6 +22,9 @@ interface KeyboardActionListener {
     fun onSpace()
     fun onSwitchKeyboard()
     fun onSwitchKeyboardLongPress()
+    /** Horizontal swipe on the space bar. +1 = right (next language),
+     *  -1 = left (previous language). Samsung-style language cycle. */
+    fun onSpaceSwipe(direction: Int) {}
 }
 
 enum class ShiftState { OFF, SINGLE, CAPS_LOCK }
@@ -183,6 +186,8 @@ class QwertyKeyboardView(
             }
         }
 
+        var spaceDownX = 0f
+        var spaceSwiped = false
         tv.setOnTouchListener { v, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
@@ -199,6 +204,20 @@ class QwertyKeyboardView(
                         handleKeyPress(keyDef)
                         startBackspaceRepeat()
                     }
+                    if (isSpaceKey(code)) {
+                        spaceDownX = event.rawX
+                        spaceSwiped = false
+                    }
+                    true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    if (isSpaceKey(code) && !spaceSwiped) {
+                        val dx = event.rawX - spaceDownX
+                        if (kotlin.math.abs(dx) > SPACE_SWIPE_THRESHOLD_PX) {
+                            spaceSwiped = true
+                            listener.onSpaceSwipe(if (dx > 0) 1 else -1)
+                        }
+                    }
                     true
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
@@ -213,7 +232,7 @@ class QwertyKeyboardView(
                     dismissKeyPopup()
                     if (code == SpecialKeys.BACKSPACE) {
                         stopBackspaceRepeat()
-                    } else if (event.action == MotionEvent.ACTION_UP && !longPressFired) {
+                    } else if (event.action == MotionEvent.ACTION_UP && !longPressFired && !spaceSwiped) {
                         handleKeyPress(keyDef)
                     }
                     true
@@ -227,6 +246,9 @@ class QwertyKeyboardView(
 
     companion object {
         private const val LONG_PRESS_MS = 300L
+        // ~80 dp at 420dpi ≈ 168 px. Tuned so a deliberate horizontal drag
+        // triggers a language cycle but a tap or vertical jitter doesn't.
+        private const val SPACE_SWIPE_THRESHOLD_PX = 80f
     }
 
     private fun handleKeyPress(keyDef: KeyDef) {

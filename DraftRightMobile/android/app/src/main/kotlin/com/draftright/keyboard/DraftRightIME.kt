@@ -52,11 +52,9 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
             orientation = LinearLayout.VERTICAL
         }
 
-        val strip = LanguageStripView(this, controller!!) {
-            refreshKeyboardForActiveLanguage()
-        }
-        languageStrip = strip
-        root.addView(strip)
+        // Language strip removed in 2.3.1+51 in favor of Samsung-style
+        // swipe-on-space-bar gesture (onSpaceSwipe). Switching feels native
+        // and saves vertical real estate above the tone toolbar.
 
         val tb = ToolbarView(this,
             onToneSelected = { tone -> handleToneSelected(tone) },
@@ -85,7 +83,6 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
     private fun refreshKeyboardForActiveLanguage() {
         currentInputConnection?.finishComposingText()
         controller?.let { keyboard?.languagePack = it.current }
-        languageStrip?.refresh()
     }
 
     override fun onCharTyped(char: String) {
@@ -166,6 +163,13 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
             val imm = getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
             imm.showInputMethodPicker()
         }
+    }
+
+    override fun onSpaceSwipe(direction: Int) {
+        val c = controller ?: return
+        if (c.enabled.size <= 1) return
+        c.cycleLanguage(reverse = direction < 0)
+        refreshKeyboardForActiveLanguage()
     }
 
     override fun onSwitchKeyboardLongPress() {
