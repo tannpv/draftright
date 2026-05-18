@@ -12,6 +12,7 @@ import android.view.inputmethod.ExtractedTextRequest
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import com.draftright.keyboard.lang.EnglishLanguagePack
 
 class DraftRightIME : InputMethodService(), KeyboardActionListener {
 
@@ -20,16 +21,40 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var toolbar: ToolbarView? = null
     private var keyboard: QwertyKeyboardView? = null
+    private var languageStrip: LanguageStripView? = null
     private var diffSheet: DiffSheetView? = null
     private var rootLayout: LinearLayout? = null
     private var originalText: String? = null
 
+    // Step B: construct LanguageRegistry + KeyboardController but do NOT wire
+    // any UI for them yet. Goal: prove that loading 7 LanguagePack singletons
+    // + a KeyboardController in the IME process doesn't break the view.
+    private val registry: LanguageRegistry by lazy {
+        try {
+            LanguageRegistry.PRODUCTION
+        } catch (t: Throwable) {
+            android.util.Log.e("DraftRightIME", "registry init failed", t)
+            LanguageRegistry(listOf(EnglishLanguagePack))
+        }
+    }
+    private var controller: KeyboardController? = null
+
     override fun onCreateInputView(): View {
         settings = SharedSettings(this)
+
+        controller = KeyboardController(
+            registry,
+            enabledIds = settings.enabledLanguageIds,
+            activeId = settings.activeLanguageId,
+        )
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
         }
+
+        // Language strip removed in 2.3.1+51 in favor of Samsung-style
+        // swipe-on-space-bar gesture (onSpaceSwipe). Switching feels native
+        // and saves vertical real estate above the tone toolbar.
 
         val tb = ToolbarView(this,
             onToneSelected = { tone -> handleToneSelected(tone) },
@@ -39,6 +64,13 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
         root.addView(tb)
 
         val kb = QwertyKeyboardView(this, this)
+        // Step D: assign languagePack via the setter (triggers second
+        // buildKeyboard()). With EN as the only enabled pack, controller.current
+        // == EnglishLanguagePack which equals kb.languagePack's default, so
+        // this is semantically a no-op — but the setter still fires
+        // buildKeyboard() once more. Goal: rule out the setter / second
+        // buildKeyboard call as the trigger.
+        kb.languagePack = controller!!.current
         keyboard = kb
         root.addView(kb)
 
@@ -48,12 +80,46 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
 
     // --- KeyboardActionListener ---
 
+    private fun refreshKeyboardForActiveLanguage() {
+        currentInputConnection?.finishComposingText()
+        controller?.let { keyboard?.languagePack = it.current }
+    }
+
     override fun onCharTyped(char: String) {
-        currentInputConnection?.commitText(char, 1)
+        val ic = currentInputConnection ?: return
+        val c = controller
+        if (c == null || char.length != 1) {
+            ic.commitText(char, 1)
+            return
+        }
+        when (val outcome = c.onKey(char[0])) {
+            is KeystrokeOutcome.Commit -> ic.commitText(outcome.text, 1)
+            is KeystrokeOutcome.Composing -> ic.setComposingText(outcome.text, 1)
+            KeystrokeOutcome.DeleteOne -> ic.deleteSurroundingText(1, 0)
+            KeystrokeOutcome.NoChange -> { /* no-op */ }
+        }
     }
 
     override fun onBackspace() {
-        currentInputConnection?.deleteSurroundingText(1, 0)
+        val ic = currentInputConnection ?: return
+        val c = controller
+        if (c == null) {
+            ic.deleteSurroundingText(1, 0)
+            return
+        }
+        when (val outcome = c.onBackspace()) {
+            is KeystrokeOutcome.Commit -> ic.commitText(outcome.text, 1)
+            is KeystrokeOutcome.Composing -> ic.setComposingText(outcome.text, 1)
+            KeystrokeOutcome.DeleteOne -> ic.deleteSurroundingText(1, 0)
+            KeystrokeOutcome.NoChange -> {
+                // Composer's buffer was just emptied by stripOneLayer. The IC's
+                // marked-text composing region still shows the last displayed
+                // value — we have to explicitly clear it here, otherwise the
+                // user appears to be stuck on the first character.
+                ic.setComposingText("", 1)
+                ic.finishComposingText()
+            }
+        }
     }
 
     override fun onEnter() {
@@ -70,16 +136,40 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
     }
 
     override fun onSpace() {
-        currentInputConnection?.commitText(" ", 1)
+        val ic = currentInputConnection ?: return
+        // Route through the composer so any pending Telex composition gets
+        // committed FIRST, then the space appended. Without this, ic.commitText
+        // would replace the marked-text region (e.g. "viet") with just " ",
+        // looking like the whole word was deleted.
+        val c = controller
+        if (c == null) {
+            ic.commitText(" ", 1)
+            return
+        }
+        when (val outcome = c.onKey(' ')) {
+            is KeystrokeOutcome.Commit -> ic.commitText(outcome.text, 1)
+            is KeystrokeOutcome.Composing -> ic.setComposingText(outcome.text, 1)
+            KeystrokeOutcome.DeleteOne -> ic.deleteSurroundingText(1, 0)
+            KeystrokeOutcome.NoChange -> ic.commitText(" ", 1)
+        }
     }
 
     override fun onSwitchKeyboard() {
-        // Both globe and ≡ buttons open the IME picker. User can pick another
-        // keyboard OR dismiss back to DraftRight. Cycling-by-tap was tested but
-        // produced a "stuck on next IME" UX — the next IME's globe doesn't
-        // reliably bring users back to DraftRight.
-        val imm = getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
-        imm.showInputMethodPicker()
+        val c = controller
+        if (c != null && c.enabled.size > 1) {
+            c.cycleLanguage()
+            refreshKeyboardForActiveLanguage()
+        } else {
+            val imm = getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+            imm.showInputMethodPicker()
+        }
+    }
+
+    override fun onSpaceSwipe(direction: Int) {
+        val c = controller ?: return
+        if (c.enabled.size <= 1) return
+        c.cycleLanguage(reverse = direction < 0)
+        refreshKeyboardForActiveLanguage()
     }
 
     override fun onSwitchKeyboardLongPress() {
@@ -97,8 +187,17 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
 
     private fun replaceAllText(newText: String) {
         val ic = currentInputConnection ?: return
+        // 1. Commit any in-flight Telex composition (the setMarkedText region)
+        //    so it becomes part of the extractable text. Without this, the
+        //    composing region survives the selection and the replacement
+        //    appears partial.
+        ic.finishComposingText()
+        controller?.composer?.reset()
+        // 2. Read the full extractable text (now including the
+        //    just-finalized composition).
         val extracted = ic.getExtractedText(ExtractedTextRequest(), 0) ?: return
         val length = extracted.text?.length ?: 0
+        // 3. Replace the entire field.
         ic.setSelection(0, length)
         ic.commitText(newText, 1)
     }

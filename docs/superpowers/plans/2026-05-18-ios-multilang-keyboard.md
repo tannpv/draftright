@@ -4,6 +4,22 @@
 
 **Goal:** Port Android Tier β (EN + VI Telex + FR/ES/DE/IT/PT) to the iOS keyboard extension at `DraftRightMobile/ios/DraftRightKeyboard/`. Same UX, adapted for iOS sandbox constraints.
 
+## REVISION 2026-05-18 (post-Android-shipping learnings)
+
+The Android Tier β reached production today (2.3.1+52). Several design decisions in this plan have been REVISED based on what actually worked vs broke on real Samsung A52 + Android 14:
+
+1. **Drop `LanguageStripView` from the iOS view tree.** Android ditched the chip strip in favor of **swipe-right/left on the space bar** to cycle languages (Samsung-style). UX is cleaner + saves a row of vertical space.
+2. **Drop the redundant `GLOBE_PICKER` ≡ key.** Long-press the system globe (iOS already provides the globe key) for system picker.
+3. **Telex composer needs three specific fixes** that surfaced only on real devices:
+   - **Empty-buffer backspace must explicitly clear marked text** — when composer strips buffer to empty, the IC's marked-text region survives and looks stuck on the first char. Fix in iOS: after `composer.onBackspace()` returns `.consumed`, call `textDocumentProxy.unmarkText()` + `textDocumentProxy.deleteBackward()` if appropriate.
+   - **Space-bar must route through composer** — direct `textDocumentProxy.insertText(" ")` replaces the marked-text region with just `" "`, deleting the whole composing word. Fix: route `keyboardDidSpace` through `controller.onKey(" ")` so the composer commits any pending word before appending the space.
+   - **Tone-rewrite Replace must finish composition first** — `replaceAllText` must call `textDocumentProxy.unmarkText()` BEFORE `setSelectedRange + insertText`, otherwise the composing region survives the replace.
+4. **Bisection-driven incremental ship.** Each commit was a single-axis change (view structure → registry → strip-GONE → strip-VISIBLE → setter → cycling → composer routing). For iOS, follow the same pattern so any regression bisects in < 1 hr instead of getting lost in a 1k-line refactor.
+
+The relevant stages below have been updated to reflect this. See [[project_session_20260518_android_tier_beta_v2]] for the full Android shipping log.
+
+---
+
 **Spec:** `docs/superpowers/specs/2026-05-18-ios-multilang-keyboard-design.md`
 **Reference (Kotlin source of truth):** Android implementation merged to main 2026-05-17. See:
 - `DraftRightMobile/android/app/src/main/kotlin/com/draftright/keyboard/composer/TelexComposer.kt`
@@ -239,7 +255,11 @@ Read the current `DraftRightMobile/ios/DraftRightKeyboard/QwertyKeyboardView.swi
 
 ---
 
-## Stage 2 — KeyboardController + LanguageStripView
+## Stage 2 — KeyboardController + swipe-space cycling (no strip)
+
+> **REVISED 2026-05-18 evening**: original plan called for a horizontal `LanguageStripView` of chips. Android shipping experience showed users prefer the Samsung-style **swipe-space-bar to cycle**. This stage now wires that gesture instead of adding a strip. The `LanguageStripView.swift` from the original spec is NOT built.
+
+## Stage 2 (deprecated original) — KeyboardController + LanguageStripView
 
 ### Task 2.1: SharedSettings App Group keys
 
@@ -296,7 +316,27 @@ Plus `KeystrokeOutcome` enum + `onKey` + `onBackspace` methods routing through t
 
 - [ ] Commit.
 
-### Task 2.4: `LanguageStripView`
+### Task 2.4 (REVISED): Swipe-space gesture instead of LanguageStripView
+
+**Files:**
+- Modify: `DraftRightMobile/ios/DraftRightKeyboard/QwertyKeyboardView.swift`
+- Modify: `DraftRightMobile/ios/DraftRightKeyboard/KeyboardViewController.swift`
+
+Add a `UIPanGestureRecognizer` to the space-bar `UIButton` in `QwertyKeyboardView.createKeyButton`. Threshold: 80 px horizontal Δ. On trigger, call `delegate?.keyboardDidSwipeSpace(direction: +1|-1)`.
+
+In `KeyboardViewController`:
+```swift
+func keyboardDidSwipeSpace(direction: Int) {
+    guard let c = controller, c.enabled.count > 1 else { return }
+    c.cycleLanguage(reverse: direction < 0)
+    textDocumentProxy.unmarkText()
+    refreshKeyboardForActiveLanguage()
+}
+```
+
+Space-bar label is the active `pack.displayName` — so user gets visual feedback after swipe (no separate strip needed).
+
+### Task 2.4 (DEPRECATED original): `LanguageStripView`
 
 **Files:**
 - Create: `…/DraftRightKeyboard/LanguageStripView.swift`
@@ -426,6 +466,49 @@ public final class TelexComposer: Composer {
 ---
 
 ## Stage 4 — `VietnameseLanguagePack` + composer integration
+
+> **REVISED 2026-05-18 evening**: Tasks 4.2 + 4.3 below add the three composer-routing fixes that emerged during Android real-device testing (backspace empty-clear, space-mid-composition, Replace finishComposing).
+
+### Task 4.3: Composer routing fixes (post-Android learnings)
+
+When wiring `keyboardDidType` / `keyboardDidBackspace` / `keyboardDidSpace` / tone-rewrite Replace, mirror these specific behaviors:
+
+1. **`keyboardDidBackspace`** when controller returns `.noChange` (composer just emptied buffer via stripOneLayer):
+   ```swift
+   case .noChange:
+       textDocumentProxy.unmarkText()  // explicitly clear the marked region
+   ```
+   Without this, the IC's marked-text shows the last value and the user appears stuck on the first char.
+
+2. **`keyboardDidSpace`** must route through the composer like any letter:
+   ```swift
+   func keyboardDidSpace() {
+       guard let c = controller else {
+           textDocumentProxy.insertText(" ")
+           return
+       }
+       switch c.onKey(" ") {
+       case .commit(let text):    textDocumentProxy.insertText(text)
+       case .composing(let text): textDocumentProxy.setMarkedText(text, selectedRange: NSRange(location: text.count, length: 0))
+       case .deleteOne:           textDocumentProxy.deleteBackward()
+       case .noChange:            textDocumentProxy.insertText(" ")
+       }
+   }
+   ```
+   Direct `insertText(" ")` REPLACES the marked region, making the whole composing word disappear.
+
+3. **Tone-rewrite Replace** (when user accepts a rewritten sentence) — call `unmarkText` first, then reset composer, then replace:
+   ```swift
+   func replaceAllText(_ newText: String) {
+       textDocumentProxy.unmarkText()
+       controller?.composer?.reset()
+       // ... selectAll + insertText newText
+   }
+   ```
+
+These three fixes correspond to Android commits 0a9818f2 (backspace+space) and 0020cb5d (Replace).
+
+### Task 4.2 (original): Wire composer into IME keystroke path
 
 ### Task 4.1: `VietnameseLanguagePack.swift`
 
@@ -741,6 +824,7 @@ Once iOS Tier β ships to App Store, update memory:
 | Stage 3 (Telex port) | 1 |
 | Stages 4-9 (VN + 5 Latin packs) | 1.5 |
 | Stage 10 (accent popup with pan-to-select) | 1 |
+| **Revision adjustments (swipe-space + composer fixes)** | already absorbed above |
 | Stage 11 (settings parity, mostly verification) | 0.5 |
 | Stage 12 (perf + memory sweep) | 0.5 |
 | Stage 13 (manual QA matrix) | 1 |
