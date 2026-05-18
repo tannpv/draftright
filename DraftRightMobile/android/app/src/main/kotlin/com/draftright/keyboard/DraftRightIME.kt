@@ -69,6 +69,13 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
         root.addView(tb)
 
         val kb = QwertyKeyboardView(this, this)
+        // Step D: assign languagePack via the setter (triggers second
+        // buildKeyboard()). With EN as the only enabled pack, controller.current
+        // == EnglishLanguagePack which equals kb.languagePack's default, so
+        // this is semantically a no-op — but the setter still fires
+        // buildKeyboard() once more. Goal: rule out the setter / second
+        // buildKeyboard call as the trigger.
+        kb.languagePack = controller!!.current
         keyboard = kb
         root.addView(kb)
 
