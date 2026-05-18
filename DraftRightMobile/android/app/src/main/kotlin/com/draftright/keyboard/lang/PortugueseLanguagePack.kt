@@ -22,7 +22,6 @@ object PortugueseLanguagePack : LanguagePack {
         listOf(
             KeyDef("?123", SpecialKeys.SYMBOLS, 1.5f),
             KeyDef("🌐", SpecialKeys.GLOBE, 1.0f),
-            KeyDef("≡", SpecialKeys.GLOBE_PICKER, 1.0f),
             KeyDef(",", ','.code, 1.0f),
             KeyDef(" ", ' '.code, 4.0f),
             KeyDef(".", '.'.code, 1.0f),

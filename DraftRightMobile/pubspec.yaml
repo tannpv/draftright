@@ -1,7 +1,7 @@
 name: draftright_mobile
 description: AI-powered text rewriting keyboard toolbar
 publish_to: 'none'
-version: 2.3.1+51
+version: 2.3.1+52
 
 environment:
   sdk: ^3.0.0
