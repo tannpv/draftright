@@ -77,12 +77,19 @@ final class UpdateService: ObservableObject {
     func checkIfNeeded() async {
         guard Date().timeIntervalSince(lastCheck) > checkInterval else { return }
         lastCheck = Date()
-        if let update = await refreshAvailableUpdate() {
-            showUpdateDialog(update)
+        // Silent path: refreshAvailableUpdate kicks off background staging.
+        // promptRestart() runs only when staging completes (see stageUpdate).
+        _ = await refreshAvailableUpdate()
+        if let update = availableUpdate, updateStaged, stagedVersion == update.version {
+            await MainActor.run { promptRestart(update) }
         }
     }
 
     /// Manual check — skips the 24h throttle. Called from Settings > Check for Updates.
+    /// If an update is already staged → restart prompt.
+    /// If an update applies but isn't staged yet → keep staging silently and tell
+    /// the user we're downloading. The next stageUpdate completion will prompt.
+    /// If no update → confirm "you're current".
     func checkNow() async {
         lastCheck = Date()
         guard let update = await refreshAvailableUpdate() else {
@@ -93,7 +100,17 @@ final class UpdateService: ObservableObject {
             alert.runModal()
             return
         }
-        showUpdateDialog(update)
+        if updateStaged, stagedVersion == update.version {
+            await MainActor.run { promptRestart(update) }
+        } else {
+            await MainActor.run {
+                let alert = NSAlert()
+                alert.messageText = "Downloading DraftRight v\(update.version)"
+                alert.informativeText = "We'll let you know when it's ready to install. You can keep working."
+                alert.alertStyle = .informational
+                alert.runModal()
+            }
+        }
     }
 
     /// Fetch `/updates/latest`, recompute `availableUpdate`, return it (or nil).
@@ -146,6 +163,11 @@ final class UpdateService: ObservableObject {
                 stagedVersion = update.version
                 updateStaged = true
                 DRLogger.log("Update \(update.version) staged at \(dmgPath)", category: .app)
+                // Silent-install UX: now that the DMG is on disk, ask the
+                // user only the question that matters — restart now or
+                // later. The download phase that used to require attention
+                // has happened in the background.
+                await MainActor.run { promptRestart(update) }
                 return
             } catch {
                 DRLogger.log("Update staging attempt \(attempt)/3 failed: \(error.localizedDescription)", category: .app)
@@ -171,19 +193,15 @@ final class UpdateService: ObservableObject {
         }
     }
 
-    /// Install from a DMG that's already on disk — brief "Installing…" window,
-    /// then mount/copy/relaunch.
+    /// Install from a DMG that's already on disk. Silent: no progress UI —
+    /// the staged DMG sits on local disk so mount + copy is sub-second. Only
+    /// the user-visible restart event matters; everything else is plumbing.
     private func installStagedDMG(at dmgPath: String, version: String) async {
-        let progressWindow = UpdateProgressWindow(version: version)
-        progressWindow.show()
-        progressWindow.updateStatus("Installing...")
-        progressWindow.setIndeterminate()
         do {
             try installDMG(at: dmgPath)
-            progressWindow.close()
+            DRLogger.log("Update \(version) installed silently; relaunching", category: .app)
             relaunch()
         } catch {
-            progressWindow.close()
             DRLogger.log("Update install failed: \(error.localizedDescription)", category: .app)
             let alert = NSAlert()
             alert.messageText = "Update Failed"
@@ -218,12 +236,23 @@ final class UpdateService: ObservableObject {
         return false
     }
 
-    private func showUpdateDialog(_ update: ResolvedUpdate) {
+    /// Single user-facing prompt for the silent-update flow. Shown only when
+    /// the DMG is already staged on disk. Restart Now → installStagedDMG +
+    /// relaunch (sub-second). Later → no-op; the user gets re-prompted on
+    /// the next checkIfNeeded tick or on Settings → Check for Updates.
+    private func promptRestart(_ update: ResolvedUpdate) {
+        // Don't double-prompt if a prompt is already in front.
+        guard !isPrompting else { return }
+        isPrompting = true
+        defer { isPrompting = false }
+
         let alert = NSAlert()
-        alert.messageText = "Update Available"
-        alert.informativeText = "DraftRight v\(update.version) is available.\n\n\(update.notes)"
+        alert.messageText = "Restart to apply DraftRight v\(update.version)"
+        alert.informativeText = update.notes.isEmpty
+            ? "The update is downloaded and ready. Restart now to apply."
+            : "\(update.notes)\n\nThe update is downloaded and ready. Restart now to apply."
         alert.alertStyle = .informational
-        alert.addButton(withTitle: "Install Now")
+        alert.addButton(withTitle: "Restart Now")
         if !update.required {
             alert.addButton(withTitle: "Later")
         }
@@ -233,6 +262,11 @@ final class UpdateService: ObservableObject {
             startInstall(update)
         }
     }
+
+    /// One-shot guard so the silent staging path doesn't pop a second prompt
+    /// while one is still on screen (e.g. checkIfNeeded fires while the user
+    /// is staring at the dialog from a previous tick).
+    private var isPrompting = false
 
     private func downloadAndInstall(url: String, version: String) async {
         guard let downloadURL = URL(string: url) else { return }
