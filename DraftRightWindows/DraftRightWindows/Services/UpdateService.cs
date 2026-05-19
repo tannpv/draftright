@@ -104,6 +104,11 @@ public class UpdateService
     // AvailableUpdate, "install" is instant — no download wait, no hang.
     private string? _stagedInstallerPath;
     private string? _stagedVersion;
+    // Active background-staging Task, or null if none is running. Used to
+    // dedupe staging kicks so the foreground "Continue in background" handler
+    // and the Refresh path can never race two writers onto the same temp file.
+    private Task? _stagingTask;
+    private readonly object _stagingLock = new();
 
     /// <summary>True when the available update's installer is already on disk
     /// and ready to run.</summary>
@@ -198,11 +203,25 @@ public class UpdateService
             try { AvailableUpdateChanged?.Invoke(); } catch { /* listener errors are not our problem */ }
         }
         // Silently pre-download the installer so "install" is instant later.
-        if (applicable != null && !UpdateStaged)
-        {
-            _ = StageInstallerAsync(applicable);
-        }
+        if (applicable != null) EnsureStagingInBackground(applicable);
         return applicable;
+    }
+
+    /// <summary>
+    /// Idempotent kick for the silent background staging of
+    /// <paramref name="info"/>. No-op if the installer is already on disk or
+    /// if a previous stage is still running — the "Continue in background"
+    /// button on the progress UI and the periodic Refresh both call through
+    /// here, so two writers can never land on the same temp file.
+    /// </summary>
+    private void EnsureStagingInBackground(UpdateInfo info)
+    {
+        lock (_stagingLock)
+        {
+            if (UpdateStaged) return;
+            if (_stagingTask is { IsCompleted: false }) return;
+            _stagingTask = StageInstallerAsync(info);
+        }
     }
 
     /// <summary>
@@ -271,8 +290,13 @@ public class UpdateService
     /// When <paramref name="ui"/> is non-null, reports percent progress to it
     /// as bytes land — used by the interactive "Yes, install now" path. When
     /// null, downloads silently for background staging.
+    ///
+    /// <paramref name="externalCt"/> lets the foreground caller bail (e.g.
+    /// the "Continue in background" button on the progress UI). When it
+    /// trips, the retry loop exits immediately, the partial file is deleted,
+    /// and we return null without logging it as a failure.
     /// </summary>
-    private async Task<string?> TryDownloadInstallerAsync(string url, string version, UpdateProgressUI? ui = null, int attempts = 3)
+    internal async Task<string?> TryDownloadInstallerAsync(string url, string version, UpdateProgressUI? ui = null, int attempts = 3, System.Threading.CancellationToken externalCt = default)
     {
         var name = Path.GetFileName(new Uri(url).LocalPath);
         if (string.IsNullOrEmpty(name)) name = $"DraftRight-{version}-setup.exe";
@@ -280,38 +304,65 @@ public class UpdateService
 
         for (int attempt = 1; attempt <= attempts; attempt++)
         {
+            if (externalCt.IsCancellationRequested)
+            {
+                DRLogger.Log($"Update download canceled by caller before attempt {attempt}", DRLogger.Category.APP);
+                if (_stagedInstallerPath != dest)
+                {
+                    try { File.Delete(dest); } catch { }
+                }
+                return null;
+            }
             try
             {
                 DRLogger.Log($"Update download attempt {attempt}/{attempts}: GET {url} → {dest}", DRLogger.Category.APP);
                 using var req = new HttpRequestMessage(HttpMethod.Get, url);
                 req.Headers.CacheControl =
                     new System.Net.Http.Headers.CacheControlHeaderValue { NoCache = true };
-                using var resp = await _downloadHttp.SendAsync(req, HttpCompletionOption.ResponseHeadersRead);
+                // Link the per-attempt 10-minute timeout with the external
+                // cancel so either path can break out cleanly.
+                using var attemptCts = System.Threading.CancellationTokenSource.CreateLinkedTokenSource(externalCt);
+                attemptCts.CancelAfter(TimeSpan.FromMinutes(10));
+                using var resp = await _downloadHttp.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, attemptCts.Token);
                 resp.EnsureSuccessStatusCode();
                 var size = resp.Content.Headers.ContentLength;
                 DRLogger.Log($"Update download attempt {attempt}: headers OK (status {(int)resp.StatusCode}, content-length {(size?.ToString() ?? "?")} bytes)", DRLogger.Category.APP);
-                using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromMinutes(10));
-                using (var src = await resp.Content.ReadAsStreamAsync())
+                using (var src = await resp.Content.ReadAsStreamAsync(attemptCts.Token))
                 using (var dst = new FileStream(dest, FileMode.Create, FileAccess.Write))
                 {
                     if (ui != null && size > 0)
                     {
-                        await CopyWithProgressAsync(src, dst, size.Value, ui, cts.Token);
+                        await CopyWithProgressAsync(src, dst, size.Value, ui, attemptCts.Token);
                     }
                     else
                     {
-                        await src.CopyToAsync(dst, cts.Token);
+                        await src.CopyToAsync(dst, attemptCts.Token);
                     }
                 }
                 var actual = new FileInfo(dest).Length;
                 DRLogger.Log($"Update download attempt {attempt}: wrote {actual} bytes to {dest}", DRLogger.Category.APP);
                 return dest;
             }
+            catch (OperationCanceledException) when (externalCt.IsCancellationRequested)
+            {
+                DRLogger.Log($"Update download canceled by caller during attempt {attempt}", DRLogger.Category.APP);
+                // Don't blow away a fresh staged installer if a concurrent
+                // silent staging just landed bytes at the same temp path.
+                if (_stagedInstallerPath != dest)
+                {
+                    try { File.Delete(dest); } catch { }
+                }
+                return null;
+            }
             catch (Exception ex)
             {
                 DRLogger.Log($"Update download attempt {attempt}/{attempts} failed: {ex.GetType().Name}: {ex.Message}", DRLogger.Category.APP);
                 try { File.Delete(dest); } catch { }
-                if (attempt < attempts) await Task.Delay(TimeSpan.FromSeconds(5 * attempt));
+                if (attempt < attempts)
+                {
+                    try { await Task.Delay(TimeSpan.FromSeconds(5 * attempt), externalCt); }
+                    catch (OperationCanceledException) { return null; }
+                }
             }
         }
         DRLogger.Log($"Update download: all {attempts} attempts failed for {url}", DRLogger.Category.APP);
@@ -472,16 +523,34 @@ public class UpdateService
         // thread via BeginInvoke.
 
         UpdateProgressUI? ui = null;
+        using var backgroundCts = new System.Threading.CancellationTokenSource();
         try
         {
             ui = UpdateProgressUI.ShowOnNewThread(version);
+            // "Continue in background" is only meaningful while we own the
+            // download. The button is hidden by default and Surface'd here.
+            ui.EnableBackground();
+            ui.CancelRequested += backgroundCts.Cancel;
 
             // Reuse the hardened staging download path: retries with backoff,
             // per-attempt CTS, structured logging. The dialog-path used to have
             // its own untimed/unretried copy of this loop — that's how 2.2.6
             // users got the second "Downloading DraftRight" hang even after
             // 2.2.5 hardened staging.
-            var tempPath = await TryDownloadInstallerAsync(url, version, ui);
+            var tempPath = await TryDownloadInstallerAsync(url, version, ui, externalCt: backgroundCts.Token);
+
+            if (backgroundCts.IsCancellationRequested)
+            {
+                // User chose "Continue in background". Drop the foreground UI
+                // and make sure the silent staging path is running so the
+                // tray/Settings "Update available" affordance can flip to
+                // "ready to install" as soon as the bytes land.
+                DRLogger.Log($"DownloadAndInstall {version}: backgrounded by user — handing off to silent staging", DRLogger.Category.APP);
+                ui.Close();
+                if (AvailableUpdate != null) EnsureStagingInBackground(AvailableUpdate);
+                return;
+            }
+
             if (tempPath == null)
             {
                 ui.Close();
@@ -589,14 +658,23 @@ internal sealed class UpdateProgressUI
     private readonly System.Windows.Forms.Label _statusLabel;
     private readonly System.Windows.Forms.ProgressBar _progressBar;
     private readonly System.Windows.Forms.Label _percentLabel;
+    private readonly System.Windows.Forms.Button _backgroundButton;
     private readonly System.Threading.ManualResetEventSlim _ready = new(false);
+
+    /// <summary>
+    /// Fires when the user clicks "Continue in background". The caller is
+    /// expected to cancel the in-flight foreground download and ensure the
+    /// silent staging path picks up where this one left off — see
+    /// <see cref="UpdateService.EnsureStagingInBackground"/>.
+    /// </summary>
+    public event Action? CancelRequested;
 
     private UpdateProgressUI(string version)
     {
         _form = new System.Windows.Forms.Form
         {
             Text = "Updating DraftRight",
-            Width = 420, Height = 160,
+            Width = 420, Height = 200,
             StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen,
             FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog,
             MaximizeBox = false, MinimizeBox = false, ControlBox = false,
@@ -629,12 +707,63 @@ internal sealed class UpdateProgressUI
             Font = new System.Drawing.Font("Segoe UI", 9),
             ForeColor = System.Drawing.Color.FromArgb(148, 163, 184),
         };
-        _form.Controls.AddRange(new System.Windows.Forms.Control[] { _statusLabel, _progressBar, _percentLabel });
+        // Hidden by default — the caller flips it on with EnableBackground()
+        // only on the download path. The staged-install path (RunStagedInstaller)
+        // would show this for a fraction of a second before flipping to
+        // "Installing..." anyway, where the button is meaningless.
+        _backgroundButton = new System.Windows.Forms.Button
+        {
+            Text = "Continue in background",
+            Location = new System.Drawing.Point(210, 115),
+            Size = new System.Drawing.Size(180, 32),
+            FlatStyle = System.Windows.Forms.FlatStyle.Flat,
+            BackColor = System.Drawing.Color.FromArgb(30, 41, 59),
+            ForeColor = System.Drawing.Color.FromArgb(226, 232, 240),
+            Font = new System.Drawing.Font("Segoe UI", 9),
+            UseVisualStyleBackColor = false,
+            Visible = false,
+            Cursor = System.Windows.Forms.Cursors.Hand,
+        };
+        _backgroundButton.FlatAppearance.BorderColor = System.Drawing.Color.FromArgb(71, 85, 105);
+        _backgroundButton.Click += (_, _) =>
+        {
+            // Disable + reflect the new state immediately so a double-click
+            // can't fire CancelRequested twice and so the user gets visual
+            // confirmation while we tear down the foreground download.
+            _backgroundButton.Enabled = false;
+            _statusLabel.Text = "Continuing in background...";
+            try { CancelRequested?.Invoke(); } catch { /* listener errors are not our problem */ }
+        };
+        var tip = new System.Windows.Forms.ToolTip();
+        tip.SetToolTip(_backgroundButton, "Hide this window. The download keeps running silently — you'll get a 'ready to install' notice when it's done.");
+
+        _form.Controls.AddRange(new System.Windows.Forms.Control[] {
+            _statusLabel, _progressBar, _percentLabel, _backgroundButton,
+        });
 
         // The handle isn't created until the form is shown. We need a handle
         // before any BeginInvoke call from another thread can succeed, so
         // signal _ready from HandleCreated on the form's own thread.
         _form.HandleCreated += (_, _) => _ready.Set();
+    }
+
+    /// <summary>
+    /// Reveals the "Continue in background" button. Call this on the
+    /// download-then-install path after the UI is up — staged installs skip
+    /// it because the install step that follows isn't cancelable.
+    /// </summary>
+    public void EnableBackground()
+    {
+        if (!_form.IsHandleCreated) return;
+        try
+        {
+            _form.BeginInvoke(new Action(() =>
+            {
+                _backgroundButton.Visible = true;
+                _backgroundButton.Enabled = true;
+            }));
+        }
+        catch (InvalidOperationException) { /* form closing */ }
     }
 
     public static UpdateProgressUI ShowOnNewThread(string version)
@@ -677,6 +806,8 @@ internal sealed class UpdateProgressUI
                 _statusLabel.Text = statusText;
                 _progressBar.Style = System.Windows.Forms.ProgressBarStyle.Marquee;
                 _percentLabel.Text = "";
+                // Past the cancellable phase — Inno Setup is about to take over.
+                _backgroundButton.Visible = false;
             }));
         }
         catch (InvalidOperationException) { /* form closing */ }
