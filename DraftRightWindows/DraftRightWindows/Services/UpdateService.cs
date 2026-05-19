@@ -25,6 +25,32 @@ public class UpdateInfo
 
     [JsonPropertyName("required")]
     public bool Required { get; set; }
+
+    /// <summary>
+    /// Per-platform expansion added by the backend. The Windows entry is the
+    /// authoritative source for what to install on this client — the legacy
+    /// top-level <see cref="Version"/> is a cross-platform max and can drift
+    /// ahead of <see cref="WindowsUrl"/>'s actual version (root cause of the
+    /// "current 2.2.10, install 2.3.1, still 2.2.10" loop). Null on legacy
+    /// backends; the client falls back to the top-level fields then.
+    /// </summary>
+    [JsonPropertyName("platforms")]
+    public Dictionary<string, PlatformRelease>? Platforms { get; set; }
+}
+
+public class PlatformRelease
+{
+    [JsonPropertyName("version")]
+    public string Version { get; set; } = "";
+
+    [JsonPropertyName("url")]
+    public string Url { get; set; } = "";
+
+    [JsonPropertyName("notes")]
+    public string Notes { get; set; } = "";
+
+    [JsonPropertyName("required")]
+    public bool Required { get; set; }
 }
 
 public class UpdateService
@@ -106,6 +132,9 @@ public class UpdateService
 
     /// <summary>Test seam: exposes <see cref="IsNewer"/> for pure-logic tests.</summary>
     internal static bool IsNewerForTest(string remote, string local) => IsNewer(remote, local);
+
+    /// <summary>The platform name the Windows client pins on at /updates/latest.</summary>
+    private const string PlatformName = "windows";
 
     public async Task CheckIfNeededAsync()
     {
@@ -348,13 +377,48 @@ public class UpdateService
     {
         try
         {
-            var json = await _http.GetStringAsync($"{_backendUrl}/updates/latest");
-            return JsonSerializer.Deserialize<UpdateInfo>(json);
+            // Pass platform=windows so the backend anchors top-level `version`
+            // / `release_notes` / `required` on the Windows row (belt). The
+            // client *also* normalizes against `platforms.windows` below
+            // (suspenders) so an older backend that ignores the query param
+            // still can't trick us into installing the wrong version.
+            var json = await _http.GetStringAsync($"{_backendUrl}/updates/latest?platform={PlatformName}");
+            var raw = JsonSerializer.Deserialize<UpdateInfo>(json);
+            return raw == null ? null : NormalizeForPlatform(raw, PlatformName);
         }
         catch
         {
             return null;
         }
+    }
+
+    /// <summary>
+    /// Returns a copy of <paramref name="raw"/> whose top-level
+    /// <see cref="UpdateInfo.Version"/> / <see cref="UpdateInfo.WindowsUrl"/>
+    /// / notes / required are taken from <c>platforms[platform]</c> when that
+    /// entry is present and well-formed. That entry is tied to the same DB
+    /// row as <c>windows_url</c>, so the two can never drift — unlike the
+    /// legacy envelope which used a cross-platform max for `version`. Falls
+    /// through unchanged when the backend is too old to emit the
+    /// <c>platforms</c> map (or the platform-specific entry is empty), so
+    /// older deployments keep working.
+    /// </summary>
+    internal static UpdateInfo NormalizeForPlatform(UpdateInfo raw, string platform)
+    {
+        if (raw.Platforms == null) return raw;
+        if (!raw.Platforms.TryGetValue(platform, out var pin) || pin == null) return raw;
+        if (string.IsNullOrEmpty(pin.Version)) return raw;
+
+        return new UpdateInfo
+        {
+            Version = pin.Version,
+            WindowsUrl = !string.IsNullOrEmpty(pin.Url) ? pin.Url : raw.WindowsUrl,
+            MacUrl = raw.MacUrl,
+            LinuxUrl = raw.LinuxUrl,
+            ReleaseNotes = !string.IsNullOrEmpty(pin.Notes) ? pin.Notes : raw.ReleaseNotes,
+            Required = pin.Required || raw.Required,
+            Platforms = raw.Platforms,
+        };
     }
 
     private static bool IsNewer(string remote, string local)
