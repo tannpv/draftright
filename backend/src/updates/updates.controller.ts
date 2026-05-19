@@ -1,6 +1,9 @@
 import { Controller, Get, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
-import { ReleasesService } from './releases.service';
+import { AppRelease } from './entities/app-release.entity';
+import { Platform, ReleasesService } from './releases.service';
+
+const PLATFORMS: readonly Platform[] = ['mac', 'windows', 'linux', 'android', 'ios'] as const;
 
 /** Compare two dotted numeric version strings ("2.2.10" > "2.2.9"). */
 function compareVersions(a: string, b: string): number {
@@ -16,6 +19,10 @@ function compareVersions(a: string, b: string): number {
 /** Highest version in the list, or '' if the list is empty. */
 function maxVersion(versions: string[]): string {
   return versions.reduce((max, v) => (compareVersions(v, max) > 0 ? v : max), '');
+}
+
+function isPlatform(value: string | undefined): value is Platform {
+  return !!value && (PLATFORMS as readonly string[]).includes(value);
 }
 
 /**
@@ -40,31 +47,26 @@ export class UpdatesController {
   @Get('latest')
   @ApiOperation({ summary: 'Get latest app version info per platform' })
   @ApiQuery({ name: 'channel', required: false, enum: ['direct', 'store'] })
-  async getLatest(@Query('channel') channelOverride?: string) {
+  @ApiQuery({ name: 'platform', required: false, enum: PLATFORMS as unknown as string[] })
+  async getLatest(
+    @Query('channel') channelOverride?: string,
+    @Query('platform') platformOverride?: string,
+  ) {
     const all = await this.releases.listEffective(channelOverride);
-    // Use mac's release_notes + required as the "envelope" notes/required
-    // since the 2.1.x clients only show notes for their own platform anyway.
-    const mac = all.mac;
-    // The legacy top-level `version` is what older clients compare against to
-    // decide "is there an update?" — but they then download their *own*
-    // platform's `*_url`. If it were just mac's version, a Windows-only
-    // release would be invisible to Windows clients until macOS also bumped.
-    // Report the highest version across all platforms so every client at
-    // least *sees* that something newer exists; the per-platform `platforms`
-    // map (and the `*_url` fields) carry the actual target.
-    const topVersion = maxVersion(
-      Object.values(all).map((r) => r?.version).filter((v): v is string => !!v),
-    );
+    const anchor = isPlatform(platformOverride) ? all[platformOverride] : null;
+    const envelope = buildEnvelope(all, anchor);
     return {
-      version: topVersion || mac?.version || '',
-      mac_url: mac?.download_url ?? '',
+      version: envelope.version,
+      mac_url: all.mac?.download_url ?? '',
       windows_url: all.windows?.download_url ?? '',
       linux_url: all.linux?.download_url ?? '',
       android_url: all.android?.download_url ?? '',
       ios_url: all.ios?.download_url ?? '',
-      release_notes: mac?.release_notes ?? '',
-      required: mac?.required ?? false,
-      // Per-platform expansion for newer clients that want the full picture:
+      release_notes: envelope.release_notes,
+      required: envelope.required,
+      // Per-platform expansion — always present so smart clients can pin to
+      // the row matching their `*_url` and never get fooled by an envelope
+      // computed across other platforms.
       platforms: Object.fromEntries(
         Object.entries(all)
           .filter(([_, v]) => v !== null)
@@ -79,4 +81,38 @@ export class UpdatesController {
       ),
     };
   }
+}
+
+/**
+ * Picks the (version, release_notes, required) triple that fills the legacy
+ * top-level envelope of `/updates/latest`. With a platform anchor (caller
+ * passed `?platform=windows`) the envelope is taken straight from that row,
+ * so `version` is guaranteed to match the matching `<platform>_url` — the
+ * mismatch was the root cause of the "current 2.2.10, install 2.3.1, still
+ * 2.2.10" loop (top-level reported the cross-platform max, but `windows_url`
+ * still pointed at the older Windows installer). With no anchor we keep the
+ * legacy "max across all platforms" semantics so genuinely old clients still
+ * *see* that something newer exists; smart clients should read
+ * `platforms.<their-platform>` directly instead of trusting the envelope.
+ */
+function buildEnvelope(
+  all: Record<Platform, AppRelease | null>,
+  anchor: AppRelease | null,
+): { version: string; release_notes: string; required: boolean } {
+  if (anchor) {
+    return {
+      version: anchor.version,
+      release_notes: anchor.release_notes ?? '',
+      required: anchor.required ?? false,
+    };
+  }
+  const mac = all.mac;
+  const topVersion = maxVersion(
+    Object.values(all).map((r) => r?.version).filter((v): v is string => !!v),
+  );
+  return {
+    version: topVersion || mac?.version || '',
+    release_notes: mac?.release_notes ?? '',
+    required: mac?.required ?? false,
+  };
 }
