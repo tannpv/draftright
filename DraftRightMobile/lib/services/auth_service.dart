@@ -263,6 +263,17 @@ class AuthService extends ChangeNotifier {
     await _syncToAppGroup('draftright.backendUrl', url);
   }
 
+  /// Sync the enabled keyboard language IDs to App Group as a JSON-encoded
+  /// string. The iOS keyboard extension decodes via JSONSerialization.
+  static Future<void> syncEnabledLanguageIdsToAppGroup(List<String> ids) async {
+    await _syncToAppGroup('draftright.enabledLanguageIds', jsonEncode(ids));
+  }
+
+  /// Sync the active keyboard language ID to App Group.
+  static Future<void> syncActiveLanguageIdToAppGroup(String id) async {
+    await _syncToAppGroup('draftright.activeLanguageId', id);
+  }
+
   String _tryDecodeError(String body) {
     try {
       final data = jsonDecode(body) as Map<String, dynamic>;

@@ -1,4 +1,5 @@
 import UIKit
+import DraftRightKeyboardCore
 
 class KeyboardViewController: UIInputViewController {
 
@@ -10,13 +11,38 @@ class KeyboardViewController: UIInputViewController {
     private var originalText: String?
     private var heightConstraint: NSLayoutConstraint!
 
+    // Tier β: language registry + per-language composer routing.
+    private let registry = LanguageRegistry.production
+    private var controller: KeyboardController!
+
     private var totalHeight: CGFloat {
         return 44 + keyboard.totalHeight // toolbar + keyboard rows
     }
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        rebuildController()
         setupUI()
+    }
+
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        // Re-read enabled / active language ids each time the keyboard
+        // appears so a settings change in the main app takes effect on
+        // the next invocation without requiring an extension reload.
+        rebuildController()
+    }
+
+    private func rebuildController() {
+        let enabledIds = settings.enabledLanguageIds
+        let activeId = settings.activeLanguageId
+        NSLog("[DraftRightKB] rebuildController enabled=\(enabledIds) active=\(activeId)")
+        controller = KeyboardController(
+            registry: registry,
+            enabledIds: enabledIds,
+            activeId: activeId
+        )
+        NSLog("[DraftRightKB] controller.enabled.count=\(controller.enabled.count) current=\(controller.current.id)")
     }
 
     private func setupUI() {
@@ -57,9 +83,16 @@ class KeyboardViewController: UIInputViewController {
     }
 
     private func replaceAllText(with newText: String) {
+        // 1. Commit any pending Telex composition. Without this, the
+        //    marked-text region survives the delete loop and the
+        //    rewritten text appears partial.
+        textDocumentProxy.unmarkText()
+        controller?.composer?.reset()
+        // 2. Walk to end of document.
         if let after = textDocumentProxy.documentContextAfterInput {
             textDocumentProxy.adjustTextPosition(byCharacterOffset: after.count)
         }
+        // 3. Delete the entire field, then insert.
         if let before = textDocumentProxy.documentContextBeforeInput {
             for _ in 0..<before.count {
                 textDocumentProxy.deleteBackward()
@@ -131,7 +164,7 @@ extension KeyboardViewController: ToolbarViewDelegate {
         let text = readFullText().trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
 
-        if settings.accessToken.isEmpty {
+        if settings.bearerToken.isEmpty {
             showBanner("Please login in DraftRight app", color: .systemOrange)
             return
         }
@@ -184,22 +217,80 @@ extension KeyboardViewController: DiffSheetDelegate {
 
 extension KeyboardViewController: KeyboardActionDelegate {
     func keyboardDidType(_ char: String) {
-        textDocumentProxy.insertText(char)
+        guard let ch = char.first, char.count == 1 else {
+            textDocumentProxy.insertText(char)
+            return
+        }
+        dispatch(controller.onKey(ch), fallback: char)
     }
 
     func keyboardDidBackspace() {
-        textDocumentProxy.deleteBackward()
+        dispatchBackspace(controller.onBackspace())
     }
 
     func keyboardDidEnter() {
+        // Commit any pending composition so newline doesn't get swallowed
+        // by the marked-text region.
+        textDocumentProxy.unmarkText()
+        controller.composer?.reset()
         textDocumentProxy.insertText("\n")
     }
 
     func keyboardDidSpace() {
-        textDocumentProxy.insertText(" ")
+        // Route space through the composer so a pending Telex composition
+        // commits FIRST, then space appends. Without this, a direct
+        // insertText(" ") replaces the marked region (e.g. "viet")
+        // with a single space and the word vanishes.
+        dispatch(controller.onKey(" "), fallback: " ")
     }
 
     func keyboardDidSwitchKeyboard() {
-        advanceToNextInputMode()
+        // Single tap on globe: cycle to next enabled language. If only
+        // one is enabled, fall back to system keyboard switcher.
+        if controller.enabled.count > 1 {
+            controller.cycleLanguage()
+            // Future: refresh visible layout when per-language layouts ship.
+        } else {
+            advanceToNextInputMode()
+        }
+    }
+
+    func keyboardDidSpaceSwipe(direction: Int) {
+        guard controller.enabled.count > 1 else { return }
+        controller.cycleLanguage(reverse: direction < 0)
+        // Future: refresh visible layout when per-language layouts ship.
+    }
+
+    // MARK: - KeystrokeOutcome dispatch
+
+    private func dispatch(_ outcome: KeystrokeOutcome, fallback: String) {
+        switch outcome {
+        case .commit(let text):
+            textDocumentProxy.unmarkText()
+            textDocumentProxy.insertText(text)
+        case .composing(let text):
+            textDocumentProxy.setMarkedText(text, selectedRange: NSRange(location: text.utf16.count, length: 0))
+        case .deleteOne:
+            textDocumentProxy.deleteBackward()
+        case .noChange:
+            textDocumentProxy.unmarkText()
+        }
+    }
+
+    private func dispatchBackspace(_ outcome: KeystrokeOutcome) {
+        switch outcome {
+        case .commit(let text):
+            textDocumentProxy.unmarkText()
+            textDocumentProxy.insertText(text)
+        case .composing(let text):
+            textDocumentProxy.setMarkedText(text, selectedRange: NSRange(location: text.utf16.count, length: 0))
+        case .deleteOne:
+            textDocumentProxy.deleteBackward()
+        case .noChange:
+            // Composer just emptied its buffer via stripOneLayer. The
+            // marked-text region still shows the previous frame — clear
+            // it so the user doesn't appear stuck on the first character.
+            textDocumentProxy.unmarkText()
+        }
     }
 }

@@ -20,6 +20,7 @@
 		3A8C268D725ABBF6AE3C847B /* ActionViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6835ACA844AC398E7A5362B4 /* ActionViewController.swift */; };
 		3B3967161E833CAA004F5970 /* AppFrameworkInfo.plist in Resources */ = {isa = PBXBuildFile; fileRef = 3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */; };
 		63577A35157F1501A4EBA6FD /* SharedSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = F52E61497CDC2BCE4E673A21 /* SharedSettings.swift */; };
+		7060FA4BC61BA9BADE5EBF20 /* SharedKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = A07D316FE4FE99EDD5922F96 /* SharedKeychain.swift */; };
 		74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
 		7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */; };
 		7CFFC95F43CBADA3CC43CC3B /* DiffSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFD7354A43EFA54973F52B7C /* DiffSheetView.swift */; };
@@ -28,8 +29,10 @@
 		97C146FC1CF9000F007C117D /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000F007C117D /* Main.storyboard */; };
 		97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
+		99D8F15864ECBAFF6B1DE724 /* SharedKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = A07D316FE4FE99EDD5922F96 /* SharedKeychain.swift */; };
 		D100C7C91D2A1D92239CA30E /* BackendClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B4DE00CF78D3D3F4EEF5388 /* BackendClient.swift */; };
 		E91EC3FF0E2C0F32F148BD58 /* Tone.swift in Sources */ = {isa = PBXBuildFile; fileRef = 102EE7DE0735023A9D90AF01 /* Tone.swift */; };
+		EFC01AE1AD943E39E2FFD346 /* DraftRightKeyboardCore in Frameworks */ = {isa = PBXBuildFile; productRef = B3960B39CF8EDD32C93D5585 /* DraftRightKeyboardCore */; };
 		FA1B2C3D4E5F6A7B8C9D0E1F /* QwertyKeyboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1B2C3D4E5F6A7B8C9D0E10 /* QwertyKeyboardView.swift */; };
 /* End PBXBuildFile section */
 
@@ -127,6 +130,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				2D4483D597249DF478197B20 /* Foundation.framework in Frameworks */,
+				EFC01AE1AD943E39E2FFD346 /* DraftRightKeyboardCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -255,7 +259,6 @@
 			children = (
 				A07D316FE4FE99EDD5922F96 /* SharedKeychain.swift */,
 			);
-			name = Shared;
 			path = Shared;
 			sourceTree = "<group>";
 		};
@@ -342,6 +345,9 @@
 			dependencies = (
 			);
 			name = DraftRightKeyboard;
+			packageProductDependencies = (
+				B3960B39CF8EDD32C93D5585 /* DraftRightKeyboardCore */,
+			);
 			productName = DraftRightKeyboard;
 			productReference = B0BF922207681BC7EB3F90F3 /* DraftRightKeyboard.appex */;
 			productType = "com.apple.product-type.app-extension";
@@ -378,6 +384,9 @@
 				Base,
 			);
 			mainGroup = 97C146E51CF9000F007C117D;
+			packageReferences = (
+				C21347752FBC4B99000B810F /* XCLocalSwiftPackageReference "DraftRightKeyboardCore" */,
+			);
 			productRefGroup = 97C146EF1CF9000F007C117D /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -572,6 +581,7 @@
 				D100C7C91D2A1D92239CA30E /* BackendClient.swift in Sources */,
 				63577A35157F1501A4EBA6FD /* SharedSettings.swift in Sources */,
 				940B53422D3E3830A0DC7886 /* Tone.swift in Sources */,
+				7060FA4BC61BA9BADE5EBF20 /* SharedKeychain.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -597,6 +607,7 @@
 				7CFFC95F43CBADA3CC43CC3B /* DiffSheetView.swift in Sources */,
 				E91EC3FF0E2C0F32F148BD58 /* Tone.swift in Sources */,
 				FA1B2C3D4E5F6A7B8C9D0E1F /* QwertyKeyboardView.swift in Sources */,
+				99D8F15864ECBAFF6B1DE724 /* SharedKeychain.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1146,6 +1157,21 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		C21347752FBC4B99000B810F /* XCLocalSwiftPackageReference "DraftRightKeyboardCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = DraftRightKeyboardCore;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		B3960B39CF8EDD32C93D5585 /* DraftRightKeyboardCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C21347752FBC4B99000B810F /* XCLocalSwiftPackageReference "DraftRightKeyboardCore" */;
+			productName = DraftRightKeyboardCore;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 97C146E61CF9000F007C117D /* Project object */;
 }

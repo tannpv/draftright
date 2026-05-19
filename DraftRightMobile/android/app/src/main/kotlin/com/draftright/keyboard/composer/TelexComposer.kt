@@ -57,26 +57,32 @@ class TelexComposer : Composer {
             if (buffer.isEmpty()) return null
             val low = incoming.lowercaseChar()
 
-            // Tone marks (s/f/r/x/j) — apply if buffer contains a vowel-like char.
-            if (low in TONE_MARKS && buffer.any { TelexState.isVowelLike(it) }) {
+            // Tone marks (s/f/r/x/j) — apply if buffer contains a vowel-like
+            // char (plain, special-marked, or already toned).
+            if (low in TONE_MARKS && bufferHasTonableVowel(buffer)) {
+                tryCancelTone(buffer, low, incoming)?.let { return it }
                 return applyTone(buffer, low)
             }
 
             // 'w' has multiple meanings depending on the preceding chars.
             if (low == 'w') {
+                tryCancelHornBreve(buffer, incoming)?.let { return it }
                 return applyHornOrBreve(buffer, incoming.isUpperCase())
             }
 
-            // dd → đ
+            // dd → đ, or cancel đ back to d + literal d.
             if (low == 'd') {
                 val last = buffer.last()
+                if (last.lowercaseChar() == 'đ') {
+                    return buffer.dropLast(1) + caseMap('d', last.isUpperCase()) + incoming
+                }
                 if (last.lowercaseChar() == 'd') {
                     return buffer.dropLast(1) + caseMap('đ', incoming.isUpperCase() || last.isUpperCase())
                 }
                 return null
             }
 
-            // Double-vowel circumflex: aa/oo/ee.
+            // Double-vowel circumflex: aa/oo/ee. Re-type cancels back to base + literal.
             val replacement = when (low) {
                 'a' -> 'â'
                 'o' -> 'ô'
@@ -84,8 +90,57 @@ class TelexComposer : Composer {
                 else -> return null
             }
             val last = buffer.last()
+            if (last.lowercaseChar() == replacement) {
+                return buffer.dropLast(1) + caseMap(low, last.isUpperCase()) + incoming
+            }
             if (last.lowercaseChar() == low) {
                 return buffer.dropLast(1) + caseMap(replacement, incoming.isUpperCase() || last.isUpperCase())
+            }
+            return null
+        }
+
+        private fun bufferHasTonableVowel(buffer: String): Boolean {
+            return buffer.any {
+                TelexState.isVowelLike(it) || UNTONE.containsKey(it.lowercaseChar())
+            }
+        }
+
+        private fun tryCancelTone(buffer: String, toneChar: Char, incoming: Char): String? {
+            val toneIdx = TONE_INDEX[toneChar] ?: return null
+            // Scan right-to-left so the most recent tone gets canceled.
+            for (i in buffer.indices.reversed()) {
+                val c = buffer[i]
+                val baseRoot = stripToneFromChar(c.lowercaseChar()) ?: continue
+                val row = TONE_ROWS_LOWER[baseRoot] ?: continue
+                if (row[toneIdx] == c.lowercaseChar()) {
+                    val untoned = caseMap(baseRoot, c.isUpperCase())
+                    return buffer.substring(0, i) + untoned + buffer.substring(i + 1) + incoming
+                }
+            }
+            return null
+        }
+
+        private fun tryCancelHornBreve(buffer: String, incoming: Char): String? {
+            if (buffer.isEmpty()) return null
+            // uow cluster cancel: ươ → uo + literal w.
+            if (buffer.length >= 2) {
+                val twoBack = buffer[buffer.length - 2]
+                val oneBack = buffer[buffer.length - 1]
+                if (twoBack.lowercaseChar() == 'ư' && oneBack.lowercaseChar() == 'ơ') {
+                    val u2 = caseMap('u', twoBack.isUpperCase())
+                    val o2 = caseMap('o', oneBack.isUpperCase())
+                    return buffer.dropLast(2) + u2 + o2 + incoming
+                }
+            }
+            val last = buffer.last()
+            val unmarked: Char? = when (last.lowercaseChar()) {
+                'ă' -> 'a'
+                'ơ' -> 'o'
+                'ư' -> 'u'
+                else -> null
+            }
+            if (unmarked != null) {
+                return buffer.dropLast(1) + caseMap(unmarked, last.isUpperCase()) + incoming
             }
             return null
         }

@@ -38,6 +38,9 @@ protocol KeyboardActionDelegate: AnyObject {
     func keyboardDidEnter()
     func keyboardDidSpace()
     func keyboardDidSwitchKeyboard()
+    /// Horizontal swipe on the space bar. +1 = right, -1 = left.
+    /// Used to cycle through enabled keyboard languages (Samsung-style).
+    func keyboardDidSpaceSwipe(direction: Int)
 }
 
 // MARK: - QwertyKeyboardView
@@ -55,6 +58,10 @@ final class QwertyKeyboardView: UIView {
     private var lastShiftTap: TimeInterval = 0
 
     private var backspaceTimer: Timer?
+
+    // Swipe-space cycle state. Matches Android's 80 dp threshold.
+    private let spaceSwipeThresholdPx: CGFloat = 80
+    private var spaceSwipeFired = false
 
     // Key preview
     private var previewLabel: UILabel?
@@ -302,6 +309,16 @@ final class QwertyKeyboardView: UIView {
         button.addTarget(self, action: #selector(keyTouchDown(_:)), for: .touchDown)
         button.addTarget(self, action: #selector(keyTouchUp(_:)), for: [.touchUpInside, .touchUpOutside, .touchCancel])
 
+        // Space bar gets a horizontal pan recognizer for the Samsung-style
+        // language-cycle swipe. cancelsTouchesInView = false so a plain
+        // tap still fires .touchUpInside and types a space.
+        if keyDef.code == .space {
+            let pan = UIPanGestureRecognizer(target: self, action: #selector(spacePan(_:)))
+            pan.cancelsTouchesInView = false
+            pan.delegate = self
+            button.addGestureRecognizer(pan)
+        }
+
         return button
     }
 
@@ -345,8 +362,28 @@ final class QwertyKeyboardView: UIView {
 
         if keyDef.code == .backspace {
             stopBackspaceRepeat()
+        } else if keyDef.code == .space && spaceSwipeFired {
+            // Swipe already cycled language; suppress the trailing tap so
+            // we don't insert a stray space.
+            spaceSwipeFired = false
         } else {
             handleKeyPress(keyDef)
+        }
+    }
+
+    @objc private func spacePan(_ gesture: UIPanGestureRecognizer) {
+        switch gesture.state {
+        case .began:
+            spaceSwipeFired = false
+        case .changed:
+            guard !spaceSwipeFired else { return }
+            let dx = gesture.translation(in: gesture.view).x
+            if abs(dx) > spaceSwipeThresholdPx {
+                spaceSwipeFired = true
+                delegate?.keyboardDidSpaceSwipe(direction: dx > 0 ? 1 : -1)
+            }
+        default:
+            break
         }
     }
 
@@ -456,6 +493,17 @@ final class QwertyKeyboardView: UIView {
     private func dismissKeyPreview() {
         previewLabel?.removeFromSuperview()
         previewLabel = nil
+    }
+}
+
+// MARK: - Gesture delegate
+
+extension QwertyKeyboardView: UIGestureRecognizerDelegate {
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                           shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+        // Let the button keep receiving its internal touch events so a
+        // plain tap on space still fires .touchUpInside (-> insert space).
+        return true
     }
 }
 

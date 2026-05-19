@@ -83,8 +83,8 @@ class QwertyKeyboardView(
         buildKeyboard()
     }
 
-    private fun isCharKey(code: Int): Boolean = code >= 0 && code != ' '.code
-    private fun isSpaceKey(code: Int): Boolean = code == ' '.code
+    private fun isCharKey(code: Int): Boolean = SpecialKeys.isCharKey(code)
+    private fun isSpaceKey(code: Int): Boolean = SpecialKeys.isSpace(code)
 
     fun buildKeyboard() {
         removeAllViews()
@@ -194,11 +194,11 @@ class QwertyKeyboardView(
                     bg.setColor(keyColorPressed)
                     v.invalidate()
                     longPressFired = false
-                    if (isCharKey(code) && keyDef.label.length == 1 && keyDef.label != "," && keyDef.label != ".") {
+                    if (isCharKey(code) && keyDef.label.length == 1 && keyDef.label !in SpecialKeys.NO_PREVIEW_LABELS) {
                         showKeyPopup(v, displayLabel)
                     }
                     if (accentChars != null && accentChars.isNotEmpty()) {
-                        handler.postDelayed(longPressRunnable, LONG_PRESS_MS)
+                        handler.postDelayed(longPressRunnable, SpecialKeys.LONG_PRESS_MS)
                     }
                     if (code == SpecialKeys.BACKSPACE) {
                         handleKeyPress(keyDef)
@@ -213,7 +213,7 @@ class QwertyKeyboardView(
                 MotionEvent.ACTION_MOVE -> {
                     if (isSpaceKey(code) && !spaceSwiped) {
                         val dx = event.rawX - spaceDownX
-                        if (kotlin.math.abs(dx) > SPACE_SWIPE_THRESHOLD_PX) {
+                        if (kotlin.math.abs(dx) > SpecialKeys.SPACE_SWIPE_THRESHOLD_PX) {
                             spaceSwiped = true
                             listener.onSpaceSwipe(if (dx > 0) 1 else -1)
                         }
@@ -244,13 +244,6 @@ class QwertyKeyboardView(
         return tv
     }
 
-    companion object {
-        private const val LONG_PRESS_MS = 300L
-        // ~80 dp at 420dpi ≈ 168 px. Tuned so a deliberate horizontal drag
-        // triggers a language cycle but a tap or vertical jitter doesn't.
-        private const val SPACE_SWIPE_THRESHOLD_PX = 80f
-    }
-
     private fun handleKeyPress(keyDef: KeyDef) {
         val code = keyDef.code
         when {
@@ -271,7 +264,7 @@ class QwertyKeyboardView(
             code == SpecialKeys.ENTER -> listener.onEnter()
             code == SpecialKeys.SHIFT -> {
                 val now = System.currentTimeMillis()
-                if (now - lastShiftTap < 300) {
+                if (now - lastShiftTap < SpecialKeys.DOUBLE_TAP_MS) {
                     shiftState = if (shiftState == ShiftState.CAPS_LOCK) ShiftState.OFF else ShiftState.CAPS_LOCK
                 } else {
                     shiftState = when (shiftState) {
