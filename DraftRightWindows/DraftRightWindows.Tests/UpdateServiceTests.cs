@@ -214,6 +214,119 @@ public class UpdateServiceTests
         Assert.Equal("2.2.6", launchedVersion);
     }
 
+    // ── NormalizeForPlatform: per-platform pin overrides legacy envelope ────
+    //
+    // Regression: 2.2.10 users got stuck in a "current 2.2.10, install 2.3.1,
+    // still 2.2.10" loop because the backend's top-level `version` is a
+    // cross-platform max (2.3.1 from mac) but `windows_url` is the Windows
+    // row's URL (pointing at the 2.2.10 installer). The client must read
+    // `platforms.windows` as the authoritative source so it can never be
+    // tricked into installing the wrong-versioned installer.
+
+    [Fact]
+    public void Normalize_PrefersPlatformPin_OverLegacyTopLevel()
+    {
+        var raw = new UpdateInfo
+        {
+            Version = "2.3.1",                                          // cross-platform max — bogus for windows
+            WindowsUrl = "https://x/installer-2.2.10.exe",              // actually a 2.2.10 installer
+            ReleaseNotes = "mac notes",
+            Platforms = new()
+            {
+                ["windows"] = new PlatformRelease
+                {
+                    Version = "2.2.10",
+                    Url = "https://x/installer-2.2.10.exe",
+                    Notes = "windows-specific notes",
+                    Required = false,
+                },
+                ["mac"] = new PlatformRelease { Version = "2.3.1", Url = "https://x/mac.dmg" },
+            },
+        };
+
+        var n = UpdateService.NormalizeForPlatform(raw, "windows");
+
+        Assert.Equal("2.2.10", n.Version);
+        Assert.Equal("https://x/installer-2.2.10.exe", n.WindowsUrl);
+        Assert.Equal("windows-specific notes", n.ReleaseNotes);
+    }
+
+    [Fact]
+    public void Normalize_FallsThrough_WhenPlatformsMapAbsent_ForLegacyBackends()
+    {
+        var raw = new UpdateInfo
+        {
+            Version = "2.2.5",
+            WindowsUrl = "https://x/old.exe",
+            ReleaseNotes = "legacy",
+        };
+
+        var n = UpdateService.NormalizeForPlatform(raw, "windows");
+
+        Assert.Equal("2.2.5", n.Version);
+        Assert.Equal("https://x/old.exe", n.WindowsUrl);
+        Assert.Equal("legacy", n.ReleaseNotes);
+    }
+
+    [Fact]
+    public void Normalize_FallsThrough_WhenPlatformEntryHasEmptyVersion()
+    {
+        // Defensive: a half-populated row shouldn't blank out a valid top-level.
+        var raw = new UpdateInfo
+        {
+            Version = "2.2.5",
+            WindowsUrl = "https://x/installer-2.2.5.exe",
+            Platforms = new()
+            {
+                ["windows"] = new PlatformRelease { Version = "", Url = "" },
+            },
+        };
+
+        var n = UpdateService.NormalizeForPlatform(raw, "windows");
+
+        Assert.Equal("2.2.5", n.Version);
+        Assert.Equal("https://x/installer-2.2.5.exe", n.WindowsUrl);
+    }
+
+    // ── End-to-end: phantom-update loop is closed ───────────────────────────
+
+    [Fact]
+    public async Task Refresh_ReturnsNull_WhenWindowsPinMatchesCurrent_DespiteHigherTopLevel()
+    {
+        // The bug report scenario: user on 2.2.10, server top-level says 2.3.1
+        // (mac's version), but the Windows row is still 2.2.10. The client
+        // must NOT prompt to "install 2.3.1" — there's no real Windows update.
+        var meta = TestHttpHandler.Always(HttpStatusCode.OK,
+            """{"version":"2.3.1","windows_url":"https://x/installer-2.2.10.exe","platforms":{"windows":{"version":"2.2.10","url":"https://x/installer-2.2.10.exe"},"mac":{"version":"2.3.1","url":"https://x/mac.dmg"}}}""");
+        var dl = TestHttpHandler.Bytes(new byte[] { 0x4D, 0x5A });
+        var svc = BuildService("2.2.10", meta, dl);
+
+        var result = await svc.RefreshAvailableUpdateAsync();
+
+        Assert.Null(result);
+        Assert.Null(svc.AvailableUpdate);
+    }
+
+    [Fact]
+    public async Task Refresh_FetchesWithPlatformQuery_SoBackendCanAnchorEnvelope()
+    {
+        // Server-side: a backend that honors `?platform=windows` returns the
+        // Windows row's version as the top-level `version`. We don't need to
+        // assert the response handling here (other tests cover that) — just
+        // that the client tells the backend which platform it is.
+        var meta = TestHttpHandler.Always(HttpStatusCode.OK,
+            """{"version":"2.2.10","windows_url":"https://x/installer-2.2.10.exe"}""");
+        var dl = TestHttpHandler.Bytes(new byte[] { 0x4D, 0x5A });
+        var svc = BuildService("2.2.10", meta, dl);
+
+        await svc.RefreshAvailableUpdateAsync();
+
+        Assert.NotEmpty(meta.Requests);
+        var url = meta.Requests[0].RequestUri!.ToString();
+        Assert.Contains("/updates/latest", url);
+        Assert.Contains("platform=windows", url);
+    }
+
     // ── Helpers ─────────────────────────────────────────────────────────────
 
     private static async Task WaitFor(Func<bool> condition, TimeSpan timeout)
