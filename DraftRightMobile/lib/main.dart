@@ -98,7 +98,7 @@ class _BootstrapState extends State<_Bootstrap> {
       await body().timeout(_bootstrapStepTimeout);
     } catch (e, st) {
       try {
-        DRLogger.log('bootstrap step "$label" failed: $e', category: 'APP');
+        DRLogger.warn('bootstrap step "$label" failed: $e', category: 'APP');
       } catch (_) {}
       try {
         ErrorReporter.reportHandled(e,
@@ -150,7 +150,7 @@ class _BootstrapState extends State<_Bootstrap> {
       // Should be unreachable (every step is already guarded) — but if the
       // bootstrap itself throws, show a retry screen, never a blank one.
       try {
-        DRLogger.log('bootstrap failed catastrophically: $e\n$st',
+        DRLogger.error('bootstrap failed catastrophically: $e\n$st',
             category: 'APP');
       } catch (_) {}
       if (mounted) setState(() => _failed = true);

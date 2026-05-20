@@ -76,7 +76,7 @@ class ExtensionTokenService {
           .timeout(const Duration(seconds: 15));
 
       if (response.statusCode >= 400) {
-        DRLogger.log(
+        DRLogger.error(
           'Mint extension token failed: ${response.statusCode} ${response.body}',
           category: 'AUTH',
         );
@@ -88,7 +88,7 @@ class ExtensionTokenService {
       await storeToken(token);
       DRLogger.log('Extension token minted and stored', category: 'AUTH');
     } catch (e) {
-      DRLogger.log('Mint extension token errored: $e', category: 'AUTH');
+      DRLogger.error('Mint extension token errored: $e', category: 'AUTH');
     }
   }
 
