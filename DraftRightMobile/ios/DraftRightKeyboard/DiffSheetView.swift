@@ -70,12 +70,15 @@ final class DiffSheetView: UIView {
         addSubview(diffRow)
 
         let cancelBtn = makeButton("Cancel", primary: false)
+        cancelBtn.accessibilityIdentifier = "dr_diff_cancel"
         cancelBtn.addTarget(self, action: #selector(cancelTapped), for: .touchUpInside)
 
         let copyBtn = makeButton("Copy", primary: false)
+        copyBtn.accessibilityIdentifier = "dr_diff_copy"
         copyBtn.addTarget(self, action: #selector(copyTapped), for: .touchUpInside)
 
         let replaceBtn = makeButton("Replace", primary: true)
+        replaceBtn.accessibilityIdentifier = "dr_diff_replace"
         replaceBtn.addTarget(self, action: #selector(replaceTapped), for: .touchUpInside)
 
         let buttonRow = UIStackView(arrangedSubviews: [cancelBtn, copyBtn, replaceBtn])

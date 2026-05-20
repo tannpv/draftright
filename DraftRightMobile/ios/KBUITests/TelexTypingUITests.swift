@@ -32,13 +32,22 @@ final class TelexTypingUITests: XCTestCase {
     }
 
     /// Launch the host with DraftRight pinned to `lang` (en/vi/fr) via the
-    /// App Group seed, then switch the keyboard to DraftRight.
-    private func launchOnDraftRight(lang: String) {
-        app.launchArguments = ["-drLang", lang]
+    /// App Group seed, optionally pointing the rewrite backend at a local
+    /// stub + dummy token, then switch the keyboard to DraftRight.
+    private func launchOnDraftRight(lang: String, backend: String? = nil, token: String? = nil) {
+        var args = ["-drLang", lang]
+        if let backend { args += ["-drBackend", backend] }
+        if let token { args += ["-drToken", token] }
+        app.launchArguments = args
         app.launch()
         XCTAssertTrue(field.waitForExistence(timeout: 10), "host field missing")
         field.tap()
         switchToDraftRightKeyboard()
+    }
+
+    /// Tap DraftRight's own globe to cycle its active language (EN→VI→FR).
+    private func cycleDraftRightLanguage() {
+        app.buttons["dr_globe"].firstMatch.tap()
     }
 
     // MARK: - Helpers
@@ -151,6 +160,61 @@ final class TelexTypingUITests: XCTestCase {
         XCTAssertTrue(accent.waitForExistence(timeout: 4), "accent é not shown")
         accent.tap()
         XCTAssertEqual(field.value as? String, "é")
+    }
+
+    /// Full human journey: switch language with the in-keyboard globe and
+    /// verify the composer + layout change with it (EN → VI Telex → FR
+    /// AZERTY). Exercises the real cycleLanguage path, not launch-arg pins.
+    func test_globe_cyclesLanguages_en_vi_fr() {
+        launchOnDraftRight(lang: "en")
+        // EN: plain.
+        type("viet")
+        XCTAssertEqual(field.value as? String, "viet")
+        clearField()
+
+        // EN → VI: Telex composes.
+        cycleDraftRightLanguage()
+        XCTAssertTrue(drKey("v").waitForExistence(timeout: 5))
+        type("vietj")
+        XCTAssertEqual(field.value as? String, "việt")
+        clearField()
+
+        // VI → FR: AZERTY layout (a leads the top row).
+        cycleDraftRightLanguage()
+        XCTAssertTrue(drKey("a").waitForExistence(timeout: 5))
+        type("azerty")
+        XCTAssertEqual(field.value as? String, "azerty")
+    }
+
+    /// Tone → rewrite → replace, against a local stub backend. Skips when
+    /// the stub isn't reachable (run via run-ui-tests.sh, which starts it).
+    func test_tone_rewrite_and_replace() throws {
+        launchOnDraftRight(lang: "en", backend: "http://localhost:8099", token: "uitest-token")
+        type("hello")
+        XCTAssertEqual(field.value as? String, "hello")
+
+        // Tap the first tone button in the toolbar.
+        let tone = app.buttons["dr_tone_0"].firstMatch
+        XCTAssertTrue(tone.waitForExistence(timeout: 5), "tone button not found")
+        tone.tap()
+
+        let replace = app.buttons["dr_diff_replace"].firstMatch
+        guard replace.waitForExistence(timeout: 10) else {
+            throw XCTSkip("rewrite stub not reachable — run via ios/KBUITests/run-ui-tests.sh")
+        }
+        replace.tap()
+        XCTAssertEqual(field.value as? String, "REWRITTEN_OK")
+    }
+
+    // Clear the host field between sub-steps using DraftRight's backspace.
+    // Telex backspace can strip diacritic layers, so loop until empty.
+    private func clearField() {
+        let backspace = app.buttons["dr_backspace"].firstMatch
+        var guardCount = 0
+        while let value = field.value as? String, !value.isEmpty, guardCount < 30 {
+            backspace.tap()
+            guardCount += 1
+        }
     }
 }
 

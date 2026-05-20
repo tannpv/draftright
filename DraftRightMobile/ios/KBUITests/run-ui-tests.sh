@@ -33,7 +33,31 @@ xcrun simctl spawn "$UDID" defaults write .GlobalPreferences AppleKeyboards -arr
 xcrun simctl spawn "$UDID" launchctl stop com.apple.SpringBoard || true
 sleep 3
 
-# 3. Build + test WITH signing — KBTestHost needs its App Group entitlement
+# 3. Start a local stub backend so the tone-rewrite test can exercise the
+#    rewrite → diff → replace path offline. The simulator reaches the Mac's
+#    localhost directly. Returns a canned rewrite for POST /rewrite.
+STUB_PORT=8099
+python3 - "$STUB_PORT" <<'PY' &
+import sys, json
+from http.server import BaseHTTPRequestHandler, HTTPServer
+class H(BaseHTTPRequestHandler):
+    def do_POST(self):
+        n = int(self.headers.get("Content-Length", 0))
+        _ = self.rfile.read(n)
+        body = json.dumps({"rewritten_text": "REWRITTEN_OK"}).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+    def log_message(self, *a): pass
+HTTPServer(("127.0.0.1", int(sys.argv[1])), H).serve_forever()
+PY
+STUB_PID=$!
+trap 'kill $STUB_PID 2>/dev/null || true' EXIT
+sleep 1
+
+# 4. Build + test WITH signing — KBTestHost needs its App Group entitlement
 #    applied or the keyboard reads no enabled languages (CODE_SIGNING_ALLOWED=NO
 #    silently strips entitlements). The host (KBTestHost) carries the
 #    com.draftright.v2 App Group and seeds enabled/active languages on launch;

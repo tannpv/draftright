@@ -26,5 +26,17 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         defaults.set("[\"en\",\"vi\",\"fr\"]", forKey: "draftright.enabledLanguageIds")
         let lang = UserDefaults.standard.string(forKey: "drLang") ?? "en"
         defaults.set(lang, forKey: "draftright.activeLanguageId")
+
+        // Optional rewrite-flow seeds. When the UI test points the keyboard
+        // at a local stub backend (`-drBackend`) + a dummy token
+        // (`-drToken`), the tone toolbar can exercise the rewrite + diff +
+        // replace path offline. Absent these, the keyboard keeps whatever
+        // the real app wrote.
+        if let backend = UserDefaults.standard.string(forKey: "drBackend") {
+            defaults.set(backend, forKey: "draftright.backendUrl")
+        }
+        if let token = UserDefaults.standard.string(forKey: "drToken") {
+            defaults.set(token, forKey: "draftright.accessToken")
+        }
     }
 }
