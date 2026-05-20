@@ -327,6 +327,71 @@ public class UpdateServiceTests
         Assert.Contains("platform=windows", url);
     }
 
+    // ── "Continue in background" cancel-mid-download ────────────────────────
+
+    [Fact]
+    public async Task TryDownload_ReturnsNullPromptly_WhenExternalTokenCanceled()
+    {
+        // Stall the response and gate the responder on the same CT we'll
+        // pass as externalCt — that way the test's Cancel() simultaneously
+        // propagates through the production CTS chain (externalCt →
+        // attemptCts → SendAsync) and through the test's stall, so we
+        // assert the production code's cancel-aware OCE handler fires
+        // (not the generic retry-on-error path).
+        using var cts = new System.Threading.CancellationTokenSource();
+        var dl = new TestHttpHandler(async (req, _) =>
+        {
+            await Task.Delay(System.Threading.Timeout.Infinite, cts.Token);
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        });
+        // Metadata handler is unused for this test but the ctor requires one.
+        var meta = TestHttpHandler.Always(HttpStatusCode.OK, "{}");
+        var svc = BuildService("2.2.10", meta, dl);
+
+        var downloadTask = svc.TryDownloadInstallerAsync(
+            url: "https://x/installer-2.3.2.exe",
+            version: "2.3.2",
+            ui: null,
+            attempts: 3,
+            externalCt: cts.Token);
+
+        // Let the request reach SendAsync.
+        await WaitFor(() => dl.CallCount >= 1, TimeSpan.FromSeconds(2));
+        cts.Cancel();
+
+        // Should return null quickly — no 5-second backoff loop, no retries.
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var result = await downloadTask.WaitAsync(TimeSpan.FromSeconds(3));
+        sw.Stop();
+
+        Assert.Null(result);
+        Assert.Equal(1, dl.CallCount);
+        Assert.True(sw.Elapsed < TimeSpan.FromSeconds(3),
+            $"cancel-aware return took {sw.Elapsed.TotalSeconds:F1}s — should be near-instant");
+    }
+
+    [Fact]
+    public async Task Refresh_DoesNotDoubleStage_WhenCalledTwiceInQuickSuccession()
+    {
+        // Refresh kicks silent staging — calling it back-to-back must NOT
+        // start two concurrent downloads to the same temp path. The Hide
+        // button uses the same EnsureStagingInBackground entry point as
+        // Refresh; this test pins the dedup behavior that both paths rely on.
+        var installerBytes = new byte[] { 0x4D, 0x5A, 0x90, 0x00, 0x03, 0x00, 0x00, 0x00 };
+        var meta = TestHttpHandler.Always(HttpStatusCode.OK,
+            """{"version":"2.3.2","windows_url":"https://x/installer-2.3.2.exe"}""");
+        var dl = TestHttpHandler.Bytes(installerBytes);
+        var svc = BuildService("2.2.10", meta, dl);
+
+        var t1 = svc.RefreshAvailableUpdateAsync();
+        var t2 = svc.RefreshAvailableUpdateAsync();
+        await Task.WhenAll(t1, t2);
+        await WaitFor(() => svc.UpdateStaged, TimeSpan.FromSeconds(5));
+
+        Assert.Equal(1, dl.CallCount);
+        Assert.True(svc.UpdateStaged);
+    }
+
     // ── Helpers ─────────────────────────────────────────────────────────────
 
     private static async Task WaitFor(Func<bool> condition, TimeSpan timeout)
