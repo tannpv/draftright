@@ -142,7 +142,7 @@ struct DraftRightApp: App {
         monitor.start { text in
             DRLogger.log("onTextSelected fired, isLoggedIn=\(appModel.isLoggedIn) mode=\(appModel.appMode.rawValue)", category: .app)
             guard appModel.isLoggedIn, !appModel.accessToken.isEmpty else {
-                DRLogger.log("BLOCKED: not logged in — surfacing sign-in alert", category: .app)
+                DRLogger.warn("BLOCKED: not logged in — surfacing sign-in alert", category: .app)
                 Self.showSignInRequiredAlert(appModel: appModel)
                 return
             }
@@ -261,7 +261,7 @@ struct DraftRightApp: App {
                     }
                 }
             } catch {
-                DRLogger.log("One-Click rewrite FAILED: \(error.localizedDescription)", category: .app)
+                DRLogger.error("One-Click rewrite FAILED: \(error.localizedDescription)", category: .app)
                 Self.showOneClickError(error.localizedDescription)
             }
         }

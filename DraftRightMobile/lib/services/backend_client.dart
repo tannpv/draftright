@@ -174,7 +174,7 @@ class BackendClient {
 
     if (response.statusCode >= 400) {
       final e = 'HTTP ${response.statusCode}: ${response.body}';
-      DRLogger.log('Rewrite error: $e', category: 'API');
+      DRLogger.error('Rewrite error: $e', category: 'API');
       throw Exception(e);
     }
 

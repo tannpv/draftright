@@ -80,7 +80,7 @@ class AuthService extends ChangeNotifier {
       await _storeTokens(data['access_token'] as String, data['refresh_token'] as String);
       DRLogger.log('Login success: $email', category: 'AUTH');
     } catch (e) {
-      DRLogger.log('Login failed: $e', category: 'AUTH');
+      DRLogger.error('Login failed: $e', category: 'AUTH');
       rethrow;
     }
   }
@@ -103,7 +103,7 @@ class AuthService extends ChangeNotifier {
       await _storeTokens(data['access_token'] as String, data['refresh_token'] as String);
       DRLogger.log('Register success: $email', category: 'AUTH');
     } catch (e) {
-      DRLogger.log('Register failed: $e', category: 'AUTH');
+      DRLogger.error('Register failed: $e', category: 'AUTH');
       rethrow;
     }
   }

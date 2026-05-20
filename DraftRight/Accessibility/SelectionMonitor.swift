@@ -196,7 +196,7 @@ final class SelectionMonitor {
         }
 
         // Fallback: Cmd+C then read clipboard
-        DRLogger.log("Hotkey AX failed, trying Cmd+C", category: .monitor)
+        DRLogger.warn("Hotkey AX failed, trying Cmd+C", category: .monitor)
         let pasteboard = NSPasteboard.general
         let savedChangeCount = pasteboard.changeCount
 
@@ -340,7 +340,7 @@ final class SelectionMonitor {
             cachedSelectedText = text
             return
         }
-        DRLogger.log("Pre-capture AX failed, trying Cmd+C", category: .monitor)
+        DRLogger.warn("Pre-capture AX failed, trying Cmd+C", category: .monitor)
 
         // Strategy 2: Cmd+C to clipboard (selection is still active at this point)
         let pasteboard = NSPasteboard.general
@@ -366,7 +366,7 @@ final class SelectionMonitor {
                     DRLogger.log("Pre-capture clipboard empty", category: .monitor)
                 }
             } else {
-                DRLogger.log("Pre-capture clipboard unchanged (Cmd+C may have failed)", category: .monitor)
+                DRLogger.warn("Pre-capture clipboard unchanged (Cmd+C may have failed)", category: .monitor)
             }
         }
     }
@@ -390,7 +390,7 @@ final class SelectionMonitor {
             return
         }
 
-        DRLogger.log("NO TEXT FOUND (pre-capture missed and AX failed)", category: .monitor)
+        DRLogger.warn("NO TEXT FOUND (pre-capture missed and AX failed)", category: .monitor)
     }
 
     @objc private func triggerButtonClicked() {
