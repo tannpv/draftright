@@ -26,6 +26,10 @@ final class ToolbarView: UIView {
 
     private func setupUI() {
         backgroundColor = UIColor.systemBackground.withAlphaComponent(0.95)
+        // Stable id so UI tests can detect that the DraftRight keyboard is
+        // the active one (the toolbar is a sibling of the keyboard view,
+        // not part of `app.keyboards`).
+        accessibilityIdentifier = "dr_toolbar"
 
         scrollView.showsHorizontalScrollIndicator = false
         scrollView.translatesAutoresizingMaskIntoConstraints = false
@@ -72,12 +76,14 @@ final class ToolbarView: UIView {
         let button = UIButton(type: .system)
         let config = UIImage.SymbolConfiguration(pointSize: 16, weight: .medium)
         button.setImage(UIImage(systemName: tone.iconName, withConfiguration: config), for: .normal)
-        button.tag = Tone.allCases.firstIndex(of: tone)!
+        let index = Tone.allCases.firstIndex(of: tone)!
+        button.tag = index
         button.addTarget(self, action: #selector(toneTapped(_:)), for: .touchUpInside)
         button.widthAnchor.constraint(equalToConstant: 40).isActive = true
         button.heightAnchor.constraint(equalToConstant: 36).isActive = true
         button.layer.cornerRadius = 6
         button.accessibilityLabel = tone.displayName
+        button.accessibilityIdentifier = "dr_tone_\(index)"
         return button
     }
 

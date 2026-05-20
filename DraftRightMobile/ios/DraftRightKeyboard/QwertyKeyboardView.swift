@@ -301,6 +301,7 @@ final class QwertyKeyboardView: UIView {
         button.setTitle(displayLabel, for: .normal)
         button.setTitleColor(keyTextColor, for: .normal)
         button.titleLabel?.font = .systemFont(ofSize: fontSize)
+        button.accessibilityIdentifier = accessibilityId(for: keyDef)
 
         // Store key def info via tag + objc association
         let wrapper = KeyDefWrapper(keyDef: keyDef, isSpecial: isSpecial, isShiftActive: isShiftActive, normalColor: bgColor)
@@ -320,6 +321,23 @@ final class QwertyKeyboardView: UIView {
         }
 
         return button
+    }
+
+    /// Stable accessibility identifiers so UI tests can locate DraftRight's
+    /// own keys (which otherwise carry the same labels as the system
+    /// keyboard). Letter/char keys -> "dr_key_<label>"; specials by role.
+    private func accessibilityId(for keyDef: KeyDef) -> String {
+        switch keyDef.code {
+        case .char:    return "dr_key_\(keyDef.label.lowercased())"
+        case .space:   return "dr_space"
+        case .backspace: return "dr_backspace"
+        case .shift:   return "dr_shift"
+        case .enter:   return "dr_enter"
+        case .globe:   return "dr_globe"
+        case .symbols: return "dr_symbols"
+        case .symbols2: return "dr_symbols2"
+        case .alpha:   return "dr_alpha"
+        }
     }
 
     // MARK: Touch handling

@@ -1,12 +1,19 @@
 import XCTest
 
-/// PARKED — third-party keyboard extensions render in a separate process
-/// whose key buttons do not bridge into the host app's accessibility tree,
-/// so XCUITest cannot see or tap the DraftRight keys (verified 2026-05-20:
-/// the host tree exposed only the system QuickType/AutoFill bar). The
-/// IC-marshalling logic these tests aimed at is instead covered headlessly
-/// by `KeystrokeDispatcherTests` in DraftRightKeyboardCore. Scaffold kept
-/// for a future attempt that exposes per-key accessibility identifiers.
+/// End-to-end: the real DraftRight keyboard extension typing into a native
+/// UITextField (KBTestHost). Verifies Vietnamese Telex composition + the
+/// tone-cancel rule through the full IC path.
+///
+/// Requirements to run locally:
+///  - Runner.app (which carries DraftRightKeyboard.appex) installed on the
+///    target simulator so the keyboard is available in Settings.
+///  - Simulator hardware keyboard OFF (I/O ▸ Keyboard ▸ Connect Hardware
+///    Keyboard, or `defaults write com.apple.iphonesimulator
+///    ConnectHardwareKeyboard -bool false`) — otherwise the software
+///    keyboard never presents and no keys bridge.
+/// DraftRight keys/toolbar expose stable `dr_*` accessibility identifiers
+/// (set in QwertyKeyboardView + ToolbarView) so switching + typing are
+/// deterministic.
 final class TelexTypingUITests: XCTestCase {
 
     private let hostBundleId = "com.draftright.kbtesthost"
@@ -14,13 +21,24 @@ final class TelexTypingUITests: XCTestCase {
 
     override func setUpWithError() throws {
         continueAfterFailure = false
-        KeyboardEnableHelper.enableIfNeeded()
+        // Keyboard enablement is handled out-of-band by preconfiguring the
+        // simulator's AppleKeyboards to exactly [en_US, DraftRight] (see the
+        // suite header). No Settings navigation needed.
         app = XCUIApplication(bundleIdentifier: hostBundleId)
-        app.launch()
     }
 
     override func tearDownWithError() throws {
         app?.terminate()
+    }
+
+    /// Launch the host with DraftRight pinned to `lang` (en/vi/fr) via the
+    /// App Group seed, then switch the keyboard to DraftRight.
+    private func launchOnDraftRight(lang: String) {
+        app.launchArguments = ["-drLang", lang]
+        app.launch()
+        XCTAssertTrue(field.waitForExistence(timeout: 10), "host field missing")
+        field.tap()
+        switchToDraftRightKeyboard()
     }
 
     // MARK: - Helpers
@@ -29,56 +47,84 @@ final class TelexTypingUITests: XCTestCase {
         app.textFields[HostFieldID]
     }
 
-    /// Switch the active keyboard to DraftRight via the next-keyboard
-    /// (globe) key. Cycles up to N times until the DraftRight toolbar
-    /// tone buttons are visible.
-    private func switchToDraftRightKeyboard(maxHops: Int = 6) {
-        let globe = app.keyboards.buttons["Next keyboard"]
-        XCTAssertTrue(globe.waitForExistence(timeout: 15), "globe key not visible")
-        for _ in 0..<maxHops {
-            if draftRightToolbarVisible { return }
-            globe.tap()
+    /// Toggle to DraftRight via the next-keyboard (globe) key. With only
+    /// two keyboards enabled this is a single tap; detected by DraftRight's
+    /// stable `dr_*` accessibility ids.
+    private func switchToDraftRightKeyboard() {
+        // A keyboard is "present" if either the system keyboard registered
+        // (app.keyboards) or DraftRight is already up (its custom input
+        // view exposes dr_* at app level but is not typed as a Keyboard).
+        let present = NSPredicate { [self] _, _ in
+            app.keyboards.element.exists || draftRightActive
         }
-        XCTAssertTrue(draftRightToolbarVisible, "could not switch to DraftRight keyboard")
+        expectation(for: present, evaluatedWith: NSNull(), handler: nil)
+        waitForExpectations(timeout: 15)
+        if draftRightActive { return }
+
+        // The simulator is preconfigured with exactly two keyboards
+        // (en_US + DraftRight), so a single globe tap toggles to DraftRight.
+        for _ in 0..<3 {
+            nextKeyboardKey().tap()
+            if waitForDraftRight() { return }
+        }
+        XCTAssertTrue(draftRightActive, "could not switch to DraftRight keyboard")
     }
 
-    private var draftRightToolbarVisible: Bool {
-        // Toolbar exposes the tone buttons; ✎ is the Simplify glyph.
-        app.keyboards.buttons["✎"].exists || app.buttons["✎"].exists
+    private func waitForDraftRight(timeout: TimeInterval = 4) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if draftRightActive { return true }
+            usleep(200_000)
+        }
+        return false
     }
 
-    /// Tap a sequence of letter keys on the visible keyboard.
+    private func nextKeyboardKey() -> XCUIElement {
+        // The next-keyboard (globe) key is exposed at the app level, not
+        // under `app.keyboards`.
+        for label in ["Next keyboard", "next keyboard", "Emoji", "🌐"] {
+            let b = app.buttons[label].firstMatch
+            if b.exists { return b }
+        }
+        return app.buttons
+            .matching(NSPredicate(format: "label CONTAINS[c] 'keyboard' OR label == 'Emoji'"))
+            .firstMatch
+    }
+
+    /// DraftRight's toolbar is a sibling of the keyboard view, so query it
+    /// at the app level rather than under `app.keyboards`.
+    private var draftRightToolbar: XCUIElement { app.otherElements["dr_toolbar"] }
+    private var draftRightActive: Bool {
+        draftRightToolbar.exists || app.buttons["dr_globe"].exists
+    }
+
+    /// Tap a sequence of DraftRight letter keys by their stable ids.
     private func type(_ chars: String) {
         for ch in chars {
-            let key = app.keyboards.keys[String(ch)]
-            XCTAssertTrue(key.waitForExistence(timeout: 5), "key '\(ch)' not found")
-            key.tap()
+            let key = app.buttons["dr_key_\(ch)"].firstMatch
+            let keyAlt = app.keys["dr_key_\(ch)"].firstMatch
+            let target = key.exists ? key : keyAlt
+            XCTAssertTrue(target.waitForExistence(timeout: 5), "DraftRight key '\(ch)' not found")
+            target.tap()
         }
-    }
-
-    /// Tap the in-keyboard globe to cycle DraftRight's own language.
-    private func cycleLanguage() {
-        app.keyboards.buttons["Next keyboard"].tap()
     }
 
     // MARK: - Tests
 
     func test_english_passthrough_typesPlainLetters() {
-        switchToDraftRightKeyboard()
+        launchOnDraftRight(lang: "en")
         type("viet")
         XCTAssertEqual(field.value as? String, "viet")
     }
 
     func test_vietnamese_telex_composesViet() {
-        switchToDraftRightKeyboard()
-        cycleLanguage() // EN -> VI
+        launchOnDraftRight(lang: "vi")
         type("vietj")
         XCTAssertEqual(field.value as? String, "việt")
     }
 
     func test_vietnamese_telex_toneCancel() {
-        switchToDraftRightKeyboard()
-        cycleLanguage() // EN -> VI
+        launchOnDraftRight(lang: "vi")
         type("ass")
         XCTAssertEqual(field.value as? String, "as")
     }

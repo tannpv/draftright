@@ -15,11 +15,16 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     /// Seed the App Group with the same keys the Flutter app would write,
-    /// so the DraftRight keyboard extension cycles EN/VI/FR under test
-    /// without needing the full app installed + logged in.
+    /// so the DraftRight keyboard extension exposes EN/VI/FR under test
+    /// without the full app installed + logged in. The active language is
+    /// driven by a launch argument (`-drLang vi`) so each UI test can pin
+    /// DraftRight to a specific composer deterministically, instead of
+    /// relying on the in-keyboard globe cycle (which is unit-tested
+    /// separately).
     private func seedAppGroupLanguages() {
         guard let defaults = UserDefaults(suiteName: "group.com.draftright.v2") else { return }
         defaults.set("[\"en\",\"vi\",\"fr\"]", forKey: "draftright.enabledLanguageIds")
-        defaults.set("en", forKey: "draftright.activeLanguageId")
+        let lang = UserDefaults.standard.string(forKey: "drLang") ?? "en"
+        defaults.set(lang, forKey: "draftright.activeLanguageId")
     }
 }
