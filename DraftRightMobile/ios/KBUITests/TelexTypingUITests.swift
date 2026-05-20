@@ -98,12 +98,16 @@ final class TelexTypingUITests: XCTestCase {
         draftRightToolbar.exists || app.buttons["dr_globe"].exists
     }
 
+    /// Resolve a DraftRight key by id (button or key element).
+    private func drKey(_ ch: String) -> XCUIElement {
+        let b = app.buttons["dr_key_\(ch)"].firstMatch
+        return b.exists ? b : app.keys["dr_key_\(ch)"].firstMatch
+    }
+
     /// Tap a sequence of DraftRight letter keys by their stable ids.
     private func type(_ chars: String) {
         for ch in chars {
-            let key = app.buttons["dr_key_\(ch)"].firstMatch
-            let keyAlt = app.keys["dr_key_\(ch)"].firstMatch
-            let target = key.exists ? key : keyAlt
+            let target = drKey(String(ch))
             XCTAssertTrue(target.waitForExistence(timeout: 5), "DraftRight key '\(ch)' not found")
             target.tap()
         }
@@ -127,6 +131,26 @@ final class TelexTypingUITests: XCTestCase {
         launchOnDraftRight(lang: "vi")
         type("ass")
         XCTAssertEqual(field.value as? String, "as")
+    }
+
+    func test_french_azerty_layoutAndTyping() {
+        launchOnDraftRight(lang: "fr")
+        // AZERTY-specific keys exist (a + z lead the top row).
+        XCTAssertTrue(app.buttons["dr_key_a"].exists || app.keys["dr_key_a"].exists)
+        XCTAssertTrue(app.buttons["dr_key_z"].exists || app.keys["dr_key_z"].exists)
+        type("azerty")
+        XCTAssertEqual(field.value as? String, "azerty")
+    }
+
+    func test_french_longPressAccent_insertsAccentedE() {
+        launchOnDraftRight(lang: "fr")
+        let e = drKey("e")
+        XCTAssertTrue(e.waitForExistence(timeout: 5), "dr_key_e not found")
+        e.press(forDuration: 0.6)
+        let accent = app.buttons["dr_accent_é"].firstMatch
+        XCTAssertTrue(accent.waitForExistence(timeout: 4), "accent é not shown")
+        accent.tap()
+        XCTAssertEqual(field.value as? String, "é")
     }
 }
 

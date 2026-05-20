@@ -34,15 +34,12 @@ class KeyboardViewController: UIInputViewController {
     }
 
     private func rebuildController() {
-        let enabledIds = settings.enabledLanguageIds
-        let activeId = settings.activeLanguageId
-        NSLog("[DraftRightKB] rebuildController enabled=\(enabledIds) active=\(activeId)")
         controller = KeyboardController(
             registry: registry,
-            enabledIds: enabledIds,
-            activeId: activeId
+            enabledIds: settings.enabledLanguageIds,
+            activeId: settings.activeLanguageId
         )
-        NSLog("[DraftRightKB] controller.enabled.count=\(controller.enabled.count) current=\(controller.current.id)")
+        keyboard.languagePack = controller.current
     }
 
     private func setupUI() {
@@ -249,7 +246,7 @@ extension KeyboardViewController: KeyboardActionDelegate {
         // one is enabled, fall back to system keyboard switcher.
         if controller.enabled.count > 1 {
             controller.cycleLanguage()
-            // Future: refresh visible layout when per-language layouts ship.
+            keyboard.languagePack = controller.current
         } else {
             advanceToNextInputMode()
         }
@@ -258,7 +255,7 @@ extension KeyboardViewController: KeyboardActionDelegate {
     func keyboardDidSpaceSwipe(direction: Int) {
         guard controller.enabled.count > 1 else { return }
         controller.cycleLanguage(reverse: direction < 0)
-        // Future: refresh visible layout when per-language layouts ship.
+        keyboard.languagePack = controller.current
     }
 
     // MARK: - KeystrokeOutcome dispatch

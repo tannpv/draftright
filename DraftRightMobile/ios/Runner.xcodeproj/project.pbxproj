@@ -34,6 +34,7 @@
 		97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
 		99D8F15864ECBAFF6B1DE724 /* SharedKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = A07D316FE4FE99EDD5922F96 /* SharedKeychain.swift */; };
+		AAA3603D8BC3B6B17F18EE3F /* AccentPopupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAE43508063932C07D91C4CA /* AccentPopupView.swift */; };
 		C28C0DDC4FD8AF51F23BBBA0 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 40CA77BC8C1023B5F3AE2D36 /* Foundation.framework */; };
 		D100C7C91D2A1D92239CA30E /* BackendClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B4DE00CF78D3D3F4EEF5388 /* BackendClient.swift */; };
 		E79691A3E38A8CDA1FA32B59 /* TelexTypingUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AF882533116FB9CD3360FE1 /* TelexTypingUITests.swift */; };
@@ -105,6 +106,7 @@
 		97C147021CF9000F007C117D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A07D316FE4FE99EDD5922F96 /* SharedKeychain.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SharedKeychain.swift; sourceTree = "<group>"; };
 		A818A5E32592D3C0802EC608 /* KBUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = KBUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		AAE43508063932C07D91C4CA /* AccentPopupView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AccentPopupView.swift; sourceTree = "<group>"; };
 		AD8997318C0237682399A953 /* Pods_Runner.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Runner.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		B0BF922207681BC7EB3F90F3 /* DraftRightKeyboard.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = DraftRightKeyboard.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		B6042AAB0C8F1ACC07AA5884 /* Pods-Runner.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.profile.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"; sourceTree = "<group>"; };
@@ -212,6 +214,7 @@
 				102EE7DE0735023A9D90AF01 /* Tone.swift */,
 				FA1B2C3D4E5F6A7B8C9D0E10 /* QwertyKeyboardView.swift */,
 				6A9A59276D900A83374CF747 /* Info.plist */,
+				AAE43508063932C07D91C4CA /* AccentPopupView.swift */,
 			);
 			path = DraftRightKeyboard;
 			sourceTree = "<group>";
@@ -731,6 +734,7 @@
 				E91EC3FF0E2C0F32F148BD58 /* Tone.swift in Sources */,
 				FA1B2C3D4E5F6A7B8C9D0E1F /* QwertyKeyboardView.swift in Sources */,
 				99D8F15864ECBAFF6B1DE724 /* SharedKeychain.swift in Sources */,
+				AAA3603D8BC3B6B17F18EE3F /* AccentPopupView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

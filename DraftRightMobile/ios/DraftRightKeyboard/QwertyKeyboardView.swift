@@ -1,30 +1,7 @@
 import UIKit
+import DraftRightKeyboardCore
 
 // MARK: - Key model
-
-enum KeyCode {
-    case char
-    case backspace
-    case shift
-    case enter
-    case space
-    case symbols   // "?123"
-    case alpha     // "ABC"
-    case symbols2  // "#+=
-    case globe     // switch keyboard
-}
-
-struct KeyDef {
-    let label: String
-    let code: KeyCode
-    let widthWeight: CGFloat
-
-    init(_ label: String, _ code: KeyCode, _ widthWeight: CGFloat = 1.0) {
-        self.label = label
-        self.code = code
-        self.widthWeight = widthWeight
-    }
-}
 
 enum ShiftState {
     case off, single, capsLock
@@ -49,9 +26,21 @@ final class QwertyKeyboardView: UIView {
 
     weak var delegate: KeyboardActionDelegate?
 
+    /// Active language pack — drives the rendered layout (alpha + symbol
+    /// rows) and the long-press accent map. Setting it rebuilds the
+    /// keyboard and resets to the alpha layer.
+    var languagePack: LanguagePack = EnglishLanguagePack() {
+        didSet {
+            currentLayer = 0
+            shiftState = .off
+            buildKeyboard()
+        }
+    }
+
     private let rowHeight: CGFloat = 42
     private let keyMargin: CGFloat = 3
     private let keyRadius: CGFloat = 5
+    private let spaceCode = Int(Character(" ").unicodeScalars.first!.value)
 
     private var shiftState: ShiftState = .off
     private var currentLayer = 0 // 0=alpha, 1=symbols1, 2=symbols2
@@ -62,6 +51,12 @@ final class QwertyKeyboardView: UIView {
     // Swipe-space cycle state. Matches Android's 80 dp threshold.
     private let spaceSwipeThresholdPx: CGFloat = 80
     private var spaceSwipeFired = false
+
+    // Long-press accent popup.
+    private var longPressTimer: Timer?
+    private var longPressFired = false
+    private var accentPopup: AccentPopupView?
+    private let longPressDelay: TimeInterval = 0.3
 
     // Key preview
     private var previewLabel: UILabel?
@@ -74,94 +69,10 @@ final class QwertyKeyboardView: UIView {
     private var keyTextColor: UIColor = .black
     private var keyboardBgColor: UIColor = .systemGray6
 
-    // MARK: Key layouts
+    // MARK: Key-code helpers
 
-    private let alphaRows: [[KeyDef]] = [
-        [
-            KeyDef("q", .char), KeyDef("w", .char), KeyDef("e", .char),
-            KeyDef("r", .char), KeyDef("t", .char), KeyDef("y", .char),
-            KeyDef("u", .char), KeyDef("i", .char), KeyDef("o", .char),
-            KeyDef("p", .char),
-        ],
-        [
-            KeyDef("a", .char), KeyDef("s", .char), KeyDef("d", .char),
-            KeyDef("f", .char), KeyDef("g", .char), KeyDef("h", .char),
-            KeyDef("j", .char), KeyDef("k", .char), KeyDef("l", .char),
-        ],
-        [
-            KeyDef("\u{2B06}", .shift, 1.5),
-            KeyDef("z", .char), KeyDef("x", .char), KeyDef("c", .char),
-            KeyDef("v", .char), KeyDef("b", .char), KeyDef("n", .char),
-            KeyDef("m", .char),
-            KeyDef("\u{232B}", .backspace, 1.5),
-        ],
-        [
-            KeyDef("?123", .symbols, 1.5),
-            KeyDef("\u{1F310}", .globe, 1.0),
-            KeyDef(",", .char, 1.0),
-            KeyDef(" ", .space, 5.0),
-            KeyDef(".", .char, 1.0),
-            KeyDef("\u{21B5}", .enter, 1.5),
-        ],
-    ]
-
-    private let symbols1Rows: [[KeyDef]] = [
-        [
-            KeyDef("1", .char), KeyDef("2", .char), KeyDef("3", .char),
-            KeyDef("4", .char), KeyDef("5", .char), KeyDef("6", .char),
-            KeyDef("7", .char), KeyDef("8", .char), KeyDef("9", .char),
-            KeyDef("0", .char),
-        ],
-        [
-            KeyDef("@", .char), KeyDef("#", .char), KeyDef("$", .char),
-            KeyDef("%", .char), KeyDef("&", .char), KeyDef("-", .char),
-            KeyDef("+", .char), KeyDef("(", .char), KeyDef(")", .char),
-        ],
-        [
-            KeyDef("#+=", .symbols2, 1.5),
-            KeyDef("!", .char), KeyDef("\"", .char), KeyDef("'", .char),
-            KeyDef(":", .char), KeyDef(";", .char), KeyDef("/", .char),
-            KeyDef("?", .char),
-            KeyDef("\u{232B}", .backspace, 1.5),
-        ],
-        [
-            KeyDef("ABC", .alpha, 1.5),
-            KeyDef("\u{1F310}", .globe, 1.0),
-            KeyDef(",", .char, 1.0),
-            KeyDef(" ", .space, 5.0),
-            KeyDef(".", .char, 1.0),
-            KeyDef("\u{21B5}", .enter, 1.5),
-        ],
-    ]
-
-    private let symbols2Rows: [[KeyDef]] = [
-        [
-            KeyDef("~", .char), KeyDef("`", .char), KeyDef("|", .char),
-            KeyDef("\u{2022}", .char), KeyDef("\u{221A}", .char), KeyDef("\u{03C0}", .char),
-            KeyDef("\u{00F7}", .char), KeyDef("\u{00D7}", .char), KeyDef("\u{00B6}", .char),
-            KeyDef("\u{0394}", .char),
-        ],
-        [
-            KeyDef("\u{00A3}", .char), KeyDef("\u{20AC}", .char), KeyDef("\u{00A5}", .char),
-            KeyDef("^", .char), KeyDef("[", .char), KeyDef("]", .char),
-            KeyDef("{", .char), KeyDef("}", .char),
-        ],
-        [
-            KeyDef("?123", .symbols, 1.5),
-            KeyDef("\u{00A9}", .char), KeyDef("\u{00AE}", .char), KeyDef("\u{2122}", .char),
-            KeyDef("\\", .char), KeyDef("<", .char), KeyDef(">", .char),
-            KeyDef("=", .char),
-            KeyDef("\u{232B}", .backspace, 1.5),
-        ],
-        [
-            KeyDef("ABC", .alpha, 1.5),
-            KeyDef("\u{1F310}", .globe, 1.0),
-            KeyDef(",", .char, 1.0),
-            KeyDef(" ", .space, 5.0),
-            KeyDef(".", .char, 1.0),
-            KeyDef("\u{21B5}", .enter, 1.5),
-        ],
-    ]
+    private func isChar(_ code: Int) -> Bool { code >= 0 && code != spaceCode }
+    private func isSpace(_ code: Int) -> Bool { code == spaceCode }
 
     // MARK: Init
 
@@ -209,15 +120,19 @@ final class QwertyKeyboardView: UIView {
 
     // MARK: Build keyboard
 
+    private func rowsForCurrentLayer() -> [[KeyDef]] {
+        switch currentLayer {
+        case 1:  return languagePack.symbols1Rows
+        case 2:  return languagePack.symbols2Rows
+        default: return languagePack.alphaRows
+        }
+    }
+
     private func buildKeyboard() {
         subviews.forEach { $0.removeFromSuperview() }
+        dismissAccentPopup()
 
-        let rows: [[KeyDef]]
-        switch currentLayer {
-        case 1:  rows = symbols1Rows
-        case 2:  rows = symbols2Rows
-        default: rows = alphaRows
-        }
+        let rows = rowsForCurrentLayer()
 
         for (rowIndex, row) in rows.enumerated() {
             let rowView = UIView()
@@ -231,8 +146,9 @@ final class QwertyKeyboardView: UIView {
                 rowView.heightAnchor.constraint(equalToConstant: rowHeight),
             ])
 
-            // Extra horizontal padding for row 1 (alpha layer) to center 9 keys under 10
-            let extraPad: CGFloat = (currentLayer == 0 && rowIndex == 1) ? 16 : 0
+            // Extra horizontal padding for the middle alpha row to centre a
+            // shorter (e.g. 9-key) row under a 10-key row.
+            let extraPad: CGFloat = (currentLayer == 0 && rowIndex == 1 && row.count < rows[0].count) ? 16 : 0
 
             let totalWeight = row.reduce(CGFloat(0)) { $0 + $1.widthWeight }
             var prevAnchor = rowView.leadingAnchor
@@ -264,8 +180,9 @@ final class QwertyKeyboardView: UIView {
         button.layer.cornerRadius = keyRadius
         button.clipsToBounds = true
 
-        let isSpecial = keyDef.code != .char && keyDef.code != .space
-        let isShiftActive = keyDef.code == .shift && shiftState != .off
+        let code = keyDef.code
+        let isSpecial = SpecialKeys.isSpecial(code)
+        let isShiftActive = code == SpecialKeys.shift && shiftState != .off
 
         let bgColor: UIColor
         if isShiftActive {
@@ -279,31 +196,24 @@ final class QwertyKeyboardView: UIView {
 
         // Display label
         let displayLabel: String
-        switch keyDef.code {
-        case .char where currentLayer == 0 && shiftState != .off:
-            displayLabel = keyDef.label.uppercased()
-        case .space:
+        if isSpace(code) {
             displayLabel = ""
-        case .shift where shiftState == .capsLock:
+        } else if code == SpecialKeys.shift && shiftState == .capsLock {
             displayLabel = "\u{2B06}\u{FE0F}" // ⬆️ with variation selector
-        default:
+        } else if isChar(code) && currentLayer == 0 && shiftState != .off {
+            displayLabel = keyDef.label.uppercased()
+        } else {
             displayLabel = keyDef.label
         }
 
-        let fontSize: CGFloat
-        switch keyDef.code {
-        case .symbols, .symbols2, .alpha:
-            fontSize = 12
-        default:
-            fontSize = 18
-        }
+        let fontSize: CGFloat =
+            (code == SpecialKeys.symbols || code == SpecialKeys.symbols2 || code == SpecialKeys.alpha) ? 12 : 18
 
         button.setTitle(displayLabel, for: .normal)
         button.setTitleColor(keyTextColor, for: .normal)
         button.titleLabel?.font = .systemFont(ofSize: fontSize)
         button.accessibilityIdentifier = accessibilityId(for: keyDef)
 
-        // Store key def info via tag + objc association
         let wrapper = KeyDefWrapper(keyDef: keyDef, isSpecial: isSpecial, isShiftActive: isShiftActive, normalColor: bgColor)
         objc_setAssociatedObject(button, &AssociatedKeys.keyDef, wrapper, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
 
@@ -313,7 +223,7 @@ final class QwertyKeyboardView: UIView {
         // Space bar gets a horizontal pan recognizer for the Samsung-style
         // language-cycle swipe. cancelsTouchesInView = false so a plain
         // tap still fires .touchUpInside and types a space.
-        if keyDef.code == .space {
+        if isSpace(code) {
             let pan = UIPanGestureRecognizer(target: self, action: #selector(spacePan(_:)))
             pan.cancelsTouchesInView = false
             pan.delegate = self
@@ -327,17 +237,25 @@ final class QwertyKeyboardView: UIView {
     /// own keys (which otherwise carry the same labels as the system
     /// keyboard). Letter/char keys -> "dr_key_<label>"; specials by role.
     private func accessibilityId(for keyDef: KeyDef) -> String {
-        switch keyDef.code {
-        case .char:    return "dr_key_\(keyDef.label.lowercased())"
-        case .space:   return "dr_space"
-        case .backspace: return "dr_backspace"
-        case .shift:   return "dr_shift"
-        case .enter:   return "dr_enter"
-        case .globe:   return "dr_globe"
-        case .symbols: return "dr_symbols"
-        case .symbols2: return "dr_symbols2"
-        case .alpha:   return "dr_alpha"
+        let code = keyDef.code
+        switch code {
+        case SpecialKeys.backspace: return "dr_backspace"
+        case SpecialKeys.shift:     return "dr_shift"
+        case SpecialKeys.enter:     return "dr_enter"
+        case SpecialKeys.globe:     return "dr_globe"
+        case SpecialKeys.symbols:   return "dr_symbols"
+        case SpecialKeys.symbols2:  return "dr_symbols2"
+        case SpecialKeys.alpha:     return "dr_alpha"
+        default:
+            if isSpace(code) { return "dr_space" }
+            return "dr_key_\(keyDef.label.lowercased())"
         }
+    }
+
+    private func accentsFor(_ keyDef: KeyDef) -> [Character]? {
+        guard isChar(keyDef.code), let ch = keyDef.label.lowercased().first else { return nil }
+        let accents = languagePack.longPressAccents[ch]
+        return (accents?.isEmpty == false) ? accents : nil
     }
 
     // MARK: Touch handling
@@ -345,17 +263,30 @@ final class QwertyKeyboardView: UIView {
     @objc private func keyTouchDown(_ sender: UIButton) {
         guard let wrapper = objc_getAssociatedObject(sender, &AssociatedKeys.keyDef) as? KeyDefWrapper else { return }
         let keyDef = wrapper.keyDef
+        let code = keyDef.code
 
         sender.backgroundColor = keyColorPressed
+        longPressFired = false
 
-        // Key preview for character keys
-        if keyDef.code == .char && keyDef.label.count == 1 && keyDef.label != "," && keyDef.label != "." {
+        // Key preview for character keys (skip narrow punctuation).
+        if isChar(code) && keyDef.label.count == 1 && keyDef.label != "," && keyDef.label != "." {
             let label = (currentLayer == 0 && shiftState != .off) ? keyDef.label.uppercased() : keyDef.label
             showKeyPreview(above: sender, label: label)
         }
 
-        // Backspace: fire immediately + start repeat
-        if keyDef.code == .backspace {
+        // Long-press accent picker for keys that have accent variants.
+        if let accents = accentsFor(keyDef) {
+            longPressTimer?.invalidate()
+            longPressTimer = Timer.scheduledTimer(withTimeInterval: longPressDelay, repeats: false) { [weak self, weak sender] _ in
+                guard let self, let sender else { return }
+                self.longPressFired = true
+                self.dismissKeyPreview()
+                self.showAccentPopup(above: sender, base: keyDef.label, accents: accents)
+            }
+        }
+
+        // Backspace: fire immediately + start repeat.
+        if code == SpecialKeys.backspace {
             handleKeyPress(keyDef)
             startBackspaceRepeat()
         }
@@ -364,10 +295,14 @@ final class QwertyKeyboardView: UIView {
     @objc private func keyTouchUp(_ sender: UIButton) {
         guard let wrapper = objc_getAssociatedObject(sender, &AssociatedKeys.keyDef) as? KeyDefWrapper else { return }
         let keyDef = wrapper.keyDef
+        let code = keyDef.code
+
+        longPressTimer?.invalidate()
+        longPressTimer = nil
 
         // Restore color
         let restoreColor: UIColor
-        if wrapper.isShiftActive && keyDef.code == .shift {
+        if wrapper.isShiftActive && code == SpecialKeys.shift {
             restoreColor = keyColorPressed
         } else if wrapper.isSpecial {
             restoreColor = keyColorSpecial
@@ -378,9 +313,15 @@ final class QwertyKeyboardView: UIView {
 
         dismissKeyPreview()
 
-        if keyDef.code == .backspace {
+        // When the accent picker is open it handles its own taps; leave it
+        // up for the user to choose (or tap outside to dismiss).
+        if longPressFired || accentPopup != nil {
+            return
+        }
+
+        if code == SpecialKeys.backspace {
             stopBackspaceRepeat()
-        } else if keyDef.code == .space && spaceSwipeFired {
+        } else if isSpace(code) && spaceSwipeFired {
             // Swipe already cycled language; suppress the trailing tap so
             // we don't insert a stray space.
             spaceSwipeFired = false
@@ -408,30 +349,30 @@ final class QwertyKeyboardView: UIView {
     // MARK: Key actions
 
     private func handleKeyPress(_ keyDef: KeyDef) {
-        switch keyDef.code {
-        case .char:
-            let char: String
-            if currentLayer == 0 && shiftState != .off {
-                char = keyDef.label.uppercased()
-            } else {
-                char = keyDef.label
-            }
+        let code = keyDef.code
+
+        if isSpace(code) {
+            delegate?.keyboardDidSpace()
+            return
+        }
+        if isChar(code) {
+            let char = (currentLayer == 0 && shiftState != .off) ? keyDef.label.uppercased() : keyDef.label
             delegate?.keyboardDidType(char)
             if shiftState == .single {
                 shiftState = .off
                 buildKeyboard()
             }
+            return
+        }
 
-        case .backspace:
+        switch code {
+        case SpecialKeys.backspace:
             delegate?.keyboardDidBackspace()
 
-        case .enter:
+        case SpecialKeys.enter:
             delegate?.keyboardDidEnter()
 
-        case .space:
-            delegate?.keyboardDidSpace()
-
-        case .shift:
+        case SpecialKeys.shift:
             let now = Date.timeIntervalSinceReferenceDate
             if now - lastShiftTap < 0.3 {
                 shiftState = (shiftState == .capsLock) ? .off : .capsLock
@@ -445,20 +386,23 @@ final class QwertyKeyboardView: UIView {
             lastShiftTap = now
             buildKeyboard()
 
-        case .symbols:
+        case SpecialKeys.symbols:
             currentLayer = 1
             buildKeyboard()
 
-        case .symbols2:
+        case SpecialKeys.symbols2:
             currentLayer = 2
             buildKeyboard()
 
-        case .alpha:
+        case SpecialKeys.alpha:
             currentLayer = 0
             buildKeyboard()
 
-        case .globe:
+        case SpecialKeys.globe:
             delegate?.keyboardDidSwitchKeyboard()
+
+        default:
+            break
         }
     }
 
@@ -469,7 +413,6 @@ final class QwertyKeyboardView: UIView {
         backspaceTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
             self?.delegate?.keyboardDidBackspace()
         }
-        // Initial delay before repeat kicks in
         backspaceTimer?.fireDate = Date().addingTimeInterval(0.4)
     }
 
@@ -512,6 +455,38 @@ final class QwertyKeyboardView: UIView {
         previewLabel?.removeFromSuperview()
         previewLabel = nil
     }
+
+    // MARK: Accent popup
+
+    private func showAccentPopup(above button: UIButton, base: String, accents: [Character]) {
+        dismissAccentPopup()
+        let isUpper = currentLayer == 0 && shiftState != .off
+        let entries = accents.map { isUpper ? String($0).uppercased() : String($0) }
+        let popup = AccentPopupView(
+            accents: entries,
+            keyColor: keyColor,
+            textColor: keyTextColor,
+            radius: keyRadius,
+            onSelect: { [weak self] accent in
+                guard let self else { return }
+                self.delegate?.keyboardDidType(accent)
+                if self.shiftState == .single { self.shiftState = .off; self.buildKeyboard() }
+                self.dismissAccentPopup()
+            },
+            onDismiss: { [weak self] in self?.dismissAccentPopup() }
+        )
+        // Present over the window so the strip (which sits ABOVE the pressed
+        // key) is not clipped by this keyboard view's bounds for top-row keys.
+        let host: UIView = window ?? self
+        let buttonFrame = button.convert(button.bounds, to: host)
+        popup.present(over: host, anchoredTo: buttonFrame)
+        accentPopup = popup
+    }
+
+    private func dismissAccentPopup() {
+        accentPopup?.removeFromSuperview()
+        accentPopup = nil
+    }
 }
 
 // MARK: - Gesture delegate
@@ -531,7 +506,7 @@ private enum AssociatedKeys {
     static var keyDef: UInt8 = 0
 }
 
-private class KeyDefWrapper {
+private final class KeyDefWrapper {
     let keyDef: KeyDef
     let isSpecial: Bool
     let isShiftActive: Bool
