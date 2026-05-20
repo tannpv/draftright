@@ -101,6 +101,14 @@ export class AppSettings {
   @Column({ type: 'varchar', length: 500, default: '' })
   apple_key_id: string;
 
+  // --- Diagnostics ---
+  // Minimum severity desktop/mobile clients should write to their local logs:
+  // 'off' | 'errors' | 'warnings' | 'info'. Surfaced via GET /health so every
+  // client applies it on its next poll. 'info' = full logging (default);
+  // 'off' is the absolute kill-switch (silences even errors).
+  @Column({ type: 'varchar', length: 20, default: 'info' })
+  client_log_level: string;
+
   @UpdateDateColumn()
   updated_at: Date;
 }
