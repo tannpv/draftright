@@ -49,6 +49,16 @@ final class TelexComposerTests: XCTestCase {
         XCTAssertEqual(finalText("n", "g", "u", "o", "w", "i", "f"), "người")
     }
 
+    func test_nguyeexn_composes_nguyễn() {
+        // "uyê" cluster: tilde must land on ê (special vowel), not y.
+        XCTAssertEqual(finalText("n", "g", "u", "y", "e", "e", "x", "n"), "nguyễn")
+    }
+
+    func test_nguyeenx_composes_nguyễn() {
+        // Same word, tilde typed after the trailing consonant.
+        XCTAssertEqual(finalText("n", "g", "u", "y", "e", "e", "n", "x"), "nguyễn")
+    }
+
     func test_tiengs_composes_tiếng() {
         XCTAssertEqual(finalText("t", "i", "e", "s", "n", "g"), "tiếng")
     }

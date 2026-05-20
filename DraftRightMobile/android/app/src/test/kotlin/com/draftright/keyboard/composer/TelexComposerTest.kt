@@ -59,6 +59,18 @@ class TelexComposerTest {
     }
 
     @Test
+    fun `nguyeexn composes nguyễn`() {
+        // uyê cluster — tilde must land on ê, not y.
+        assertEquals("nguyễn", finalText(TelexComposer(), 'n', 'g', 'u', 'y', 'e', 'e', 'x', 'n'))
+    }
+
+    @Test
+    fun `nguyeenx composes nguyễn`() {
+        // Same word, tilde typed after the trailing consonant.
+        assertEquals("nguyễn", finalText(TelexComposer(), 'n', 'g', 'u', 'y', 'e', 'e', 'n', 'x'))
+    }
+
+    @Test
     fun `tiengs composes tiếng`() {
         assertEquals("tiếng", finalText(TelexComposer(), 't', 'i', 'e', 's', 'n', 'g'))
     }

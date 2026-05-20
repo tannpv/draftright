@@ -222,7 +222,15 @@ class TelexComposer : Composer {
             hasTrailingConsonant: Boolean,
         ): Int {
             val len = endInclusive - start + 1
-            if (len >= 3) return start + 1
+            if (len >= 3) {
+                // A circumflex/horn/breve vowel takes the tone. When there
+                // are two (e.g. "ươi"), the tone goes on the LAST one — ơ in
+                // ươ, ê in uyê. Otherwise default to the middle vowel.
+                for (i in endInclusive downTo start) {
+                    if (TelexState.isSpecialVowel(buffer[i])) return i
+                }
+                return start + 1
+            }
             if (len == 2) {
                 val first = buffer[start]
                 val second = buffer[endInclusive]
