@@ -11,6 +11,9 @@ needed:** line.
 Heading format must stay `## <version>` (a date after an em dash is optional and
 ignored by the extractor), e.g. `## 2.3.6 — 2026-05-20`.
 
+## 2.3.9 — 2026-05-20
+- Completed the fix for the "update ready" tray badge — it now reliably appears (and the tray menu updates) when a new version is available.
+
 ## 2.3.8 — 2026-05-20
 - Fixed the tray icon not showing the "update ready" badge (and the tray menu not updating to "Update available") when a new version was detected.
 
