@@ -214,6 +214,60 @@ public class UpdateServiceTests
         Assert.Equal("2.2.6", launchedVersion);
     }
 
+    // ── StartInstall during in-flight staging must not race the temp file ───
+    //
+    // Regression: 2.3.2 → 2.3.3 testing surfaced this. RefreshAvailableUpdate
+    // kicks silent staging, which downloads to Temp\<name>. If the user clicks
+    // "Yes" on the prompt before staging finishes, StartInstall used to call
+    // DownloadAndInstallAsync, which opened a SECOND FileStream(FileMode.Create)
+    // on the same path → "The process cannot access the file ... because it is
+    // being used by another process" on every attempt, then a red "Update
+    // failed" dialog — even though staging itself was fine. StartInstall must
+    // instead wait on the in-flight staging and install the staged file.
+
+    [Fact]
+    public async Task StartInstall_WaitsOnInFlightStaging_WithoutStartingSecondDownload()
+    {
+        var installerBytes = new byte[] { 0x4D, 0x5A, 0x90, 0x00, 0x03, 0x00, 0x00, 0x00 };
+        var meta = TestHttpHandler.Always(HttpStatusCode.OK,
+            """{"version":"2.3.3","windows_url":"https://x/installer-2.3.3.exe"}""");
+
+        // Gate the download so staging stays in flight until we release it —
+        // that's the window in which the user clicks "Yes" and the old code
+        // raced a second writer onto the temp file.
+        var release = new TaskCompletionSource();
+        var dl = new TestHttpHandler(async (req, _) =>
+        {
+            await release.Task;
+            var msg = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent(installerBytes)
+            };
+            msg.Content.Headers.ContentLength = installerBytes.Length;
+            return msg;
+        });
+        var svc = BuildService("2.3.2", meta, dl);
+
+        string? launchedVersion = null;
+        svc.StagedInstallerLauncherForTest = (_, version) => launchedVersion = version;
+
+        // Refresh kicks silent staging; the download blocks on `release`.
+        var info = await svc.RefreshAvailableUpdateAsync();
+        Assert.NotNull(info);
+        await WaitFor(() => dl.CallCount >= 1, TimeSpan.FromSeconds(5));
+        Assert.False(svc.UpdateStaged, "precondition: staging must still be in flight");
+
+        // User clicks "Yes" mid-staging. This must NOT start a second download.
+        svc.StartInstall(info!);
+
+        // Let staging finish.
+        release.SetResult();
+
+        await WaitFor(() => launchedVersion != null, TimeSpan.FromSeconds(5));
+        Assert.Equal("2.3.3", launchedVersion);
+        Assert.Equal(1, dl.CallCount); // exactly one download — staging's, not a racing second one
+    }
+
     // ── NormalizeForPlatform: per-platform pin overrides legacy envelope ────
     //
     // Regression: 2.2.10 users got stuck in a "current 2.2.10, install 2.3.1,
