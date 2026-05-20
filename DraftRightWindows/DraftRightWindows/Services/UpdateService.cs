@@ -180,7 +180,7 @@ public class UpdateService
         var info = await FetchLatestVersionAsync();
         if (info == null)
         {
-            DRLogger.Log("Update check: /updates/latest returned null (network or parse error)", DRLogger.Category.APP);
+            DRLogger.Warn("Update check: /updates/latest returned null (network or parse error)", DRLogger.Category.APP);
         }
         else
         {
@@ -238,7 +238,7 @@ public class UpdateService
     {
         if (string.IsNullOrEmpty(info.WindowsUrl))
         {
-            DRLogger.Log($"StartInstall {info.Version}: refused — empty windows_url", DRLogger.Category.APP);
+            DRLogger.Warn($"StartInstall {info.Version}: refused — empty windows_url", DRLogger.Category.APP);
             return;
         }
         if (UpdateStaged && _stagedInstallerPath != null && _stagedVersion == info.Version)
@@ -364,7 +364,7 @@ public class UpdateService
         }
         catch (Exception ex)
         {
-            DRLogger.Log($"Update staging failed: {ex.Message}", DRLogger.Category.APP);
+            DRLogger.Error($"Update staging failed: {ex.Message}", DRLogger.Category.APP);
         }
     }
 
@@ -442,7 +442,7 @@ public class UpdateService
             }
             catch (Exception ex)
             {
-                DRLogger.Log($"Update download attempt {attempt}/{attempts} failed: {ex.GetType().Name}: {ex.Message}", DRLogger.Category.APP);
+                DRLogger.Warn($"Update download attempt {attempt}/{attempts} failed: {ex.GetType().Name}: {ex.Message}", DRLogger.Category.APP);
                 try { File.Delete(dest); } catch { }
                 if (attempt < attempts)
                 {
@@ -451,7 +451,7 @@ public class UpdateService
                 }
             }
         }
-        DRLogger.Log($"Update download: all {attempts} attempts failed for {url}", DRLogger.Category.APP);
+        DRLogger.Error($"Update download: all {attempts} attempts failed for {url}", DRLogger.Category.APP);
         return null;
     }
 

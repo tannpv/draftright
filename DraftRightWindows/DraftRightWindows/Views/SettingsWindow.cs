@@ -276,7 +276,7 @@ public sealed class SettingsWindow : IDisposable
             if (!string.IsNullOrEmpty(ViewModel.ErrorMessage))
             {
                 _statusLabel.Text = ViewModel.ErrorMessage;
-                DRLogger.Log($"Sign-in FAILED: {ViewModel.ErrorMessage}", DRLogger.Category.AUTH);
+                DRLogger.Error($"Sign-in FAILED: {ViewModel.ErrorMessage}", DRLogger.Category.AUTH);
             }
             else
             {
@@ -287,7 +287,7 @@ public sealed class SettingsWindow : IDisposable
         catch (Exception ex)
         {
             _statusLabel.Text = ex.Message;
-            DRLogger.Log($"Sign-in FAILED: {ex.Message}", DRLogger.Category.AUTH);
+            DRLogger.Error($"Sign-in FAILED: {ex.Message}", DRLogger.Category.AUTH);
         }
         finally
         {

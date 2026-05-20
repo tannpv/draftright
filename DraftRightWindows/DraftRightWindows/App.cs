@@ -80,7 +80,7 @@ public class App : Application
 
         UnhandledException += (sender, e) =>
         {
-            DRLogger.Log($"WinUI UnhandledException: {e.Exception}", DRLogger.Category.APP);
+            DRLogger.Error($"WinUI UnhandledException: {e.Exception}", DRLogger.Category.APP);
             WriteCrashFile("WinUI", e.Exception);
             ErrorReporter.Report(e.Exception, source: "WinUI", severity: "fatal");
             e.Handled = true;
@@ -89,7 +89,7 @@ public class App : Application
         AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
         {
             var ex = e.ExceptionObject as Exception;
-            DRLogger.Log($"AppDomain UnhandledException (terminating={e.IsTerminating}): {ex}",
+            DRLogger.Error($"AppDomain UnhandledException (terminating={e.IsTerminating}): {ex}",
                 DRLogger.Category.APP);
             WriteCrashFile("AppDomain", ex);
             if (ex != null) ErrorReporter.Report(ex, source: "AppDomain", severity: "fatal");
@@ -97,7 +97,7 @@ public class App : Application
 
         TaskScheduler.UnobservedTaskException += (sender, e) =>
         {
-            DRLogger.Log($"UnobservedTaskException: {e.Exception}", DRLogger.Category.APP);
+            DRLogger.Warn($"UnobservedTaskException: {e.Exception}", DRLogger.Category.APP);
             WriteCrashFile("UnobservedTask", e.Exception);
             ErrorReporter.Report(e.Exception, source: "UnobservedTask", severity: "error");
             e.SetObserved();
@@ -119,7 +119,7 @@ public class App : Application
         }
         catch (Exception ex)
         {
-            DRLogger.Log($"Startup banner failed: {ex.Message}", DRLogger.Category.APP);
+            DRLogger.Warn($"Startup banner failed: {ex.Message}", DRLogger.Category.APP);
         }
     }
 
@@ -215,7 +215,7 @@ public class App : Application
             }
             catch (Exception ex)
             {
-                DRLogger.Log($"Auto-refresh: failed — {ex.Message}", DRLogger.Category.AUTH);
+                DRLogger.Error($"Auto-refresh: failed — {ex.Message}", DRLogger.Category.AUTH);
                 Auth.ClearTokens();
                 Api.ClearToken();
                 RaiseSessionExpired();
@@ -245,7 +245,7 @@ public class App : Application
 
         if (!registered)
         {
-            DRLogger.Log(
+            DRLogger.Error(
                 $"Hotkey registration failed (modifiers=0x{Settings.HotkeyModifiers:X} vk=0x{Settings.HotkeyKey:X})",
                 DRLogger.Category.HOTKEY);
         }
@@ -412,7 +412,7 @@ public class App : Application
                         }
                         catch (Exception ex)
                         {
-                            DRLogger.Log($"Paste failed: {ex.Message}", DRLogger.Category.HOTKEY);
+                            DRLogger.Error($"Paste failed: {ex.Message}", DRLogger.Category.HOTKEY);
                         }
                         finally
                         {
@@ -432,7 +432,7 @@ public class App : Application
             }
             catch (Exception ex)
             {
-                DRLogger.Log($"Panel: EXCEPTION {ex.GetType().Name}: {ex.Message}", DRLogger.Category.PANEL);
+                DRLogger.Error($"Panel: EXCEPTION {ex.GetType().Name}: {ex.Message}", DRLogger.Category.PANEL);
             }
             finally
             {
@@ -468,7 +468,7 @@ public class App : Application
         }
         catch (Exception ex)
         {
-            DRLogger.Log($"One-Click rewrite FAILED: {ex.Message}", DRLogger.Category.HOTKEY);
+            DRLogger.Error($"One-Click rewrite FAILED: {ex.Message}", DRLogger.Category.HOTKEY);
             ShowOneClickError(ex.Message);
         }
         finally
@@ -505,7 +505,7 @@ public class App : Application
 
     private void ShowOneClickError(string message)
     {
-        DRLogger.Log($"One-Click error: {message}", DRLogger.Category.HOTKEY);
+        DRLogger.Error($"One-Click error: {message}", DRLogger.Category.HOTKEY);
 
         try
         {
@@ -760,7 +760,7 @@ public class App : Application
             }
             catch (Exception ex)
             {
-                DRLogger.Log($"RaiseSessionExpired alert failed: {ex.Message}", DRLogger.Category.AUTH);
+                DRLogger.Warn($"RaiseSessionExpired alert failed: {ex.Message}", DRLogger.Category.AUTH);
             }
         });
     }
@@ -1434,7 +1434,7 @@ internal static class SettingsFormBuilder
                 catch (Exception ex)
                 {
                     setStatus(ex.ToString(), ErrorRed);
-                    DRLogger.Log($"Login error: {ex}", DRLogger.Category.AUTH);
+                    DRLogger.Error($"Login error: {ex}", DRLogger.Category.AUTH);
                 }
                 finally
                 {

@@ -417,7 +417,7 @@ public sealed class RewritePanel : Window
             case nameof(ViewModel.ErrorMessage):
                 _errorTextBlock.Text = ViewModel.ErrorMessage ?? string.Empty;
                 if (!string.IsNullOrEmpty(ViewModel.ErrorMessage))
-                    DRLogger.Log($"Rewrite error: {ViewModel.ErrorMessage}", DRLogger.Category.API);
+                    DRLogger.Error($"Rewrite error: {ViewModel.ErrorMessage}", DRLogger.Category.API);
                 break;
             case nameof(ViewModel.IsLoading):
                 _loadingOverlay.Visibility = ViewModel.IsLoading ? Visibility.Visible : Visibility.Collapsed;

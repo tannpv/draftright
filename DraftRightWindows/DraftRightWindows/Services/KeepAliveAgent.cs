@@ -85,7 +85,7 @@ public static class KeepAliveAgent
         var exe = ExecutablePath;
         if (string.IsNullOrEmpty(exe))
         {
-            DRLogger.Log("KeepAliveAgent: no executable path — aborting install",
+            DRLogger.Error("KeepAliveAgent: no executable path — aborting install",
                 DRLogger.Category.APP);
             return false;
         }
@@ -103,7 +103,7 @@ public static class KeepAliveAgent
                        TaskXmlBackupPath + "\"";
             if (!RunSchtasks(args, out var stdout, out var stderr))
             {
-                DRLogger.Log("KeepAliveAgent: schtasks /Create failed — " +
+                DRLogger.Error("KeepAliveAgent: schtasks /Create failed — " +
                              stderr, DRLogger.Category.APP);
                 return false;
             }
@@ -113,7 +113,7 @@ public static class KeepAliveAgent
         }
         catch (Exception ex)
         {
-            DRLogger.Log("KeepAliveAgent: install failed — " + ex.Message,
+            DRLogger.Error("KeepAliveAgent: install failed — " + ex.Message,
                 DRLogger.Category.APP);
             return false;
         }
@@ -126,7 +126,7 @@ public static class KeepAliveAgent
         var args = "/Delete /F /TN \"" + TaskName + "\"";
         if (!RunSchtasks(args, out _, out var stderr))
         {
-            DRLogger.Log("KeepAliveAgent: schtasks /Delete failed — " + stderr,
+            DRLogger.Warn("KeepAliveAgent: schtasks /Delete failed — " + stderr,
                 DRLogger.Category.APP);
             return false;
         }

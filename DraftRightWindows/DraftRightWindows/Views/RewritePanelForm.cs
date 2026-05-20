@@ -190,7 +190,7 @@ public sealed class RewritePanelForm : WinForms.Form
             t.Tick += (_, _) => { TopMost = false; t.Stop(); t.Dispose(); };
             t.Start();
         }
-        catch (Exception ex) { DRLogger.Log($"Foreground-grab failed: {ex.Message}", DRLogger.Category.PANEL); }
+        catch (Exception ex) { DRLogger.Warn($"Foreground-grab failed: {ex.Message}", DRLogger.Category.PANEL); }
     }
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
@@ -479,7 +479,7 @@ public sealed class RewritePanelForm : WinForms.Form
                 _errorLabel.Visible = hasError;
                 _copyErrorBtn.Visible = hasError;
                 if (hasError)
-                    DRLogger.Log($"Rewrite error: {ViewModel.ErrorMessage}", DRLogger.Category.API);
+                    DRLogger.Error($"Rewrite error: {ViewModel.ErrorMessage}", DRLogger.Category.API);
                 break;
             case nameof(RewritePanelViewModel.IsLoading):
                 SyncLoadingState();
