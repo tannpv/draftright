@@ -86,7 +86,7 @@ enum KeepAliveAgent {
                 fromPropertyList: plist, format: .xml, options: 0)
             try data.write(to: plistURL, options: .atomic)
         } catch {
-            DRLogger.log("KeepAliveAgent: write plist failed — \(error.localizedDescription)", category: .app)
+            DRLogger.error("KeepAliveAgent: write plist failed — \(error.localizedDescription)", category: .app)
             return false
         }
 
@@ -97,7 +97,7 @@ enum KeepAliveAgent {
         let uid = getuid()
         _ = runLaunchctl(["bootout", "gui/\(uid)/\(label)"])
         guard runLaunchctl(["bootstrap", "gui/\(uid)", plistURL.path]) else {
-            DRLogger.log("KeepAliveAgent: launchctl bootstrap failed", category: .app)
+            DRLogger.error("KeepAliveAgent: launchctl bootstrap failed", category: .app)
             return false
         }
         _ = runLaunchctl(["enable", "gui/\(uid)/\(label)"])
@@ -113,7 +113,7 @@ enum KeepAliveAgent {
             do {
                 try FileManager.default.removeItem(at: plistURL)
             } catch {
-                DRLogger.log("KeepAliveAgent: remove plist failed — \(error.localizedDescription)", category: .app)
+                DRLogger.warn("KeepAliveAgent: remove plist failed — \(error.localizedDescription)", category: .app)
                 return false
             }
         }

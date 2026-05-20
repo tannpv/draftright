@@ -170,7 +170,7 @@ final class UpdateService: ObservableObject {
                 await MainActor.run { promptRestart(update) }
                 return
             } catch {
-                DRLogger.log("Update staging attempt \(attempt)/3 failed: \(error.localizedDescription)", category: .app)
+                DRLogger.warn("Update staging attempt \(attempt)/3 failed: \(error.localizedDescription)", category: .app)
                 try? FileManager.default.removeItem(at: dmgURL)
                 if attempt < 3 {
                     try? await Task.sleep(nanoseconds: UInt64(attempt) * 5_000_000_000)
@@ -202,7 +202,7 @@ final class UpdateService: ObservableObject {
             DRLogger.log("Update \(version) installed silently; relaunching", category: .app)
             relaunch()
         } catch {
-            DRLogger.log("Update install failed: \(error.localizedDescription)", category: .app)
+            DRLogger.error("Update install failed: \(error.localizedDescription)", category: .app)
             let alert = NSAlert()
             alert.messageText = "Update Failed"
             alert.informativeText = "Could not install the update: \(error.localizedDescription)"
@@ -219,7 +219,7 @@ final class UpdateService: ObservableObject {
             let (data, _) = try await URLSession.shared.data(for: request)
             return try JSONDecoder().decode(UpdateInfo.self, from: data)
         } catch {
-            DRLogger.log("Update check failed: \(error.localizedDescription)", category: .app)
+            DRLogger.warn("Update check failed: \(error.localizedDescription)", category: .app)
             return nil
         }
     }
@@ -297,7 +297,7 @@ final class UpdateService: ObservableObject {
             relaunch()
         } catch {
             progressWindow.close()
-            DRLogger.log("Update failed: \(error.localizedDescription)", category: .app)
+            DRLogger.error("Update failed: \(error.localizedDescription)", category: .app)
             let alert = NSAlert()
             alert.messageText = "Update Failed"
             alert.informativeText = "Could not install the update: \(error.localizedDescription)"

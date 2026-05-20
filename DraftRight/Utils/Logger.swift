@@ -34,11 +34,26 @@ enum DRLogger {
         case settings = "SETTINGS"
     }
 
-    static func log(_ message: String, category: Category = .app) {
-        guard isEnabled else { return }
+    /// Log severity. Lines are tagged `[LEVEL]` so failures are skimmable and
+    /// greppable (`grep "\[ERROR\]"`) instead of buried in same-level category
+    /// chatter. `.warn` = something degraded but handled; `.error` = an
+    /// operation failed.
+    enum Level: String {
+        case info = "INFO"
+        case warn = "WARN"
+        case error = "ERROR"
+    }
+
+    static func log(_ message: String, category: Category = .app, level: Level = .info) {
+        // WARN/ERROR are always recorded, even when the user has logging
+        // toggled off — a bug report shouldn't be blank for the lines that
+        // matter most. Only routine INFO chatter honors the off-switch.
+        guard isEnabled || level != .info else { return }
 
         let timestamp = dateFormatter.string(from: Date())
-        let line = "[\(timestamp)] [\(category.rawValue)] \(message)\n"
+        // Pad the level so the [CATEGORY] column stays aligned across lines.
+        let levelTag = level.rawValue.padding(toLength: 5, withPad: " ", startingAt: 0)
+        let line = "[\(timestamp)] [\(levelTag)] [\(category.rawValue)] \(message)\n"
 
         if let data = line.data(using: .utf8) {
             if let handle = try? FileHandle(forWritingTo: logFile) {
@@ -53,6 +68,16 @@ enum DRLogger {
         #if DEBUG
         print(line, terminator: "")
         #endif
+    }
+
+    /// Log a handled-but-degraded condition at `.warn`.
+    static func warn(_ message: String, category: Category = .app) {
+        log(message, category: category, level: .warn)
+    }
+
+    /// Log a failed operation at `.error`.
+    static func error(_ message: String, category: Category = .app) {
+        log(message, category: category, level: .error)
     }
 
     /// Returns the log file path for display in Settings
