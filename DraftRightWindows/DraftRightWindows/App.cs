@@ -24,6 +24,12 @@ public class App : Application
     private WinForms.Form? _settingsForm;
     private Thread? _trayThread;
     private WinForms.NotifyIcon? _trayIcon;
+    // Hidden, never-shown form used purely as a marshaling target on the tray
+    // thread. ContextMenuStrip.BeginInvoke throws until its handle is created
+    // (i.e. until the menu is first opened), so cross-thread tray updates
+    // (update-available menu text + icon badge) were silently dropped. A form
+    // gives us a handle that exists from startup.
+    private WinForms.Form? _trayPump;
     private System.Threading.Timer? _healthTimer;
     private WinForms.ToolStripMenuItem? _statusMenuItem;
     private WinForms.ToolStripMenuItem? _updateMenuItem;
@@ -578,6 +584,11 @@ public class App : Application
     {
         WinForms.Application.EnableVisualStyles();
 
+        // Marshaling target with a guaranteed handle (forced below). Never
+        // shown, so it's invisible; Application.Run() still pumps its messages.
+        _trayPump = new WinForms.Form { ShowInTaskbar = false };
+        _ = _trayPump.Handle; // force handle creation on the tray thread
+
         _trayIcon = new WinForms.NotifyIcon();
         _trayIcon.Text = "DraftRight";
 
@@ -630,8 +641,8 @@ public class App : Application
         {
             UpdateService.AvailableUpdateChanged += () =>
             {
-                try { menu.BeginInvoke(new Action(RefreshUpdateMenuItem)); }
-                catch { /* tray menu gone */ }
+                try { _trayPump?.BeginInvoke(new Action(RefreshUpdateMenuItem)); }
+                catch { /* tray thread gone */ }
             };
             RefreshUpdateMenuItem();
         }
@@ -807,6 +818,8 @@ public class App : Application
             _trayIcon.Dispose();
             _trayIcon = null;
         }
+        _trayPump?.Dispose();
+        _trayPump = null;
         _badgeTrayIcon?.Dispose();
         _badgeTrayIcon = null;
         _baseTrayIcon?.Dispose();
