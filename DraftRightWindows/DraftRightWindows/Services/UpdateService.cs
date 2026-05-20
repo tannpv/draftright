@@ -245,11 +245,97 @@ public class UpdateService
         {
             DRLogger.Log($"StartInstall {info.Version}: using staged installer at {_stagedInstallerPath}", DRLogger.Category.APP);
             RunStagedInstaller(_stagedInstallerPath, info.Version);
+            return;
+        }
+
+        // Not staged yet. If silent background staging is already downloading
+        // this same version, DO NOT start a second download — both write the
+        // same temp file (Path.GetTempPath()/<name>) with FileMode.Create, so
+        // the second writer throws "The process cannot access the file ...
+        // because it is being used by another process" on every attempt and
+        // the foreground path dies with "Update failed: could not download
+        // installer after multiple attempts" even though staging is fine.
+        // Instead, wait on the in-flight staging behind a progress window and
+        // install the staged file when it lands.
+        Task? staging;
+        lock (_stagingLock) { staging = _stagingTask; }
+        if (staging is { IsCompleted: false })
+        {
+            DRLogger.Log($"StartInstall {info.Version}: staging already in flight — waiting on it instead of starting a second download", DRLogger.Category.APP);
+            _ = AwaitStagingThenInstallAsync(info, staging);
         }
         else
         {
             DRLogger.Log($"StartInstall {info.Version}: not staged, falling back to download-then-install from {info.WindowsUrl}", DRLogger.Category.APP);
             _ = DownloadAndInstallAsync(info.WindowsUrl, info.Version);
+        }
+    }
+
+    /// <summary>
+    /// Waits on the in-flight silent staging download (rather than racing it
+    /// with a second writer to the same temp file), then runs the staged
+    /// installer. Shows an indeterminate progress window — silent staging
+    /// reports no byte progress, so a marquee is the honest visual — with a
+    /// "Continue in background" button that drops the window and lets staging
+    /// finish on its own (the tray / Settings "ready to install" affordance
+    /// fires via <see cref="AvailableUpdateChanged"/> when it lands).
+    /// </summary>
+    private async Task AwaitStagingThenInstallAsync(UpdateInfo info, Task staging)
+    {
+        // Test path: the headless test host has no WinForms desktop, so skip
+        // the progress window entirely and hand off through RunStagedInstaller
+        // (which honors StagedInstallerLauncherForTest).
+        if (StagedInstallerLauncherForTest != null)
+        {
+            try { await staging; } catch { /* staging logs its own failures */ }
+            if (UpdateStaged && _stagedInstallerPath != null && _stagedVersion == info.Version)
+                RunStagedInstaller(_stagedInstallerPath, info.Version);
+            return;
+        }
+
+        UpdateProgressUI? ui = null;
+        using var backgroundCts = new System.Threading.CancellationTokenSource();
+        try
+        {
+            ui = UpdateProgressUI.ShowOnNewThread(info.Version);
+            ui.EnableBackground();
+            ui.SetIndeterminate($"Downloading DraftRight v{info.Version}...", hideBackgroundButton: false);
+            ui.CancelRequested += backgroundCts.Cancel;
+
+            // Either staging finishes, or the user clicks "Continue in background".
+            var backgrounded = Task.Delay(System.Threading.Timeout.Infinite, backgroundCts.Token);
+            await Task.WhenAny(staging, backgrounded);
+
+            if (backgroundCts.IsCancellationRequested)
+            {
+                DRLogger.Log($"AwaitStagingThenInstall {info.Version}: backgrounded by user — staging continues silently", DRLogger.Category.APP);
+                ui.Close();
+                return;
+            }
+
+            ui.Close();
+
+            if (UpdateStaged && _stagedInstallerPath != null && _stagedVersion == info.Version)
+            {
+                RunStagedInstaller(_stagedInstallerPath, info.Version);
+            }
+            else
+            {
+                // Staging completed without producing a usable file (download
+                // failed). Fall back to the retrying download-then-install path.
+                DRLogger.Log($"AwaitStagingThenInstall {info.Version}: staging ended without a staged file — downloading directly", DRLogger.Category.APP);
+                await DownloadAndInstallAsync(info.WindowsUrl, info.Version);
+            }
+        }
+        catch (Exception ex)
+        {
+            ui?.Close();
+            System.Windows.Forms.MessageBox.Show(
+                $"Update failed: {ex.Message}",
+                "Update Error",
+                System.Windows.Forms.MessageBoxButtons.OK,
+                System.Windows.Forms.MessageBoxIcon.Error
+            );
         }
     }
 
@@ -796,7 +882,12 @@ internal sealed class UpdateProgressUI
         catch (InvalidOperationException) { /* form closing */ }
     }
 
-    public void SetIndeterminate(string statusText)
+    /// <param name="hideBackgroundButton">True (default) for the post-download
+    /// "Installing..." phase, where backgrounding is meaningless because Inno
+    /// Setup is about to take over. False while still downloading with unknown
+    /// progress (e.g. waiting on silent staging), where "Continue in
+    /// background" is still a valid choice.</param>
+    public void SetIndeterminate(string statusText, bool hideBackgroundButton = true)
     {
         if (!_form.IsHandleCreated) return;
         try
@@ -806,8 +897,7 @@ internal sealed class UpdateProgressUI
                 _statusLabel.Text = statusText;
                 _progressBar.Style = System.Windows.Forms.ProgressBarStyle.Marquee;
                 _percentLabel.Text = "";
-                // Past the cancellable phase — Inno Setup is about to take over.
-                _backgroundButton.Visible = false;
+                if (hideBackgroundButton) _backgroundButton.Visible = false;
             }));
         }
         catch (InvalidOperationException) { /* form closing */ }
