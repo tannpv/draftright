@@ -27,6 +27,13 @@ public class App : Application
     private System.Threading.Timer? _healthTimer;
     private WinForms.ToolStripMenuItem? _statusMenuItem;
     private WinForms.ToolStripMenuItem? _updateMenuItem;
+    // Base tray icon and a cached copy with an "update ready" badge dot. We
+    // swap _trayIcon.Icon between them as the update state changes.
+    private Icon? _baseTrayIcon;
+    private Icon? _badgeTrayIcon;
+    // Tracks the last badge state so the "update ready" balloon fires once on
+    // the rising edge, not on every AvailableUpdateChanged tick.
+    private bool _updateBadgeShown;
     public static BackendStatus CurrentStatus { get; private set; } = BackendStatus.Offline;
     private DateTime _lastAutoRecovery = DateTime.MinValue;
     public static UpdateService? UpdateService { get; private set; }
@@ -535,14 +542,19 @@ public class App : Application
         {
             var icoPath = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(exePath)!, "Assets", "DraftRight.ico");
             if (System.IO.File.Exists(icoPath))
-                _trayIcon.Icon = new Icon(icoPath);
+                _baseTrayIcon = new Icon(icoPath);
             else
-                _trayIcon.Icon = SystemIcons.Application;
+                _baseTrayIcon = (Icon)SystemIcons.Application.Clone();
         }
         else
         {
-            _trayIcon.Icon = SystemIcons.Application;
+            _baseTrayIcon = (Icon)SystemIcons.Application.Clone();
         }
+        _trayIcon.Icon = _baseTrayIcon;
+        // Pre-build the badged variant once so RefreshUpdateMenuItem can swap
+        // it in without recompositing on every update-state change.
+        try { _badgeTrayIcon = TrayIconBadge.WithDot(_baseTrayIcon); }
+        catch (Exception ex) { DRLogger.Warn($"Tray badge icon build failed: {ex.Message}", DRLogger.Category.APP); }
 
         var menu = new WinForms.ContextMenuStrip();
         _statusMenuItem = new WinForms.ToolStripMenuItem("Offline") { Enabled = false };
@@ -589,9 +601,9 @@ public class App : Application
     {
         if (_updateMenuItem == null) return;
         var u = UpdateService?.AvailableUpdate;
+        var staged = u != null && (UpdateService?.UpdateStaged ?? false);
         if (u != null)
         {
-            var staged = UpdateService?.UpdateStaged ?? false;
             _updateMenuItem.Text = staged
                 ? $"Update {u.Version} ready — restart & install"
                 : $"Update {u.Version} available — install now";
@@ -601,6 +613,36 @@ public class App : Application
         {
             _updateMenuItem.Visible = false;
         }
+
+        UpdateTrayBadge(u != null, u?.Version, staged);
+    }
+
+    /// <summary>
+    /// Reflects "an update is ready to install" on the always-visible tray
+    /// icon: swaps in the badged icon and, on the rising edge, shows a one-time
+    /// balloon so the badge isn't silently easy to miss. Must run on the tray
+    /// thread (called from <see cref="RefreshUpdateMenuItem"/>).
+    /// </summary>
+    private void UpdateTrayBadge(bool hasUpdate, string? version, bool staged)
+    {
+        if (_trayIcon == null) return;
+        try
+        {
+            // Fall back to the base icon if badge compositing failed at startup.
+            _trayIcon.Icon = (hasUpdate && _badgeTrayIcon != null) ? _badgeTrayIcon : _baseTrayIcon;
+
+            if (hasUpdate && !_updateBadgeShown)
+            {
+                _trayIcon.BalloonTipTitle = "DraftRight update";
+                _trayIcon.BalloonTipText = staged
+                    ? $"Version {version} is ready to install — open the DraftRight tray menu to restart & install."
+                    : $"Version {version} is available — open the DraftRight tray menu to install.";
+                _trayIcon.BalloonTipIcon = WinForms.ToolTipIcon.Info;
+                _trayIcon.ShowBalloonTip(5000);
+            }
+        }
+        catch { /* tray icon may be disposed during shutdown */ }
+        _updateBadgeShown = hasUpdate;
     }
 
     private async Task PerformHealthCheckAsync()
@@ -721,6 +763,10 @@ public class App : Application
             _trayIcon.Dispose();
             _trayIcon = null;
         }
+        _badgeTrayIcon?.Dispose();
+        _badgeTrayIcon = null;
+        _baseTrayIcon?.Dispose();
+        _baseTrayIcon = null;
         _settingsForm?.Close();
         WinForms.Application.ExitThread();
         Environment.Exit(0);
