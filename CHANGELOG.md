@@ -11,6 +11,9 @@ needed:** line.
 Heading format must stay `## <version>` (a date after an em dash is optional and
 ignored by the extractor), e.g. `## 2.3.6 — 2026-05-20`.
 
+## 2.3.8 — 2026-05-20
+- Fixed the tray icon not showing the "update ready" badge (and the tray menu not updating to "Update available") when a new version was detected.
+
 ## 2.3.7 — 2026-05-20
 - DraftRight now shows a brief "What's New" summary the first time you open it after an update.
 - Added centrally-managed logging controls so support can request more detail only when troubleshooting.
