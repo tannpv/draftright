@@ -57,6 +57,11 @@ public sealed class SettingsService
     /// <summary>When false, DRLogger.Log short-circuits — no file writes.</summary>
     public bool LoggingEnabled { get; set; } = true;
 
+    /// <summary>The app version that last ran on this machine. Drives the
+    /// one-time "What's New" notice shown on the first launch after an update
+    /// applies. Empty on a fresh install (no notice shown).</summary>
+    public string LastSeenVersion { get; set; } = "";
+
     // ── Persistence ─────────────────────────────────────────
 
     /// <summary>
@@ -87,6 +92,7 @@ public sealed class SettingsService
             AppMode = AppModeExtensions.FromApiValue(loaded.AppMode);
             OneClickTone = loaded.OneClickTone ?? OneClickTone;
             LoggingEnabled = loaded.LoggingEnabled ?? LoggingEnabled;
+            LastSeenVersion = loaded.LastSeenVersion ?? LastSeenVersion;
         }
         catch
         {
@@ -114,7 +120,8 @@ public sealed class SettingsService
                 DefaultTone = DefaultTone,
                 AppMode = AppMode.ApiValue(),
                 OneClickTone = OneClickTone,
-                LoggingEnabled = LoggingEnabled
+                LoggingEnabled = LoggingEnabled,
+                LastSeenVersion = LastSeenVersion
             };
 
             var json = JsonSerializer.Serialize(data, JsonOptions);
@@ -143,5 +150,6 @@ public sealed class SettingsService
         public string? AppMode { get; set; }
         public string? OneClickTone { get; set; }
         public bool? LoggingEnabled { get; set; }
+        public string? LastSeenVersion { get; set; }
     }
 }

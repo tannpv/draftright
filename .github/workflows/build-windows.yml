@@ -187,6 +187,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - name: Checkout (for CHANGELOG release notes)
+        uses: actions/checkout@v4
+
       - name: Download x64 installer artifact
         uses: actions/download-artifact@v4
         with:
@@ -220,6 +223,24 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           ls -lh "$INSTALLER"
 
+      - name: Extract release notes from CHANGELOG
+        id: notes
+        env:
+          NEW_VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          # Every release must carry a user-facing note (shown post-update as
+          # "What's New"). A missing CHANGELOG section fails the release.
+          if ! NOTES=$(bash scripts/changelog-extract.sh "$NEW_VERSION"); then
+            echo "::error::No '## $NEW_VERSION' section in CHANGELOG.md — add release notes before tagging a release."
+            exit 1
+          fi
+          {
+            echo "notes<<DRNOTES_EOF"
+            echo "$NOTES"
+            echo "DRNOTES_EOF"
+          } >> "$GITHUB_OUTPUT"
+          echo "Release notes for $NEW_VERSION:"; echo "$NOTES"
+
       - name: SCP installer to droplet
         env:
           DROPLET_SSH_KEY: ${{ secrets.DROPLET_SSH_KEY }}
@@ -246,6 +267,7 @@ jobs:
           DROPLET_HOST: ${{ secrets.DROPLET_HOST }}
           NEW_VERSION: ${{ steps.meta.outputs.version }}
           REMOTE_NAME: ${{ steps.meta.outputs.remote }}
+          RELEASE_NOTES: ${{ steps.notes.outputs.notes }}
         run: |
           # Match what scripts/release-publish.sh does locally: write to
           # app_releases via psql over the SSH tunnel rather than the HTTP
@@ -253,12 +275,18 @@ jobs:
           # the deploy user on the droplet is already trusted (it owns the
           # backend container) so a direct DB upsert is the simpler path.
           # Avoids needing to mint a fresh admin JWT every release.
+          # Notes are dollar-quoted ($drnote$) so multi-line CHANGELOG text
+          # needs no escaping; RELEASE_NOTES is passed via env (not inlined as
+          # an Actions expression) so its contents can't break the script.
           SQL=$(cat <<SQL_EOF
           INSERT INTO app_releases (platform, channel, version, download_url, release_notes, required, enabled)
-          VALUES ('windows', 'direct', '$NEW_VERSION', 'https://draftright.info/downloads/$REMOTE_NAME', '', false, true)
+          VALUES ('windows', 'direct', '$NEW_VERSION', 'https://draftright.info/downloads/$REMOTE_NAME', \$drnote\$
+          $RELEASE_NOTES
+          \$drnote\$, false, true)
           ON CONFLICT (platform, channel) DO UPDATE SET
             version = EXCLUDED.version,
             download_url = EXCLUDED.download_url,
+            release_notes = EXCLUDED.release_notes,
             updated_at = now();
           SQL_EOF
           )

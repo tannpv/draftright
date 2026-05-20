@@ -30,6 +30,7 @@ _DEFAULTS: dict[str, object] = {
     "auto_start": False,
     "enabled_tones": list(_ALL_TONE_VALUES),  # all tones enabled by default
     "default_tone": "",  # empty = no auto-run tone
+    "last_seen_version": "",  # drives the one-time post-update "What's New"
 }
 
 # Desktop entry used for auto-start
@@ -135,6 +136,14 @@ class SettingsService:
     @default_tone.setter
     def default_tone(self, value: str) -> None:
         self._data["default_tone"] = value
+
+    @property
+    def last_seen_version(self) -> str:
+        return str(self._data.get("last_seen_version", _DEFAULTS["last_seen_version"]))
+
+    @last_seen_version.setter
+    def last_seen_version(self, value: str) -> None:
+        self._data["last_seen_version"] = value
 
     # -- persistence -------------------------------------------------------
 

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:draftright_mobile/services/auth_service.dart';
@@ -268,6 +269,65 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _checkOnboarding();
     _wireShareIntake();
+    // Defer until the tree (and a Navigator) is mounted.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkWhatsNew());
+  }
+
+  /// One-time post-update "What's New": if the running version changed since
+  /// last launch, fetch the notes the backend advertises for it and show them
+  /// once. Records the version immediately so it can't repeat; silent on fresh
+  /// installs and when no matching notes exist.
+  Future<void> _checkWhatsNew() async {
+    if (!mounted) return;
+    final settings = context.read<SettingsService>();
+    String version;
+    try {
+      version = (await PackageInfo.fromPlatform()).version;
+    } catch (_) {
+      return;
+    }
+    final lastSeen = settings.lastSeenVersion;
+    if (lastSeen == version) return;
+    await settings.setLastSeenVersion(version);
+    if (lastSeen.isEmpty) return; // fresh install — nothing to announce
+
+    final platform = _platformKey();
+    if (platform == null) return;
+    final notes = await BackendClient.releaseNotesForVersion(
+        settings.backendUrl, platform, version);
+    if (notes == null || !mounted) return;
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text("What's new in v$version"),
+        content: SingleChildScrollView(child: Text(notes)),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Got it'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String? _platformKey() {
+    if (kIsWeb) return null;
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+        return 'android';
+      case TargetPlatform.iOS:
+        return 'ios';
+      case TargetPlatform.macOS:
+        return 'mac';
+      case TargetPlatform.windows:
+        return 'windows';
+      case TargetPlatform.linux:
+        return 'linux';
+      default:
+        return null;
+    }
   }
 
   @override

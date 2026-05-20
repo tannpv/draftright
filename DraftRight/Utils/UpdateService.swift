@@ -211,6 +211,17 @@ final class UpdateService: ObservableObject {
         }
     }
 
+    /// Release notes the backend advertises for `version`, or nil if the latest
+    /// published mac release no longer matches it (e.g. a newer one is already
+    /// out) or has no notes. Used for the post-update "What's New" notice —
+    /// right after updating, the latest version equals the running one.
+    func releaseNotesForVersion(_ version: String) async -> String? {
+        guard let info = await fetchLatestVersion() else { return nil }
+        let resolved = info.resolved(for: "mac")
+        guard resolved.version == version, !resolved.notes.isEmpty else { return nil }
+        return resolved.notes
+    }
+
     private func fetchLatestVersion() async -> UpdateInfo? {
         guard let url = URL(string: "\(backendUrl)/updates/latest") else { return nil }
         do {

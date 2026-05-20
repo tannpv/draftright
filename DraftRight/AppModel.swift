@@ -116,6 +116,7 @@ final class AppModel: ObservableObject {
         static let defaultTab = "draftright.defaultTab"
         static let appMode = "draftright.appMode"
         static let oneClickTone = "draftright.oneClickTone"
+        static let lastSeenVersion = "draftright.lastSeenVersion"
     }
 
     init() {
@@ -181,6 +182,38 @@ final class AppModel: ObservableObject {
                 await self?.updateService?.checkIfNeeded()
             }
         }
+
+        // Post-update "What's New": if the running version changed since the
+        // last launch, show the release notes once. Record the version now so
+        // the notice can't repeat; skip on a fresh install (no prior version).
+        let lastSeen = defaults.string(forKey: Keys.lastSeenVersion) ?? ""
+        if lastSeen != version {
+            defaults.set(version, forKey: Keys.lastSeenVersion)
+            if !lastSeen.isEmpty {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 11) { [weak self] in
+                    Task { @MainActor in await self?.checkForWhatsNew(version: version) }
+                }
+            }
+        }
+    }
+
+    /// Fetches and shows the release notes for the now-running version. The
+    /// notes only appear if the backend's latest mac release still matches this
+    /// version (so a stale/newer note is never shown).
+    @MainActor
+    private func checkForWhatsNew(version: String) async {
+        guard let notes = await updateService?.releaseNotesForVersion(version),
+              !notes.isEmpty else {
+            DRLogger.log("Post-update: no release notes for \(version) — skipping What's New", category: .app)
+            return
+        }
+        let alert = NSAlert()
+        alert.messageText = "What's new in DraftRight v\(version)"
+        alert.informativeText = notes
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "Got it")
+        NSApp.activate(ignoringOtherApps: true)
+        alert.runModal()
     }
 
     #if DEBUG
