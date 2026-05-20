@@ -42,9 +42,30 @@ enum DRLogger {
         case info = "INFO"
         case warn = "WARN"
         case error = "ERROR"
+        // Threshold-only — used as `minLevel` to silence everything; never
+        // passed as a line's level.
+        case off = "OFF"
+
+        /// Severity ordering for threshold comparisons.
+        var rank: Int {
+            switch self {
+            case .info: return 0
+            case .warn: return 1
+            case .error: return 2
+            case .off: return 3
+            }
+        }
     }
 
+    /// Minimum severity to write, set remotely by the admin portal and pushed
+    /// to clients via `/health`'s `client_log_level`. The master verbosity
+    /// control: `.info` logs everything (default), `.off` is the absolute
+    /// kill-switch (silences even errors, for privacy/compliance).
+    static var minLevel: Level = .info
+
     static func log(_ message: String, category: Category = .app, level: Level = .info) {
+        // Remote admin threshold (master): drop anything below it; .off drops all.
+        guard level.rank >= minLevel.rank else { return }
         // WARN/ERROR are always recorded, even when the user has logging
         // toggled off — a bug report shouldn't be blank for the lines that
         // matter most. Only routine INFO chatter honors the off-switch.
@@ -78,6 +99,33 @@ enum DRLogger {
     /// Log a failed operation at `.error`.
     static func error(_ message: String, category: Category = .app) {
         log(message, category: category, level: .error)
+    }
+
+    /// Applies the backend's `client_log_level` ("off" | "errors" | "warnings"
+    /// | "info") as the `minLevel` threshold. Unknown/empty → full logging.
+    /// No-op when unchanged so the ~30s health poll doesn't spam; only a
+    /// genuine change is announced.
+    static func setMinLevelFromServer(_ value: String?) {
+        let newLevel: Level
+        switch value?.trimmingCharacters(in: .whitespaces).lowercased() {
+        case "off": newLevel = .off
+        case "errors", "error": newLevel = .error
+        case "warnings", "warning", "warn": newLevel = .warn
+        default: newLevel = .info
+        }
+        if newLevel == minLevel { return }
+
+        let old = minLevel
+        let msg = "Client log level changed: \(old.rawValue) -> \(newLevel.rawValue) (server '\(value ?? "")')"
+        // When narrowing (e.g. → off) record under the OLD threshold first so
+        // the announcement isn't dropped; when widening, set then record.
+        if newLevel.rank > old.rank {
+            log(msg, category: .app, level: .warn)
+            minLevel = newLevel
+        } else {
+            minLevel = newLevel
+            log(msg, category: .app, level: .warn)
+        }
     }
 
     /// Returns the log file path for display in Settings

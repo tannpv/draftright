@@ -144,6 +144,28 @@ class BackendClient {
     return url;
   }
 
+  /// Best-effort: fetch `/health` and apply the admin-controlled
+  /// `client_log_level` to [DRLogger]. The mobile app doesn't poll /health for
+  /// liveness, so this runs once at startup. Any failure leaves the current
+  /// level untouched and never blocks startup.
+  static Future<void> applyClientLogLevel(String backendUrl) async {
+    try {
+      var base = backendUrl;
+      while (base.endsWith('/')) {
+        base = base.substring(0, base.length - 1);
+      }
+      final resp = await http
+          .get(Uri.parse('$base/health'))
+          .timeout(const Duration(seconds: 5));
+      if (resp.statusCode != 200) return;
+      final data = jsonDecode(resp.body) as Map<String, dynamic>;
+      if (data['app'] != 'draftright') return;
+      DRLogger.setMinLevelFromServer(data['client_log_level'] as String?);
+    } catch (_) {
+      // Best-effort — never block startup or change level on error.
+    }
+  }
+
   Future<RewriteResult> rewrite({
     required String text,
     required Tone tone,

@@ -137,6 +137,10 @@ class APIClient:
             body = resp.json()
             if body.get("app") != "draftright":
                 return "wrong_server"
+            # Apply admin-controlled log verbosity once we've confirmed this is
+            # really a DraftRight backend. Older backends omit the field.
+            from draftright.services.logger import set_min_level_from_server
+            set_min_level_from_server(body.get("client_log_level"))
         except Exception:
             return "offline"
 

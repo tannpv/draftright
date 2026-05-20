@@ -36,6 +36,8 @@ interface Settings {
   apple_client_id: string;
   apple_team_id: string;
   apple_key_id: string;
+  // Diagnostics
+  client_log_level: string;
   [key: string]: any;
 }
 
@@ -127,6 +129,7 @@ export default function SettingsPage() {
     resend_api_key: '', email_from: 'DraftRight <noreply@draftright.info>',
     google_client_id: '', google_client_secret: '',
     apple_client_id: '', apple_team_id: '', apple_key_id: '',
+    client_log_level: 'info',
   };
 
   const [settings, setSettings] = useState<Settings>(defaults);
@@ -237,6 +240,22 @@ export default function SettingsPage() {
               ))}
             </div>
             {isLive && <div style={{ background: 'rgba(255,174,31,0.1)', border: '1px solid rgba(255,174,31,0.2)', borderRadius: 8, padding: '10px 14px', color: '#ffae1f', fontSize: 13 }}>⚠️ Live mode applies strict rate limits and shorter token expiry.</div>}
+          </div>
+
+          {/* Logging & Diagnostics */}
+          <div className="card" style={{ marginBottom: 24 }}>
+            <h2 style={{ color: '#eaeff4', fontSize: 16, fontWeight: 600, marginBottom: 8 }}>Logging &amp; Diagnostics</h2>
+            <p style={{ color: '#7c8fac', fontSize: 12, marginBottom: 16 }}>Minimum severity that desktop &amp; mobile apps write to their local logs. Applied on each client's next health check (~30s).</p>
+            <div style={{ maxWidth: 360 }}>
+              <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Client log level</label>
+              <select value={settings.client_log_level} onChange={e => set('client_log_level')(e.target.value)} className="dark-input">
+                <option value="info">Info — everything (default)</option>
+                <option value="warnings">Warnings — warnings + errors</option>
+                <option value="errors">Errors only</option>
+                <option value="off">Off — log nothing</option>
+              </select>
+              <p style={{ color: '#7c8fac', fontSize: 11, marginTop: 4 }}>“Off” is an absolute kill-switch — clients stop writing logs entirely, including errors.</p>
+            </div>
           </div>
 
           {/* Limits */}

@@ -160,6 +160,15 @@ public sealed class ApiClient : IDisposable
                 return BackendStatus.WrongServer;
             }
 
+            // Apply the admin-controlled log verbosity (only once we've
+            // confirmed this is really a DraftRight backend, so a rogue server
+            // can't silence our logs). Older backends omit the field → no-op.
+            if (doc.RootElement.TryGetProperty("client_log_level", out var lvlProp)
+                && lvlProp.ValueKind == JsonValueKind.String)
+            {
+                DRLogger.SetMinLevelFromServer(lvlProp.GetString());
+            }
+
             // Step 2: Check /auth/me for login state. Goes through the
             // auto-refresh wrapper so an expired access token gets refreshed
             // before we mistakenly tell the tray "Not Logged In" — the bug
