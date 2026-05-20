@@ -197,7 +197,9 @@ final class QwertyKeyboardView: UIView {
         // Display label
         let displayLabel: String
         if isSpace(code) {
-            displayLabel = ""
+            // Show the active language on the space bar so the user can see
+            // which one the globe just switched to.
+            displayLabel = languagePack.displayName
         } else if code == SpecialKeys.shift && shiftState == .capsLock {
             displayLabel = "\u{2B06}\u{FE0F}" // ⬆️ with variation selector
         } else if isChar(code) && currentLayer == 0 && shiftState != .off {
@@ -206,8 +208,14 @@ final class QwertyKeyboardView: UIView {
             displayLabel = keyDef.label
         }
 
-        let fontSize: CGFloat =
-            (code == SpecialKeys.symbols || code == SpecialKeys.symbols2 || code == SpecialKeys.alpha) ? 12 : 18
+        let fontSize: CGFloat
+        if code == SpecialKeys.symbols || code == SpecialKeys.symbols2 || code == SpecialKeys.alpha {
+            fontSize = 12
+        } else if isSpace(code) {
+            fontSize = 14
+        } else {
+            fontSize = 18
+        }
 
         button.setTitle(displayLabel, for: .normal)
         button.setTitleColor(keyTextColor, for: .normal)

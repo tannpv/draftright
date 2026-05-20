@@ -167,23 +167,30 @@ final class TelexTypingUITests: XCTestCase {
     /// AZERTY). Exercises the real cycleLanguage path, not launch-arg pins.
     func test_globe_cyclesLanguages_en_vi_fr() {
         launchOnDraftRight(lang: "en")
-        // EN: plain.
+        // EN: plain + space bar shows the language name.
+        XCTAssertEqual(spaceBarLabel(), "English")
         type("viet")
         XCTAssertEqual(field.value as? String, "viet")
         clearField()
 
-        // EN → VI: Telex composes.
+        // EN → VI: Telex composes + label updates.
         cycleDraftRightLanguage()
         XCTAssertTrue(drKey("v").waitForExistence(timeout: 5))
+        XCTAssertEqual(spaceBarLabel(), "Tiếng Việt")
         type("vietj")
         XCTAssertEqual(field.value as? String, "việt")
         clearField()
 
-        // VI → FR: AZERTY layout (a leads the top row).
+        // VI → FR: AZERTY layout (a leads the top row) + label updates.
         cycleDraftRightLanguage()
         XCTAssertTrue(drKey("a").waitForExistence(timeout: 5))
+        XCTAssertEqual(spaceBarLabel(), "Français")
         type("azerty")
         XCTAssertEqual(field.value as? String, "azerty")
+    }
+
+    private func spaceBarLabel() -> String {
+        app.buttons["dr_space"].firstMatch.label
     }
 
     /// Tone → rewrite → replace, against a local stub backend. Skips when
