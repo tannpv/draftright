@@ -286,6 +286,22 @@ public class App : Application
         // InvokeRequired/Invoke will marshal show/hide calls back to this thread as needed.
         _loadingIndicator = new LoadingIndicator();
 
+        // Create UpdateService BEFORE starting the tray thread. RunTrayIcon
+        // wires the AvailableUpdateChanged subscription under `if (UpdateService
+        // != null)`; if the tray thread reached that check before this
+        // assignment, the subscription was silently skipped and the tray badge
+        // / "update available" menu never updated when an update was found.
+        // Read the real assembly version (hardcoding made every backend release
+        // look newer than the installed build).
+        var asmVer = System.Reflection.Assembly.GetExecutingAssembly()
+            .GetName().Version?.ToString() ?? "0.0.0";
+        // Drop trailing ".0" so the local string compares cleanly against
+        // semver-style backend versions ("2.1.1" not "2.1.1.0").
+        var currentVersion = asmVer.EndsWith(".0") ? asmVer.Substring(0, asmVer.Length - 2) : asmVer;
+        DRLogger.Log($"UpdateService current version: {currentVersion} (assembly {asmVer})",
+            DRLogger.Category.APP);
+        UpdateService = new UpdateService(currentVersion, Settings.BackendUrl);
+
         _trayThread = new Thread(RunTrayIcon);
         _trayThread.SetApartmentState(ApartmentState.STA);
         _trayThread.IsBackground = true;
@@ -295,17 +311,6 @@ public class App : Application
         _healthTimer = new System.Threading.Timer(async _ => await PerformHealthCheckAsync(), null, TimeSpan.Zero, TimeSpan.FromSeconds(30));
 
         // Start update check — 10 seconds after launch.
-        // Read the real assembly version. Previously hardcoded to "1.0.0", which
-        // meant every backend release looked newer (the user got an "update
-        // available" prompt for versions OLDER than what they had installed).
-        var asmVer = System.Reflection.Assembly.GetExecutingAssembly()
-            .GetName().Version?.ToString() ?? "0.0.0";
-        // Drop trailing ".0" if present so the local string compares cleanly
-        // against semver-style backend versions ("2.1.1" not "2.1.1.0").
-        var currentVersion = asmVer.EndsWith(".0") ? asmVer.Substring(0, asmVer.Length - 2) : asmVer;
-        DRLogger.Log($"UpdateService current version: {currentVersion} (assembly {asmVer})",
-            DRLogger.Category.APP);
-        UpdateService = new UpdateService(currentVersion, Settings.BackendUrl);
         _ = Task.Delay(TimeSpan.FromSeconds(10)).ContinueWith(_ => UpdateService.CheckIfNeededAsync());
 
         // Show a one-time "What's New" notice if we just updated to a newer
@@ -641,8 +646,9 @@ public class App : Application
         {
             UpdateService.AvailableUpdateChanged += () =>
             {
+                DRLogger.Log($"AvailableUpdateChanged fired (pumpHandle={_trayPump?.IsHandleCreated})", DRLogger.Category.APP);
                 try { _trayPump?.BeginInvoke(new Action(RefreshUpdateMenuItem)); }
-                catch { /* tray thread gone */ }
+                catch (Exception ex) { DRLogger.Error($"AvailableUpdateChanged marshal failed: {ex.GetType().Name}: {ex.Message}", DRLogger.Category.APP); }
             };
             RefreshUpdateMenuItem();
         }
@@ -657,6 +663,7 @@ public class App : Application
         if (_updateMenuItem == null) return;
         var u = UpdateService?.AvailableUpdate;
         var staged = u != null && (UpdateService?.UpdateStaged ?? false);
+        DRLogger.Log($"RefreshUpdateMenuItem: ran (u={u?.Version ?? "(null)"} staged={staged})", DRLogger.Category.APP);
         if (u != null)
         {
             _updateMenuItem.Text = staged
@@ -685,6 +692,7 @@ public class App : Application
         {
             // Fall back to the base icon if badge compositing failed at startup.
             _trayIcon.Icon = (hasUpdate && _badgeTrayIcon != null) ? _badgeTrayIcon : _baseTrayIcon;
+            DRLogger.Log($"UpdateTrayBadge: hasUpdate={hasUpdate} badgeIconNull={_badgeTrayIcon == null} visible={_trayIcon.Visible} — icon set", DRLogger.Category.APP);
 
             if (hasUpdate && !_updateBadgeShown)
             {
