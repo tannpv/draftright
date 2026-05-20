@@ -158,9 +158,13 @@ public static class KeepAliveAgent
     }
 
     /// <summary>
-    /// Build the Task Scheduler XML. RestartOnFailure with Interval=PT10S and
-    /// Count=10 mirrors the macOS ThrottleInterval=10 / KeepAlive guard.
-    /// Hidden=true keeps the task out of casual Task Scheduler UI clutter.
+    /// Build the Task Scheduler XML. RestartOnFailure with Interval=PT1M and
+    /// Count=10 approximates the macOS ThrottleInterval / KeepAlive guard.
+    /// Task Scheduler rejects any RestartOnFailure interval below one minute
+    /// ("The task XML contains a value which is incorrectly formatted or out
+    /// of range. ...Interval:PT10S") — PT1M is the smallest it accepts, so we
+    /// can't mirror launchd's 10s exactly. Hidden=true keeps the task out of
+    /// casual Task Scheduler UI clutter.
     /// </summary>
     private static string BuildTaskXml(string exePath, bool runAtLogon)
     {
@@ -187,7 +191,7 @@ public static class KeepAliveAgent
             "  </Principals>\n" +
             "  <Settings>\n" +
             "    <RestartOnFailure>\n" +
-            "      <Interval>PT10S</Interval>\n" +
+            "      <Interval>PT1M</Interval>\n" +
             "      <Count>10</Count>\n" +
             "    </RestartOnFailure>\n" +
             "    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>\n" +
