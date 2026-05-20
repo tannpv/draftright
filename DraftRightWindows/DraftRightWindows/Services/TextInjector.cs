@@ -156,7 +156,7 @@ public sealed class TextInjector
         if (sent != 4)
         {
             int err = Marshal.GetLastWin32Error();
-            DRLogger.Log($"InjectText: SendInput sent {sent}/4, GetLastError={err}", DRLogger.Category.HOTKEY);
+            DRLogger.Warn($"InjectText: SendInput sent {sent}/4, GetLastError={err}", DRLogger.Category.HOTKEY);
         }
 
         // 5. Brief delay for the paste to register before our caller continues.

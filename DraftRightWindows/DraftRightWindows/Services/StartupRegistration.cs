@@ -39,7 +39,7 @@ public static class StartupRegistration
         }
         catch (Exception ex)
         {
-            DRLogger.Log($"StartupRegistration.SetEnabled({enabled}) failed: {ex.Message}",
+            DRLogger.Warn($"StartupRegistration.SetEnabled({enabled}) failed: {ex.Message}",
                 DRLogger.Category.SETTINGS);
         }
     }

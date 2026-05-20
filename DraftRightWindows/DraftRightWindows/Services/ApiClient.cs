@@ -155,7 +155,7 @@ public sealed class ApiClient : IDisposable
 
             if (app != "draftright")
             {
-                DRLogger.Log($"CheckHealthAsync: /health.app={app ?? "(null)"} (expected 'draftright') → WrongServer",
+                DRLogger.Warn($"CheckHealthAsync: /health.app={app ?? "(null)"} (expected 'draftright') → WrongServer",
                     DRLogger.Category.API);
                 return BackendStatus.WrongServer;
             }
@@ -180,7 +180,7 @@ public sealed class ApiClient : IDisposable
         }
         catch (Exception ex)
         {
-            DRLogger.Log(
+            DRLogger.Warn(
                 $"CheckHealthAsync: failed after {sw.ElapsedMilliseconds}ms — {ex.GetType().Name}: {ex.Message}",
                 DRLogger.Category.API);
             return BackendStatus.Offline;
@@ -319,7 +319,7 @@ public sealed class ApiClient : IDisposable
             // Truncated body preview so error log entries don't bloat the log
             // with multi-KB stack traces from the backend.
             var preview = detail.Length > 200 ? detail.Substring(0, 200) + "…" : detail;
-            DRLogger.Log(
+            DRLogger.Error(
                 $"HandleResponse: non-success {(int)response.StatusCode} {response.ReasonPhrase} body={preview}",
                 DRLogger.Category.API);
 
