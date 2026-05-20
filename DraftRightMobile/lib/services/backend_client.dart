@@ -144,6 +144,65 @@ class BackendClient {
     return url;
   }
 
+  /// Best-effort: fetch `/health` and apply the admin-controlled
+  /// `client_log_level` to [DRLogger]. The mobile app doesn't poll /health for
+  /// liveness, so this runs once at startup. Any failure leaves the current
+  /// level untouched and never blocks startup.
+  static Future<void> applyClientLogLevel(String backendUrl) async {
+    try {
+      var base = backendUrl;
+      while (base.endsWith('/')) {
+        base = base.substring(0, base.length - 1);
+      }
+      final resp = await http
+          .get(Uri.parse('$base/health'))
+          .timeout(const Duration(seconds: 5));
+      if (resp.statusCode != 200) return;
+      final data = jsonDecode(resp.body) as Map<String, dynamic>;
+      if (data['app'] != 'draftright') return;
+      DRLogger.setMinLevelFromServer(data['client_log_level'] as String?);
+    } catch (_) {
+      // Best-effort — never block startup or change level on error.
+    }
+  }
+
+  /// Release notes the backend advertises for [version] on [platform]
+  /// ('android' | 'ios' | …), or null if the latest published version no
+  /// longer matches (e.g. a newer one is out) or there are no notes. Used for
+  /// the post-update "What's New" notice. Best-effort.
+  static Future<String?> releaseNotesForVersion(
+      String backendUrl, String platform, String version) async {
+    try {
+      var base = backendUrl;
+      while (base.endsWith('/')) {
+        base = base.substring(0, base.length - 1);
+      }
+      final resp = await http
+          .get(Uri.parse('$base/updates/latest?platform=$platform'))
+          .timeout(const Duration(seconds: 5));
+      if (resp.statusCode != 200) return null;
+      final data = jsonDecode(resp.body) as Map<String, dynamic>;
+
+      // Prefer the per-platform entry; fall back to the legacy top-level envelope.
+      String? backendVersion;
+      String? notes;
+      final platforms = data['platforms'];
+      if (platforms is Map && platforms[platform] is Map) {
+        final p = platforms[platform] as Map;
+        backendVersion = p['version'] as String?;
+        notes = p['notes'] as String?;
+      }
+      backendVersion ??= data['version'] as String?;
+      notes ??= data['release_notes'] as String?;
+
+      if (backendVersion != version) return null;
+      if (notes == null || notes.trim().isEmpty) return null;
+      return notes;
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<RewriteResult> rewrite({
     required String text,
     required Tone tone,
@@ -174,7 +233,7 @@ class BackendClient {
 
     if (response.statusCode >= 400) {
       final e = 'HTTP ${response.statusCode}: ${response.body}';
-      DRLogger.log('Rewrite error: $e', category: 'API');
+      DRLogger.error('Rewrite error: $e', category: 'API');
       throw Exception(e);
     }
 

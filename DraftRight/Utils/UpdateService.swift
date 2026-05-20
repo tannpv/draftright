@@ -170,7 +170,7 @@ final class UpdateService: ObservableObject {
                 await MainActor.run { promptRestart(update) }
                 return
             } catch {
-                DRLogger.log("Update staging attempt \(attempt)/3 failed: \(error.localizedDescription)", category: .app)
+                DRLogger.warn("Update staging attempt \(attempt)/3 failed: \(error.localizedDescription)", category: .app)
                 try? FileManager.default.removeItem(at: dmgURL)
                 if attempt < 3 {
                     try? await Task.sleep(nanoseconds: UInt64(attempt) * 5_000_000_000)
@@ -202,13 +202,24 @@ final class UpdateService: ObservableObject {
             DRLogger.log("Update \(version) installed silently; relaunching", category: .app)
             relaunch()
         } catch {
-            DRLogger.log("Update install failed: \(error.localizedDescription)", category: .app)
+            DRLogger.error("Update install failed: \(error.localizedDescription)", category: .app)
             let alert = NSAlert()
             alert.messageText = "Update Failed"
             alert.informativeText = "Could not install the update: \(error.localizedDescription)"
             alert.alertStyle = .critical
             alert.runModal()
         }
+    }
+
+    /// Release notes the backend advertises for `version`, or nil if the latest
+    /// published mac release no longer matches it (e.g. a newer one is already
+    /// out) or has no notes. Used for the post-update "What's New" notice —
+    /// right after updating, the latest version equals the running one.
+    func releaseNotesForVersion(_ version: String) async -> String? {
+        guard let info = await fetchLatestVersion() else { return nil }
+        let resolved = info.resolved(for: "mac")
+        guard resolved.version == version, !resolved.notes.isEmpty else { return nil }
+        return resolved.notes
     }
 
     private func fetchLatestVersion() async -> UpdateInfo? {
@@ -219,7 +230,7 @@ final class UpdateService: ObservableObject {
             let (data, _) = try await URLSession.shared.data(for: request)
             return try JSONDecoder().decode(UpdateInfo.self, from: data)
         } catch {
-            DRLogger.log("Update check failed: \(error.localizedDescription)", category: .app)
+            DRLogger.warn("Update check failed: \(error.localizedDescription)", category: .app)
             return nil
         }
     }
@@ -297,7 +308,7 @@ final class UpdateService: ObservableObject {
             relaunch()
         } catch {
             progressWindow.close()
-            DRLogger.log("Update failed: \(error.localizedDescription)", category: .app)
+            DRLogger.error("Update failed: \(error.localizedDescription)", category: .app)
             let alert = NSAlert()
             alert.messageText = "Update Failed"
             alert.informativeText = "Could not install the update: \(error.localizedDescription)"

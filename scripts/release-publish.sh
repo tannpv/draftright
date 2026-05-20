@@ -127,16 +127,37 @@ esac
 if [ -n "$DB_PLATFORM" ]; then
   echo "==> Updating app_releases.$DB_PLATFORM in prod DB..."
   SQL_URL="https://draftright.info$URL"
-  ssh draftright "sudo docker exec -i draftright-postgres-1 psql -U draftright -d draftright -v ON_ERROR_STOP=1 <<EOF
+
+  # Pull this version's user-facing note from CHANGELOG.md so clients can show
+  # a "What's New" notice after updating. Best-effort here (manual path) — a
+  # missing section just publishes empty notes with a warning; the CI release
+  # path enforces it.
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  if NOTES="$("$SCRIPT_DIR/changelog-extract.sh" "$VERSION" "$SCRIPT_DIR/../CHANGELOG.md" 2>/dev/null)"; then
+    echo "    notes:    $(printf '%s' "$NOTES" | head -1) …"
+  else
+    echo "    notes:    (!) no CHANGELOG.md section for $VERSION — publishing empty notes" >&2
+    NOTES=""
+  fi
+
+  # Build the SQL locally and pipe it to the remote psql over stdin. Notes are
+  # dollar-quoted ($drnote$) so multi-line text needs no escaping; the heredoc
+  # is no longer embedded in the remote command string.
+  SQL=$(cat <<SQLEOF
 -- Always writes the 'direct' channel row. Store-channel rows are managed
 -- via the admin Versions page (POST /admin/releases with channel=store).
 INSERT INTO app_releases (platform, channel, version, download_url, release_notes, required, enabled)
-VALUES ('$DB_PLATFORM', 'direct', '$VERSION', '$SQL_URL', '', false, true)
+VALUES ('$DB_PLATFORM', 'direct', '$VERSION', '$SQL_URL', \$drnote\$
+$NOTES
+\$drnote\$, false, true)
 ON CONFLICT (platform, channel) DO UPDATE SET
   version = EXCLUDED.version,
   download_url = EXCLUDED.download_url,
+  release_notes = EXCLUDED.release_notes,
   updated_at = now();
-EOF" 2>&1 | tail -2
+SQLEOF
+)
+  printf '%s\n' "$SQL" | ssh draftright "sudo docker exec -i draftright-postgres-1 psql -U draftright -d draftright -v ON_ERROR_STOP=1" 2>&1 | tail -2
 fi
 
 # ── 4. Verify ──────────────────────────────────────────────────────────────

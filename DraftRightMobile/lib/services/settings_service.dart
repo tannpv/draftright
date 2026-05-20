@@ -26,8 +26,11 @@ class SettingsService extends ChangeNotifier {
   bool _autoCloseAfterRewrite = true;
   List<String> _enabledLanguageIds = const ['en'];
   String _activeLanguageId = 'en';
+  String _lastSeenVersion = '';
 
   String get backendUrl => _backendUrl;
+  /// App version that last ran — drives the one-time post-update "What's New".
+  String get lastSeenVersion => _lastSeenVersion;
   String get translateLanguage => _translateLanguage;
   List<String> get enabledTones => List.unmodifiable(_enabledTones);
   String get defaultTone => _defaultTone;
@@ -54,10 +57,16 @@ class SettingsService extends ChangeNotifier {
     if (!_enabledLanguageIds.contains(_activeLanguageId)) {
       _activeLanguageId = _enabledLanguageIds.first;
     }
+    _lastSeenVersion = _prefs.getString('draftright.lastSeenVersion') ?? '';
 
     // Sync backend URL to SharedPreferences for keyboard extensions
     await _prefs.setString('draftright.backendUrl', _backendUrl);
     await AuthService.syncBackendUrlToAppGroup(_backendUrl);
+  }
+
+  Future<void> setLastSeenVersion(String version) async {
+    _lastSeenVersion = version;
+    await _prefs.setString('draftright.lastSeenVersion', version);
   }
 
   Future<void> setBackendUrl(String value) async {

@@ -116,7 +116,7 @@ struct AccountSettingsTab: View {
             lastSignInEmail = loginEmail
             loginPassword = ""
         } catch {
-            DRLogger.log("Sign-in FAILED: \(error.localizedDescription)", category: .settings)
+            DRLogger.error("Sign-in FAILED: \(error.localizedDescription)", category: .settings)
             loginError = error.localizedDescription
         }
         isLoggingIn = false
@@ -140,7 +140,7 @@ struct AccountSettingsTab: View {
             appModel.sessionExpired = false
             DRLogger.log("Google Sign-In: SUCCESS", category: .settings)
         } catch {
-            DRLogger.log("Google Sign-In FAILED: \(error.localizedDescription)", category: .settings)
+            DRLogger.error("Google Sign-In FAILED: \(error.localizedDescription)", category: .settings)
             loginError = error.localizedDescription
         }
         isLoggingIn = false

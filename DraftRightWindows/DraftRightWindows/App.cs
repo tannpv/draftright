@@ -301,6 +301,50 @@ public class App : Application
             DRLogger.Category.APP);
         UpdateService = new UpdateService(currentVersion, Settings.BackendUrl);
         _ = Task.Delay(TimeSpan.FromSeconds(10)).ContinueWith(_ => UpdateService.CheckIfNeededAsync());
+
+        // Show a one-time "What's New" notice if we just updated to a newer
+        // version since the last run.
+        _ = MaybeShowWhatsNewAsync(currentVersion);
+    }
+
+    /// <summary>
+    /// On the first launch after an update, shows the release notes the backend
+    /// advertises for the now-running version. Compares the running version
+    /// against the last one we recorded; only fires on an actual upgrade (not a
+    /// fresh install or downgrade), and records the current version so it shows
+    /// at most once per update.
+    /// </summary>
+    private async Task MaybeShowWhatsNewAsync(string currentVersion)
+    {
+        try
+        {
+            var lastSeen = Settings.LastSeenVersion;
+            // Always record the current version so the notice can't repeat.
+            if (lastSeen != currentVersion)
+            {
+                Settings.LastSeenVersion = currentVersion;
+                Settings.Save();
+            }
+
+            // Fresh install (no prior version) or not an upgrade → nothing to show.
+            var svc = UpdateService;
+            if (svc is null || string.IsNullOrEmpty(lastSeen)
+                || !UpdateService.IsNewerForTest(currentVersion, lastSeen))
+                return;
+
+            DRLogger.Log($"Post-update: detected upgrade {lastSeen} -> {currentVersion}, fetching What's New", DRLogger.Category.APP);
+            var notes = await svc.GetReleaseNotesForVersionAsync(currentVersion);
+            if (string.IsNullOrWhiteSpace(notes))
+            {
+                DRLogger.Log($"Post-update: no release notes available for {currentVersion} — skipping notice", DRLogger.Category.APP);
+                return;
+            }
+            Views.WhatsNewWindow.Show(currentVersion, notes!);
+        }
+        catch (Exception ex)
+        {
+            DRLogger.Warn($"Post-update What's New failed: {ex.Message}", DRLogger.Category.APP);
+        }
     }
 
     // ── WndProc subclass ────────────────────────────────────
