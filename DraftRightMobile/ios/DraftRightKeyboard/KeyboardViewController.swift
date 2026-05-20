@@ -264,33 +264,24 @@ extension KeyboardViewController: KeyboardActionDelegate {
     // MARK: - KeystrokeOutcome dispatch
 
     private func dispatch(_ outcome: KeystrokeOutcome, fallback: String) {
-        switch outcome {
-        case .commit(let text):
-            textDocumentProxy.unmarkText()
-            textDocumentProxy.insertText(text)
-        case .composing(let text):
-            textDocumentProxy.setMarkedText(text, selectedRange: NSRange(location: text.utf16.count, length: 0))
-        case .deleteOne:
-            textDocumentProxy.deleteBackward()
-        case .noChange:
-            textDocumentProxy.unmarkText()
-        }
+        KeystrokeDispatcher.apply(outcome, to: UIKitTextProxy(textDocumentProxy))
     }
 
     private func dispatchBackspace(_ outcome: KeystrokeOutcome) {
-        switch outcome {
-        case .commit(let text):
-            textDocumentProxy.unmarkText()
-            textDocumentProxy.insertText(text)
-        case .composing(let text):
-            textDocumentProxy.setMarkedText(text, selectedRange: NSRange(location: text.utf16.count, length: 0))
-        case .deleteOne:
-            textDocumentProxy.deleteBackward()
-        case .noChange:
-            // Composer just emptied its buffer via stripOneLayer. The
-            // marked-text region still shows the previous frame — clear
-            // it so the user doesn't appear stuck on the first character.
-            textDocumentProxy.unmarkText()
-        }
+        KeystrokeDispatcher.apply(outcome, to: UIKitTextProxy(textDocumentProxy))
     }
+}
+
+/// Adapts the UIKit `UITextDocumentProxy` to the headless-testable
+/// `KeyboardTextProxy` seam in DraftRightKeyboardCore.
+private final class UIKitTextProxy: KeyboardTextProxy {
+    private let proxy: UITextDocumentProxy
+    init(_ proxy: UITextDocumentProxy) { self.proxy = proxy }
+
+    func insert(_ text: String) { proxy.insertText(text) }
+    func deleteBackward() { proxy.deleteBackward() }
+    func setComposing(_ text: String) {
+        proxy.setMarkedText(text, selectedRange: NSRange(location: text.utf16.count, length: 0))
+    }
+    func clearComposing() { proxy.unmarkText() }
 }
