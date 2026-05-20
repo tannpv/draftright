@@ -510,6 +510,20 @@ public class UpdateService
         }
     }
 
+    /// <summary>
+    /// Release notes the backend currently advertises for <paramref name="version"/>,
+    /// or null if there are none or the latest published version no longer
+    /// matches (e.g. an even newer release is already out). Used for the
+    /// post-update "What's New" notice — right after updating, the latest
+    /// version equals the running version, so its notes are the right ones.
+    /// </summary>
+    public async Task<string?> GetReleaseNotesForVersionAsync(string version)
+    {
+        var info = await FetchLatestVersionAsync();
+        if (info == null || info.Version != version) return null;
+        return string.IsNullOrWhiteSpace(info.ReleaseNotes) ? null : info.ReleaseNotes;
+    }
+
     private async Task<UpdateInfo?> FetchLatestVersionAsync()
     {
         try
