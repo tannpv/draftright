@@ -47,6 +47,8 @@ private struct HealthResponse: Codable {
     let app: String
     let version: String
     let status: String
+    // Admin-controlled log verbosity; absent on older backends → nil.
+    let client_log_level: String?
 }
 
 final class BackendClient {
@@ -213,6 +215,10 @@ final class BackendClient {
             guard health.app == "draftright" else {
                 return .wrongServer
             }
+            // Apply admin-controlled log verbosity only once we've confirmed
+            // this is really a DraftRight backend (a rogue server shouldn't be
+            // able to silence our logs).
+            DRLogger.setMinLevelFromServer(health.client_log_level)
         } catch {
             return .offline
         }

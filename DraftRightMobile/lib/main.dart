@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:draftright_mobile/services/auth_service.dart';
+import 'package:draftright_mobile/services/backend_client.dart';
 import 'package:draftright_mobile/services/logger_service.dart';
 import 'package:draftright_mobile/services/settings_service.dart';
 import 'package:draftright_mobile/screens/login_screen.dart';
@@ -118,6 +119,10 @@ class _BootstrapState extends State<_Bootstrap> {
 
       final settings = SettingsService();
       await _step('settings', () => settings.init());
+
+      // Apply admin-controlled log verbosity (best-effort, one /health fetch).
+      await _step('loglevel',
+          () => BackendClient.applyClientLogLevel(settings.backendUrl));
 
       final auth = AuthService();
       await _step('auth', () => auth.init(settings.backendUrl));
