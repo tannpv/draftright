@@ -27,6 +27,10 @@
 **/bin/
 **/obj/
 DraftRightWindows/publish/
+# Self-contained publish output (incl. local test builds) — large single-file
+# exes that must never be committed (GitHub rejects >100 MB).
+**/publish/
+**/publish-*/
 DraftRightWindows/installer/Output/
 
 # Python
