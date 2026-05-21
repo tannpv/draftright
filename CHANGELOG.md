@@ -11,6 +11,9 @@ needed:** line.
 Heading format must stay `## <version>` (a date after an em dash is optional and
 ignored by the extractor), e.g. `## 2.3.6 — 2026-05-20`.
 
+## 2.3.10 — 2026-05-20
+- Advanced mode now auto-runs your chosen "Default Tone" the moment the rewrite panel opens — no need to click a tone first. Leave the default empty to keep picking manually.
+
 ## 2.3.9 — 2026-05-20
 - Completed the fix for the "update ready" tray badge — it now reliably appears (and the tray menu updates) when a new version is available.
 
