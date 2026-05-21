@@ -33,7 +33,7 @@ public partial class RewritePanelViewModel : ObservableObject
     /// <summary>
     /// Set when the latest /rewrite response was a grammar check
     /// (tone == grammar_check and the response has a `grammar` payload).
-    /// RewritePanel observes this and swaps in GrammarCheckView for richer UI.
+    /// The rewrite panel observes this to render grammar results distinctly.
     /// </summary>
     [ObservableProperty]
     private GrammarResult? _grammarResult;
