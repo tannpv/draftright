@@ -69,6 +69,7 @@ platform :ios do
       export_method: "app-store",
       output_directory: "build/",
       clean: true,
+      xcargs: "-allowProvisioningUpdates",
     )
     upload_to_app_store(
       api_key: asc_api_key,

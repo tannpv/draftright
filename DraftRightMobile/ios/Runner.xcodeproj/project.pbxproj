@@ -606,7 +606,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "echo \"=== Embed Extensions ===\"\n\nEXT_BUILD_DIR=\"${PROJECT_DIR}/build/keyboard_ext\"\nDEST=\"${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}.app/PlugIns\"\nmkdir -p \"${DEST}\"\n\n# Build extensions inheriting the parent build's signing env so DEVELOPMENT_TEAM\n# (free provisioning Personal Team) propagates. The previous version used\n# `env -i ... CODE_SIGN_IDENTITY=\"-\"` which forced ad-hoc signing — extensions\n# silently failed to build for personal-team devices, leaving PlugIns/ empty.\nbuild_and_embed() {\n  local TARGET=$1\n  echo \"--- Building ${TARGET} (team=${DEVELOPMENT_TEAM:-unset}) ---\"\n  xcodebuild build \\\n    -project \"${PROJECT_FILE_PATH}\" \\\n    -target \"${TARGET}\" \\\n    -configuration \"${CONFIGURATION}\" \\\n    -sdk \"${SDK_NAME}\" \\\n    SYMROOT=\"${EXT_BUILD_DIR}\" \\\n    DEVELOPMENT_TEAM=\"${DEVELOPMENT_TEAM}\" \\\n    CODE_SIGN_STYLE=Automatic \\\n    2>&1 | tail -10\n\n  APPEX_PATH=\"${EXT_BUILD_DIR}/${CONFIGURATION}${EFFECTIVE_PLATFORM_NAME}/${TARGET}.appex\"\n  BINARY=\"${APPEX_PATH}/${TARGET}\"\n  if [ -f \"${BINARY}\" ]; then\n    rm -rf \"${DEST}/${TARGET}.appex\"\n    cp -R \"${APPEX_PATH}\" \"${DEST}/\"\n    echo \"SUCCESS: Embedded ${TARGET}.appex\"\n  else\n    echo \"ERROR: ${TARGET} binary not found at ${BINARY}\"\n    ls -la \"${EXT_BUILD_DIR}\" 2>/dev/null\n  fi\n}\n\nbuild_and_embed DraftRightKeyboard\nbuild_and_embed DraftRightAction\n";
+			shellScript = "echo \"=== Embed Extensions ===\"\n\nEXT_BUILD_DIR=\"${PROJECT_DIR}/build/keyboard_ext\"\nDEST=\"${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}.app/PlugIns\"\nmkdir -p \"${DEST}\"\n\n# Build extensions inheriting the parent build's signing env so DEVELOPMENT_TEAM\n# (free provisioning Personal Team) propagates. The previous version used\n# `env -i ... CODE_SIGN_IDENTITY=\"-\"` which forced ad-hoc signing — extensions\n# silently failed to build for personal-team devices, leaving PlugIns/ empty.\nbuild_and_embed() {\n  local TARGET=$1\n  echo \"--- Building ${TARGET} (team=${DEVELOPMENT_TEAM:-unset}) ---\"\n  xcodebuild build \\\n    -project \"${PROJECT_FILE_PATH}\" \\\n    -target \"${TARGET}\" \\\n    -configuration \"${CONFIGURATION}\" \\\n    -sdk \"${SDK_NAME}\" \\\n    -allowProvisioningUpdates \\\n    SYMROOT=\"${EXT_BUILD_DIR}\" \\\n    DEVELOPMENT_TEAM=\"${DEVELOPMENT_TEAM}\" \\\n    CODE_SIGN_STYLE=Automatic \\\n    2>&1 | tail -10\n\n  APPEX_PATH=\"${EXT_BUILD_DIR}/${CONFIGURATION}${EFFECTIVE_PLATFORM_NAME}/${TARGET}.appex\"\n  BINARY=\"${APPEX_PATH}/${TARGET}\"\n  if [ -f \"${BINARY}\" ]; then\n    rm -rf \"${DEST}/${TARGET}.appex\"\n    cp -R \"${APPEX_PATH}\" \"${DEST}/\"\n    echo \"SUCCESS: Embedded ${TARGET}.appex\"\n  else\n    echo \"ERROR: ${TARGET} binary not found at ${BINARY}\"\n    ls -la \"${EXT_BUILD_DIR}\" 2>/dev/null\n  fi\n}\n\nbuild_and_embed DraftRightKeyboard\nbuild_and_embed DraftRightAction\n";
 		};
 		941E73F15CD0BBCB775E511F /* [CP] Copy Pods Resources */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -931,7 +931,6 @@
 			buildSettings = {
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_ENTITLEMENTS = DraftRightAction/DraftRightAction.entitlements;
-				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = Y8NWQK9BZJ;
@@ -990,7 +989,6 @@
 			buildSettings = {
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_ENTITLEMENTS = DraftRightAction/DraftRightAction.entitlements;
-				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = Y8NWQK9BZJ;
@@ -1323,7 +1321,6 @@
 			buildSettings = {
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_ENTITLEMENTS = DraftRightAction/DraftRightAction.entitlements;
-				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = Y8NWQK9BZJ;
