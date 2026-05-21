@@ -41,8 +41,8 @@ final class ToolbarView: UIView {
         stackView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.addSubview(stackView)
 
-        for tone in Tone.allCases {
-            let button = createToneButton(tone)
+        for (index, tone) in Tone.allCases.enumerated() {
+            let button = createToneButton(tone, index: index)
             stackView.addArrangedSubview(button)
         }
 
@@ -72,11 +72,10 @@ final class ToolbarView: UIView {
         ])
     }
 
-    private func createToneButton(_ tone: Tone) -> UIButton {
+    private func createToneButton(_ tone: Tone, index: Int) -> UIButton {
         let button = UIButton(type: .system)
         let config = UIImage.SymbolConfiguration(pointSize: 16, weight: .medium)
         button.setImage(UIImage(systemName: tone.iconName, withConfiguration: config), for: .normal)
-        let index = Tone.allCases.firstIndex(of: tone)!
         button.tag = index
         button.addTarget(self, action: #selector(toneTapped(_:)), for: .touchUpInside)
         button.widthAnchor.constraint(equalToConstant: 40).isActive = true
@@ -88,8 +87,8 @@ final class ToolbarView: UIView {
     }
 
     @objc private func toneTapped(_ sender: UIButton) {
-        let tone = Tone.allCases[sender.tag]
-        delegate?.toolbarDidSelectTone(tone)
+        guard Tone.allCases.indices.contains(sender.tag) else { return }
+        delegate?.toolbarDidSelectTone(Tone.allCases[sender.tag])
     }
 
     @objc private func undoTapped() {

@@ -16,7 +16,7 @@ class KeyboardViewController: UIInputViewController {
     private var controller: KeyboardController!
 
     private var totalHeight: CGFloat {
-        return 44 + keyboard.totalHeight // toolbar + keyboard rows
+        return KeyboardDimensions.toolbarHeight + keyboard.totalHeight
     }
 
     override func viewDidLoad() {
@@ -62,7 +62,7 @@ class KeyboardViewController: UIInputViewController {
             toolbar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             toolbar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             toolbar.topAnchor.constraint(equalTo: view.topAnchor),
-            toolbar.heightAnchor.constraint(equalToConstant: 44),
+            toolbar.heightAnchor.constraint(equalToConstant: KeyboardDimensions.toolbarHeight),
 
             keyboard.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             keyboard.trailingAnchor.constraint(equalTo: view.trailingAnchor),
@@ -108,7 +108,7 @@ class KeyboardViewController: UIInputViewController {
         sheet.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(sheet)
 
-        let sheetHeight: CGFloat = 280
+        let sheetHeight = KeyboardDimensions.diffSheetHeight
         NSLayoutConstraint.activate([
             sheet.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             sheet.trailingAnchor.constraint(equalTo: view.trailingAnchor),
@@ -117,7 +117,7 @@ class KeyboardViewController: UIInputViewController {
         ])
 
         // Push keyboard below diff sheet
-        heightConstraint.constant = 44 + sheetHeight + keyboard.totalHeight
+        heightConstraint.constant = KeyboardDimensions.toolbarHeight + sheetHeight + keyboard.totalHeight
         self.diffSheet = sheet
     }
 
@@ -148,8 +148,8 @@ class KeyboardViewController: UIInputViewController {
             banner.heightAnchor.constraint(equalToConstant: 28),
         ])
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-            banner.removeFromSuperview()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak banner] in
+            banner?.removeFromSuperview()
         }
     }
 }

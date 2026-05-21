@@ -37,10 +37,10 @@ final class QwertyKeyboardView: UIView {
         }
     }
 
-    private let rowHeight: CGFloat = 42
-    private let keyMargin: CGFloat = 3
-    private let keyRadius: CGFloat = 5
-    private let spaceCode = Int(Character(" ").unicodeScalars.first!.value)
+    private let rowHeight = KeyboardDimensions.rowHeight
+    private let keyMargin = KeyboardDimensions.keyMargin
+    private let keyRadius = KeyboardDimensions.keyRadius
+    private let spaceCode = Int(Character(" ").unicodeScalars.first?.value ?? 32)
 
     private var shiftState: ShiftState = .off
     private var currentLayer = 0 // 0=alpha, 1=symbols1, 2=symbols2
@@ -115,7 +115,7 @@ final class QwertyKeyboardView: UIView {
     }
 
     var totalHeight: CGFloat {
-        return rowHeight * 4
+        return KeyboardDimensions.keyboardHeight
     }
 
     // MARK: Build keyboard

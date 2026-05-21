@@ -1,4 +1,5 @@
 import UIKit
+import DraftRightKeyboardCore
 
 /// Long-press accent picker. Shows a horizontal strip of accent variants
 /// above the pressed key; tapping one inserts it, tapping outside dismisses.
@@ -11,9 +12,9 @@ final class AccentPopupView: UIView {
     private let onSelect: (String) -> Void
     private let onDismiss: () -> Void
 
-    private let cellWidth: CGFloat = 44
-    private let cellHeight: CGFloat = 48
-    private let cellGap: CGFloat = 4
+    private let cellWidth = KeyboardDimensions.accentCellWidth
+    private let cellHeight = KeyboardDimensions.accentCellHeight
+    private let cellGap = KeyboardDimensions.accentCellGap
 
     private var container: UIView?
 

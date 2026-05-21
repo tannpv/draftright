@@ -37,6 +37,7 @@ class SceneDelegate: FlutterSceneDelegate {
                                            binaryMessenger: messenger)
         appGroupChannel = channel
         let defaults = UserDefaults(suiteName: "group.com.draftright.v2")
+        assert(defaults != nil, "App Group group.com.draftright.v2 unavailable — check entitlements; keyboard sync will silently no-op")
 
         channel.setMethodCallHandler { call, result in
             let args = call.arguments as? [String: Any]
