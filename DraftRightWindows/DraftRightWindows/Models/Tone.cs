@@ -27,6 +27,22 @@ public static class ToneExtensions
         _ => "polished"
     };
 
+    /// <summary>Parse a backend API value (e.g. "polished", "grammar_check")
+    /// back into a <see cref="Tone"/>, or null if it doesn't match a known
+    /// tone. Inverse of <see cref="ApiValue"/>.</summary>
+    public static Tone? FromApiValue(string? apiValue) => apiValue switch
+    {
+        "simple" => Tone.Simple,
+        "natural" => Tone.Natural,
+        "polished" => Tone.Polished,
+        "concise" => Tone.Concise,
+        "technical" => Tone.Technical,
+        "claude" => Tone.Claude,
+        "grammar_check" => Tone.GrammarCheck,
+        "translate" => Tone.Translate,
+        _ => null
+    };
+
     public static string DisplayName(this Tone tone) => tone switch
     {
         Tone.Simple => "Simple",

@@ -191,6 +191,14 @@ public sealed class RewritePanelForm : WinForms.Form
             t.Start();
         }
         catch (Exception ex) { DRLogger.Warn($"Foreground-grab failed: {ex.Message}", DRLogger.Category.PANEL); }
+
+        // Advanced mode "Default Tone (auto-run)": run the configured tone on
+        // open so the user gets a rewrite without clicking. Null = manual pick.
+        if (AutoRunTone is Tone autoTone)
+        {
+            DRLogger.Log($"Panel: auto-running default tone {autoTone}", DRLogger.Category.PANEL);
+            RunTone(autoTone);
+        }
     }
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
@@ -418,11 +426,25 @@ public sealed class RewritePanelForm : WinForms.Form
         return flow;
     }
 
+    /// <summary>
+    /// Tone to run automatically when the panel first opens (Advanced mode's
+    /// "Default Tone (auto-run)" setting), so the user sees a rewrite without
+    /// clicking a tone. Null = wait for a manual click (the prior behavior).
+    /// Set by the caller before the panel is shown.
+    /// </summary>
+    public Tone? AutoRunTone { get; set; }
+
     private void OnToneClick(object? sender, EventArgs e)
     {
         if (sender is not WinForms.Button btn || btn.Tag is not Tone tone)
             return;
+        RunTone(tone);
+    }
 
+    /// <summary>Selects a tone (highlights its button) and kicks off the
+    /// rewrite — shared by manual clicks and the auto-run-on-open path.</summary>
+    private void RunTone(Tone tone)
+    {
         DRLogger.Log($"Tone selected: {tone}", DRLogger.Category.PANEL);
         UpdateToneButtonStyles(tone);
 
