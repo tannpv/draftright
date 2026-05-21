@@ -31,6 +31,10 @@
     <MrtCoreGeneratePriFiles Condition="'$(WindowsPackageType)' == 'None'">false</MrtCoreGeneratePriFiles>
     <EnableMrtTooling Condition="'$(WindowsPackageType)' == 'None'">false</EnableMrtTooling>
     <!-- MSIX-mode flags: enable when packaging for the Microsoft Store. -->
+    <!-- Required by the WinAppSDK PRI/MRT packaging target in MSIX mode
+         (WinAppSdkGenerateAppxManifest needs DefaultResourceLanguage). -->
+    <DefaultLanguage Condition="'$(WindowsPackageType)' == 'MSIX'">en-US</DefaultLanguage>
+    <DefaultResourceLanguage Condition="'$(WindowsPackageType)' == 'MSIX'">en-US</DefaultResourceLanguage>
     <AppxPackage Condition="'$(WindowsPackageType)' == 'MSIX'">true</AppxPackage>
     <EnableMsixTooling Condition="'$(WindowsPackageType)' == 'MSIX'">true</EnableMsixTooling>
     <GenerateAppxPackageOnBuild Condition="'$(WindowsPackageType)' == 'MSIX'">true</GenerateAppxPackageOnBuild>
