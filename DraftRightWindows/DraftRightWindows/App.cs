@@ -55,17 +55,11 @@ public class App : Application
 
     // ── Rewrite flow ────────────────────────────────────────
     private DispatcherQueue? _dispatcherQueue;
-    // The WinUI RewritePanel relies on theme XAML resources (themeresources.xaml,
-    // TabViewScrollButtonBackground, etc.) that are only fully resolvable when the
-    // app is built with the VS AppX MSBuild tooling that produces a real
-    // resources.pri. On unpackaged builds without that tooling, the WinUI panel
-    // crashes during the first XAML render with STATUS_STOWED_EXCEPTION (0xc000027b)
-    // / "Cannot find a Resource with the Name/Key TabViewScrollButtonBackground".
-    //
-    // RewritePanelForm is a WinForms reimplementation of the same UI surface
-    // (same ViewModel API, same dark theme) that doesn't go through XAML and
-    // therefore works reliably on local x64 builds. Used in place of the WinUI
-    // panel below.
+    // The rewrite UI is a WinForms form (RewritePanelForm), not WinUI XAML: on
+    // unpackaged builds without the VS AppX tooling (no real resources.pri), a
+    // WinUI panel crashed on first render (STATUS_STOWED_EXCEPTION 0xc000027b —
+    // "Cannot find a Resource ... TabViewScrollButtonBackground"). The WinForms
+    // form shares the same ViewModel API + dark theme and works on local x64.
     private RewritePanelForm? _rewritePanel;
     private Thread? _rewritePanelThread;
     private IntPtr _sourceWindow = IntPtr.Zero;
@@ -381,7 +375,7 @@ public class App : Application
 
     /// <summary>
     /// Called (on the WndProc thread) when the global hotkey fires.
-    /// Captures selected text from the foreground app and opens the RewritePanel.
+    /// Captures selected text from the foreground app and opens the rewrite panel.
     /// </summary>
     private async Task HandleHotkeyAsync()
     {
