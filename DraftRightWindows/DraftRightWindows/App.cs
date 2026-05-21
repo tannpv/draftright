@@ -22,24 +22,9 @@ public class App : Application
     private Window? _hiddenWindow;
     private IntPtr _hwnd = IntPtr.Zero;
     private WinForms.Form? _settingsForm;
-    private Thread? _trayThread;
-    private WinForms.NotifyIcon? _trayIcon;
-    // Hidden, never-shown form used purely as a marshaling target on the tray
-    // thread. ContextMenuStrip.BeginInvoke throws until its handle is created
-    // (i.e. until the menu is first opened), so cross-thread tray updates
-    // (update-available menu text + icon badge) were silently dropped. A form
-    // gives us a handle that exists from startup.
-    private WinForms.Form? _trayPump;
     private System.Threading.Timer? _healthTimer;
-    private WinForms.ToolStripMenuItem? _statusMenuItem;
-    private WinForms.ToolStripMenuItem? _updateMenuItem;
-    // Base tray icon and a cached copy with an "update ready" badge dot. We
-    // swap _trayIcon.Icon between them as the update state changes.
-    private Icon? _baseTrayIcon;
-    private Icon? _badgeTrayIcon;
-    // Tracks the last badge state so the "update ready" balloon fires once on
-    // the rising edge, not on every AvailableUpdateChanged tick.
-    private bool _updateBadgeShown;
+    // Owns the tray icon, menu, update badge, and its STA pump thread.
+    private TrayIconController? _tray;
     public static BackendStatus CurrentStatus { get; private set; } = BackendStatus.Offline;
     private DateTime _lastAutoRecovery = DateTime.MinValue;
     public static UpdateService? UpdateService { get; private set; }
@@ -280,11 +265,10 @@ public class App : Application
         // InvokeRequired/Invoke will marshal show/hide calls back to this thread as needed.
         _loadingIndicator = new LoadingIndicator();
 
-        // Create UpdateService BEFORE starting the tray thread. RunTrayIcon
-        // wires the AvailableUpdateChanged subscription under `if (UpdateService
-        // != null)`; if the tray thread reached that check before this
-        // assignment, the subscription was silently skipped and the tray badge
-        // / "update available" menu never updated when an update was found.
+        // Create UpdateService BEFORE starting the tray. The tray subscribes to
+        // its AvailableUpdateChanged event in its ctor, so it must already
+        // exist — otherwise the badge / "update available" menu never updates
+        // when an update is found.
         // Read the real assembly version (hardcoding made every backend release
         // look newer than the installed build).
         var asmVer = System.Reflection.Assembly.GetExecutingAssembly()
@@ -296,10 +280,12 @@ public class App : Application
             DRLogger.Category.APP);
         UpdateService = new UpdateService(currentVersion, Settings.BackendUrl);
 
-        _trayThread = new Thread(RunTrayIcon);
-        _trayThread.SetApartmentState(ApartmentState.STA);
-        _trayThread.IsBackground = true;
-        _trayThread.Start();
+        _tray = new TrayIconController(
+            UpdateService,
+            onOpenSettings: OpenSettings,
+            onSignOut: () => { Auth.ClearTokens(); Api.ClearToken(); },
+            onQuit: DoQuit);
+        _tray.Start();
 
         // Start health check — immediate first check, then every 30 seconds
         _healthTimer = new System.Threading.Timer(async _ => await PerformHealthCheckAsync(), null, TimeSpan.Zero, TimeSpan.FromSeconds(30));
@@ -575,143 +561,7 @@ public class App : Application
     {
         DRLogger.Error($"One-Click error: {message}", DRLogger.Category.HOTKEY);
 
-        try
-        {
-            if (_trayIcon != null)
-            {
-                _trayIcon.BalloonTipTitle = "DraftRight \u2014 One-Click Rewrite Failed";
-                _trayIcon.BalloonTipText = message;
-                _trayIcon.BalloonTipIcon = WinForms.ToolTipIcon.Error;
-                _trayIcon.ShowBalloonTip(4000);
-            }
-        }
-        catch
-        {
-            // Best-effort: tray icon may be disposed or BalloonTip unavailable — log only.
-        }
-    }
-
-    private void RunTrayIcon()
-    {
-        WinForms.Application.EnableVisualStyles();
-
-        // Marshaling target with a guaranteed handle (forced below). Never
-        // shown, so it's invisible; Application.Run() still pumps its messages.
-        _trayPump = new WinForms.Form { ShowInTaskbar = false };
-        _ = _trayPump.Handle; // force handle creation on the tray thread
-
-        _trayIcon = new WinForms.NotifyIcon();
-        _trayIcon.Text = "DraftRight";
-
-        var exePath = Environment.ProcessPath;
-        if (exePath != null)
-        {
-            var icoPath = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(exePath)!, "Assets", "DraftRight.ico");
-            if (System.IO.File.Exists(icoPath))
-                _baseTrayIcon = new Icon(icoPath);
-            else
-                _baseTrayIcon = (Icon)SystemIcons.Application.Clone();
-        }
-        else
-        {
-            _baseTrayIcon = (Icon)SystemIcons.Application.Clone();
-        }
-        _trayIcon.Icon = _baseTrayIcon;
-        // Pre-build the badged variant once so RefreshUpdateMenuItem can swap
-        // it in without recompositing on every update-state change.
-        try { _badgeTrayIcon = TrayIconBadge.WithDot(_baseTrayIcon); }
-        catch (Exception ex) { DRLogger.Warn($"Tray badge icon build failed: {ex.Message}", DRLogger.Category.APP); }
-
-        var menu = new WinForms.ContextMenuStrip();
-        _statusMenuItem = new WinForms.ToolStripMenuItem("Offline") { Enabled = false };
-        menu.Items.Add(_statusMenuItem);
-        _updateMenuItem = new WinForms.ToolStripMenuItem("Update available")
-        {
-            Visible = false,
-            ForeColor = Color.FromArgb(34, 197, 94),
-        };
-        _updateMenuItem.Click += (_, _) =>
-        {
-            var u = UpdateService?.AvailableUpdate;
-            if (u != null) UpdateService!.StartInstall(u);
-        };
-        menu.Items.Add(_updateMenuItem);
-        menu.Items.Add(new WinForms.ToolStripSeparator());
-        menu.Items.Add("Settings", null, (_, _) => OpenSettings());
-        menu.Items.Add(new WinForms.ToolStripSeparator());
-        menu.Items.Add("Sign Out", null, (_, _) => { Auth.ClearTokens(); Api.ClearToken(); });
-        menu.Items.Add("Quit", null, (_, _) => DoQuit());
-
-        _trayIcon.ContextMenuStrip = menu;
-        _trayIcon.DoubleClick += (_, _) => OpenSettings();
-        _trayIcon.Visible = true;
-
-        // Reflect "update available" in the tray menu — both now (in case the
-        // 10s-after-launch check already finished) and whenever it changes.
-        if (UpdateService != null)
-        {
-            UpdateService.AvailableUpdateChanged += () =>
-            {
-                DRLogger.Log($"AvailableUpdateChanged fired (pumpHandle={_trayPump?.IsHandleCreated})", DRLogger.Category.APP);
-                try { _trayPump?.BeginInvoke(new Action(RefreshUpdateMenuItem)); }
-                catch (Exception ex) { DRLogger.Error($"AvailableUpdateChanged marshal failed: {ex.GetType().Name}: {ex.Message}", DRLogger.Category.APP); }
-            };
-            RefreshUpdateMenuItem();
-        }
-
-        WinForms.Application.Run();
-    }
-
-    // Show/hide + relabel the tray "update available" item from the current
-    // UpdateService.AvailableUpdate. Must run on the tray thread.
-    private void RefreshUpdateMenuItem()
-    {
-        if (_updateMenuItem == null) return;
-        var u = UpdateService?.AvailableUpdate;
-        var staged = u != null && (UpdateService?.UpdateStaged ?? false);
-        DRLogger.Log($"RefreshUpdateMenuItem: ran (u={u?.Version ?? "(null)"} staged={staged})", DRLogger.Category.APP);
-        if (u != null)
-        {
-            _updateMenuItem.Text = staged
-                ? $"Update {u.Version} ready — restart & install"
-                : $"Update {u.Version} available — install now";
-            _updateMenuItem.Visible = true;
-        }
-        else
-        {
-            _updateMenuItem.Visible = false;
-        }
-
-        UpdateTrayBadge(u != null, u?.Version, staged);
-    }
-
-    /// <summary>
-    /// Reflects "an update is ready to install" on the always-visible tray
-    /// icon: swaps in the badged icon and, on the rising edge, shows a one-time
-    /// balloon so the badge isn't silently easy to miss. Must run on the tray
-    /// thread (called from <see cref="RefreshUpdateMenuItem"/>).
-    /// </summary>
-    private void UpdateTrayBadge(bool hasUpdate, string? version, bool staged)
-    {
-        if (_trayIcon == null) return;
-        try
-        {
-            // Fall back to the base icon if badge compositing failed at startup.
-            _trayIcon.Icon = (hasUpdate && _badgeTrayIcon != null) ? _badgeTrayIcon : _baseTrayIcon;
-            DRLogger.Log($"UpdateTrayBadge: hasUpdate={hasUpdate} badgeIconNull={_badgeTrayIcon == null} visible={_trayIcon.Visible} — icon set", DRLogger.Category.APP);
-
-            if (hasUpdate && !_updateBadgeShown)
-            {
-                _trayIcon.BalloonTipTitle = "DraftRight update";
-                _trayIcon.BalloonTipText = staged
-                    ? $"Version {version} is ready to install — open the DraftRight tray menu to restart & install."
-                    : $"Version {version} is available — open the DraftRight tray menu to install.";
-                _trayIcon.BalloonTipIcon = WinForms.ToolTipIcon.Info;
-                _trayIcon.ShowBalloonTip(5000);
-            }
-        }
-        catch { /* tray icon may be disposed during shutdown */ }
-        _updateBadgeShown = hasUpdate;
+        _tray?.ShowError("DraftRight - One-Click Rewrite Failed", message);
     }
 
     private async Task PerformHealthCheckAsync()
@@ -719,28 +569,15 @@ public class App : Application
         var status = await Api.CheckHealthAsync();
         CurrentStatus = status;
 
-        // Update tray icon tooltip and status menu item on the tray thread
-        if (_trayIcon != null)
+        // Reflect status on the tray (tooltip + status menu header).
+        var label = status switch
         {
-            var label = status switch
-            {
-                BackendStatus.Connected => "Connected",
-                BackendStatus.NotLoggedIn => "Not Logged In",
-                BackendStatus.WrongServer => "Wrong Server",
-                _ => "Offline"
-            };
-
-            try
-            {
-                _trayIcon.Text = $"DraftRight - {label}";
-                if (_statusMenuItem != null)
-                    _statusMenuItem.Text = label;
-            }
-            catch
-            {
-                // Tray icon may be disposed during shutdown
-            }
-        }
+            BackendStatus.Connected => "Connected",
+            BackendStatus.NotLoggedIn => "Not Logged In",
+            BackendStatus.WrongServer => "Wrong Server",
+            _ => "Offline"
+        };
+        _tray?.SetStatus(label);
 
         // Check for updates (throttled internally to once per 24h)
         if (UpdateService != null)
@@ -826,18 +663,7 @@ public class App : Application
         if (_subclassProc != null && _hwnd != IntPtr.Zero)
             Win32Interop.RemoveWindowSubclass(_hwnd, _subclassProc, (UIntPtr)1);
 
-        if (_trayIcon != null)
-        {
-            _trayIcon.Visible = false;
-            _trayIcon.Dispose();
-            _trayIcon = null;
-        }
-        _trayPump?.Dispose();
-        _trayPump = null;
-        _badgeTrayIcon?.Dispose();
-        _badgeTrayIcon = null;
-        _baseTrayIcon?.Dispose();
-        _baseTrayIcon = null;
+        _tray?.Dispose();
         _settingsForm?.Close();
         WinForms.Application.ExitThread();
         Environment.Exit(0);
