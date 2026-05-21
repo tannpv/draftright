@@ -364,21 +364,20 @@ jobs:
         uses: microsoft/setup-msbuild@v2
 
       - name: Restore
-        run: msbuild /t:Restore /p:Configuration=Release /p:Platform=x64 /p:RuntimeIdentifier=win-x64
+        run: msbuild /t:Restore /p:Configuration=Release /p:Platform=x64
 
       - name: Build MSIX (x64, StoreUpload)
         shell: pwsh
         run: |
-          # x64-only single-project MSIX. The multi-arch .msixbundle path
-          # needs per-arch PackageArchitecture wiring (WinAppSdk recipe
-          # target errors without it); a single-arch x64 .msix is accepted
-          # by the Store and is enough to ship. arm64 can be added later as
-          # a second package in the same submission.
+          # Platform=x64 is the WinUI 3 architecture selector for MSIX.
+          # RuntimeIdentifier is deliberately omitted: it shifts output to a
+          # win-x64/ subfolder but resources.pri is generated at the parent
+          # path, causing APPX0702. PackageArchitecture=x64 tells the WinAppSdk
+          # recipe target the target arch (fixes WinAppSdkGenerateAppxPackageRecipe).
           msbuild `
             /t:Rebuild `
             /p:Configuration=Release `
             /p:Platform=x64 `
-            /p:RuntimeIdentifier=win-x64 `
             /p:WindowsPackageType=MSIX `
             /p:EnableMsixTooling=true `
             /p:GenerateAppxPackageOnBuild=true `
