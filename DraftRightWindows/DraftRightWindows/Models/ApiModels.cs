@@ -81,7 +81,7 @@ public class RewriteResponse
     /// <summary>
     /// Present only when tone == grammar_check. Backend returns a structured
     /// { grammar: { score, issues: [...] } } in addition to (or instead of) a
-    /// flat rewritten_text. Rendered by GrammarCheckView.
+    /// flat rewritten_text.
     /// </summary>
     [JsonPropertyName("grammar")]
     public GrammarResult? Grammar { get; set; }
