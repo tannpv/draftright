@@ -7,6 +7,13 @@ import kotlin.concurrent.thread
 
 class BackendClient {
 
+    private companion object {
+        /** Connect + read timeout for the /rewrite call (ms). */
+        const val NETWORK_TIMEOUT_MS = 15_000
+        /** Backend enforces a max input length; truncate client-side to match. */
+        const val MAX_INPUT_CHARS = 3000
+    }
+
     fun rewrite(
         text: String,
         tone: Tone,
@@ -24,7 +31,7 @@ class BackendClient {
                     return@thread
                 }
 
-                val inputText = if (text.length > 3000) text.substring(0, 3000) else text
+                val inputText = if (text.length > MAX_INPUT_CHARS) text.substring(0, MAX_INPUT_CHARS) else text
 
                 val body = JSONObject().apply {
                     put("text", inputText)
@@ -41,8 +48,8 @@ class BackendClient {
                     conn.requestMethod = "POST"
                     conn.setRequestProperty("Content-Type", "application/json")
                     conn.setRequestProperty("Authorization", "Bearer $bearerToken")
-                    conn.connectTimeout = 15000
-                    conn.readTimeout = 15000
+                    conn.connectTimeout = NETWORK_TIMEOUT_MS
+                    conn.readTimeout = NETWORK_TIMEOUT_MS
                     conn.doOutput = true
                     conn.outputStream.use { it.write(body.toString().toByteArray()) }
 

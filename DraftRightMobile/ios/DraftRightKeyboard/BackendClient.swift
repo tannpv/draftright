@@ -13,6 +13,13 @@ struct RewriteResponse: Codable {
 }
 
 final class BackendClient {
+    private enum Config {
+        /// Backend caps rewrite input length; truncate client-side to match.
+        static let maxInputChars = 3000
+        /// Request timeout for the /rewrite call (seconds).
+        static let timeoutSeconds: TimeInterval = 15
+    }
+
     func rewrite(
         text: String,
         tone: Tone,
@@ -40,13 +47,12 @@ final class BackendClient {
             return
         }
 
-        // Backend caps rewrite input; truncate defensively. Log so a
-        // user's "missing" tail isn't a silent mystery during debugging.
-        let maxInputChars = 3000
-        if text.count > maxInputChars {
-            NSLog("[DraftRight] rewrite input truncated from \(text.count) to \(maxInputChars) chars")
+        // Truncate defensively. Log so a user's "missing" tail isn't a
+        // silent mystery during debugging.
+        if text.count > Config.maxInputChars {
+            NSLog("[DraftRight] rewrite input truncated from \(text.count) to \(Config.maxInputChars) chars")
         }
-        let inputText = String(text.prefix(maxInputChars))
+        let inputText = String(text.prefix(Config.maxInputChars))
         let targetLanguage = tone == .translate ? settings.translateLanguage : nil
         let body = RewriteRequest(text: inputText, tone: tone.apiValue, target_language: targetLanguage)
 
@@ -54,7 +60,7 @@ final class BackendClient {
         request.httpMethod = "POST"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         request.addValue("Bearer \(bearerToken)", forHTTPHeaderField: "Authorization")
-        request.timeoutInterval = 15
+        request.timeoutInterval = Config.timeoutSeconds
 
         do {
             request.httpBody = try JSONEncoder().encode(body)

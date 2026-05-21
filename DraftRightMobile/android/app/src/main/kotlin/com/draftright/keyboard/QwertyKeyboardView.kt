@@ -62,8 +62,7 @@ class QwertyKeyboardView(
     init {
         orientation = VERTICAL
 
-        val uiMode = context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK
-        val isDark = uiMode == android.content.res.Configuration.UI_MODE_NIGHT_YES
+        val isDark = KeyboardTheme.isDark(context)
 
         if (isDark) {
             keyboardBgColor = Color.parseColor("#1B1B1F")
