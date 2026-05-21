@@ -40,7 +40,13 @@ final class BackendClient {
             return
         }
 
-        let inputText = String(text.prefix(3000))
+        // Backend caps rewrite input; truncate defensively. Log so a
+        // user's "missing" tail isn't a silent mystery during debugging.
+        let maxInputChars = 3000
+        if text.count > maxInputChars {
+            NSLog("[DraftRight] rewrite input truncated from \(text.count) to \(maxInputChars) chars")
+        }
+        let inputText = String(text.prefix(maxInputChars))
         let targetLanguage = tone == .translate ? settings.translateLanguage : nil
         let body = RewriteRequest(text: inputText, tone: tone.apiValue, target_language: targetLanguage)
 

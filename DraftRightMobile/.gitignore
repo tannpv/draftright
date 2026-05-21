@@ -68,6 +68,11 @@ android/fastlane/play-console-key.json
 **/play-console-key.json
 google-play-*.json
 
+# Negate the user's global `tests` ignore (case-insensitive on macOS)
+# so the SwiftPM keyboard-core test target stays tracked.
+!ios/DraftRightKeyboardCore/Tests/
+!ios/DraftRightKeyboardCore/Tests/**
+
 # Fastlane runtime artifacts
 android/fastlane/report.xml
 android/fastlane/Preview.html

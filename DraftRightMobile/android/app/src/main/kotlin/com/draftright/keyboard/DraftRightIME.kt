@@ -32,8 +32,7 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
     private val registry: LanguageRegistry by lazy {
         try {
             LanguageRegistry.PRODUCTION
-        } catch (t: Throwable) {
-            android.util.Log.e("DraftRightIME", "registry init failed", t)
+        } catch (_: Throwable) {
             LanguageRegistry(listOf(EnglishLanguagePack))
         }
     }
@@ -206,7 +205,7 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
         val text = readFullText().trim()
         if (text.isEmpty()) return
 
-        if (settings.accessToken.isEmpty()) {
+        if (settings.bearerToken.isEmpty()) {
             showBanner("Please login in DraftRight app")
             return
         }

@@ -52,20 +52,28 @@ public final class TelexComposer: Composer {
         if buf.isEmpty { return nil }
         let low = Character(incoming.lowercased())
 
-        // Tone marks (s/f/r/x/j) — apply if buffer contains a vowel-like char.
-        if TelexState.isToneMark(low) && buf.contains(where: { TelexState.isVowelLike($0) }) {
+        // Tone marks (s/f/r/x/j) — apply to plain, marked, or already-toned
+        // vowels. Retyping the same tone cancels it (Samsung Telex behavior).
+        if TelexState.isToneMark(low) && bufferHasTonableVowel(buf) {
+            if let canceled = tryCancelTone(buf, low, incoming) { return canceled }
             return applyTone(buf, low)
         }
 
         // 'w' has multiple meanings depending on the preceding chars.
         if low == "w" {
+            if let canceled = tryCancelHornBreve(buf, incoming) { return canceled }
             return applyHornOrBreve(buf, wIsUpper: incoming.isUppercase)
         }
 
-        // dd → đ
+        // dd → đ, or cancel đ back to d + literal d.
         if low == "d" {
             guard let last = buf.last else { return nil }
-            if Character(last.lowercased()) == "d" {
+            let lastLow = Character(last.lowercased())
+            if lastLow == "đ" {
+                let mapped: Character = last.isUppercase ? "D" : "d"
+                return String(buf.dropLast()) + String(mapped) + String(incoming)
+            }
+            if lastLow == "d" {
                 let upper = incoming.isUppercase || last.isUppercase
                 let replacement: Character = upper ? "Đ" : "đ"
                 return String(buf.dropLast()) + String(replacement)
@@ -73,7 +81,7 @@ public final class TelexComposer: Composer {
             return nil
         }
 
-        // Double-vowel circumflex: aa/oo/ee.
+        // Double-vowel circumflex: aa/oo/ee. Retype cancels back to base + literal.
         let replacement: Character
         switch low {
         case "a": replacement = "â"
@@ -81,10 +89,67 @@ public final class TelexComposer: Composer {
         case "e": replacement = "ê"
         default: return nil
         }
-        guard let last = buf.last, Character(last.lowercased()) == low else { return nil }
+        guard let last = buf.last else { return nil }
+        let lastLow = Character(last.lowercased())
+        if lastLow == replacement {
+            let mapped: Character = last.isUppercase ? Character(low.uppercased()) : low
+            return String(buf.dropLast()) + String(mapped) + String(incoming)
+        }
+        guard lastLow == low else { return nil }
         let upper = incoming.isUppercase || last.isUppercase
         let mapped: Character = upper ? Character(replacement.uppercased()) : replacement
         return String(buf.dropLast()) + String(mapped)
+    }
+
+    private static func bufferHasTonableVowel(_ buf: String) -> Bool {
+        return buf.contains { c in
+            TelexState.isVowelLike(c) || unTone[Character(c.lowercased())] != nil
+        }
+    }
+
+    private static func tryCancelTone(_ buf: String, _ toneChar: Character, _ incoming: Character) -> String? {
+        guard let toneIdx = toneIndex[toneChar] else { return nil }
+        let chars = Array(buf)
+        // Scan right-to-left so the most recent tone gets canceled.
+        for i in stride(from: chars.count - 1, through: 0, by: -1) {
+            let c = chars[i]
+            let lower = Character(c.lowercased())
+            guard let baseRoot = unTone[lower] else { continue }
+            guard let row = toneRowsLower[baseRoot] else { continue }
+            if row[toneIdx] == lower {
+                let untoned: Character = c.isUppercase ? Character(baseRoot.uppercased()) : baseRoot
+                var newChars = chars
+                newChars[i] = untoned
+                return String(newChars) + String(incoming)
+            }
+        }
+        return nil
+    }
+
+    private static func tryCancelHornBreve(_ buf: String, _ incoming: Character) -> String? {
+        if buf.isEmpty { return nil }
+        let chars = Array(buf)
+        // uow cluster cancel: ươ → uo + literal w.
+        if chars.count >= 2 {
+            let twoBack = chars[chars.count - 2]
+            let oneBack = chars[chars.count - 1]
+            if Character(twoBack.lowercased()) == "ư" && Character(oneBack.lowercased()) == "ơ" {
+                let u2: Character = twoBack.isUppercase ? "U" : "u"
+                let o2: Character = oneBack.isUppercase ? "O" : "o"
+                return String(buf.dropLast(2)) + String(u2) + String(o2) + String(incoming)
+            }
+        }
+        guard let last = buf.last else { return nil }
+        let unmarked: Character?
+        switch Character(last.lowercased()) {
+        case "ă": unmarked = "a"
+        case "ơ": unmarked = "o"
+        case "ư": unmarked = "u"
+        default: unmarked = nil
+        }
+        guard let u = unmarked else { return nil }
+        let mapped: Character = last.isUppercase ? Character(u.uppercased()) : u
+        return String(buf.dropLast()) + String(mapped) + String(incoming)
     }
 
     static func applyHornOrBreve(_ buf: String, wIsUpper: Bool) -> String? {
@@ -181,7 +246,16 @@ public final class TelexComposer: Composer {
         _ hasTrailingConsonant: Bool
     ) -> Int {
         let len = endInclusive - start + 1
-        if len >= 3 { return start + 1 }
+        if len >= 3 {
+            // A circumflex/horn/breve vowel takes the tone. When there are
+            // two (e.g. "ươi"), the tone goes on the LAST one — ơ in ươ,
+            // ê in uyê. Otherwise default to the middle vowel.
+            for i in stride(from: endInclusive, through: start, by: -1)
+            where TelexState.isSpecialVowel(chars[i]) {
+                return i
+            }
+            return start + 1
+        }
         if len == 2 {
             let first = chars[start]
             let second = chars[endInclusive]

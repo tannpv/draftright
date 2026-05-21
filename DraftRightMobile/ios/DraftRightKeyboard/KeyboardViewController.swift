@@ -1,4 +1,5 @@
 import UIKit
+import DraftRightKeyboardCore
 
 class KeyboardViewController: UIInputViewController {
 
@@ -10,13 +11,35 @@ class KeyboardViewController: UIInputViewController {
     private var originalText: String?
     private var heightConstraint: NSLayoutConstraint!
 
+    // Tier β: language registry + per-language composer routing.
+    private let registry = LanguageRegistry.production
+    private var controller: KeyboardController!
+
     private var totalHeight: CGFloat {
-        return 44 + keyboard.totalHeight // toolbar + keyboard rows
+        return KeyboardDimensions.toolbarHeight + keyboard.totalHeight
     }
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        rebuildController()
         setupUI()
+    }
+
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        // Re-read enabled / active language ids each time the keyboard
+        // appears so a settings change in the main app takes effect on
+        // the next invocation without requiring an extension reload.
+        rebuildController()
+    }
+
+    private func rebuildController() {
+        controller = KeyboardController(
+            registry: registry,
+            enabledIds: settings.enabledLanguageIds,
+            activeId: settings.activeLanguageId
+        )
+        keyboard.languagePack = controller.current
     }
 
     private func setupUI() {
@@ -39,7 +62,7 @@ class KeyboardViewController: UIInputViewController {
             toolbar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             toolbar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             toolbar.topAnchor.constraint(equalTo: view.topAnchor),
-            toolbar.heightAnchor.constraint(equalToConstant: 44),
+            toolbar.heightAnchor.constraint(equalToConstant: KeyboardDimensions.toolbarHeight),
 
             keyboard.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             keyboard.trailingAnchor.constraint(equalTo: view.trailingAnchor),
@@ -57,9 +80,16 @@ class KeyboardViewController: UIInputViewController {
     }
 
     private func replaceAllText(with newText: String) {
+        // 1. Commit any pending Telex composition. Without this, the
+        //    marked-text region survives the delete loop and the
+        //    rewritten text appears partial.
+        textDocumentProxy.unmarkText()
+        controller?.composer?.reset()
+        // 2. Walk to end of document.
         if let after = textDocumentProxy.documentContextAfterInput {
             textDocumentProxy.adjustTextPosition(byCharacterOffset: after.count)
         }
+        // 3. Delete the entire field, then insert.
         if let before = textDocumentProxy.documentContextBeforeInput {
             for _ in 0..<before.count {
                 textDocumentProxy.deleteBackward()
@@ -78,7 +108,7 @@ class KeyboardViewController: UIInputViewController {
         sheet.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(sheet)
 
-        let sheetHeight: CGFloat = 280
+        let sheetHeight = KeyboardDimensions.diffSheetHeight
         NSLayoutConstraint.activate([
             sheet.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             sheet.trailingAnchor.constraint(equalTo: view.trailingAnchor),
@@ -87,7 +117,7 @@ class KeyboardViewController: UIInputViewController {
         ])
 
         // Push keyboard below diff sheet
-        heightConstraint.constant = 44 + sheetHeight + keyboard.totalHeight
+        heightConstraint.constant = KeyboardDimensions.toolbarHeight + sheetHeight + keyboard.totalHeight
         self.diffSheet = sheet
     }
 
@@ -118,8 +148,8 @@ class KeyboardViewController: UIInputViewController {
             banner.heightAnchor.constraint(equalToConstant: 28),
         ])
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-            banner.removeFromSuperview()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak banner] in
+            banner?.removeFromSuperview()
         }
     }
 }
@@ -131,7 +161,7 @@ extension KeyboardViewController: ToolbarViewDelegate {
         let text = readFullText().trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
 
-        if settings.accessToken.isEmpty {
+        if settings.bearerToken.isEmpty {
             showBanner("Please login in DraftRight app", color: .systemOrange)
             return
         }
@@ -184,22 +214,71 @@ extension KeyboardViewController: DiffSheetDelegate {
 
 extension KeyboardViewController: KeyboardActionDelegate {
     func keyboardDidType(_ char: String) {
-        textDocumentProxy.insertText(char)
+        guard let ch = char.first, char.count == 1 else {
+            textDocumentProxy.insertText(char)
+            return
+        }
+        dispatch(controller.onKey(ch), fallback: char)
     }
 
     func keyboardDidBackspace() {
-        textDocumentProxy.deleteBackward()
+        dispatchBackspace(controller.onBackspace())
     }
 
     func keyboardDidEnter() {
+        // Commit any pending composition so newline doesn't get swallowed
+        // by the marked-text region.
+        textDocumentProxy.unmarkText()
+        controller.composer?.reset()
         textDocumentProxy.insertText("\n")
     }
 
     func keyboardDidSpace() {
-        textDocumentProxy.insertText(" ")
+        // Route space through the composer so a pending Telex composition
+        // commits FIRST, then space appends. Without this, a direct
+        // insertText(" ") replaces the marked region (e.g. "viet")
+        // with a single space and the word vanishes.
+        dispatch(controller.onKey(" "), fallback: " ")
     }
 
     func keyboardDidSwitchKeyboard() {
-        advanceToNextInputMode()
+        // Single tap on globe: cycle to next enabled language. If only
+        // one is enabled, fall back to system keyboard switcher.
+        if controller.enabled.count > 1 {
+            controller.cycleLanguage()
+            keyboard.languagePack = controller.current
+        } else {
+            advanceToNextInputMode()
+        }
     }
+
+    func keyboardDidSpaceSwipe(direction: Int) {
+        guard controller.enabled.count > 1 else { return }
+        controller.cycleLanguage(reverse: direction < 0)
+        keyboard.languagePack = controller.current
+    }
+
+    // MARK: - KeystrokeOutcome dispatch
+
+    private func dispatch(_ outcome: KeystrokeOutcome, fallback: String) {
+        KeystrokeDispatcher.apply(outcome, to: UIKitTextProxy(textDocumentProxy))
+    }
+
+    private func dispatchBackspace(_ outcome: KeystrokeOutcome) {
+        KeystrokeDispatcher.apply(outcome, to: UIKitTextProxy(textDocumentProxy))
+    }
+}
+
+/// Adapts the UIKit `UITextDocumentProxy` to the headless-testable
+/// `KeyboardTextProxy` seam in DraftRightKeyboardCore.
+private final class UIKitTextProxy: KeyboardTextProxy {
+    private let proxy: UITextDocumentProxy
+    init(_ proxy: UITextDocumentProxy) { self.proxy = proxy }
+
+    func insert(_ text: String) { proxy.insertText(text) }
+    func deleteBackward() { proxy.deleteBackward() }
+    func setComposing(_ text: String) {
+        proxy.setMarkedText(text, selectedRange: NSRange(location: text.utf16.count, length: 0))
+    }
+    func clearComposing() { proxy.unmarkText() }
 }
