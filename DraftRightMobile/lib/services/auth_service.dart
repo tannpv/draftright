@@ -248,14 +248,22 @@ class AuthService extends ChangeNotifier {
     unawaited(_extension.ensureMinted(accessToken: access));
   }
 
-  /// Sync a key/value to iOS App Group UserDefaults for keyboard extension access.
-  static Future<void> _syncToAppGroup(String key, String? value) async {
-    if (!Platform.isIOS) return;
-    try {
-      await _appGroupChannel.invokeMethod('set', {'key': key, 'value': value});
-    } catch (_) {
-      // Platform channel not available (e.g. running on web or desktop)
+  /// Sync a key/value to iOS App Group UserDefaults for keyboard extension
+  /// access. The native handler lives on the implicit-engine init hook,
+  /// which can register AFTER this fires on cold start — so retry a few
+  /// times before giving up, otherwise the keyboard never sees the token
+  /// and rewrite 401s while the in-app Playground works.
+  static Future<bool> _syncToAppGroup(String key, String? value) async {
+    if (!Platform.isIOS) return true;
+    for (var attempt = 0; attempt < 6; attempt++) {
+      try {
+        await _appGroupChannel.invokeMethod('set', {'key': key, 'value': value});
+        return true;
+      } catch (_) {
+        await Future.delayed(const Duration(milliseconds: 500));
+      }
     }
+    return false;
   }
 
   /// Sync backend URL to App Group (called from SettingsService).

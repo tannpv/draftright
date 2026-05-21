@@ -111,14 +111,18 @@ class ExtensionTokenService {
 
   Future<void> _syncToKeychain(String key, String? value) async {
     if (!Platform.isIOS) return;
-    try {
-      if (value == null) {
-        await _channel.invokeMethod('deleteKeychain', {'key': key});
-      } else {
-        await _channel.invokeMethod('setKeychain', {'key': key, 'value': value});
+    // The App Group / keychain channel can register after this runs on
+    // cold start; retry so the keyboard reliably gets the long-lived
+    // extension token instead of falling back to the expiring access JWT.
+    final method = value == null ? 'deleteKeychain' : 'setKeychain';
+    final args = value == null ? {'key': key} : {'key': key, 'value': value};
+    for (var attempt = 0; attempt < 6; attempt++) {
+      try {
+        await _channel.invokeMethod(method, args);
+        return;
+      } catch (_) {
+        await Future.delayed(const Duration(milliseconds: 500));
       }
-    } catch (_) {
-      // Channel not available (web/desktop test runs).
     }
   }
 

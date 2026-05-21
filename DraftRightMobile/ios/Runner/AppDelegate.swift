@@ -3,6 +3,13 @@ import UIKit
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
+  // Must be held strongly: a FlutterMethodChannel whose only reference is a
+  // local var gets deallocated after the init hook returns, which silently
+  // kills its method-call handler. That caused the keyboard extension to
+  // never receive the synced token/backendUrl (rewrite 401) on the launches
+  // where ARC reclaimed it.
+  private var appGroupChannel: FlutterMethodChannel?
+
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
@@ -17,6 +24,7 @@ import UIKit
     guard let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "AppGroupPlugin") else { return }
     let messenger = registrar.messenger()
     let channel = FlutterMethodChannel(name: "com.draftright.v2/app_group", binaryMessenger: messenger)
+    appGroupChannel = channel
     let defaults = UserDefaults(suiteName: "group.com.draftright.v2")
 
     channel.setMethodCallHandler { (call, result) in
