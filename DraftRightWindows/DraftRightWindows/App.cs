@@ -453,6 +453,18 @@ public class App : Application
                 _rewritePanel = panel;
                 panel.SetInputText(text);
 
+                // Advanced mode: auto-run the configured "Default Tone" on open
+                // (if set and still enabled), so the panel produces a rewrite
+                // without requiring a tone click — mirrors the macOS auto-run
+                // behavior. Empty default = manual pick (unchanged).
+                var defaultToneApi = Settings.DefaultTone;
+                if (!string.IsNullOrEmpty(defaultToneApi)
+                    && Settings.EnabledTones.Contains(defaultToneApi)
+                    && ToneExtensions.FromApiValue(defaultToneApi) is Tone autoTone)
+                {
+                    panel.AutoRunTone = autoTone;
+                }
+
                 panel.ViewModel.PasteRequested += (_, rewrittenText) =>
                 {
                     // Hide panel immediately so focus can return to source app.
