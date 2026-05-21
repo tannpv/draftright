@@ -19,14 +19,24 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWinUI>true</UseWinUI>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
-    <WindowsPackageType>None</WindowsPackageType>
     <EnableDefaultPageItems>false</EnableDefaultPageItems>
     <EnableDefaultApplicationDefinition>false</EnableDefaultApplicationDefinition>
-    <GeneratePriFile>false</GeneratePriFile>
-    <DisableMrtCodeGen>true</DisableMrtCodeGen>
-    <AppxPackage>false</AppxPackage>
-    <MrtCoreGeneratePriFiles>false</MrtCoreGeneratePriFiles>
-    <EnableMrtTooling>false</EnableMrtTooling>
+    <!-- Default to unpackaged (.exe) build for direct/Inno distribution. The
+         Microsoft Store packaging job overrides with -p:WindowsPackageType=MSIX. -->
+    <WindowsPackageType Condition="'$(WindowsPackageType)' == ''">None</WindowsPackageType>
+    <!-- These flags only matter when WindowsPackageType=None (unpackaged .exe). -->
+    <GeneratePriFile Condition="'$(WindowsPackageType)' == 'None'">false</GeneratePriFile>
+    <DisableMrtCodeGen Condition="'$(WindowsPackageType)' == 'None'">true</DisableMrtCodeGen>
+    <AppxPackage Condition="'$(WindowsPackageType)' == 'None'">false</AppxPackage>
+    <MrtCoreGeneratePriFiles Condition="'$(WindowsPackageType)' == 'None'">false</MrtCoreGeneratePriFiles>
+    <EnableMrtTooling Condition="'$(WindowsPackageType)' == 'None'">false</EnableMrtTooling>
+    <!-- MSIX-mode flags: enable when packaging for the Microsoft Store. -->
+    <AppxPackage Condition="'$(WindowsPackageType)' == 'MSIX'">true</AppxPackage>
+    <EnableMsixTooling Condition="'$(WindowsPackageType)' == 'MSIX'">true</EnableMsixTooling>
+    <GenerateAppxPackageOnBuild Condition="'$(WindowsPackageType)' == 'MSIX'">true</GenerateAppxPackageOnBuild>
+    <AppxBundle Condition="'$(WindowsPackageType)' == 'MSIX'">Always</AppxBundle>
+    <AppxBundlePlatforms Condition="'$(WindowsPackageType)' == 'MSIX'">x64|arm64</AppxBundlePlatforms>
+    <AppxAutoIncrementPackageRevision Condition="'$(WindowsPackageType)' == 'MSIX'">False</AppxAutoIncrementPackageRevision>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
@@ -40,6 +50,13 @@
     <Content Include="Assets\DraftRight.ico">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+  </ItemGroup>
+  <!-- MSIX manifest + visual assets: only included in packaged (Store) mode. -->
+  <ItemGroup Condition="'$(WindowsPackageType)' == 'MSIX'">
+    <AppxManifest Include="Package.appxmanifest">
+      <SubType>Designer</SubType>
+    </AppxManifest>
+    <Content Include="Assets\*.png" />
   </ItemGroup>
   <ItemGroup>
     <!-- Lets DraftRightWindows.Tests reach the internal UpdateService test seams

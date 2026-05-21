@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Package
+    xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+    xmlns:mp="http://schemas.microsoft.com/appx/2014/phone/manifest"
+    xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+    xmlns:uap5="http://schemas.microsoft.com/appx/manifest/uap/windows10/5"
+    xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+    IgnorableNamespaces="uap uap5 rescap mp">
+
+  <!-- Identity values are placeholders for local builds. Microsoft Store rewrites
+       Name, Publisher, and Version on submission to match the developer account
+       and the version code in the .msixbundle filename. -->
+  <Identity
+      Name="SouthernMartin.DraftRight"
+      Publisher="CN=D60C776E-6F95-4693-82A9-C924FBF21545"
+      Version="2.3.11.0" />
+
+  <mp:PhoneIdentity PhoneProductId="d4a8f7b2-9c3e-4a1d-8f6b-2e5a7c9d1b3a" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
+
+  <Properties>
+    <DisplayName>DraftRight</DisplayName>
+    <PublisherDisplayName>SouthernMartin</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.scale-200.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.22621.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="en-us" />
+  </Resources>
+
+  <Applications>
+    <Application Id="App" Executable="DraftRightWindows.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements
+          DisplayName="DraftRight"
+          Description="AI-powered text rewriting. Press Ctrl+Shift+R to rewrite selected text in any app."
+          BackgroundColor="transparent"
+          Square150x150Logo="Assets\Square150x150Logo.scale-200.png"
+          Square44x44Logo="Assets\Square44x44Logo.scale-200.png">
+        <uap:DefaultTile
+            Wide310x150Logo="Assets\Wide310x150Logo.scale-200.png"
+            Square71x71Logo="Assets\Square71x71Logo.scale-200.png"
+            Square310x310Logo="Assets\Square310x310Logo.scale-200.png"
+            ShortName="DraftRight" />
+        <uap:SplashScreen Image="Assets\SplashScreen.scale-200.png" BackgroundColor="#1E40AF" />
+      </uap:VisualElements>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <!-- Required for global hotkey registration (RegisterHotKey via SendInput),
+         clipboard simulation, and any direct Win32 API use the IME-style
+         flow needs. Microsoft Store reviews runFullTrust apps individually
+         but accepts them; this is the standard path for utility apps that
+         need real Win32 access. -->
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+</Package>

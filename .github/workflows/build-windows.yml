@@ -333,3 +333,75 @@ jobs:
             exit 1
           fi
           echo "✓ installer serving — $CT, $CL bytes"
+
+  # ── MSIX bundle for Microsoft Store submission ──────────────────────────
+  # Single-project MSIX: WindowsPackageType=MSIX activates AppxPackage targets
+  # which produce an .msixbundle for x64+arm64. Submitted to Microsoft Store,
+  # which signs the bundle automatically before publishing — no developer
+  # cert required. Independent of the unpackaged Inno-installer build above.
+  msix:
+    name: Build MSIX bundle for Microsoft Store
+    runs-on: windows-latest
+    timeout-minutes: 25
+
+    env:
+      COMMIT_SHA: ${{ github.sha }}
+
+    defaults:
+      run:
+        working-directory: DraftRightWindows/DraftRightWindows
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Restore
+        run: msbuild /t:Restore /p:Configuration=Release /p:Platform=x64
+
+      - name: Build MSIX bundle (x64 + arm64)
+        shell: pwsh
+        run: |
+          # Single-project MSIX build. AppxBundlePlatforms drives the
+          # bundle to include both architectures in one .msixbundle.
+          msbuild `
+            /t:Rebuild `
+            /p:Configuration=Release `
+            /p:Platform=x64 `
+            /p:WindowsPackageType=MSIX `
+            /p:EnableMsixTooling=true `
+            /p:GenerateAppxPackageOnBuild=true `
+            /p:UapAppxPackageBuildMode=StoreUpload `
+            /p:AppxBundle=Always `
+            /p:AppxBundlePlatforms="x64|arm64" `
+            /p:AppxPackageDir=AppPackages\
+
+      - name: Locate built bundle
+        shell: pwsh
+        run: |
+          $bundle = Get-ChildItem -Path AppPackages -Recurse -Include *.msixupload, *.msixbundle | Select-Object -First 1
+          if (-not $bundle) {
+            Write-Host "Listing AppPackages tree for diagnosis:"
+            Get-ChildItem -Path AppPackages -Recurse | Select-Object FullName, Length
+            throw "No .msixupload or .msixbundle found"
+          }
+          Write-Host "Built: $($bundle.FullName) ($([math]::Round($bundle.Length/1MB, 1)) MB)"
+          $shortSha = $env:COMMIT_SHA.Substring(0, 7)
+          $name = "DraftRight-Store-$shortSha$($bundle.Extension)"
+          Copy-Item $bundle.FullName "AppPackages\$name"
+          Add-Content -Path $env:GITHUB_ENV -Value "MSIX_NAME=$name"
+          Add-Content -Path $env:GITHUB_ENV -Value "MSIX_PATH=DraftRightWindows/DraftRightWindows/AppPackages/$name"
+
+      - name: Upload MSIX bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: DraftRight-MSIX-Store
+          path: ${{ env.MSIX_PATH }}
+          retention-days: 30
