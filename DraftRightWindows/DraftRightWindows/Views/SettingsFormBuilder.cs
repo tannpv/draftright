@@ -358,29 +358,6 @@ internal static class SettingsFormBuilder
         };
         tab.Controls.Add(oneClickCombo); simpleOnlyControls.Add(oneClickCombo);
         sy += 44;
-
-        var defaultToneLabel = MakeFieldLabel("Default Tone (auto-run)", sy);
-        tab.Controls.Add(defaultToneLabel); simpleOnlyControls.Add(defaultToneLabel);
-        sy += 18;
-        var defaultCombo = MakeComboBox(sy);
-        int defaultSelected = 0;
-        for (int i = 0; i < allTones.Length; i++)
-        {
-            defaultCombo.Items.Add(allTones[i].DisplayName());
-            if (allTones[i].ApiValue() == App.Settings.DefaultTone)
-                defaultSelected = i;
-        }
-        defaultCombo.SelectedIndex = defaultSelected;
-        defaultCombo.SelectedIndexChanged += (_, _) =>
-        {
-            if (defaultCombo.SelectedIndex >= 0 && defaultCombo.SelectedIndex < allTones.Length)
-            {
-                App.Settings.DefaultTone = allTones[defaultCombo.SelectedIndex].ApiValue();
-                App.Settings.Save();
-            }
-        };
-        tab.Controls.Add(defaultCombo); simpleOnlyControls.Add(defaultCombo);
-        sy += 30;
         int simpleBlockHeight = sy - conditionalY;
 
         // ── Advanced block: Panel Tones ─────────────────────
@@ -411,6 +388,33 @@ internal static class SettingsFormBuilder
             tab.Controls.Add(cb); advancedOnlyControls.Add(cb);
             ay += 26;
         }
+
+        // Default Tone (auto-run): only meaningful in Advanced mode — when the
+        // rewrite panel opens it runs this tone immediately (empty = manual
+        // pick). Lives in the Advanced block so it's visible where it applies.
+        ay += 8;
+        var defaultToneLabel = MakeFieldLabel("Default Tone (auto-run)", ay);
+        tab.Controls.Add(defaultToneLabel); advancedOnlyControls.Add(defaultToneLabel);
+        ay += 18;
+        var defaultCombo = MakeComboBox(ay);
+        int defaultSelected = 0;
+        for (int i = 0; i < allTones.Length; i++)
+        {
+            defaultCombo.Items.Add(allTones[i].DisplayName());
+            if (allTones[i].ApiValue() == App.Settings.DefaultTone)
+                defaultSelected = i;
+        }
+        defaultCombo.SelectedIndex = defaultSelected;
+        defaultCombo.SelectedIndexChanged += (_, _) =>
+        {
+            if (defaultCombo.SelectedIndex >= 0 && defaultCombo.SelectedIndex < allTones.Length)
+            {
+                App.Settings.DefaultTone = allTones[defaultCombo.SelectedIndex].ApiValue();
+                App.Settings.Save();
+            }
+        };
+        tab.Controls.Add(defaultCombo); advancedOnlyControls.Add(defaultCombo);
+        ay += 30;
         int advancedBlockHeight = ay - conditionalY;
 
         // ── Translation section (always visible, position depends on mode) ──
