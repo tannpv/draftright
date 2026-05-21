@@ -386,21 +386,28 @@ jobs:
             /p:PackageArchitecture=x64 `
             /p:AppxPackageDir=AppPackages\
 
-      - name: Locate built bundle
+      - name: Create .msixupload
         shell: pwsh
         run: |
-          $bundle = Get-ChildItem -Path AppPackages -Recurse -Include *.msixupload, *.msixbundle | Select-Object -First 1
-          if (-not $bundle) {
-            Write-Host "Listing AppPackages tree for diagnosis:"
+          # The VS-only _BuildMsixUploadPackage target is not available on CI runners.
+          # Build it manually: zip the .msix (+ .msixsym) into a .msixupload that the
+          # Partner Center API and web portal both accept.
+          $msix = Get-ChildItem -Path AppPackages -Recurse -Include *.msix | Select-Object -First 1
+          if (-not $msix) {
+            Write-Host "AppPackages tree:"
             Get-ChildItem -Path AppPackages -Recurse | Select-Object FullName, Length
-            throw "No .msixupload or .msixbundle found"
+            throw "No .msix found in AppPackages"
           }
-          Write-Host "Built: $($bundle.FullName) ($([math]::Round($bundle.Length/1MB, 1)) MB)"
+          $sym = Get-ChildItem -Path AppPackages -Recurse -Include *.msixsym | Select-Object -First 1
           $shortSha = $env:COMMIT_SHA.Substring(0, 7)
-          $name = "DraftRight-Store-$shortSha$($bundle.Extension)"
-          Copy-Item $bundle.FullName "AppPackages\$name"
-          Add-Content -Path $env:GITHUB_ENV -Value "MSIX_NAME=$name"
-          Add-Content -Path $env:GITHUB_ENV -Value "MSIX_PATH=DraftRightWindows/DraftRightWindows/AppPackages/$name"
+          $upload = "AppPackages\DraftRight-Store-$shortSha.msixupload"
+          $toZip = @($msix.FullName)
+          if ($sym) { $toZip += $sym.FullName }
+          Compress-Archive -Path $toZip -DestinationPath $upload -Force
+          $sizeMB = [math]::Round((Get-Item $upload).Length / 1MB, 1)
+          Write-Host "Created $upload ($sizeMB MB) from $($msix.Name)"
+          Add-Content -Path $env:GITHUB_ENV -Value "MSIX_NAME=DraftRight-Store-$shortSha.msixupload"
+          Add-Content -Path $env:GITHUB_ENV -Value "MSIX_PATH=DraftRightWindows/DraftRightWindows/AppPackages/DraftRight-Store-$shortSha.msixupload"
 
       - name: Upload MSIX bundle
         uses: actions/upload-artifact@v4
