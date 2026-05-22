@@ -56,6 +56,10 @@ final class TelexTypingUITests: XCTestCase {
         app.textFields[HostFieldID]
     }
 
+    private var field2: XCUIElement {
+        app.textFields[HostField2ID]
+    }
+
     /// Toggle to DraftRight via the next-keyboard (globe) key. With only
     /// two keyboards enabled this is a single tap; detected by DraftRight's
     /// stable `dr_*` accessibility ids.
@@ -90,14 +94,19 @@ final class TelexTypingUITests: XCTestCase {
 
     private func nextKeyboardKey() -> XCUIElement {
         // The next-keyboard (globe) key is exposed at the app level, not
-        // under `app.keyboards`.
+        // under `app.keyboards`. On iOS 26 the system keyboard exposes it as a
+        // `Key` element (UIAccessibilityElementKBKey), not a `Button` — so
+        // query both element types.
         for label in ["Next keyboard", "next keyboard", "Emoji", "🌐"] {
             let b = app.buttons[label].firstMatch
             if b.exists { return b }
+            let k = app.keys[label].firstMatch
+            if k.exists { return k }
         }
-        return app.buttons
-            .matching(NSPredicate(format: "label CONTAINS[c] 'keyboard' OR label == 'Emoji'"))
-            .firstMatch
+        let pred = NSPredicate(format: "label CONTAINS[c] 'keyboard' OR label == 'Emoji'")
+        let btn = app.buttons.matching(pred).firstMatch
+        if btn.exists { return btn }
+        return app.keys.matching(pred).firstMatch
     }
 
     /// DraftRight's toolbar is a sibling of the keyboard view, so query it
@@ -193,6 +202,23 @@ final class TelexTypingUITests: XCTestCase {
         app.buttons["dr_space"].firstMatch.label
     }
 
+    /// Cross-field composer leak: a partial Telex composition in one field must
+    /// not carry into the next field when focus changes while the keyboard
+    /// stays up (the iOS analog of the Android Zalo "za" bug). Type "a" in VI
+    /// (composer marks "a", uncommitted), switch to field 2, then type "s"
+    /// (sắc tone). If the composer leaked its buffer, "s" tones the stale "a"
+    /// and field 2 shows "á". Correct behaviour: a fresh composer, so field 2
+    /// shows "s".
+    func test_crossField_composerDoesNotLeakIntoNextField() {
+        launchOnDraftRight(lang: "vi")
+        type("a")
+        XCTAssertTrue(field2.waitForExistence(timeout: 5), "second host field missing")
+        field2.tap()
+        type("s")
+        XCTAssertEqual(field2.value as? String, "s",
+                       "composer leaked the previous field's pending composition into field 2")
+    }
+
     /// Tone → rewrite → replace, against a local stub backend. Skips when
     /// the stub isn't reachable (run via run-ui-tests.sh, which starts it).
     func test_tone_rewrite_and_replace() throws {
@@ -226,3 +252,4 @@ final class TelexTypingUITests: XCTestCase {
 }
 
 private let HostFieldID = "kb_target_field"
+private let HostField2ID = "kb_target_field_2"
