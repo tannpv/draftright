@@ -33,6 +33,26 @@ class KeyboardViewController: UIInputViewController {
         rebuildController()
     }
 
+    override func textDidChange(_ textInput: UITextInput?) {
+        super.textDidChange(textInput)
+        // Guard against the Telex composer leaking a pending composition into
+        // another field. If we're mid-composition but the text immediately
+        // before the cursor no longer ends with our composing buffer, the
+        // editing context changed out from under us — e.g. the user tapped a
+        // different field (or switched apps) while the keyboard stayed up.
+        // Drop the buffer + marked text so the next field starts clean.
+        // Our own keystrokes keep the buffer as the document's tail, so this
+        // never fires mid-composition from normal typing.
+        guard let composer = controller?.composer else { return }
+        let composing = composer.currentComposingText()
+        guard !composing.isEmpty else { return }
+        let before = textDocumentProxy.documentContextBeforeInput ?? ""
+        if !before.hasSuffix(composing) {
+            textDocumentProxy.unmarkText()
+            composer.reset()
+        }
+    }
+
     private func rebuildController() {
         controller = KeyboardController(
             registry: registry,
