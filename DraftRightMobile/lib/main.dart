@@ -343,9 +343,17 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _completeOnboarding() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('draftright.onboardingComplete', true);
+    // Advance the UI immediately so the user is never trapped on onboarding
+    // if the persistence plugin misbehaves (see the iOS plugin-registration
+    // bug that made "Get Started" appear unresponsive). Persistence is
+    // best-effort afterwards.
     setState(() => _onboardingComplete = true);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('draftright.onboardingComplete', true);
+    } catch (e) {
+      DRLogger.warn('Failed to persist onboardingComplete: $e');
+    }
   }
 
   /// Drain any text the user shared on cold-start, and subscribe to fresh
