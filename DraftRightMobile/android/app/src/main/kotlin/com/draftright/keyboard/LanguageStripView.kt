@@ -31,8 +31,7 @@ class LanguageStripView(
         visibility = if (controller.enabled.size <= 1) View.GONE else View.VISIBLE
         if (visibility == View.GONE) return
 
-        val uiMode = context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK
-        val isDark = uiMode == android.content.res.Configuration.UI_MODE_NIGHT_YES
+        val isDark = KeyboardTheme.isDark(context)
         val inactiveText = if (isDark) Color.parseColor("#cbd5e1") else Color.parseColor("#475569")
         val inactiveBg = if (isDark) Color.parseColor("#2a2a2e") else Color.parseColor("#e2e8f0")
 

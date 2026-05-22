@@ -123,6 +123,13 @@ class SubscriptionInfo {
 }
 
 class BackendClient {
+  /// Backend caps rewrite input length; truncate client-side to match.
+  static const int _maxInputChars = 3000;
+  /// Timeout for the main rewrite/subscription calls.
+  static const Duration _requestTimeout = Duration(seconds: 15);
+  /// Shorter timeout for the best-effort /health probe.
+  static const Duration _healthTimeout = Duration(seconds: 5);
+
   final AuthService _auth;
   final String Function() _getBaseUrl;
   final http.Client _http;
@@ -156,7 +163,7 @@ class BackendClient {
       }
       final resp = await http
           .get(Uri.parse('$base/health'))
-          .timeout(const Duration(seconds: 5));
+          .timeout(_healthTimeout);
       if (resp.statusCode != 200) return;
       final data = jsonDecode(resp.body) as Map<String, dynamic>;
       if (data['app'] != 'draftright') return;
@@ -179,7 +186,7 @@ class BackendClient {
       }
       final resp = await http
           .get(Uri.parse('$base/updates/latest?platform=$platform'))
-          .timeout(const Duration(seconds: 5));
+          .timeout(_healthTimeout);
       if (resp.statusCode != 200) return null;
       final data = jsonDecode(resp.body) as Map<String, dynamic>;
 
@@ -213,7 +220,7 @@ class BackendClient {
     final uri = Uri.parse('$_baseUrl/rewrite');
 
     final body = <String, dynamic>{
-      'text': text.length > 3000 ? text.substring(0, 3000) : text,
+      'text': text.length > _maxInputChars ? text.substring(0, _maxInputChars) : text,
       'tone': tone.apiValue,
     };
     if (targetLanguage != null && targetLanguage.isNotEmpty) {
@@ -271,7 +278,7 @@ class BackendClient {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',
       },
-    ).timeout(const Duration(seconds: 15));
+    ).timeout(_requestTimeout);
 
     if (response.statusCode == 401) {
       final refreshed = await _auth.tryRefresh();
@@ -283,7 +290,7 @@ class BackendClient {
             'Content-Type': 'application/json',
             'Authorization': 'Bearer $newToken',
           },
-        ).timeout(const Duration(seconds: 15));
+        ).timeout(_requestTimeout);
       }
     }
 
@@ -303,6 +310,6 @@ class BackendClient {
         'Authorization': 'Bearer $token',
       },
       body: jsonEncode(body),
-    ).timeout(const Duration(seconds: 15));
+    ).timeout(_requestTimeout);
   }
 }
