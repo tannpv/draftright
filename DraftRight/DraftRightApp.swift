@@ -35,6 +35,17 @@ struct DraftRightApp: App {
         }
     }
 
+    /// AppKit twin of `statusColor`, used to tint the composited menu-bar
+    /// image (which carries the "update available" badge).
+    private var statusNSColor: NSColor {
+        switch appModel.backendStatus {
+        case .connected: return .systemGreen
+        case .notLoggedIn: return .systemYellow
+        case .offline: return .systemRed
+        case .wrongServer: return .systemPurple
+        }
+    }
+
     private var statusLabel: String {
         switch appModel.backendStatus {
         case .connected: return "Connected"
@@ -65,9 +76,14 @@ struct DraftRightApp: App {
             }
             .keyboardShortcut("q", modifiers: .command)
         } label: {
-            Image(systemName: "pencil.and.outline")
-                .symbolRenderingMode(.palette)
-                .foregroundStyle(statusColor)
+            // Composited NSImage (status tint + optional red "update
+            // available" badge) — SwiftUI Image overlays don't survive the
+            // menu bar's template flattening, so we draw it ourselves.
+            // See MenuBarIcon / Windows TrayIconBadge for parity.
+            Image(nsImage: MenuBarIcon.image(
+                symbolName: "pencil.and.outline",
+                tint: statusNSColor,
+                showsBadge: appModel.availableUpdate != nil))
         }
     }
 
