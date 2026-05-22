@@ -38,6 +38,13 @@ class QwertyKeyboardView(
     private val KEY_MARGIN_DP = 3
     private val KEY_RADIUS_DP = 5
 
+    // Key-press preview popup (the magnified character shown above a pressed
+    // key). Sized to match the larger, easier-to-read preview on stock
+    // Samsung / Gboard keyboards.
+    private val KEY_POPUP_WIDTH_DP = 56
+    private val KEY_POPUP_HEIGHT_DP = 64
+    private val KEY_POPUP_TEXT_SP = 32f
+
     private var shiftState = ShiftState.OFF
     private var currentLayer = 0 // 0=alpha, 1=symbols1, 2=symbols2
     private var lastShiftTap = 0L
@@ -319,7 +326,7 @@ class QwertyKeyboardView(
 
         val popupView = TextView(context).apply {
             text = label
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 24f)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, KEY_POPUP_TEXT_SP)
             setTextColor(keyTextColor)
             gravity = Gravity.CENTER
             val popBg = GradientDrawable().apply {
@@ -331,12 +338,12 @@ class QwertyKeyboardView(
             setPadding(dpToPx(12), dpToPx(8), dpToPx(12), dpToPx(8))
         }
 
-        val popup = PopupWindow(popupView, dpToPx(48), dpToPx(52), false).apply {
+        val popup = PopupWindow(popupView, dpToPx(KEY_POPUP_WIDTH_DP), dpToPx(KEY_POPUP_HEIGHT_DP), false).apply {
             isClippingEnabled = false
         }
 
-        val xOff = (anchorView.width - dpToPx(48)) / 2
-        val yOff = -(dpToPx(52) + dpToPx(ROW_HEIGHT_DP))
+        val xOff = (anchorView.width - dpToPx(KEY_POPUP_WIDTH_DP)) / 2
+        val yOff = -(dpToPx(KEY_POPUP_HEIGHT_DP) + dpToPx(ROW_HEIGHT_DP))
         popup.showAsDropDown(anchorView, xOff, yOff)
         popupWindow = popup
     }
