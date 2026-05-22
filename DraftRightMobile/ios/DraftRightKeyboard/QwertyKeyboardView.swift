@@ -436,7 +436,9 @@ final class QwertyKeyboardView: UIView {
 
         let preview = UILabel()
         preview.text = label
-        preview.font = .systemFont(ofSize: 24)
+        // Larger preview char (parity with the Android keyboard) so the
+        // selected key is as easy to read as stock Samsung / Gboard.
+        preview.font = .systemFont(ofSize: 32)
         preview.textColor = keyTextColor
         preview.textAlignment = .center
         preview.backgroundColor = keyColor
@@ -449,7 +451,7 @@ final class QwertyKeyboardView: UIView {
         preview.layer.shadowOffset = CGSize(width: 0, height: 1)
         preview.layer.masksToBounds = false
 
-        let previewSize = CGSize(width: 48, height: 52)
+        let previewSize = CGSize(width: 56, height: 64)
         let buttonFrame = button.convert(button.bounds, to: self)
         let x = buttonFrame.midX - previewSize.width / 2
         let y = buttonFrame.minY - previewSize.height - 4
