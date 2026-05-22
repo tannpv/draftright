@@ -152,16 +152,10 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
           ],
         ),
         if (info.isFree) ...[
-          const SizedBox(height: 32),
-          FilledButton.icon(
-            onPressed: () {
-              // Future: link to app store upgrade
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Upgrade coming soon!')),
-              );
-            },
-            icon: const Icon(Icons.upgrade),
-            label: const Text('Upgrade to Pro'),
+          const SizedBox(height: 24),
+          Text(
+            'Manage your plan at draftright.info',
+            style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
           ),
         ],
       ],
