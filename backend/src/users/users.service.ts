@@ -21,6 +21,27 @@ export class UsersService {
     return this.usersRepo.findOne({ where: { id } });
   }
 
+  /**
+   * Permanently delete a user and all data tied to them. Required by App
+   * Store Guideline 5.1.1(v) (in-app account deletion). Runs in a single
+   * transaction: hard-delete owned rows that carry a user FK, null out the
+   * optional user_id on anonymous-capable telemetry (bug/error reports), then
+   * delete the user. Raw SQL keeps it independent of cross-module entity
+   * imports and matches the exact table names.
+   */
+  async deleteAccount(userId: string): Promise<void> {
+    await this.usersRepo.manager.transaction(async (m) => {
+      await m.query('DELETE FROM extension_tokens WHERE user_id = $1', [userId]);
+      await m.query('DELETE FROM payments WHERE user_id = $1', [userId]);
+      await m.query('DELETE FROM usage_logs WHERE user_id = $1', [userId]);
+      await m.query('DELETE FROM subscriptions WHERE user_id = $1', [userId]);
+      await m.query('DELETE FROM feature_votes WHERE user_id = $1', [userId]);
+      await m.query('UPDATE bug_reports SET user_id = NULL WHERE user_id = $1', [userId]);
+      await m.query('UPDATE error_reports SET user_id = NULL WHERE user_id = $1', [userId]);
+      await m.query('DELETE FROM users WHERE id = $1', [userId]);
+    });
+  }
+
   async create(data: Partial<User> & { email: string; name: string }): Promise<User> {
     const user = this.usersRepo.create(data);
     return this.usersRepo.save(user);

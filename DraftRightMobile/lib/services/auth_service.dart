@@ -210,6 +210,25 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  /// Permanently delete the signed-in user's account (App Store Guideline
+  /// 5.1.1(v)). Calls DELETE /auth/account, then clears all local credentials
+  /// exactly like [logout] so the app returns to the signed-out state.
+  Future<void> deleteAccount() async {
+    final token = await getAccessToken();
+    final uri = Uri.parse('$_baseUrl/auth/account');
+    final response = await http
+        .delete(uri, headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        })
+        .timeout(const Duration(seconds: 15));
+
+    if (response.statusCode >= 400) {
+      throw Exception(_tryDecodeError(response.body));
+    }
+    await logout();
+  }
+
   /// Called after a 401 response to refresh the token.
   Future<bool> tryRefresh() async {
     if (_refreshToken == null || _refreshToken!.isEmpty) return false;

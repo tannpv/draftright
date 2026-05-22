@@ -108,6 +108,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _deleteAccount() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Account'),
+        content: const Text(
+          'This permanently deletes your DraftRight account and all associated '
+          'data — subscription, usage history, and saved settings. '
+          'This cannot be undone.\n\n'
+          'Are you sure you want to delete your account?',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+    try {
+      await context.read<AuthService>().deleteAccount();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Your account has been deleted.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not delete account: $e')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer2<SettingsService, AuthService>(
@@ -153,6 +189,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     leading: const Icon(Icons.logout, color: Colors.red),
                     title: const Text('Sign Out', style: TextStyle(color: Colors.red)),
                     onTap: _logout,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.delete_forever, color: Colors.red),
+                    title: const Text('Delete Account', style: TextStyle(color: Colors.red)),
+                    subtitle: const Text('Permanently delete your account and data'),
+                    onTap: _deleteAccount,
                   ),
                 ),
               ] else ...[
