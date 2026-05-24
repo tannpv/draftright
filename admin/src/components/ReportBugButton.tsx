@@ -170,7 +170,9 @@ export default function ReportBugButton() {
     fd.append('description', trimmed);
     fd.append('source', 'admin-portal');
     fd.append('app_version', APP_VERSION);
-    fd.append('os_info', navigator.userAgent);
+    // Backend caps os_info at 100 chars; UA strings exceed that → truncate so
+    // the submit isn't rejected with a 400.
+    fd.append('os_info', navigator.userAgent.slice(0, 100));
     fd.append(
       'context',
       JSON.stringify({
@@ -185,12 +187,14 @@ export default function ReportBugButton() {
       fd.append('screenshot', file);
     }
 
-    const token = localStorage.getItem('token');
     try {
+      // Submit anonymously: /bug-reports stamps the bearer token's subject as
+      // users.user_id, but the admin portal's token is an admin_users id (not a
+      // users row) — sending it triggers a FK-violation 500. The admin's
+      // identity is captured via the user_email field instead.
       const res = await fetch(`${API_URL}/bug-reports`, {
         method: 'POST',
         body: fd,
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       });
       if (!res.ok) {
         let errMsg = `Submission failed (${res.status})`;
