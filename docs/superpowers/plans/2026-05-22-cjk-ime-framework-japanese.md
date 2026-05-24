@@ -10,6 +10,19 @@
 
 ---
 
+## Progress (updated 2026-05-25)
+
+- ✅ **Task 2** — backend manifest endpoint (`GET /ime-packs/manifest`, LanguageModule catalog). Committed.
+- ✅ **Task 3** — RomajiComposer (Swift + Kotlin), Core suite green. Committed.
+- ✅ **Task 5** — `ImePackService` (download/verify-sha256/atomic-install/remove) + native `sharedPackDir` resolvers (iOS App Group / Android files dir) + `forPlatform()` factory. 5 hermetic tests green. Committed.
+- ✅ **Task 7** — `LanguageModule` model + `ImeManifestClient` + reusable `LanguagePacksSection` widget + Settings wiring ("Add a language (download)"). manifest 3/3 + widget 3/3 green. Committed.
+- ⛔ **Task 1 (RIME spike, HARD GATE)** — NOT started. Device-bound. **Blocks Tasks 4, 6, 8.**
+- ⏸ **Tasks 4, 6, 8** — gated on Task 1 GO.
+
+**Next action:** run the Task 1 RIME spike on a real iPhone + Android device, write `rime-spike-findings.md` with GO/NO-GO, then resume Tasks 4 → 6 → 8.
+
+---
+
 ## ⛔ Gate: Task 1 must pass before Tasks 4+ begin
 
 Tasks 2–3 (manifest + composer) are safe to build in parallel and have no engine dependency. **Tasks 4 onward depend on Task 1 proving the RIME bridge is viable inside the iOS keyboard extension.** If Task 1's checkpoint fails (won't build, OOMs the extension, or can't return candidates), STOP and revisit the engine decision (Mozc, or a thinner converter) before continuing — do not build UI/packs on an unproven engine.
