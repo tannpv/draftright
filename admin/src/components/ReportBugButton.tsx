@@ -7,8 +7,40 @@ const APP_VERSION = (import.meta.env.VITE_APP_VERSION as string | undefined) || 
 const MAX_FILE_BYTES = 5 * 1024 * 1024; // 5 MB
 const MIN_DESC_LEN = 10;
 const ALLOWED_TYPES = ['image/png', 'image/jpeg'];
+const MAX_IMAGE_DIM = 1600; // cap longest edge; keeps screenshots readable + small
+const JPEG_QUALITY = 0.85;
 
 type ToastState = { message: string; type: 'success' | 'error' } | null;
+
+/**
+ * Downscale + JPEG-compress an image so large pastes/screenshots fit the upload
+ * limit. Clipboard images (esp. Retina PNGs) routinely exceed 5 MB; without
+ * this, the user can't attach them. Returns a new JPEG File, or the original
+ * if anything fails (caller still enforces the size limit).
+ */
+async function downscaleImage(file: File): Promise<File> {
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, MAX_IMAGE_DIM / Math.max(bitmap.width, bitmap.height));
+    const w = Math.max(1, Math.round(bitmap.width * scale));
+    const h = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return file;
+    ctx.drawImage(bitmap, 0, 0, w, h);
+    bitmap.close?.();
+    const blob = await new Promise<Blob | null>((res) =>
+      canvas.toBlob(res, 'image/jpeg', JPEG_QUALITY),
+    );
+    if (!blob) return file;
+    const name = file.name.replace(/\.(png|jpe?g)$/i, '') + '.jpg';
+    return new File([blob], name, { type: 'image/jpeg' });
+  } catch {
+    return file;
+  }
+}
 
 export default function ReportBugButton() {
   const [open, setOpen] = useState(false);
@@ -22,18 +54,20 @@ export default function ReportBugButton() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Validate + accept a File from any source (input, drop, clipboard).
-  function acceptFile(f: File | null | undefined): boolean {
+  async function acceptFile(f: File | null | undefined): Promise<boolean> {
     if (!f) return false;
     if (!ALLOWED_TYPES.includes(f.type)) {
       setValidationError('Screenshot must be a PNG or JPEG image.');
       return false;
     }
-    if (f.size > MAX_FILE_BYTES) {
-      setValidationError('Screenshot must be under 5 MB.');
+    // Compress/downscale first so large pastes & screenshots fit the limit.
+    const img = await downscaleImage(f);
+    if (img.size > MAX_FILE_BYTES) {
+      setValidationError('Screenshot is too large even after compression (over 5 MB).');
       return false;
     }
     setValidationError(null);
-    setFile(f);
+    setFile(img);
     return true;
   }
 
@@ -74,10 +108,9 @@ export default function ReportBugButton() {
           // Clipboard images often come as 'image/png' but with no name; synthesize one.
           const ext = blob.type === 'image/jpeg' ? 'jpg' : 'png';
           const named = new File([blob], `pasted-${Date.now()}.${ext}`, { type: blob.type });
-          if (acceptFile(named)) {
-            e.preventDefault();
-            break;
-          }
+          e.preventDefault(); // we're handling the pasted image; stop default paste
+          void acceptFile(named);
+          break;
         }
       }
     };
@@ -99,15 +132,18 @@ export default function ReportBugButton() {
   }
 
   function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0] ?? null;
+    const input = e.target;
+    const f = input.files?.[0] ?? null;
     if (!f) {
       setFile(null);
       return;
     }
-    if (!acceptFile(f)) {
-      e.target.value = '';
-      setFile(null);
-    }
+    void acceptFile(f).then((ok) => {
+      if (!ok) {
+        input.value = '';
+        setFile(null);
+      }
+    });
   }
 
   function handleDrop(e: React.DragEvent<HTMLDivElement>) {
@@ -116,7 +152,7 @@ export default function ReportBugButton() {
     setIsDragging(false);
     if (submitting) return;
     const f = e.dataTransfer.files?.[0];
-    if (f) acceptFile(f);
+    if (f) void acceptFile(f);
   }
 
   async function handleSubmit(e: FormEvent) {
