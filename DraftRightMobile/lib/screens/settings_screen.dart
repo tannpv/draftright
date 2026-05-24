@@ -8,12 +8,70 @@ import 'package:draftright_mobile/screens/about_screen.dart';
 import 'package:draftright_mobile/services/share_service.dart';
 import 'package:draftright_mobile/widgets/report_bug_sheet.dart';
 import 'package:draftright_mobile/widgets/suggest_feature_sheet.dart';
+import 'package:draftright_mobile/models/language_module.dart';
+import 'package:draftright_mobile/services/ime_manifest_client.dart';
+import 'package:draftright_mobile/services/ime_pack_service.dart';
+import 'package:draftright_mobile/widgets/language_packs_section.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+/// Loads the downloadable-language catalog from the server and lets the user
+/// install/remove packs. Hidden silently on platforms without the shared-dir
+/// channel (e.g. desktop) or when the catalog has no downloadable languages.
+class _DownloadableLanguages extends StatefulWidget {
+  final String baseUrl;
+  const _DownloadableLanguages({required this.baseUrl});
+
+  @override
+  State<_DownloadableLanguages> createState() => _DownloadableLanguagesState();
+}
+
+class _DownloadableLanguagesState extends State<_DownloadableLanguages> {
+  late final Future<({List<LanguageModule> modules, PackInstaller installer})?> _load =
+      _resolve();
+
+  Future<({List<LanguageModule> modules, PackInstaller installer})?> _resolve() async {
+    try {
+      final installer = await ImePackService.forPlatform();
+      final modules =
+          await ImeManifestClient(baseUrl: widget.baseUrl).fetchDownloadable();
+      if (modules.isEmpty) return null;
+      return (modules: modules, installer: installer);
+    } catch (_) {
+      return null; // no channel (desktop) / offline — just hide the section
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<({List<LanguageModule> modules, PackInstaller installer})?>(
+      future: _load,
+      builder: (context, snap) {
+        if (snap.connectionState != ConnectionState.done) {
+          return const Padding(
+            padding: EdgeInsets.all(16),
+            child: Center(child: SizedBox(
+              width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.4))),
+          );
+        }
+        final data = snap.data;
+        if (data == null) {
+          return const ListTile(
+            dense: true,
+            title: Text('No additional languages available',
+                style: TextStyle(fontSize: 13, color: Colors.grey)),
+          );
+        }
+        return LanguagePacksSection(
+            modules: data.modules, packInstaller: data.installer);
+      },
+    );
+  }
 }
 
 class _FloatingBubbleTile extends StatelessWidget {
@@ -283,6 +341,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
               ),
+              const SizedBox(height: 12),
+              const Text('Add a language (download)',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+              const Text(
+                'Japanese, Chinese and more install a small dictionary pack on demand.',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+              const SizedBox(height: 8),
+              Card(child: _DownloadableLanguages(baseUrl: settings.backendUrl)),
 
               const SizedBox(height: 24),
               const Text('Floating Bubble',

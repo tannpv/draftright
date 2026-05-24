@@ -20,6 +20,21 @@ class PackDownloadError implements Exception {
   String toString() => 'PackDownloadError: HTTP $statusCode';
 }
 
+/// Install/verify/remove surface for downloadable language packs. The settings
+/// UI depends on this interface (not the concrete service) so it can be tested
+/// against a fake.
+abstract class PackInstaller {
+  Future<bool> isInstalled(String packId);
+  Future<String> install({
+    required String packId,
+    required String url,
+    required String sha256,
+    int? sizeBytes,
+    void Function(double progress)? onProgress,
+  });
+  Future<void> remove(String packId);
+}
+
 /// Downloads, verifies and installs downloadable IME language packs (Japanese,
 /// then Korean/Chinese) into a shared directory the keyboard extension can read.
 ///
@@ -28,7 +43,7 @@ class PackDownloadError implements Exception {
 /// atomically into place, so a failed or corrupt download never leaves a usable
 /// pack behind. [baseDir] is the App Group container (iOS) / files dir
 /// (Android); tests pass a temporary directory.
-class ImePackService {
+class ImePackService implements PackInstaller {
   ImePackService({required Directory baseDir, http.Client? httpClient})
       : _baseDir = baseDir,
         _http = httpClient ?? http.Client();
@@ -60,11 +75,13 @@ class ImePackService {
   String packPath(String packId) => '${_packsDir.path}/$packId.pack';
 
   /// Whether the pack is installed and ready for the keyboard to mmap.
+  @override
   Future<bool> isInstalled(String packId) => File(packPath(packId)).exists();
 
   /// Streams [url] to a temp file, verifies its SHA-256 equals [sha256], then
   /// atomically installs it. Returns the final path. [onProgress] (0.0–1.0) is
   /// called as bytes arrive when the total size is known.
+  @override
   Future<String> install({
     required String packId,
     required String url,
@@ -114,6 +131,7 @@ class ImePackService {
   }
 
   /// Deletes an installed pack and frees its disk space.
+  @override
   Future<void> remove(String packId) async {
     final f = File(packPath(packId));
     if (await f.exists()) await f.delete();
