@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { apiFetch } from '../api';
+import { apiFetch, DEFAULT_PAGE_SIZE } from '../api';
+import { formatCurrency } from '../lib/format';
 import { toneStyle, type Tone } from '../lib/status';
 
 interface Transaction {
@@ -23,11 +24,6 @@ interface TransactionsResponse {
   total: number;
 }
 
-function formatCents(cents: number): string {
-  if (cents === 0) return 'Free';
-  return `$${(cents / 100).toFixed(2)}`;
-}
-
 function storeLabel(store_type: string): { label: string; color: string; bg: string } {
   switch (store_type) {
     case 'google_play':  return { label: 'Google Play', color: 'var(--success)', bg: 'rgba(19,222,185,0.12)' };
@@ -40,7 +36,7 @@ function storeLabel(store_type: string): { label: string; color: string; bg: str
 const TX_TONE: Record<string, Tone> = { active: 'success', cancelled: 'danger', expired: 'muted' };
 const statusStyle = (status: string) => toneStyle(TX_TONE[status] ?? 'muted');
 
-const PAGE_SIZE = 20;
+
 
 export default function TransactionsPage() {
   const navigate = useNavigate();
@@ -56,7 +52,7 @@ export default function TransactionsPage() {
   const fetchTransactions = useCallback(async (s: string, p: number) => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ page: String(p), limit: String(PAGE_SIZE) });
+      const params = new URLSearchParams({ page: String(p), limit: String(DEFAULT_PAGE_SIZE) });
       if (s) params.set('search', s);
       const data = await apiFetch(`/admin/transactions?${params.toString()}`) as TransactionsResponse;
       setTransactions(data.transactions);
@@ -82,7 +78,7 @@ export default function TransactionsPage() {
     }, 400);
   }
 
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(total / DEFAULT_PAGE_SIZE));
 
   return (
     <div>
@@ -185,7 +181,7 @@ export default function TransactionsPage() {
 
                       {/* Amount */}
                       <td style={{ padding: '13px 16px', color: tx.price_cents === 0 ? 'var(--muted)' : 'var(--success)', fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap' }}>
-                        {formatCents(tx.price_cents)}
+                        {tx.price_cents === 0 ? 'Free' : formatCurrency(tx.price_cents)}
                       </td>
 
                       {/* Store badge */}

@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect, ChangeEvent, FormEvent } from 'react';
 import Toast from './Toast';
 import { getAdminEmail } from '../auth';
+import { API_URL } from '../api';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 const APP_VERSION = (import.meta.env.VITE_APP_VERSION as string | undefined) || 'admin-portal-2.0.0';
 const MAX_FILE_BYTES = 5 * 1024 * 1024; // 5 MB
 const MIN_DESC_LEN = 10;

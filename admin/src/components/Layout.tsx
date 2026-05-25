@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
-import { verifyBackend } from '../api';
+import { verifyBackend, API_URL } from '../api';
 import { logout, getAdminEmail } from '../auth';
 import ReportBugButton from './ReportBugButton';
 
@@ -165,10 +165,10 @@ export default function Layout() {
   useEffect(() => {
     verifyBackend().then((result) => {
       if (result === 'wrong_server') {
-        const url = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+        const url = API_URL;
         setBackendWarning(`Connected to wrong backend -- expected DraftRight API on ${url}`);
       } else if (result === 'unreachable') {
-        const url = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+        const url = API_URL;
         setBackendWarning(`Backend unreachable at ${url}`);
       }
     });

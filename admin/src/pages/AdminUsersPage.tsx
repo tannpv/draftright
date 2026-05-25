@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import DataTable from '../components/DataTable';
 import Modal from '../components/Modal';
 import Toast from '../components/Toast';
-import { apiFetch } from '../api';
+import { apiFetch, SEARCH_DEBOUNCE_MS } from '../api';
 
 interface AdminUser {
   id: string;
@@ -72,7 +72,7 @@ export default function AdminUsersPage() {
   }, [fetchUsers]);
 
   useEffect(() => {
-    const t = setTimeout(() => { setSearch(searchInput); setPage(1); }, 300);
+    const t = setTimeout(() => { setSearch(searchInput); setPage(1); }, SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(t);
   }, [searchInput]);
 

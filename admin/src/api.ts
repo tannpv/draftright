@@ -1,4 +1,7 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+/** Single source for the backend base URL + shared UI constants. */
+export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+export const SEARCH_DEBOUNCE_MS = 300;
+export const DEFAULT_PAGE_SIZE = 20;
 
 export async function apiFetch(path: string, options?: RequestInit): Promise<unknown> {
   const token = localStorage.getItem('token');
@@ -27,7 +30,6 @@ export async function apiFetch(path: string, options?: RequestInit): Promise<unk
 }
 
 export async function verifyBackend(): Promise<'ok' | 'wrong_server' | 'unreachable'> {
-  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
   try {
     const res = await fetch(`${API_URL}/health`, {
       headers: { Accept: 'application/json' },
