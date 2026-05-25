@@ -86,6 +86,21 @@ const FILTER_TABS: { key: StatusFilter; label: string }[] = [
   { key: 'refunded',  label: 'Refunded' },
 ];
 
+/* ── Provider modes ───────────────────────────────────────
+ * The settings field holding each payment method's sandbox/live mode.
+ * vietqr + bank_transfer settle via SePay, so they share `sepay_mode`.
+ * Add a new method → add one entry here (nothing else to change). */
+const METHOD_MODE_FIELD: Record<string, string> = {
+  stripe: 'stripe_mode',
+  paypal: 'paypal_mode',
+  momo: 'momo_mode',
+  vietqr: 'sepay_mode',
+  bank_transfer: 'sepay_mode',
+};
+const MODE_FIELDS = [...new Set(Object.values(METHOD_MODE_FIELD))];
+const SANDBOX_MODES = new Set(['sandbox', 'test']);
+const isSandboxMode = (mode?: string) => SANDBOX_MODES.has(mode ?? '');
+
 
 /* ── Component ────────────────────────────────────────── */
 
@@ -107,17 +122,9 @@ export default function PaymentsPage() {
   // provider is in sandbox/test gets a "Simulate paid" button.
   const [modes, setModes] = useState<Record<string, string>>({});
 
-  // Maps a payment method to its provider's mode field; sandbox/test → simulatable.
-  const isSandbox = (method: string): boolean => {
-    const m =
-      method === 'stripe' ? modes.stripe_mode
-      : method === 'paypal' ? modes.paypal_mode
-      : method === 'momo' ? modes.momo_mode
-      : modes.sepay_mode; // vietqr + bank_transfer are confirmed via SePay
-    return m === 'sandbox' || m === 'test';
-  };
-  const anySandbox = ['stripe_mode', 'paypal_mode', 'momo_mode', 'sepay_mode']
-    .some((k) => modes[k] === 'sandbox' || modes[k] === 'test');
+  // A payment is simulatable when its provider's mode is sandbox/test.
+  const isSandbox = (method: string) => isSandboxMode(modes[METHOD_MODE_FIELD[method] ?? 'sepay_mode']);
+  const anySandbox = MODE_FIELDS.some((f) => isSandboxMode(modes[f]));
 
   // Modal state
   const [confirmPayment, setConfirmPayment] = useState<Payment | null>(null);
@@ -169,10 +176,7 @@ export default function PaymentsPage() {
     apiFetch('/admin/settings')
       .then((s) => {
         const x = s as Record<string, string>;
-        setModes({
-          stripe_mode: x.stripe_mode, paypal_mode: x.paypal_mode,
-          momo_mode: x.momo_mode, sepay_mode: x.sepay_mode,
-        });
+        setModes(Object.fromEntries(MODE_FIELDS.map((f) => [f, x[f]])));
       })
       .catch(() => {});
   }, [fetchStats]);
