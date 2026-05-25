@@ -12,15 +12,6 @@ export class AppSettings {
   @Column({ type: 'int', default: 3 })
   trial_limit: number;
 
-  /**
-   * Global payment test mode. When true, the storefront/admin treat payments as
-   * sandbox: providers run in their test/sandbox mode and admins can simulate a
-   * successful payment (manual confirm) without a real charge. Flip off to go
-   * live.
-   */
-  @Column({ type: 'boolean', default: false })
-  payment_test_mode: boolean;
-
   @Column({ type: 'int', default: 15 })
   token_expiry_minutes: number;
 
