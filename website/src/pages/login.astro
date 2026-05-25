@@ -1,0 +1,13 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import LoginForm from '../components/LoginForm.tsx';
+---
+<BaseLayout title="Log in — DraftRight" description="Sign in to your DraftRight account to manage your subscription.">
+  <section class="py-20 px-6">
+    <div class="max-w-2xl mx-auto text-center mb-10">
+      <h1 class="text-4xl font-bold text-white mb-4">Welcome back</h1>
+      <p class="text-gray-400">Log in to manage your subscription and devices.</p>
+    </div>
+    <LoginForm client:load />
+  </section>
+</BaseLayout>

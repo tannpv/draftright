@@ -13,22 +13,23 @@ interface Plan {
   badge: string | null;
 }
 
-const PLANS: Plan[] = [
-  {
-    id: 'ead6d324-f463-4454-89e4-b620f85642c6',
-    name: 'Pro Monthly',
-    price: 99000,
-    period: 'month',
-    badge: null,
-  },
-  {
-    id: '67039e75-d2e8-469b-a0f5-0abf52217b11',
-    name: 'Pro Yearly',
-    price: 999000,
-    period: 'year',
-    badge: 'Save 17%',
-  },
-];
+// Plans come from the backend (GET /plans) so prices + IDs never go stale.
+interface ApiPlan {
+  id: string;
+  name: string;
+  price_cents: number;
+  currency: string | null;
+  billing_period: 'none' | 'monthly' | 'yearly';
+  is_active: boolean;
+}
+
+const toPlan = (p: ApiPlan): Plan => ({
+  id: p.id,
+  name: p.name,
+  price: p.price_cents,
+  period: p.billing_period === 'yearly' ? 'year' : 'month',
+  badge: p.billing_period === 'yearly' ? 'Best value' : null,
+});
 
 interface Method {
   key: 'stripe' | 'paypal' | 'momo' | 'vietqr' | 'bank_transfer';
@@ -88,12 +89,36 @@ export default function Checkout() {
   const [checkoutData, setCheckoutData] = useState<CheckoutResponse | null>(null);
   const [topError, setTopError] = useState('');
   const [paymentStatus, setPaymentStatus] = useState('');
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [plansError, setPlansError] = useState('');
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const selectedPlan = PLANS.find((p) => p.id === planId);
+  const selectedPlan = plans.find((p) => p.id === planId);
 
   const getToken = () =>
-    typeof window !== 'undefined' ? localStorage.getItem('draftright_token') : null;
+    typeof window !== 'undefined' ? localStorage.getItem('dr_access_token') : null;
+
+  // Load active plans from the backend; preselect from ?plan=<id> if present.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API}/plans`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data: ApiPlan[] = await res.json();
+        if (cancelled) return;
+        const paid = data.filter((p) => p.billing_period !== 'none').map(toPlan);
+        setPlans(paid);
+        const wanted = new URLSearchParams(window.location.search).get('plan');
+        if (wanted && paid.some((p) => p.id === wanted)) setPlanId(wanted);
+      } catch (err) {
+        if (!cancelled) setPlansError(err instanceof Error ? err.message : 'Could not load plans');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(
     () => () => {
@@ -129,7 +154,8 @@ export default function Checkout() {
         throw new Error(err?.message || 'Authentication failed');
       }
       const data = await res.json();
-      localStorage.setItem('draftright_token', data.access_token);
+      localStorage.setItem('dr_access_token', data.access_token);
+      if (data.refresh_token) localStorage.setItem('dr_refresh_token', data.refresh_token);
       void startCheckout(data.access_token);
     } catch (err) {
       setAuthError(err instanceof Error ? err.message : 'Something went wrong');
@@ -152,7 +178,8 @@ export default function Checkout() {
         throw new Error(err?.message || 'Social login failed');
       }
       const data = await res.json();
-      localStorage.setItem('draftright_token', data.access_token);
+      localStorage.setItem('dr_access_token', data.access_token);
+      if (data.refresh_token) localStorage.setItem('dr_refresh_token', data.refresh_token);
       void startCheckout(data.access_token);
     } catch (err) {
       setAuthError(err instanceof Error ? err.message : 'Something went wrong');
@@ -250,8 +277,10 @@ export default function Checkout() {
     <div>
       <h2 className="text-2xl font-bold text-white mb-2">Choose your plan</h2>
       <p className="text-gray-400 mb-8">Unlock unlimited rewrites and all platforms.</p>
+      {plansError && <p className="mb-4 text-sm text-red-400">Could not load plans: {plansError}</p>}
+      {plans.length === 0 && !plansError && <p className="text-gray-500">Loading plans…</p>}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {PLANS.map((p) => (
+        {plans.map((p) => (
           <button
             key={p.id}
             onClick={() => setPlanId(p.id)}
