@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { PaymentStrategy, CheckoutResult, WebhookAction, CreateCheckoutOptions } from './payment-strategy.interface';
 import { Payment } from '../entities/payment.entity';
 import { AppSettings } from '../../admin/entities/app-settings.entity';
+import { extractPaymentReference } from '../payment-reference';
 
 @Injectable()
 export class VietQRStrategy implements PaymentStrategy {
@@ -86,29 +87,26 @@ export class VietQRStrategy implements PaymentStrategy {
     // Casso:
     if (payload.data && Array.isArray(payload.data)) {
       for (const tx of payload.data) {
-        const desc = (tx.description || '').toUpperCase();
-        const match = desc.match(/DR-[A-Z]+-[A-Z0-9]+/);
-        if (match && tx.amount > 0) {
-          return { type: 'payment_completed', reference_code: match[0] };
+        const ref = extractPaymentReference(tx.description);
+        if (ref && tx.amount > 0) {
+          return { type: 'payment_completed', reference_code: ref };
         }
       }
     }
 
     // SePay:
     if (payload.content && payload.transferAmount) {
-      const desc = (payload.content || '').toUpperCase();
-      const match = desc.match(/DR-[A-Z]+-[A-Z0-9]+/);
-      if (match && payload.transferAmount > 0) {
-        return { type: 'payment_completed', reference_code: match[0] };
+      const ref = extractPaymentReference(payload.content);
+      if (ref && payload.transferAmount > 0) {
+        return { type: 'payment_completed', reference_code: ref };
       }
     }
 
     // MB Bank BaaS:
     if (payload.transactionId && payload.description) {
-      const desc = (payload.description || '').toUpperCase();
-      const match = desc.match(/DR-[A-Z]+-[A-Z0-9]+/);
-      if (match && payload.creditAmount > 0) {
-        return { type: 'payment_completed', reference_code: match[0] };
+      const ref = extractPaymentReference(payload.description);
+      if (ref && payload.creditAmount > 0) {
+        return { type: 'payment_completed', reference_code: ref };
       }
     }
 
