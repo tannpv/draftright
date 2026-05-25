@@ -30,6 +30,43 @@ class UpdateService:
         self._backend_url = backend_url.rstrip("/")
         self._last_check = 0.0
 
+    @property
+    def current_version(self):
+        return self._current_version
+
+    def release_notes_for_version(self, version):
+        """Release notes the backend advertises for `version` on Linux, or None
+        if the latest published Linux release no longer matches it or has no
+        notes. Used for the post-update "What's New" notice — right after
+        updating, the latest version equals the running one."""
+        try:
+            url = f"{self._backend_url}/updates/latest?platform=linux"
+            req = Request(url, headers={"Accept": "application/json"})
+            with urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read().decode())
+        except (URLError, json.JSONDecodeError, OSError) as exc:
+            logger.debug("What's New fetch failed: %s", exc)
+            return None
+
+        # Prefer the per-platform entry; fall back to the legacy top-level envelope.
+        backend_version = None
+        notes = None
+        platforms = data.get("platforms")
+        if isinstance(platforms, dict) and isinstance(platforms.get("linux"), dict):
+            p = platforms["linux"]
+            backend_version = p.get("version")
+            notes = p.get("notes")
+        if not backend_version:
+            backend_version = data.get("version")
+        if not notes:
+            notes = data.get("release_notes")
+
+        if backend_version != version:
+            return None
+        if not notes or not notes.strip():
+            return None
+        return notes
+
     def check_if_needed(self):
         now = time.monotonic()
         if now - self._last_check < CHECK_INTERVAL:

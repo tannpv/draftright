@@ -8,11 +8,11 @@ public final class LanguageRegistry {
         self.all = packs
     }
 
+    /// Look up by id, falling back to the default pack. Never crashes — a
+    /// stale/unknown id (e.g. left in shared settings by an older build)
+    /// must degrade to the default language, not take down the keyboard.
     public func byId(_ id: String) -> LanguagePack {
-        guard let p = all.first(where: { $0.id == id }) else {
-            fatalError("Unknown LanguagePack id: \(id)")
-        }
-        return p
+        return byIdOrDefault(id)
     }
 
     public func byIdOrDefault(_ id: String) -> LanguagePack {

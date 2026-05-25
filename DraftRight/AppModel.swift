@@ -116,6 +116,7 @@ final class AppModel: ObservableObject {
         static let defaultTab = "draftright.defaultTab"
         static let appMode = "draftright.appMode"
         static let oneClickTone = "draftright.oneClickTone"
+        static let lastSeenVersion = "draftright.lastSeenVersion"
     }
 
     init() {
@@ -181,6 +182,38 @@ final class AppModel: ObservableObject {
                 await self?.updateService?.checkIfNeeded()
             }
         }
+
+        // Post-update "What's New": if the running version changed since the
+        // last launch, show the release notes once. Record the version now so
+        // the notice can't repeat; skip on a fresh install (no prior version).
+        let lastSeen = defaults.string(forKey: Keys.lastSeenVersion) ?? ""
+        if lastSeen != version {
+            defaults.set(version, forKey: Keys.lastSeenVersion)
+            if !lastSeen.isEmpty {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 11) { [weak self] in
+                    Task { @MainActor in await self?.checkForWhatsNew(version: version) }
+                }
+            }
+        }
+    }
+
+    /// Fetches and shows the release notes for the now-running version. The
+    /// notes only appear if the backend's latest mac release still matches this
+    /// version (so a stale/newer note is never shown).
+    @MainActor
+    private func checkForWhatsNew(version: String) async {
+        guard let notes = await updateService?.releaseNotesForVersion(version),
+              !notes.isEmpty else {
+            DRLogger.log("Post-update: no release notes for \(version) — skipping What's New", category: .app)
+            return
+        }
+        let alert = NSAlert()
+        alert.messageText = "What's new in DraftRight v\(version)"
+        alert.informativeText = notes
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "Got it")
+        NSApp.activate(ignoringOtherApps: true)
+        alert.runModal()
     }
 
     #if DEBUG
@@ -188,7 +221,7 @@ final class AppModel: ObservableObject {
         let base = backendUrl.strippingTrailingSlash
         DRLogger.log("autoLoginForDev: attempting login to \(base)/auth/login", category: .auth)
         guard let url = URL(string: "\(base)/auth/login") else {
-            DRLogger.log("autoLoginForDev: invalid URL", category: .auth)
+            DRLogger.warn("autoLoginForDev: invalid URL", category: .auth)
             return
         }
         var request = URLRequest(url: url)
@@ -204,13 +237,13 @@ final class AppModel: ObservableObject {
             guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let access = json["access_token"] as? String,
                   let refresh = json["refresh_token"] as? String else {
-                DRLogger.log("autoLoginForDev: failed to parse tokens from response", category: .auth)
+                DRLogger.warn("autoLoginForDev: failed to parse tokens from response", category: .auth)
                 return
             }
             storeTokens(access: access, refresh: refresh)
             DRLogger.log("autoLoginForDev: SUCCESS — isLoggedIn=\(isLoggedIn)", category: .auth)
         } catch {
-            DRLogger.log("autoLoginForDev: network error — \(error.localizedDescription)", category: .auth)
+            DRLogger.warn("autoLoginForDev: network error — \(error.localizedDescription)", category: .auth)
         }
     }
     #endif
@@ -273,7 +306,7 @@ final class AppModel: ObservableObject {
                     accessToken: access
                 )
             case .unauthorized:
-                DRLogger.log("Refresh rejected by backend — clearing tokens, surfacing sessionExpired", category: .auth)
+                DRLogger.error("Refresh rejected by backend — clearing tokens, surfacing sessionExpired", category: .auth)
                 accessToken = ""
                 refreshToken = ""
                 let wasExpired = sessionExpired
@@ -283,7 +316,7 @@ final class AppModel: ObservableObject {
                     onSessionExpired?()
                 }
             case .transient:
-                DRLogger.log("Refresh transient failure — keeping tokens, will retry next cycle", category: .auth)
+                DRLogger.warn("Refresh transient failure — keeping tokens, will retry next cycle", category: .auth)
                 // Intentionally do NOT clear. Next 30s health check tries again.
             }
         }

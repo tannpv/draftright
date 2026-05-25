@@ -59,6 +59,18 @@ class TelexComposerTest {
     }
 
     @Test
+    fun `nguyeexn composes nguyễn`() {
+        // uyê cluster — tilde must land on ê, not y.
+        assertEquals("nguyễn", finalText(TelexComposer(), 'n', 'g', 'u', 'y', 'e', 'e', 'x', 'n'))
+    }
+
+    @Test
+    fun `nguyeenx composes nguyễn`() {
+        // Same word, tilde typed after the trailing consonant.
+        assertEquals("nguyễn", finalText(TelexComposer(), 'n', 'g', 'u', 'y', 'e', 'e', 'n', 'x'))
+    }
+
+    @Test
     fun `tiengs composes tiếng`() {
         assertEquals("tiếng", finalText(TelexComposer(), 't', 'i', 'e', 's', 'n', 'g'))
     }
@@ -123,6 +135,22 @@ class TelexComposerTest {
         c.reset()
         assertEquals("", c.currentComposingText())
     }
+
+    @Test fun `ass cancels tone to as`() { assertEquals("as", finalText(TelexComposer(), 'a', 's', 's')) }
+    @Test fun `aff cancels tone to af`() { assertEquals("af", finalText(TelexComposer(), 'a', 'f', 'f')) }
+    @Test fun `arr cancels tone to ar`() { assertEquals("ar", finalText(TelexComposer(), 'a', 'r', 'r')) }
+    @Test fun `axx cancels tone to ax`() { assertEquals("ax", finalText(TelexComposer(), 'a', 'x', 'x')) }
+    @Test fun `ajj cancels tone to aj`() { assertEquals("aj", finalText(TelexComposer(), 'a', 'j', 'j')) }
+    @Test fun `vietjj cancels tone only keeping ê mark`() { assertEquals("viêtj", finalText(TelexComposer(), 'v', 'i', 'e', 't', 'j', 'j')) }
+    @Test fun `aaa cancels circumflex to aaa`() { assertEquals("aa", finalText(TelexComposer(), 'a', 'a', 'a')) }
+    @Test fun `ooo cancels circumflex to oo`() { assertEquals("oo", finalText(TelexComposer(), 'o', 'o', 'o')) }
+    @Test fun `eee cancels circumflex to ee`() { assertEquals("ee", finalText(TelexComposer(), 'e', 'e', 'e')) }
+    @Test fun `aww cancels breve to aw`() { assertEquals("aw", finalText(TelexComposer(), 'a', 'w', 'w')) }
+    @Test fun `oww cancels horn to ow`() { assertEquals("ow", finalText(TelexComposer(), 'o', 'w', 'w')) }
+    @Test fun `uww cancels horn to uw`() { assertEquals("uw", finalText(TelexComposer(), 'u', 'w', 'w')) }
+    @Test fun `uoww cancels uow cluster to uow`() { assertEquals("uow", finalText(TelexComposer(), 'u', 'o', 'w', 'w')) }
+    @Test fun `ddd cancels d to dd`() { assertEquals("dd", finalText(TelexComposer(), 'd', 'd', 'd')) }
+    @Test fun `as then s cancel preserves case ASS yields AS`() { assertEquals("AS", finalText(TelexComposer(), 'A', 'S', 'S')) }
 
     @Test
     fun `length cap commits at 32 chars`() {

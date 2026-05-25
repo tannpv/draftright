@@ -26,8 +26,11 @@ class SettingsService extends ChangeNotifier {
   bool _autoCloseAfterRewrite = true;
   List<String> _enabledLanguageIds = const ['en'];
   String _activeLanguageId = 'en';
+  String _lastSeenVersion = '';
 
   String get backendUrl => _backendUrl;
+  /// App version that last ran — drives the one-time post-update "What's New".
+  String get lastSeenVersion => _lastSeenVersion;
   String get translateLanguage => _translateLanguage;
   List<String> get enabledTones => List.unmodifiable(_enabledTones);
   String get defaultTone => _defaultTone;
@@ -54,10 +57,21 @@ class SettingsService extends ChangeNotifier {
     if (!_enabledLanguageIds.contains(_activeLanguageId)) {
       _activeLanguageId = _enabledLanguageIds.first;
     }
+    _lastSeenVersion = _prefs.getString('draftright.lastSeenVersion') ?? '';
 
     // Sync backend URL to SharedPreferences for keyboard extensions
     await _prefs.setString('draftright.backendUrl', _backendUrl);
     await AuthService.syncBackendUrlToAppGroup(_backendUrl);
+    // Sync keyboard language preferences to App Group so the iOS keyboard
+    // extension picks them up (Flutter's shared_preferences writes to the
+    // app's standard UserDefaults, which the extension can't read).
+    await AuthService.syncEnabledLanguageIdsToAppGroup(_enabledLanguageIds);
+    await AuthService.syncActiveLanguageIdToAppGroup(_activeLanguageId);
+  }
+
+  Future<void> setLastSeenVersion(String version) async {
+    _lastSeenVersion = version;
+    await _prefs.setString('draftright.lastSeenVersion', version);
   }
 
   Future<void> setBackendUrl(String value) async {
@@ -102,9 +116,11 @@ class SettingsService extends ChangeNotifier {
   Future<void> setEnabledLanguageIds(List<String> ids) async {
     _enabledLanguageIds = ids.isEmpty ? const ['en'] : List<String>.from(ids);
     await _prefs.setStringList('draftright.enabledLanguageIds', _enabledLanguageIds);
+    await AuthService.syncEnabledLanguageIdsToAppGroup(_enabledLanguageIds);
     if (!_enabledLanguageIds.contains(_activeLanguageId)) {
       _activeLanguageId = _enabledLanguageIds.first;
       await _prefs.setString('draftright.activeLanguageId', _activeLanguageId);
+      await AuthService.syncActiveLanguageIdToAppGroup(_activeLanguageId);
     }
     notifyListeners();
   }
@@ -113,6 +129,7 @@ class SettingsService extends ChangeNotifier {
     if (!_enabledLanguageIds.contains(id)) return;
     _activeLanguageId = id;
     await _prefs.setString('draftright.activeLanguageId', id);
+    await AuthService.syncActiveLanguageIdToAppGroup(id);
     notifyListeners();
   }
 

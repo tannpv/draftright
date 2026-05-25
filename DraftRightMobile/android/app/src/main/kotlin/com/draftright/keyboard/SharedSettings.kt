@@ -2,6 +2,8 @@ package com.draftright.keyboard
 
 import android.content.Context
 import android.content.SharedPreferences
+import org.json.JSONArray
+import org.json.JSONException
 
 class SharedSettings(context: Context) {
     private val prefs: SharedPreferences =
@@ -49,10 +51,22 @@ class SharedSettings(context: Context) {
 
     private fun parseStringList(raw: String?): List<String> {
         if (raw.isNullOrBlank()) return emptyList()
-        return raw.trim()
-            .removePrefix("[").removeSuffix("]")
-            .split(",")
-            .map { it.trim().removeSurrounding("\"") }
-            .filter { it.isNotEmpty() }
+        // Flutter's shared_preferences_android prefixes StringList values
+        // with a sentinel (base64 of "This is the prefix for a list.") to
+        // distinguish a List<String> from a plain String at read time.
+        // Strip it; what remains is a valid JSON array.
+        val jsonText = raw.trim().removePrefix(FLUTTER_LIST_PREFIX)
+        return try {
+            val arr = JSONArray(jsonText)
+            (0 until arr.length()).mapNotNull { i ->
+                arr.optString(i).takeIf { it.isNotEmpty() }
+            }
+        } catch (_: JSONException) {
+            emptyList()
+        }
+    }
+
+    private companion object {
+        const val FLUTTER_LIST_PREFIX = "VGhpcyBpcyB0aGUgcHJlZml4IGZvciBhIGxpc3Qu!"
     }
 }

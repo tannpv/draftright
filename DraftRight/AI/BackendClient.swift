@@ -47,6 +47,8 @@ private struct HealthResponse: Codable {
     let app: String
     let version: String
     let status: String
+    // Admin-controlled log verbosity; absent on older backends → nil.
+    let client_log_level: String?
 }
 
 final class BackendClient {
@@ -69,13 +71,13 @@ final class BackendClient {
     ) async throws -> String {
         DRLogger.log("rewrite request: tone=\(tone.apiValue) textLen=\(text.count) url=\(backendUrl)", category: .api)
         guard !accessToken.isEmpty else {
-            DRLogger.log("rewrite FAILED: not logged in", category: .api)
+            DRLogger.error("rewrite FAILED: not logged in", category: .api)
             throw BackendClientError.notLoggedIn
         }
 
         let base = backendUrl.strippingTrailingSlash
         guard let url = URL(string: "\(base)/rewrite") else {
-            DRLogger.log("rewrite FAILED: invalid URL", category: .api)
+            DRLogger.error("rewrite FAILED: invalid URL", category: .api)
             throw BackendClientError.invalidURL
         }
 
@@ -96,7 +98,7 @@ final class BackendClient {
         do {
             (data, response) = try await session.data(for: request)
         } catch let error as URLError where error.code == .timedOut {
-            DRLogger.log("rewrite FAILED: timeout", category: .api)
+            DRLogger.error("rewrite FAILED: timeout", category: .api)
             throw BackendClientError.timeout
         }
 
@@ -122,7 +124,7 @@ final class BackendClient {
         let httpStatus = (response as? HTTPURLResponse)?.statusCode ?? -1
         if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode >= 400 {
             let bodyText = String(data: data, encoding: .utf8) ?? "Unknown error"
-            DRLogger.log("rewrite FAILED: HTTP \(httpResponse.statusCode) — \(bodyText.prefix(200))", category: .api)
+            DRLogger.error("rewrite FAILED: HTTP \(httpResponse.statusCode) — \(bodyText.prefix(200))", category: .api)
             throw BackendClientError.httpError(httpResponse.statusCode, bodyText)
         }
 
@@ -165,7 +167,7 @@ final class BackendClient {
         do {
             let (data, response) = try await session.data(for: request)
             guard let http = response as? HTTPURLResponse else {
-                DRLogger.log("refreshTokens FAILED: non-HTTP response", category: .auth)
+                DRLogger.error("refreshTokens FAILED: non-HTTP response", category: .auth)
                 return .transient
             }
             switch http.statusCode {
@@ -173,20 +175,20 @@ final class BackendClient {
                 guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                       let access = json["access_token"] as? String,
                       let refresh = json["refresh_token"] as? String else {
-                    DRLogger.log("refreshTokens FAILED: bad response shape", category: .auth)
+                    DRLogger.error("refreshTokens FAILED: bad response shape", category: .auth)
                     return .transient
                 }
                 DRLogger.log("refreshTokens SUCCESS", category: .auth)
                 return .success(access: access, refresh: refresh)
             case 401, 403:
-                DRLogger.log("refreshTokens UNAUTHORIZED: HTTP \(http.statusCode) — clearing", category: .auth)
+                DRLogger.error("refreshTokens UNAUTHORIZED: HTTP \(http.statusCode) — clearing", category: .auth)
                 return .unauthorized
             default:
-                DRLogger.log("refreshTokens TRANSIENT: HTTP \(http.statusCode) — keeping tokens", category: .auth)
+                DRLogger.warn("refreshTokens TRANSIENT: HTTP \(http.statusCode) — keeping tokens", category: .auth)
                 return .transient
             }
         } catch {
-            DRLogger.log("refreshTokens TRANSIENT: \(error.localizedDescription) — keeping tokens", category: .auth)
+            DRLogger.warn("refreshTokens TRANSIENT: \(error.localizedDescription) — keeping tokens", category: .auth)
             return .transient
         }
     }
@@ -213,6 +215,10 @@ final class BackendClient {
             guard health.app == "draftright" else {
                 return .wrongServer
             }
+            // Apply admin-controlled log verbosity only once we've confirmed
+            // this is really a DraftRight backend (a rogue server shouldn't be
+            // able to silence our logs).
+            DRLogger.setMinLevelFromServer(health.client_log_level)
         } catch {
             return .offline
         }

@@ -45,7 +45,7 @@ class ProcessTextActivity : Activity() {
 
         settings = SharedSettings(this)
 
-        if (settings.accessToken.isEmpty()) {
+        if (settings.bearerToken.isEmpty()) {
             Toast.makeText(this, "Please open DraftRight app and sign in first", Toast.LENGTH_LONG).show()
             finish()
             return

@@ -9,6 +9,7 @@ interface Settings {
   refresh_token_expiry_days: number;
   max_input_length: number;
   supported_languages: string;
+  payment_test_mode: boolean;
   // Payment
   stripe_secret_key: string;
   stripe_webhook_secret: string;
@@ -36,6 +37,8 @@ interface Settings {
   apple_client_id: string;
   apple_team_id: string;
   apple_key_id: string;
+  // Diagnostics
+  client_log_level: string;
   [key: string]: any;
 }
 
@@ -119,6 +122,7 @@ export default function SettingsPage() {
   const defaults: Settings = {
     environment: 'testing', trial_limit: 3, token_expiry_minutes: 15, refresh_token_expiry_days: 90, max_input_length: 3000,
     supported_languages: ALL_LANGUAGES.join(','),
+    payment_test_mode: false,
     stripe_secret_key: '', stripe_webhook_secret: '', stripe_mode: 'test',
     paypal_client_id: '', paypal_client_secret: '', paypal_mode: 'sandbox',
     momo_partner_code: '', momo_access_key: '', momo_secret_key: '', momo_mode: 'sandbox',
@@ -127,6 +131,7 @@ export default function SettingsPage() {
     resend_api_key: '', email_from: 'DraftRight <noreply@draftright.info>',
     google_client_id: '', google_client_secret: '',
     apple_client_id: '', apple_team_id: '', apple_key_id: '',
+    client_log_level: 'info',
   };
 
   const [settings, setSettings] = useState<Settings>(defaults);
@@ -172,7 +177,7 @@ export default function SettingsPage() {
     } finally { setSaving(false); }
   }
 
-  const set = (key: string) => (val: string | number) => setSettings({ ...settings, [key]: val });
+  const set = (key: string) => (val: string | number | boolean) => setSettings({ ...settings, [key]: val });
 
   if (loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}><div style={{ color: '#7c8fac' }}>Loading settings...</div></div>;
 
@@ -239,6 +244,22 @@ export default function SettingsPage() {
             {isLive && <div style={{ background: 'rgba(255,174,31,0.1)', border: '1px solid rgba(255,174,31,0.2)', borderRadius: 8, padding: '10px 14px', color: '#ffae1f', fontSize: 13 }}>⚠️ Live mode applies strict rate limits and shorter token expiry.</div>}
           </div>
 
+          {/* Logging & Diagnostics */}
+          <div className="card" style={{ marginBottom: 24 }}>
+            <h2 style={{ color: '#eaeff4', fontSize: 16, fontWeight: 600, marginBottom: 8 }}>Logging &amp; Diagnostics</h2>
+            <p style={{ color: '#7c8fac', fontSize: 12, marginBottom: 16 }}>Minimum severity that desktop &amp; mobile apps write to their local logs. Applied on each client's next health check (~30s).</p>
+            <div style={{ maxWidth: 360 }}>
+              <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Client log level</label>
+              <select value={settings.client_log_level} onChange={e => set('client_log_level')(e.target.value)} className="dark-input">
+                <option value="info">Info — everything (default)</option>
+                <option value="warnings">Warnings — warnings + errors</option>
+                <option value="errors">Errors only</option>
+                <option value="off">Off — log nothing</option>
+              </select>
+              <p style={{ color: '#7c8fac', fontSize: 11, marginTop: 4 }}>“Off” is an absolute kill-switch — clients stop writing logs entirely, including errors.</p>
+            </div>
+          </div>
+
           {/* Limits */}
           <div className="card" style={{ marginBottom: 24 }}>
             <h2 style={{ color: '#eaeff4', fontSize: 16, fontWeight: 600, marginBottom: 16 }}>Limits</h2>
@@ -288,6 +309,31 @@ export default function SettingsPage() {
       {/* ===== PAYMENT TAB ===== */}
       {activeTab === 'payment' && (
         <>
+          {/* Test/Live mode toggle */}
+          <div className="card" style={{ marginBottom: 24,
+              border: settings.payment_test_mode ? '1px solid rgba(255,174,31,0.4)' : '1px solid rgba(19,222,185,0.4)',
+              background: settings.payment_test_mode ? 'rgba(255,174,31,0.06)' : 'rgba(19,222,185,0.06)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' as const }}>
+              <div>
+                <h2 style={{ color: '#eaeff4', fontSize: 16, fontWeight: 600, marginBottom: 4 }}>
+                  {settings.payment_test_mode ? '🧪 Payment Test Mode' : '🟢 Payment Live Mode'}
+                </h2>
+                <p style={{ color: '#7c8fac', fontSize: 12, margin: 0 }}>
+                  {settings.payment_test_mode
+                    ? 'Sandbox: no real charges. You can "Simulate paid" on pending payments to activate a subscription for testing.'
+                    : 'Live: real charges via the configured providers. Turn ON to test safely before launch.'}
+                </p>
+              </div>
+              <button onClick={() => set('payment_test_mode')(!settings.payment_test_mode)} className="btn" style={{
+                  padding: '8px 18px', borderRadius: 8, fontWeight: 600, cursor: 'pointer',
+                  border: settings.payment_test_mode ? '2px solid #ffae1f' : '2px solid #13deb9',
+                  background: settings.payment_test_mode ? 'rgba(255,174,31,0.12)' : 'rgba(19,222,185,0.12)',
+                  color: settings.payment_test_mode ? '#ffae1f' : '#13deb9' }}>
+                {settings.payment_test_mode ? 'TEST MODE: ON' : 'TEST MODE: OFF'}
+              </button>
+            </div>
+          </div>
+
           {/* Stripe */}
           <div className="card" style={{ marginBottom: 24 }}>
             <h2 style={{ color: '#eaeff4', fontSize: 16, fontWeight: 600, marginBottom: 4 }}>

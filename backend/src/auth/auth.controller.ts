@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards, Request, Get, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Request, Get, Delete, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
@@ -66,6 +66,16 @@ export class AuthController {
   @Get('me')
   async me(@Request() req: any) {
     return { id: req.user.id, email: req.user.email, role: req.user.role };
+  }
+
+  // Permanent, in-app account deletion (App Store Guideline 5.1.1(v)).
+  // Removes the user and all data tied to them; no recovery.
+  @UseGuards(JwtAuthGuard)
+  @Delete('account')
+  @HttpCode(HttpStatus.OK)
+  async deleteAccount(@Request() req: any) {
+    await this.usersService.deleteAccount(req.user.id);
+    return { deleted: true };
   }
 
   @UseGuards(JwtAuthGuard)

@@ -1,9 +1,5 @@
 import Foundation
 
-private func chars(_ labels: String...) -> [KeyDef] {
-    labels.map { KeyDef($0, Int($0.unicodeScalars.first!.value)) }
-}
-
 public struct GermanLanguagePack: LanguagePack {
     public let id = "de"
     public let displayName = "Deutsch"
@@ -21,9 +17,9 @@ public struct GermanLanguagePack: LanguagePack {
             [
                 KeyDef("?123", SpecialKeys.symbols, widthWeight: 1.5),
                 KeyDef("🌐", SpecialKeys.globe, widthWeight: 1.0),
-                KeyDef(",", Int(Character(",").unicodeScalars.first!.value), widthWeight: 1.0),
-                KeyDef(" ", Int(Character(" ").unicodeScalars.first!.value), widthWeight: 4.0),
-                KeyDef(".", Int(Character(".").unicodeScalars.first!.value), widthWeight: 1.0),
+                KeyDef(",", keyCode(","), widthWeight: 1.0),
+                KeyDef(" ", keyCode(" "), widthWeight: 4.0),
+                KeyDef(".", keyCode("."), widthWeight: 1.0),
                 KeyDef("↵", SpecialKeys.enter, widthWeight: 1.5),
             ],
         ]

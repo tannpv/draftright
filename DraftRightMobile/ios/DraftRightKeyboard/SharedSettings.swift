@@ -40,4 +40,24 @@ struct SharedSettings {
     var translateLanguage: String {
         defaults?.string(forKey: "draftright.translateLanguage") ?? "Vietnamese"
     }
+
+    /// IDs of enabled keyboard languages, in user-chosen order. Flutter's
+    /// shared_preferences writes to the app's standard UserDefaults — not
+    /// the App Group — so AuthService bridges the list via a method
+    /// channel as a JSON-encoded string. Defaults to ["en"] if never set.
+    var enabledLanguageIds: [String] {
+        guard let raw = defaults?.string(forKey: "draftright.enabledLanguageIds"),
+              let data = raw.data(using: .utf8),
+              let parsed = try? JSONSerialization.jsonObject(with: data) as? [String],
+              !parsed.isEmpty
+        else {
+            return ["en"]
+        }
+        return parsed
+    }
+
+    /// Currently active keyboard language id. Defaults to "en".
+    var activeLanguageId: String {
+        defaults?.string(forKey: "draftright.activeLanguageId") ?? "en"
+    }
 }

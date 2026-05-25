@@ -2,9 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:draftright_mobile/services/auth_service.dart';
+import 'package:draftright_mobile/services/backend_client.dart';
 import 'package:draftright_mobile/services/logger_service.dart';
 import 'package:draftright_mobile/services/settings_service.dart';
 import 'package:draftright_mobile/screens/login_screen.dart';
@@ -98,7 +100,7 @@ class _BootstrapState extends State<_Bootstrap> {
       await body().timeout(_bootstrapStepTimeout);
     } catch (e, st) {
       try {
-        DRLogger.log('bootstrap step "$label" failed: $e', category: 'APP');
+        DRLogger.warn('bootstrap step "$label" failed: $e', category: 'APP');
       } catch (_) {}
       try {
         ErrorReporter.reportHandled(e,
@@ -118,6 +120,10 @@ class _BootstrapState extends State<_Bootstrap> {
 
       final settings = SettingsService();
       await _step('settings', () => settings.init());
+
+      // Apply admin-controlled log verbosity (best-effort, one /health fetch).
+      await _step('loglevel',
+          () => BackendClient.applyClientLogLevel(settings.backendUrl));
 
       final auth = AuthService();
       await _step('auth', () => auth.init(settings.backendUrl));
@@ -150,7 +156,7 @@ class _BootstrapState extends State<_Bootstrap> {
       // Should be unreachable (every step is already guarded) — but if the
       // bootstrap itself throws, show a retry screen, never a blank one.
       try {
-        DRLogger.log('bootstrap failed catastrophically: $e\n$st',
+        DRLogger.error('bootstrap failed catastrophically: $e\n$st',
             category: 'APP');
       } catch (_) {}
       if (mounted) setState(() => _failed = true);
@@ -263,6 +269,65 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _checkOnboarding();
     _wireShareIntake();
+    // Defer until the tree (and a Navigator) is mounted.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkWhatsNew());
+  }
+
+  /// One-time post-update "What's New": if the running version changed since
+  /// last launch, fetch the notes the backend advertises for it and show them
+  /// once. Records the version immediately so it can't repeat; silent on fresh
+  /// installs and when no matching notes exist.
+  Future<void> _checkWhatsNew() async {
+    if (!mounted) return;
+    final settings = context.read<SettingsService>();
+    String version;
+    try {
+      version = (await PackageInfo.fromPlatform()).version;
+    } catch (_) {
+      return;
+    }
+    final lastSeen = settings.lastSeenVersion;
+    if (lastSeen == version) return;
+    await settings.setLastSeenVersion(version);
+    if (lastSeen.isEmpty) return; // fresh install — nothing to announce
+
+    final platform = _platformKey();
+    if (platform == null) return;
+    final notes = await BackendClient.releaseNotesForVersion(
+        settings.backendUrl, platform, version);
+    if (notes == null || !mounted) return;
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text("What's new in v$version"),
+        content: SingleChildScrollView(child: Text(notes)),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Got it'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String? _platformKey() {
+    if (kIsWeb) return null;
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+        return 'android';
+      case TargetPlatform.iOS:
+        return 'ios';
+      case TargetPlatform.macOS:
+        return 'mac';
+      case TargetPlatform.windows:
+        return 'windows';
+      case TargetPlatform.linux:
+        return 'linux';
+      default:
+        return null;
+    }
   }
 
   @override
@@ -278,9 +343,17 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _completeOnboarding() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('draftright.onboardingComplete', true);
+    // Advance the UI immediately so the user is never trapped on onboarding
+    // if the persistence plugin misbehaves (see the iOS plugin-registration
+    // bug that made "Get Started" appear unresponsive). Persistence is
+    // best-effort afterwards.
     setState(() => _onboardingComplete = true);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('draftright.onboardingComplete', true);
+    } catch (e) {
+      DRLogger.warn('Failed to persist onboardingComplete: $e');
+    }
   }
 
   /// Drain any text the user shared on cold-start, and subscribe to fresh

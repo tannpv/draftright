@@ -38,6 +38,13 @@ class QwertyKeyboardView(
     private val KEY_MARGIN_DP = 3
     private val KEY_RADIUS_DP = 5
 
+    // Key-press preview popup (the magnified character shown above a pressed
+    // key). Sized to match the larger, easier-to-read preview on stock
+    // Samsung / Gboard keyboards.
+    private val KEY_POPUP_WIDTH_DP = 56
+    private val KEY_POPUP_HEIGHT_DP = 64
+    private val KEY_POPUP_TEXT_SP = 32f
+
     private var shiftState = ShiftState.OFF
     private var currentLayer = 0 // 0=alpha, 1=symbols1, 2=symbols2
     private var lastShiftTap = 0L
@@ -62,8 +69,7 @@ class QwertyKeyboardView(
     init {
         orientation = VERTICAL
 
-        val uiMode = context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK
-        val isDark = uiMode == android.content.res.Configuration.UI_MODE_NIGHT_YES
+        val isDark = KeyboardTheme.isDark(context)
 
         if (isDark) {
             keyboardBgColor = Color.parseColor("#1B1B1F")
@@ -83,8 +89,8 @@ class QwertyKeyboardView(
         buildKeyboard()
     }
 
-    private fun isCharKey(code: Int): Boolean = code >= 0 && code != ' '.code
-    private fun isSpaceKey(code: Int): Boolean = code == ' '.code
+    private fun isCharKey(code: Int): Boolean = SpecialKeys.isCharKey(code)
+    private fun isSpaceKey(code: Int): Boolean = SpecialKeys.isSpace(code)
 
     fun buildKeyboard() {
         removeAllViews()
@@ -194,11 +200,11 @@ class QwertyKeyboardView(
                     bg.setColor(keyColorPressed)
                     v.invalidate()
                     longPressFired = false
-                    if (isCharKey(code) && keyDef.label.length == 1 && keyDef.label != "," && keyDef.label != ".") {
+                    if (isCharKey(code) && keyDef.label.length == 1 && keyDef.label !in SpecialKeys.NO_PREVIEW_LABELS) {
                         showKeyPopup(v, displayLabel)
                     }
                     if (accentChars != null && accentChars.isNotEmpty()) {
-                        handler.postDelayed(longPressRunnable, LONG_PRESS_MS)
+                        handler.postDelayed(longPressRunnable, SpecialKeys.LONG_PRESS_MS)
                     }
                     if (code == SpecialKeys.BACKSPACE) {
                         handleKeyPress(keyDef)
@@ -213,7 +219,7 @@ class QwertyKeyboardView(
                 MotionEvent.ACTION_MOVE -> {
                     if (isSpaceKey(code) && !spaceSwiped) {
                         val dx = event.rawX - spaceDownX
-                        if (kotlin.math.abs(dx) > SPACE_SWIPE_THRESHOLD_PX) {
+                        if (kotlin.math.abs(dx) > SpecialKeys.SPACE_SWIPE_THRESHOLD_PX) {
                             spaceSwiped = true
                             listener.onSpaceSwipe(if (dx > 0) 1 else -1)
                         }
@@ -244,13 +250,6 @@ class QwertyKeyboardView(
         return tv
     }
 
-    companion object {
-        private const val LONG_PRESS_MS = 300L
-        // ~80 dp at 420dpi ≈ 168 px. Tuned so a deliberate horizontal drag
-        // triggers a language cycle but a tap or vertical jitter doesn't.
-        private const val SPACE_SWIPE_THRESHOLD_PX = 80f
-    }
-
     private fun handleKeyPress(keyDef: KeyDef) {
         val code = keyDef.code
         when {
@@ -271,7 +270,7 @@ class QwertyKeyboardView(
             code == SpecialKeys.ENTER -> listener.onEnter()
             code == SpecialKeys.SHIFT -> {
                 val now = System.currentTimeMillis()
-                if (now - lastShiftTap < 300) {
+                if (now - lastShiftTap < SpecialKeys.DOUBLE_TAP_MS) {
                     shiftState = if (shiftState == ShiftState.CAPS_LOCK) ShiftState.OFF else ShiftState.CAPS_LOCK
                 } else {
                     shiftState = when (shiftState) {
@@ -326,7 +325,7 @@ class QwertyKeyboardView(
 
         val popupView = TextView(context).apply {
             text = label
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 24f)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, KEY_POPUP_TEXT_SP)
             setTextColor(keyTextColor)
             gravity = Gravity.CENTER
             val popBg = GradientDrawable().apply {
@@ -338,12 +337,12 @@ class QwertyKeyboardView(
             setPadding(dpToPx(12), dpToPx(8), dpToPx(12), dpToPx(8))
         }
 
-        val popup = PopupWindow(popupView, dpToPx(48), dpToPx(52), false).apply {
+        val popup = PopupWindow(popupView, dpToPx(KEY_POPUP_WIDTH_DP), dpToPx(KEY_POPUP_HEIGHT_DP), false).apply {
             isClippingEnabled = false
         }
 
-        val xOff = (anchorView.width - dpToPx(48)) / 2
-        val yOff = -(dpToPx(52) + dpToPx(ROW_HEIGHT_DP))
+        val xOff = (anchorView.width - dpToPx(KEY_POPUP_WIDTH_DP)) / 2
+        val yOff = -(dpToPx(KEY_POPUP_HEIGHT_DP) + dpToPx(ROW_HEIGHT_DP))
         popup.showAsDropDown(anchorView, xOff, yOff)
         popupWindow = popup
     }

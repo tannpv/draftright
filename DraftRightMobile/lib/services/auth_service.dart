@@ -80,7 +80,7 @@ class AuthService extends ChangeNotifier {
       await _storeTokens(data['access_token'] as String, data['refresh_token'] as String);
       DRLogger.log('Login success: $email', category: 'AUTH');
     } catch (e) {
-      DRLogger.log('Login failed: $e', category: 'AUTH');
+      DRLogger.error('Login failed: $e', category: 'AUTH');
       rethrow;
     }
   }
@@ -103,7 +103,7 @@ class AuthService extends ChangeNotifier {
       await _storeTokens(data['access_token'] as String, data['refresh_token'] as String);
       DRLogger.log('Register success: $email', category: 'AUTH');
     } catch (e) {
-      DRLogger.log('Register failed: $e', category: 'AUTH');
+      DRLogger.error('Register failed: $e', category: 'AUTH');
       rethrow;
     }
   }
@@ -210,6 +210,25 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  /// Permanently delete the signed-in user's account (App Store Guideline
+  /// 5.1.1(v)). Calls DELETE /auth/account, then clears all local credentials
+  /// exactly like [logout] so the app returns to the signed-out state.
+  Future<void> deleteAccount() async {
+    final token = await getAccessToken();
+    final uri = Uri.parse('$_baseUrl/auth/account');
+    final response = await http
+        .delete(uri, headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        })
+        .timeout(const Duration(seconds: 15));
+
+    if (response.statusCode >= 400) {
+      throw Exception(_tryDecodeError(response.body));
+    }
+    await logout();
+  }
+
   /// Called after a 401 response to refresh the token.
   Future<bool> tryRefresh() async {
     if (_refreshToken == null || _refreshToken!.isEmpty) return false;
@@ -248,19 +267,38 @@ class AuthService extends ChangeNotifier {
     unawaited(_extension.ensureMinted(accessToken: access));
   }
 
-  /// Sync a key/value to iOS App Group UserDefaults for keyboard extension access.
-  static Future<void> _syncToAppGroup(String key, String? value) async {
-    if (!Platform.isIOS) return;
-    try {
-      await _appGroupChannel.invokeMethod('set', {'key': key, 'value': value});
-    } catch (_) {
-      // Platform channel not available (e.g. running on web or desktop)
+  /// Sync a key/value to iOS App Group UserDefaults for keyboard extension
+  /// access. The native handler lives on the implicit-engine init hook,
+  /// which can register AFTER this fires on cold start — so retry a few
+  /// times before giving up, otherwise the keyboard never sees the token
+  /// and rewrite 401s while the in-app Playground works.
+  static Future<bool> _syncToAppGroup(String key, String? value) async {
+    if (!Platform.isIOS) return true;
+    for (var attempt = 0; attempt < 6; attempt++) {
+      try {
+        await _appGroupChannel.invokeMethod('set', {'key': key, 'value': value});
+        return true;
+      } catch (_) {
+        await Future.delayed(const Duration(milliseconds: 500));
+      }
     }
+    return false;
   }
 
   /// Sync backend URL to App Group (called from SettingsService).
   static Future<void> syncBackendUrlToAppGroup(String url) async {
     await _syncToAppGroup('draftright.backendUrl', url);
+  }
+
+  /// Sync the enabled keyboard language IDs to App Group as a JSON-encoded
+  /// string. The iOS keyboard extension decodes via JSONSerialization.
+  static Future<void> syncEnabledLanguageIdsToAppGroup(List<String> ids) async {
+    await _syncToAppGroup('draftright.enabledLanguageIds', jsonEncode(ids));
+  }
+
+  /// Sync the active keyboard language ID to App Group.
+  static Future<void> syncActiveLanguageIdToAppGroup(String id) async {
+    await _syncToAppGroup('draftright.activeLanguageId', id);
   }
 
   String _tryDecodeError(String body) {

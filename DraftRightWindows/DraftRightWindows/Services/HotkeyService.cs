@@ -74,7 +74,7 @@ public sealed class HotkeyService : IDisposable
         else
         {
             var lastError = Marshal.GetLastWin32Error();
-            DRLogger.Log(
+            DRLogger.Error(
                 $"Register: FAILED — RegisterHotKey returned false, GetLastError=0x{lastError:X} ({lastError})",
                 DRLogger.Category.HOTKEY);
         }

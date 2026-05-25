@@ -155,9 +155,18 @@ public sealed class ApiClient : IDisposable
 
             if (app != "draftright")
             {
-                DRLogger.Log($"CheckHealthAsync: /health.app={app ?? "(null)"} (expected 'draftright') → WrongServer",
+                DRLogger.Warn($"CheckHealthAsync: /health.app={app ?? "(null)"} (expected 'draftright') → WrongServer",
                     DRLogger.Category.API);
                 return BackendStatus.WrongServer;
+            }
+
+            // Apply the admin-controlled log verbosity (only once we've
+            // confirmed this is really a DraftRight backend, so a rogue server
+            // can't silence our logs). Older backends omit the field → no-op.
+            if (doc.RootElement.TryGetProperty("client_log_level", out var lvlProp)
+                && lvlProp.ValueKind == JsonValueKind.String)
+            {
+                DRLogger.SetMinLevelFromServer(lvlProp.GetString());
             }
 
             // Step 2: Check /auth/me for login state. Goes through the
@@ -180,7 +189,7 @@ public sealed class ApiClient : IDisposable
         }
         catch (Exception ex)
         {
-            DRLogger.Log(
+            DRLogger.Warn(
                 $"CheckHealthAsync: failed after {sw.ElapsedMilliseconds}ms — {ex.GetType().Name}: {ex.Message}",
                 DRLogger.Category.API);
             return BackendStatus.Offline;
@@ -319,7 +328,7 @@ public sealed class ApiClient : IDisposable
             // Truncated body preview so error log entries don't bloat the log
             // with multi-KB stack traces from the backend.
             var preview = detail.Length > 200 ? detail.Substring(0, 200) + "…" : detail;
-            DRLogger.Log(
+            DRLogger.Error(
                 $"HandleResponse: non-success {(int)response.StatusCode} {response.ReasonPhrase} body={preview}",
                 DRLogger.Category.API);
 

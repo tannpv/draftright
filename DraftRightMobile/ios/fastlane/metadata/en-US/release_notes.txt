@@ -1,1 +1,9 @@
-First release on App Store. AI text rewriting with eight tones, multilingual support, privacy-respecting design.
+AI text rewriting in any app, in any language — pick a tone, get a polished rewrite.
+
+New & improved:
+• Delete your account anytime — Settings › Account › Delete Account.
+• Onboarding now continues reliably on every iPhone and iPad.
+• The DraftRight keyboard no longer carries a half-typed word into the next field.
+• Larger key-press preview, so the key you tapped is easier to see.
+• Multilingual keyboard — English, Tiếng Việt (Telex), Français, Español, Deutsch, Italiano, Português. Switch with the globe key.
+• Eight rewrite tones, plus translate, right where you type.

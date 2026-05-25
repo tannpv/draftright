@@ -103,6 +103,7 @@ export default function PaymentsPage() {
   const [error, setError] = useState('');
 
   const [stats, setStats] = useState<PaymentStats | null>(null);
+  const [testMode, setTestMode] = useState(false);
 
   // Modal state
   const [confirmPayment, setConfirmPayment] = useState<Payment | null>(null);
@@ -150,6 +151,10 @@ export default function PaymentsPage() {
 
   useEffect(() => {
     fetchStats();
+    // Surface payment test mode so the admin knows "Confirm" = simulate a payment.
+    apiFetch('/admin/settings')
+      .then((s) => setTestMode(!!(s as { payment_test_mode?: boolean }).payment_test_mode))
+      .catch(() => {});
   }, [fetchStats]);
 
   useEffect(() => {
@@ -326,7 +331,7 @@ export default function PaymentsPage() {
                 setConfirmNotes('');
               }}
             >
-              Confirm
+              {testMode ? '🧪 Simulate paid' : 'Confirm'}
             </button>
           )}
           {row.status === 'completed' && row.method === 'stripe' && (
@@ -379,6 +384,13 @@ export default function PaymentsPage() {
           Manual and QR payment management
         </p>
       </div>
+
+      {testMode && (
+        <div style={{ marginBottom: 24, padding: '12px 16px', borderRadius: 8,
+            border: '1px solid rgba(255,174,31,0.4)', background: 'rgba(255,174,31,0.08)', color: '#ffae1f', fontSize: 13 }}>
+          🧪 <strong>Payment Test Mode is ON.</strong> No real charges. Use “Simulate paid” on a pending payment to complete it and activate the subscription for testing. Turn off in Settings → Payment to go live.
+        </div>
+      )}
 
       {/* Stats row */}
       {stats && (

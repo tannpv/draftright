@@ -107,11 +107,6 @@ class AboutScreen extends StatelessWidget {
                 onTap: () => _open(context, 'https://draftright.info/privacy'),
               ),
               ListTile(
-                leading: const Icon(Icons.delete_outline),
-                title: const Text('Delete account'),
-                onTap: () => _open(context, 'https://draftright.info/delete-account'),
-              ),
-              ListTile(
                 leading: const Icon(Icons.support_agent),
                 title: const Text('Support'),
                 subtitle: const Text('support@draftright.info'),

@@ -32,8 +32,7 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
     private val registry: LanguageRegistry by lazy {
         try {
             LanguageRegistry.PRODUCTION
-        } catch (t: Throwable) {
-            android.util.Log.e("DraftRightIME", "registry init failed", t)
+        } catch (_: Throwable) {
             LanguageRegistry(listOf(EnglishLanguagePack))
         }
     }
@@ -76,6 +75,28 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
 
         rootLayout = root
         return root
+    }
+
+    // --- Input session lifecycle ---
+
+    override fun onStartInput(attribute: EditorInfo?, restarting: Boolean) {
+        super.onStartInput(attribute, restarting)
+        // A new editor (different field or app) just took focus. Start with an
+        // empty composer so a stale Telex buffer from the previous field can
+        // never seed this one. `restarting` (same field re-init, e.g. rotation)
+        // is left alone to avoid disrupting an in-progress composition.
+        if (!restarting) controller?.composer?.reset()
+    }
+
+    override fun onFinishInput() {
+        // The current editor is losing focus (user switched field or app).
+        // Commit any pending Telex composition into the field it was actually
+        // typed in, then clear the composer so the buffer doesn't leak into the
+        // next field — e.g. "za" typed in a search box must not pre-fill a Zalo
+        // chat box when it opens.
+        currentInputConnection?.finishComposingText()
+        controller?.composer?.reset()
+        super.onFinishInput()
     }
 
     // --- KeyboardActionListener ---
@@ -206,7 +227,7 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
         val text = readFullText().trim()
         if (text.isEmpty()) return
 
-        if (settings.accessToken.isEmpty()) {
+        if (settings.bearerToken.isEmpty()) {
             showBanner("Please login in DraftRight app")
             return
         }

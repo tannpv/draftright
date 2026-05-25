@@ -13,6 +13,7 @@ import time
 import logging
 from pathlib import Path
 
+from draftright.__version__ import __version__
 from draftright.services.logger import setup_logging
 from draftright.services.update_service import UpdateService
 from draftright.services import error_reporter
@@ -80,8 +81,11 @@ class DraftRightApplication(Adw.Application):
 
         # Start update check — 10 seconds after launch
         backend_url = self.settings_service.backend_url if self.settings_service else "http://localhost:3000"
-        self._update_service = UpdateService("1.0.0", backend_url)
+        self._update_service = UpdateService(__version__, backend_url)
         GLib.timeout_add_seconds(10, self._trigger_update_check)
+
+        # Post-update "What's New" — shortly after the window is up.
+        GLib.timeout_add_seconds(2, self._trigger_whats_new_check)
 
     def _load_css(self):
         """Load custom CSS from resources."""
@@ -229,6 +233,43 @@ class DraftRightApplication(Adw.Application):
         info = self._update_service.check_if_needed()
         if info is not None:
             GLib.idle_add(self._show_update_dialog, info)
+
+    def _trigger_whats_new_check(self) -> bool:
+        """Kick the one-time post-update notice in a background thread."""
+        threading.Thread(target=self._do_whats_new_check, daemon=True).start()
+        return False  # one-shot
+
+    def _do_whats_new_check(self):
+        """Background thread: if the running version changed since last launch,
+        fetch its release notes and show them once."""
+        if self._update_service is None or self.settings_service is None:
+            return
+        current = __version__
+        last_seen = self.settings_service.last_seen_version
+        if last_seen == current:
+            return
+        # Record now so the notice can't repeat; skip on a fresh install.
+        self.settings_service.last_seen_version = current
+        self.settings_service.save()
+        if not last_seen:
+            return
+        notes = self._update_service.release_notes_for_version(current)
+        if notes:
+            GLib.idle_add(self._show_whats_new_dialog, current, notes)
+
+    def _show_whats_new_dialog(self, version, notes) -> bool:
+        """Show the 'What's New' notice on the GTK main thread."""
+        dialog = Gtk.MessageDialog(
+            transient_for=self.props.active_window,
+            modal=True,
+            message_type=Gtk.MessageType.INFO,
+            text=f"What's new in DraftRight v{version}",
+        )
+        dialog.set_property("secondary-text", notes)
+        dialog.add_button("Got it", Gtk.ResponseType.OK)
+        dialog.connect("response", lambda d, _r: d.destroy())
+        dialog.present()
+        return False
 
     def _show_update_dialog(self, info) -> bool:
         """Show update dialog on the GTK main thread."""

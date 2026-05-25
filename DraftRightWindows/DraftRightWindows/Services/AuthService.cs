@@ -77,7 +77,7 @@ public sealed class AuthService
         }
         catch (Exception ex)
         {
-            DRLogger.Log($"SaveTokens: failed to persist — {ex.GetType().Name}: {ex.Message}",
+            DRLogger.Error($"SaveTokens: failed to persist — {ex.GetType().Name}: {ex.Message}",
                 DRLogger.Category.AUTH);
             throw;
         }
@@ -107,7 +107,7 @@ public sealed class AuthService
         }
         catch (Exception ex)
         {
-            DRLogger.Log($"ClearTokens: failed to delete auth file — {ex.GetType().Name}: {ex.Message}",
+            DRLogger.Warn($"ClearTokens: failed to delete auth file — {ex.GetType().Name}: {ex.Message}",
                 DRLogger.Category.AUTH);
         }
     }
@@ -149,7 +149,7 @@ public sealed class AuthService
         }
         catch (Exception ex)
         {
-            DRLogger.Log($"RestoreSession: failed — {ex.GetType().Name}: {ex.Message}",
+            DRLogger.Warn($"RestoreSession: failed — {ex.GetType().Name}: {ex.Message}",
                 DRLogger.Category.AUTH);
             return false;
         }

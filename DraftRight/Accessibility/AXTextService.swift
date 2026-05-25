@@ -15,7 +15,7 @@ final class AXTextService {
         let errorFocused = AXUIElementCopyAttributeValue(systemWideElement, kAXFocusedUIElementAttribute as CFString, &focused)
 
         if errorFocused != .success {
-            DRLogger.log("focusedElement err=\(errorFocused.rawValue)", category: .ax)
+            DRLogger.warn("focusedElement err=\(errorFocused.rawValue)", category: .ax)
             return nil
         }
 
@@ -24,7 +24,7 @@ final class AXTextService {
         var selected: CFTypeRef?
         let errorSelected = AXUIElementCopyAttributeValue(element as! AXUIElement, kAXSelectedTextAttribute as CFString, &selected)
         if errorSelected != .success {
-            DRLogger.log("selectedText err=\(errorSelected.rawValue)", category: .ax)
+            DRLogger.warn("selectedText err=\(errorSelected.rawValue)", category: .ax)
             return nil
         }
         guard let value = selected as? String else { return nil }

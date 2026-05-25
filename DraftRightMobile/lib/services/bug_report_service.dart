@@ -65,7 +65,7 @@ class BugReportService {
       if (screenshot != null) {
         final length = await screenshot.length();
         if (length > maxScreenshotBytes) {
-          DRLogger.log(
+          DRLogger.warn(
             'Bug report rejected client-side: screenshot $length bytes > 5 MB',
             category: 'BUG_REPORT',
           );
@@ -80,7 +80,7 @@ class BugReportService {
       final ok = streamed.statusCode >= 200 && streamed.statusCode < 300;
       if (!ok) {
         final body = await streamed.stream.bytesToString();
-        DRLogger.log(
+        DRLogger.warn(
           'Bug report failed: ${streamed.statusCode} $body',
           category: 'BUG_REPORT',
         );
@@ -89,7 +89,7 @@ class BugReportService {
       }
       return ok;
     } catch (e) {
-      DRLogger.log('Bug report exception: $e', category: 'BUG_REPORT');
+      DRLogger.warn('Bug report exception: $e', category: 'BUG_REPORT');
       return false;
     }
   }

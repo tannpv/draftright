@@ -214,6 +214,238 @@ public class UpdateServiceTests
         Assert.Equal("2.2.6", launchedVersion);
     }
 
+    // ── StartInstall during in-flight staging must not race the temp file ───
+    //
+    // Regression: 2.3.2 → 2.3.3 testing surfaced this. RefreshAvailableUpdate
+    // kicks silent staging, which downloads to Temp\<name>. If the user clicks
+    // "Yes" on the prompt before staging finishes, StartInstall used to call
+    // DownloadAndInstallAsync, which opened a SECOND FileStream(FileMode.Create)
+    // on the same path → "The process cannot access the file ... because it is
+    // being used by another process" on every attempt, then a red "Update
+    // failed" dialog — even though staging itself was fine. StartInstall must
+    // instead wait on the in-flight staging and install the staged file.
+
+    [Fact]
+    public async Task StartInstall_WaitsOnInFlightStaging_WithoutStartingSecondDownload()
+    {
+        var installerBytes = new byte[] { 0x4D, 0x5A, 0x90, 0x00, 0x03, 0x00, 0x00, 0x00 };
+        var meta = TestHttpHandler.Always(HttpStatusCode.OK,
+            """{"version":"2.3.3","windows_url":"https://x/installer-2.3.3.exe"}""");
+
+        // Gate the download so staging stays in flight until we release it —
+        // that's the window in which the user clicks "Yes" and the old code
+        // raced a second writer onto the temp file.
+        var release = new TaskCompletionSource();
+        var dl = new TestHttpHandler(async (req, _) =>
+        {
+            await release.Task;
+            var msg = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent(installerBytes)
+            };
+            msg.Content.Headers.ContentLength = installerBytes.Length;
+            return msg;
+        });
+        var svc = BuildService("2.3.2", meta, dl);
+
+        string? launchedVersion = null;
+        svc.StagedInstallerLauncherForTest = (_, version) => launchedVersion = version;
+
+        // Refresh kicks silent staging; the download blocks on `release`.
+        var info = await svc.RefreshAvailableUpdateAsync();
+        Assert.NotNull(info);
+        await WaitFor(() => dl.CallCount >= 1, TimeSpan.FromSeconds(5));
+        Assert.False(svc.UpdateStaged, "precondition: staging must still be in flight");
+
+        // User clicks "Yes" mid-staging. This must NOT start a second download.
+        svc.StartInstall(info!);
+
+        // Let staging finish.
+        release.SetResult();
+
+        await WaitFor(() => launchedVersion != null, TimeSpan.FromSeconds(5));
+        Assert.Equal("2.3.3", launchedVersion);
+        Assert.Equal(1, dl.CallCount); // exactly one download — staging's, not a racing second one
+    }
+
+    // ── NormalizeForPlatform: per-platform pin overrides legacy envelope ────
+    //
+    // Regression: 2.2.10 users got stuck in a "current 2.2.10, install 2.3.1,
+    // still 2.2.10" loop because the backend's top-level `version` is a
+    // cross-platform max (2.3.1 from mac) but `windows_url` is the Windows
+    // row's URL (pointing at the 2.2.10 installer). The client must read
+    // `platforms.windows` as the authoritative source so it can never be
+    // tricked into installing the wrong-versioned installer.
+
+    [Fact]
+    public void Normalize_PrefersPlatformPin_OverLegacyTopLevel()
+    {
+        var raw = new UpdateInfo
+        {
+            Version = "2.3.1",                                          // cross-platform max — bogus for windows
+            WindowsUrl = "https://x/installer-2.2.10.exe",              // actually a 2.2.10 installer
+            ReleaseNotes = "mac notes",
+            Platforms = new()
+            {
+                ["windows"] = new PlatformRelease
+                {
+                    Version = "2.2.10",
+                    Url = "https://x/installer-2.2.10.exe",
+                    Notes = "windows-specific notes",
+                    Required = false,
+                },
+                ["mac"] = new PlatformRelease { Version = "2.3.1", Url = "https://x/mac.dmg" },
+            },
+        };
+
+        var n = UpdateService.NormalizeForPlatform(raw, "windows");
+
+        Assert.Equal("2.2.10", n.Version);
+        Assert.Equal("https://x/installer-2.2.10.exe", n.WindowsUrl);
+        Assert.Equal("windows-specific notes", n.ReleaseNotes);
+    }
+
+    [Fact]
+    public void Normalize_FallsThrough_WhenPlatformsMapAbsent_ForLegacyBackends()
+    {
+        var raw = new UpdateInfo
+        {
+            Version = "2.2.5",
+            WindowsUrl = "https://x/old.exe",
+            ReleaseNotes = "legacy",
+        };
+
+        var n = UpdateService.NormalizeForPlatform(raw, "windows");
+
+        Assert.Equal("2.2.5", n.Version);
+        Assert.Equal("https://x/old.exe", n.WindowsUrl);
+        Assert.Equal("legacy", n.ReleaseNotes);
+    }
+
+    [Fact]
+    public void Normalize_FallsThrough_WhenPlatformEntryHasEmptyVersion()
+    {
+        // Defensive: a half-populated row shouldn't blank out a valid top-level.
+        var raw = new UpdateInfo
+        {
+            Version = "2.2.5",
+            WindowsUrl = "https://x/installer-2.2.5.exe",
+            Platforms = new()
+            {
+                ["windows"] = new PlatformRelease { Version = "", Url = "" },
+            },
+        };
+
+        var n = UpdateService.NormalizeForPlatform(raw, "windows");
+
+        Assert.Equal("2.2.5", n.Version);
+        Assert.Equal("https://x/installer-2.2.5.exe", n.WindowsUrl);
+    }
+
+    // ── End-to-end: phantom-update loop is closed ───────────────────────────
+
+    [Fact]
+    public async Task Refresh_ReturnsNull_WhenWindowsPinMatchesCurrent_DespiteHigherTopLevel()
+    {
+        // The bug report scenario: user on 2.2.10, server top-level says 2.3.1
+        // (mac's version), but the Windows row is still 2.2.10. The client
+        // must NOT prompt to "install 2.3.1" — there's no real Windows update.
+        var meta = TestHttpHandler.Always(HttpStatusCode.OK,
+            """{"version":"2.3.1","windows_url":"https://x/installer-2.2.10.exe","platforms":{"windows":{"version":"2.2.10","url":"https://x/installer-2.2.10.exe"},"mac":{"version":"2.3.1","url":"https://x/mac.dmg"}}}""");
+        var dl = TestHttpHandler.Bytes(new byte[] { 0x4D, 0x5A });
+        var svc = BuildService("2.2.10", meta, dl);
+
+        var result = await svc.RefreshAvailableUpdateAsync();
+
+        Assert.Null(result);
+        Assert.Null(svc.AvailableUpdate);
+    }
+
+    [Fact]
+    public async Task Refresh_FetchesWithPlatformQuery_SoBackendCanAnchorEnvelope()
+    {
+        // Server-side: a backend that honors `?platform=windows` returns the
+        // Windows row's version as the top-level `version`. We don't need to
+        // assert the response handling here (other tests cover that) — just
+        // that the client tells the backend which platform it is.
+        var meta = TestHttpHandler.Always(HttpStatusCode.OK,
+            """{"version":"2.2.10","windows_url":"https://x/installer-2.2.10.exe"}""");
+        var dl = TestHttpHandler.Bytes(new byte[] { 0x4D, 0x5A });
+        var svc = BuildService("2.2.10", meta, dl);
+
+        await svc.RefreshAvailableUpdateAsync();
+
+        Assert.NotEmpty(meta.Requests);
+        var url = meta.Requests[0].RequestUri!.ToString();
+        Assert.Contains("/updates/latest", url);
+        Assert.Contains("platform=windows", url);
+    }
+
+    // ── "Continue in background" cancel-mid-download ────────────────────────
+
+    [Fact]
+    public async Task TryDownload_ReturnsNullPromptly_WhenExternalTokenCanceled()
+    {
+        // Stall the response and gate the responder on the same CT we'll
+        // pass as externalCt — that way the test's Cancel() simultaneously
+        // propagates through the production CTS chain (externalCt →
+        // attemptCts → SendAsync) and through the test's stall, so we
+        // assert the production code's cancel-aware OCE handler fires
+        // (not the generic retry-on-error path).
+        using var cts = new System.Threading.CancellationTokenSource();
+        var dl = new TestHttpHandler(async (req, _) =>
+        {
+            await Task.Delay(System.Threading.Timeout.Infinite, cts.Token);
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        });
+        // Metadata handler is unused for this test but the ctor requires one.
+        var meta = TestHttpHandler.Always(HttpStatusCode.OK, "{}");
+        var svc = BuildService("2.2.10", meta, dl);
+
+        var downloadTask = svc.TryDownloadInstallerAsync(
+            url: "https://x/installer-2.3.2.exe",
+            version: "2.3.2",
+            ui: null,
+            attempts: 3,
+            externalCt: cts.Token);
+
+        // Let the request reach SendAsync.
+        await WaitFor(() => dl.CallCount >= 1, TimeSpan.FromSeconds(2));
+        cts.Cancel();
+
+        // Should return null quickly — no 5-second backoff loop, no retries.
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var result = await downloadTask.WaitAsync(TimeSpan.FromSeconds(3));
+        sw.Stop();
+
+        Assert.Null(result);
+        Assert.Equal(1, dl.CallCount);
+        Assert.True(sw.Elapsed < TimeSpan.FromSeconds(3),
+            $"cancel-aware return took {sw.Elapsed.TotalSeconds:F1}s — should be near-instant");
+    }
+
+    [Fact]
+    public async Task Refresh_DoesNotDoubleStage_WhenCalledTwiceInQuickSuccession()
+    {
+        // Refresh kicks silent staging — calling it back-to-back must NOT
+        // start two concurrent downloads to the same temp path. The Hide
+        // button uses the same EnsureStagingInBackground entry point as
+        // Refresh; this test pins the dedup behavior that both paths rely on.
+        var installerBytes = new byte[] { 0x4D, 0x5A, 0x90, 0x00, 0x03, 0x00, 0x00, 0x00 };
+        var meta = TestHttpHandler.Always(HttpStatusCode.OK,
+            """{"version":"2.3.2","windows_url":"https://x/installer-2.3.2.exe"}""");
+        var dl = TestHttpHandler.Bytes(installerBytes);
+        var svc = BuildService("2.2.10", meta, dl);
+
+        var t1 = svc.RefreshAvailableUpdateAsync();
+        var t2 = svc.RefreshAvailableUpdateAsync();
+        await Task.WhenAll(t1, t2);
+        await WaitFor(() => svc.UpdateStaged, TimeSpan.FromSeconds(5));
+
+        Assert.Equal(1, dl.CallCount);
+        Assert.True(svc.UpdateStaged);
+    }
+
     // ── Helpers ─────────────────────────────────────────────────────────────
 
     private static async Task WaitFor(Func<bool> condition, TimeSpan timeout)
