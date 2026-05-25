@@ -3,9 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { PaymentController } from './payment.controller';
 import { PaymentService } from './payment.service';
 import { StripeStrategy } from './strategies/stripe.strategy';
-import { PayPalStrategy } from './strategies/paypal.strategy';
 import { VietQRStrategy } from './strategies/vietqr.strategy';
-import { MomoStrategy } from './strategies/momo.strategy';
 import { Payment } from './entities/payment.entity';
 import { User } from '../users/entities/user.entity';
 import { AppSettings } from '../admin/entities/app-settings.entity';
@@ -25,7 +23,7 @@ import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
     SubscriptionsModule,
   ],
   controllers: [PaymentController],
-  providers: [PaymentService, StripeStrategy, PayPalStrategy, VietQRStrategy, MomoStrategy],
+  providers: [PaymentService, StripeStrategy, VietQRStrategy],
   exports: [PaymentService],
 })
 export class PaymentModule {}

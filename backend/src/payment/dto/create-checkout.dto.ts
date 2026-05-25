@@ -6,8 +6,8 @@ export class CreateCheckoutDto {
   @IsString()
   plan_id: string;
 
-  @ApiProperty({ example: 'vietqr', enum: ['stripe', 'paypal', 'vietqr', 'bank_transfer'] })
-  @IsIn(['stripe', 'paypal', 'momo', 'vietqr', 'bank_transfer'])
+  @ApiProperty({ example: 'vietqr', enum: ['stripe', 'vietqr', 'bank_transfer'] })
+  @IsIn(['stripe', 'vietqr', 'bank_transfer'])
   method: string;
 
   @ApiPropertyOptional({ example: 'https://draftright.app/payment/success' })

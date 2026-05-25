@@ -4,9 +4,7 @@ import { Repository, MoreThanOrEqual } from 'typeorm';
 import { Payment, PaymentMethod, PaymentStatus } from './entities/payment.entity';
 import { PaymentStrategy, CheckoutResult, WebhookAction } from './strategies/payment-strategy.interface';
 import { StripeStrategy } from './strategies/stripe.strategy';
-import { PayPalStrategy } from './strategies/paypal.strategy';
 import { VietQRStrategy } from './strategies/vietqr.strategy';
-import { MomoStrategy } from './strategies/momo.strategy';
 import { PlansService } from '../plans/plans.service';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { User } from '../users/entities/user.entity';
@@ -30,14 +28,10 @@ export class PaymentService {
     private readonly plansService: PlansService,
     private readonly subscriptionsService: SubscriptionsService,
     private readonly stripeStrategy: StripeStrategy,
-    private readonly paypalStrategy: PayPalStrategy,
     private readonly vietqrStrategy: VietQRStrategy,
-    private readonly momoStrategy: MomoStrategy,
   ) {
     this.strategies = new Map<string, PaymentStrategy>([
       ['stripe', this.stripeStrategy],
-      ['paypal', this.paypalStrategy],
-      ['momo', this.momoStrategy],
       ['vietqr', this.vietqrStrategy],
       ['bank_transfer', this.vietqrStrategy],
     ]);

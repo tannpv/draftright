@@ -81,8 +81,6 @@ const FILTER_TABS: { key: StatusFilter; label: string }[] = [
  * Add a new method → add one entry here (nothing else to change). */
 const METHOD_MODE_FIELD: Record<string, string> = {
   stripe: 'stripe_mode',
-  paypal: 'paypal_mode',
-  momo: 'momo_mode',
   vietqr: 'sepay_mode',
   bank_transfer: 'sepay_mode',
 };
