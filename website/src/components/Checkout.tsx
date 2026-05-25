@@ -9,6 +9,7 @@ interface Plan {
   id: PlanId;
   name: string;
   price: number;
+  currency: string;
   period: 'month' | 'year';
   badge: string | null;
 }
@@ -27,6 +28,7 @@ const toPlan = (p: ApiPlan): Plan => ({
   id: p.id,
   name: p.name,
   price: p.price_cents,
+  currency: (p.currency || 'VND').toUpperCase(),
   period: p.billing_period === 'yearly' ? 'year' : 'month',
   badge: p.billing_period === 'yearly' ? 'Best value' : null,
 });
@@ -48,6 +50,14 @@ const METHODS: Method[] = [
 
 const formatVnd = (n: number) =>
   new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(n);
+
+// price_cents is whole VND for VND plans (99000 = 99.000₫) but minor units for
+// currencies with cents (499 USD = $4.99). Format by each plan's own currency.
+const formatPrice = (priceCents: number, currency: string) => {
+  const c = (currency || 'VND').toUpperCase();
+  if (c === 'VND') return formatVnd(priceCents);
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: c }).format(priceCents / 100);
+};
 
 type Step = 'plan' | 'method' | 'auth' | 'processing' | 'success';
 type AuthMode = 'login' | 'register';
@@ -297,12 +307,12 @@ export default function Checkout() {
             )}
             <div className="text-lg font-semibold text-white">{p.name}</div>
             <div className="mt-2">
-              <span className="text-3xl font-extrabold text-white">{formatVnd(p.price)}</span>
+              <span className="text-3xl font-extrabold text-white">{formatPrice(p.price, p.currency)}</span>
               <span className="text-gray-500 ml-1">/ {p.period}</span>
             </div>
             {p.period === 'year' && (
               <div className="mt-1 text-sm text-emerald-400">
-                {formatVnd(Math.round(p.price / 12))}/month
+                {formatPrice(Math.round(p.price / 12), p.currency)}/month
               </div>
             )}
           </button>
@@ -315,7 +325,7 @@ export default function Checkout() {
     <div>
       <h2 className="text-2xl font-bold text-white mb-2">Payment method</h2>
       <p className="text-gray-400 mb-8">
-        {selectedPlan?.name} — {selectedPlan ? formatVnd(selectedPlan.price) : ''}
+        {selectedPlan?.name} — {selectedPlan ? formatPrice(selectedPlan.price, selectedPlan.currency) : ''}
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {METHODS.map((m) => (
