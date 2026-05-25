@@ -10,6 +10,7 @@ interface Settings {
   max_input_length: number;
   supported_languages: string;
   // Payment
+  payment_methods_enabled: string;
   stripe_secret_key: string;
   stripe_webhook_secret: string;
   stripe_mode: string;
@@ -40,6 +41,14 @@ interface Settings {
   client_log_level: string;
   [key: string]: any;
 }
+
+const PAYMENT_METHODS: { key: string; label: string }[] = [
+  { key: 'stripe', label: 'Card (Stripe)' },
+  { key: 'paypal', label: 'PayPal' },
+  { key: 'momo', label: 'Momo' },
+  { key: 'vietqr', label: 'VietQR' },
+  { key: 'bank_transfer', label: 'Bank Transfer' },
+];
 
 const ALL_LANGUAGES = [
   'Arabic', 'Chinese (Simplified)', 'Chinese (Traditional)',
@@ -121,6 +130,7 @@ export default function SettingsPage() {
   const defaults: Settings = {
     environment: 'testing', trial_limit: 3, token_expiry_minutes: 15, refresh_token_expiry_days: 90, max_input_length: 3000,
     supported_languages: ALL_LANGUAGES.join(','),
+    payment_methods_enabled: '',
     stripe_secret_key: '', stripe_webhook_secret: '', stripe_mode: 'test',
     paypal_client_id: '', paypal_client_secret: '', paypal_mode: 'sandbox',
     momo_partner_code: '', momo_access_key: '', momo_secret_key: '', momo_mode: 'sandbox',
@@ -180,6 +190,17 @@ export default function SettingsPage() {
   if (loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}><div style={{ color: 'var(--muted)' }}>Loading settings...</div></div>;
 
   const isLive = settings.environment === 'live';
+
+  // Checkout method enable/disable (CSV in payment_methods_enabled).
+  const paymentMethodsSet = new Set(
+    (settings.payment_methods_enabled || '').split(',').map((s) => s.trim()).filter(Boolean),
+  );
+  const toggleMethod = (key: string) => {
+    const next = new Set(paymentMethodsSet);
+    next.has(key) ? next.delete(key) : next.add(key);
+    set('payment_methods_enabled')([...next].join(','));
+  };
+
   const tabs = [
     { key: 'general' as const, label: 'General', icon: '⚙️' },
     { key: 'payment' as const, label: 'Payment', icon: '💳' },
@@ -311,6 +332,29 @@ export default function SettingsPage() {
             Each provider has its own <strong style={{ color: 'var(--text)' }}>mode</strong> (sandbox/test vs live). A pending
             payment whose provider is in sandbox/test can be completed with the “🧪 Simulate paid” button on the Payments page.
           </p>
+
+          {/* Enabled methods (shown on the website checkout) */}
+          <div className="card" style={{ marginBottom: 24 }}>
+            <h2 style={{ color: 'var(--text)', fontSize: 16, fontWeight: 600, marginBottom: 4 }}>🧾 Checkout methods</h2>
+            <p style={{ color: 'var(--muted)', fontSize: 12, marginBottom: 14 }}>
+              Tick the methods customers can pick on the website. Takes effect immediately (no restart).
+            </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+              {PAYMENT_METHODS.map(({ key, label }) => {
+                const on = paymentMethodsSet.has(key);
+                return (
+                  <button key={key} onClick={() => toggleMethod(key)} className="btn" style={{
+                    padding: '7px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                    border: on ? '2px solid var(--success)' : '2px solid var(--border)',
+                    background: on ? 'rgba(19,222,185,0.12)' : 'transparent',
+                    color: on ? 'var(--success)' : 'var(--muted)',
+                  }}>
+                    {on ? '✓ ' : ''}{label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
           {/* Stripe */}
           <div className="card" style={{ marginBottom: 24 }}>
