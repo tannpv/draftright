@@ -1,12 +1,12 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import {
-  PaymentStrategy,
   CheckoutResult,
   WebhookAction,
   CreateCheckoutOptions,
 } from './payment-strategy.interface';
+import { BasePaymentStrategy } from './base-payment.strategy';
 import { Payment } from '../entities/payment.entity';
 import { AppSettings } from '../../admin/entities/app-settings.entity';
 import { websiteUrl } from '../../common/app-config';
@@ -25,20 +25,19 @@ import { websiteUrl } from '../../common/app-config';
  * with env-var fallback so local dev still works without DB seeding.
  */
 @Injectable()
-export class StripeStrategy implements PaymentStrategy {
-  private readonly logger = new Logger(StripeStrategy.name);
-
+export class StripeStrategy extends BasePaymentStrategy {
   constructor(
-    @InjectRepository(AppSettings)
-    private readonly settingsRepo: Repository<AppSettings>,
-  ) {}
+    @InjectRepository(AppSettings) settingsRepo: Repository<AppSettings>,
+  ) {
+    super(settingsRepo);
+  }
 
   /**
    * Pull credentials from AppSettings (set via admin portal). Falls back to env
    * vars if DB value is empty — useful for first deploy + tests.
    */
   private async getCredentials(): Promise<{ secretKey: string; webhookSecret: string }> {
-    const settings = await this.settingsRepo.findOne({ where: {} });
+    const settings = await this.getSettings();
     return {
       secretKey: settings?.stripe_secret_key || process.env.STRIPE_SECRET_KEY || '',
       webhookSecret: settings?.stripe_webhook_secret || process.env.STRIPE_WEBHOOK_SECRET || '',

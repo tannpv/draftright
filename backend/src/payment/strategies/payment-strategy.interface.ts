@@ -27,10 +27,8 @@ export type WebhookAction =
   | { type: 'dispute_created';   stripe_charge_id: string; amount: number }
   | { type: 'ignored' };
 
-export interface PaymentStrategy {
-  createCheckout(payment: Payment, options?: CreateCheckoutOptions): Promise<CheckoutResult>;
-  verifyWebhook(payload: any, headers: any): Promise<WebhookAction>;
-}
+// The strategy contract is BasePaymentStrategy (abstract class). These are the
+// shared data shapes its methods use.
 
 export interface CreateCheckoutOptions {
   success_url?: string;
