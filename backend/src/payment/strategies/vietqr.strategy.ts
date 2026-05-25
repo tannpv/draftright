@@ -1,23 +1,23 @@
-import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { PaymentStrategy, CheckoutResult, WebhookAction, CreateCheckoutOptions } from './payment-strategy.interface';
+import { CheckoutResult, WebhookAction, CreateCheckoutOptions } from './payment-strategy.interface';
+import { BasePaymentStrategy } from './base-payment.strategy';
 import { Payment } from '../entities/payment.entity';
 import { AppSettings } from '../../admin/entities/app-settings.entity';
 import { extractPaymentReference } from '../payment-reference';
 
 @Injectable()
-export class VietQRStrategy implements PaymentStrategy {
-  private readonly logger = new Logger(VietQRStrategy.name);
-
+export class VietQRStrategy extends BasePaymentStrategy {
   constructor(
-    @InjectRepository(AppSettings)
-    private readonly settingsRepo: Repository<AppSettings>,
-  ) {}
+    @InjectRepository(AppSettings) settingsRepo: Repository<AppSettings>,
+  ) {
+    super(settingsRepo);
+  }
 
   /** Read bank + provider credentials from AppSettings (admin portal), env fallback. */
   private async getCredentials() {
-    const s = await this.settingsRepo.findOne({ where: {} });
+    const s = await this.getSettings();
     return {
       bankId: s?.vietqr_bank_id || process.env.VIETQR_BANK_ID || 'MB',
       accountNumber: s?.vietqr_account_number || process.env.VIETQR_ACCOUNT_NUMBER || '0000000000',

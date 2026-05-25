@@ -2,7 +2,8 @@ import { Injectable, BadRequestException, NotFoundException, Logger } from '@nes
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, MoreThanOrEqual } from 'typeorm';
 import { Payment, PaymentMethod, PaymentStatus } from './entities/payment.entity';
-import { PaymentStrategy, CheckoutResult, WebhookAction } from './strategies/payment-strategy.interface';
+import { CheckoutResult, WebhookAction } from './strategies/payment-strategy.interface';
+import { BasePaymentStrategy } from './strategies/base-payment.strategy';
 import { StripeStrategy } from './strategies/stripe.strategy';
 import { VietQRStrategy } from './strategies/vietqr.strategy';
 import { PlansService } from '../plans/plans.service';
@@ -14,7 +15,7 @@ import { PAYMENT_PENDING_TTL_MS } from '../common/app-config';
 
 @Injectable()
 export class PaymentService {
-  private strategies: Map<string, PaymentStrategy>;
+  private strategies: Map<string, BasePaymentStrategy>;
 
   private readonly logger = new Logger(PaymentService.name);
 
@@ -30,7 +31,7 @@ export class PaymentService {
     private readonly stripeStrategy: StripeStrategy,
     private readonly vietqrStrategy: VietQRStrategy,
   ) {
-    this.strategies = new Map<string, PaymentStrategy>([
+    this.strategies = new Map<string, BasePaymentStrategy>([
       ['stripe', this.stripeStrategy],
       ['vietqr', this.vietqrStrategy],
       ['bank_transfer', this.vietqrStrategy],
@@ -61,7 +62,7 @@ export class PaymentService {
 
   // --- Generic: get strategy by method ---
 
-  private getStrategy(method: string): PaymentStrategy {
+  private getStrategy(method: string): BasePaymentStrategy {
     const strategy = this.strategies.get(method);
     if (!strategy) throw new BadRequestException(`Unsupported payment method: ${method}`);
     return strategy;
