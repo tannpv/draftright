@@ -9,6 +9,7 @@ import {
 } from './payment-strategy.interface';
 import { Payment } from '../entities/payment.entity';
 import { AppSettings } from '../../admin/entities/app-settings.entity';
+import { websiteUrl } from '../../common/app-config';
 
 /**
  * Stripe strategy — Phase 3a refactor.
@@ -82,9 +83,9 @@ export class StripeStrategy implements PaymentStrategy {
         ...(plan.trial_days > 0 ? { trial_period_days: plan.trial_days } : {}),
       },
       success_url: options?.success_url
-        || `${process.env.WEBSITE_URL || 'http://localhost:4000'}/payment/success?ref=${payment.reference_code}`,
+        || `${websiteUrl()}/payment/success?ref=${payment.reference_code}`,
       cancel_url: options?.cancel_url
-        || `${process.env.WEBSITE_URL || 'http://localhost:4000'}/payment/cancel`,
+        || `${websiteUrl()}/payment/cancel`,
       // Required so we can find the user later if Stripe creates a Customer fresh
       client_reference_id: payment.user_id,
     };

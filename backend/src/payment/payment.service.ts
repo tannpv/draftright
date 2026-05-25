@@ -12,6 +12,7 @@ import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { User } from '../users/entities/user.entity';
 import { AppSettings } from '../admin/entities/app-settings.entity';
 import { generatePaymentReference } from './payment-reference';
+import { PAYMENT_PENDING_TTL_MS } from '../common/app-config';
 
 @Injectable()
 export class PaymentService {
@@ -99,7 +100,7 @@ export class PaymentService {
       method: method as PaymentMethod,
       status: PaymentStatus.PENDING,
       reference_code: generatePaymentReference(),
-      expires_at: new Date(Date.now() + 30 * 60 * 1000), // 30 min expiry
+      expires_at: new Date(Date.now() + PAYMENT_PENDING_TTL_MS), // 30 min expiry
     });
     // Eagerly attach the plan so the strategy can read it without a re-fetch
     (payment as any).plan = plan;

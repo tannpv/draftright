@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PaymentStrategy, CheckoutResult, WebhookAction, CreateCheckoutOptions } from './payment-strategy.interface';
 import { Payment } from '../entities/payment.entity';
+import { websiteUrl } from '../../common/app-config';
 
 @Injectable()
 export class PayPalStrategy implements PaymentStrategy {
@@ -49,8 +50,8 @@ export class PayPalStrategy implements PaymentStrategy {
           description: 'DraftRight Pro Subscription',
         }],
         application_context: {
-          return_url: options?.success_url || `${process.env.WEBSITE_URL || 'http://localhost:4000'}/payment/success?ref=${payment.reference_code}`,
-          cancel_url: options?.cancel_url || `${process.env.WEBSITE_URL || 'http://localhost:4000'}/payment/cancel`,
+          return_url: options?.success_url || `${websiteUrl()}/payment/success?ref=${payment.reference_code}`,
+          cancel_url: options?.cancel_url || `${websiteUrl()}/payment/cancel`,
           brand_name: 'DraftRight',
         },
       }),
