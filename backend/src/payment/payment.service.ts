@@ -11,7 +11,7 @@ import { PlansService } from '../plans/plans.service';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { User } from '../users/entities/user.entity';
 import { AppSettings } from '../admin/entities/app-settings.entity';
-import { randomBytes } from 'crypto';
+import { generatePaymentReference } from './payment-reference';
 
 @Injectable()
 export class PaymentService {
@@ -71,12 +71,6 @@ export class PaymentService {
     return strategy;
   }
 
-  // --- Generic: generate unique reference code ---
-
-  private generateReferenceCode(): string {
-    const rand = randomBytes(4).toString('hex').toUpperCase();
-    return `DR-PRO-${rand}`;
-  }
 
   // --- Generic: create checkout ---
 
@@ -104,7 +98,7 @@ export class PaymentService {
       currency: plan.currency || 'USD',
       method: method as PaymentMethod,
       status: PaymentStatus.PENDING,
-      reference_code: this.generateReferenceCode(),
+      reference_code: generatePaymentReference(),
       expires_at: new Date(Date.now() + 30 * 60 * 1000), // 30 min expiry
     });
     // Eagerly attach the plan so the strategy can read it without a re-fetch
