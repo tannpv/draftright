@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { createHmac } from 'crypto';
 import { PaymentStrategy, CheckoutResult, WebhookAction, CreateCheckoutOptions } from './payment-strategy.interface';
 import { Payment } from '../entities/payment.entity';
+import { websiteUrl, backendUrl } from '../../common/app-config';
 
 @Injectable()
 export class MomoStrategy implements PaymentStrategy {
@@ -19,8 +20,8 @@ export class MomoStrategy implements PaymentStrategy {
       throw new Error('Momo payments are not available yet. Please use VietQR or Bank Transfer.');
     }
 
-    const redirectUrl = options?.success_url || `${process.env.WEBSITE_URL || 'http://localhost:4000'}/payment/success?ref=${payment.reference_code}`;
-    const ipnUrl = `${process.env.BACKEND_URL || 'http://localhost:3000'}/payment/webhook/momo`;
+    const redirectUrl = options?.success_url || `${websiteUrl()}/payment/success?ref=${payment.reference_code}`;
+    const ipnUrl = `${backendUrl()}/payment/webhook/momo`;
     const requestId = payment.id;
     const orderId = payment.reference_code;
     const orderInfo = `DraftRight Pro - ${payment.reference_code}`;

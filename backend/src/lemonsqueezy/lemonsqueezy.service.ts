@@ -4,6 +4,7 @@ import { UsersService } from '../users/users.service';
 import { PlansService } from '../plans/plans.service';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { StoreType } from '../subscriptions/entities/subscription.entity';
+import { LS_PERIOD_MS } from '../common/app-config';
 
 const LEMONSQUEEZY_API_BASE = 'https://api.lemonsqueezy.com/v1';
 
@@ -166,7 +167,7 @@ export class LemonsqueezyService {
       proPlan.id,
       StoreType.LEMONSQUEEZY,
       subId,
-      renewsAt ?? new Date(Date.now() + 31 * 24 * 60 * 60 * 1000),
+      renewsAt ?? new Date(Date.now() + LS_PERIOD_MS),
     );
     this.logger.log(`Activated Pro for user ${userId} sub ${subId} renews=${renewsAt?.toISOString()}`);
   }
@@ -180,7 +181,7 @@ export class LemonsqueezyService {
       proPlan.id,
       StoreType.LEMONSQUEEZY,
       subId,
-      renewsAt ?? new Date(Date.now() + 31 * 24 * 60 * 60 * 1000),
+      renewsAt ?? new Date(Date.now() + LS_PERIOD_MS),
     );
     this.logger.log(`Extended Pro for user ${userId} renews=${renewsAt?.toISOString()}`);
   }

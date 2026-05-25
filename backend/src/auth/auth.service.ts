@@ -9,6 +9,7 @@ import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { EmailService } from '../email/email.service';
 import { AuthProvider } from '../users/entities/user.entity';
 import { AppSettings } from '../admin/entities/app-settings.entity';
+import { EMAIL_CODE_TTL_MS } from '../common/app-config';
 
 @Injectable()
 export class AuthService {
@@ -53,7 +54,7 @@ export class AuthService {
 
     const password_hash = await bcrypt.hash(password, 10);
     const code = this.generateVerificationCode();
-    const expires = new Date(Date.now() + 15 * 60 * 1000);
+    const expires = new Date(Date.now() + EMAIL_CODE_TTL_MS);
 
     const user = await this.usersService.create({
       email: normalizedEmail,
@@ -103,7 +104,7 @@ export class AuthService {
     if (!user || user.email_verified) return;
 
     const code = this.generateVerificationCode();
-    const expires = new Date(Date.now() + 15 * 60 * 1000);
+    const expires = new Date(Date.now() + EMAIL_CODE_TTL_MS);
     await this.usersService.update(user.id, {
       email_verification_code: code,
       email_verification_expires: expires,
