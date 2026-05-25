@@ -67,11 +67,6 @@ export class PaymentController {
     return this.paymentService.handleWebhook('stripe', req.rawBody, req.headers);
   }
 
-  @Post('webhook/paypal')
-  async paypalWebhook(@Body() body: any, @Req() req: Request) {
-    return this.paymentService.handleWebhook('paypal', body, req.headers);
-  }
-
   @Post('webhook/vietqr')
   async vietqrWebhook(@Body() body: any, @Req() req: Request) {
     return this.paymentService.handleWebhook('vietqr', body, req.headers);
@@ -85,10 +80,5 @@ export class PaymentController {
   @Post('webhook/sepay')
   async sepayWebhook(@Body() body: any, @Req() req: Request) {
     return this.paymentService.handleWebhook('vietqr', body, req.headers);
-  }
-
-  @Post('webhook/momo')
-  async momoWebhook(@Body() body: any, @Req() req: Request) {
-    return this.paymentService.handleWebhook('momo', body, req.headers);
   }
 }

@@ -14,13 +14,6 @@ interface Settings {
   stripe_secret_key: string;
   stripe_webhook_secret: string;
   stripe_mode: string;
-  paypal_client_id: string;
-  paypal_client_secret: string;
-  paypal_mode: string;
-  momo_partner_code: string;
-  momo_access_key: string;
-  momo_secret_key: string;
-  momo_mode: string;
   vietqr_bank_id: string;
   vietqr_account_number: string;
   vietqr_account_name: string;
@@ -44,8 +37,6 @@ interface Settings {
 
 const PAYMENT_METHODS: { key: string; label: string }[] = [
   { key: 'stripe', label: 'Card (Stripe)' },
-  { key: 'paypal', label: 'PayPal' },
-  { key: 'momo', label: 'Momo' },
   { key: 'vietqr', label: 'VietQR' },
   { key: 'bank_transfer', label: 'Bank Transfer' },
 ];
@@ -132,8 +123,6 @@ export default function SettingsPage() {
     supported_languages: ALL_LANGUAGES.join(','),
     payment_methods_enabled: '',
     stripe_secret_key: '', stripe_webhook_secret: '', stripe_mode: 'test',
-    paypal_client_id: '', paypal_client_secret: '', paypal_mode: 'sandbox',
-    momo_partner_code: '', momo_access_key: '', momo_secret_key: '', momo_mode: 'sandbox',
     vietqr_bank_id: 'MB', vietqr_account_number: '', vietqr_account_name: '',
     casso_api_key: '', sepay_api_key: '', sepay_mode: 'sandbox',
     resend_api_key: '', email_from: 'DraftRight <noreply@draftright.info>',
@@ -378,45 +367,6 @@ export default function SettingsPage() {
                   <option value="live">Live</option>
                 </select>
                 <p style={{ color: 'var(--muted)', fontSize: 11, marginTop: 4 }}>Switch when keys are sk_live_/whsec_ from live mode.</p>
-              </div>
-            </div>
-          </div>
-
-          {/* PayPal */}
-          <div className="card" style={{ marginBottom: 24 }}>
-            <h2 style={{ color: 'var(--text)', fontSize: 16, fontWeight: 600, marginBottom: 4 }}>
-              <StatusDot configured={!!settings.paypal_client_id} />🅿️ PayPal
-            </h2>
-            <p style={{ color: 'var(--muted)', fontSize: 12, marginBottom: 16 }}>PayPal payments</p>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-              <SecretField label="Client ID" value={settings.paypal_client_id} onChange={set('paypal_client_id')} placeholder="AX..." />
-              <SecretField label="Client Secret" value={settings.paypal_client_secret} onChange={set('paypal_client_secret')} placeholder="EL..." />
-              <div>
-                <label style={{ display: 'block', color: 'var(--text)', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Mode</label>
-                <select value={settings.paypal_mode} onChange={e => set('paypal_mode')(e.target.value)} className="dark-input">
-                  <option value="sandbox">Sandbox (Testing)</option>
-                  <option value="live">Live (Production)</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          {/* Momo */}
-          <div className="card" style={{ marginBottom: 24 }}>
-            <h2 style={{ color: 'var(--text)', fontSize: 16, fontWeight: 600, marginBottom: 4 }}>
-              <StatusDot configured={!!settings.momo_partner_code} />💜 Momo
-            </h2>
-            <p style={{ color: 'var(--muted)', fontSize: 12, marginBottom: 16 }}>Momo e-wallet payments (Vietnam)</p>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-              <SecretField label="Partner Code" value={settings.momo_partner_code} onChange={set('momo_partner_code')} placeholder="MOMO..." />
-              <SecretField label="Access Key" value={settings.momo_access_key} onChange={set('momo_access_key')} />
-              <SecretField label="Secret Key" value={settings.momo_secret_key} onChange={set('momo_secret_key')} />
-              <div>
-                <label style={{ display: 'block', color: 'var(--text)', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Mode</label>
-                <select value={settings.momo_mode} onChange={e => set('momo_mode')(e.target.value)} className="dark-input">
-                  <option value="sandbox">Sandbox (Testing)</option>
-                  <option value="live">Live (Production)</option>
-                </select>
               </div>
             </div>
           </div>

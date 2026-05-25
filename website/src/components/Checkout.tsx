@@ -34,7 +34,7 @@ const toPlan = (p: ApiPlan): Plan => ({
 });
 
 interface Method {
-  key: 'stripe' | 'paypal' | 'momo' | 'vietqr' | 'bank_transfer';
+  key: 'stripe' | 'vietqr' | 'bank_transfer';
   icon: string;
   label: string;
   sub: string;
@@ -42,8 +42,6 @@ interface Method {
 
 const METHODS: Method[] = [
   { key: 'stripe', icon: '💳', label: 'Credit/Debit Card', sub: 'Visa, Mastercard, Apple Pay, Google Pay' },
-  { key: 'paypal', icon: '🅿️', label: 'PayPal', sub: 'PayPal account' },
-  { key: 'momo', icon: '💳', label: 'Momo', sub: 'Pay with Momo e-wallet' },
   { key: 'vietqr', icon: '📱', label: 'VietQR', sub: 'Scan QR with any Vietnamese banking app' },
   { key: 'bank_transfer', icon: '🏦', label: 'Bank Transfer', sub: 'Manual transfer to MB Bank' },
 ];
@@ -257,10 +255,7 @@ export default function Checkout() {
         }
         const data: CheckoutResponse = await res.json();
         setCheckoutData(data);
-        if (
-          (methodKey === 'stripe' || methodKey === 'paypal' || methodKey === 'momo') &&
-          data.redirect_url
-        ) {
+        if (methodKey === 'stripe' && data.redirect_url) {
           window.location.href = data.redirect_url;
           return;
         }
