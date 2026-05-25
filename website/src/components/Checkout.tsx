@@ -101,6 +101,9 @@ export default function Checkout() {
   const [paymentStatus, setPaymentStatus] = useState('');
   const [plans, setPlans] = useState<Plan[]>([]);
   const [plansError, setPlansError] = useState('');
+  // null until loaded → show all; otherwise only these methods.
+  const [enabledMethods, setEnabledMethods] = useState<string[] | null>(null);
+  const visibleMethods = enabledMethods ? METHODS.filter((m) => enabledMethods.includes(m.key)) : METHODS;
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const selectedPlan = plans.find((p) => p.id === planId);
@@ -108,7 +111,7 @@ export default function Checkout() {
   const getToken = () =>
     typeof window !== 'undefined' ? localStorage.getItem('dr_access_token') : null;
 
-  // Load active plans from the backend; preselect from ?plan=<id> if present.
+  // Load active plans + enabled payment methods from the backend.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -123,6 +126,17 @@ export default function Checkout() {
         if (wanted && paid.some((p) => p.id === wanted)) setPlanId(wanted);
       } catch (err) {
         if (!cancelled) setPlansError(err instanceof Error ? err.message : 'Could not load plans');
+      }
+    })();
+    // Enabled payment methods (admin-controlled). On failure, show all.
+    (async () => {
+      try {
+        const res = await fetch(`${API}/payment/methods`);
+        if (!res.ok) return;
+        const data: { methods?: string[] } = await res.json();
+        if (!cancelled && Array.isArray(data.methods)) setEnabledMethods(data.methods);
+      } catch {
+        /* keep default (all) */
       }
     })();
     return () => {
@@ -328,7 +342,7 @@ export default function Checkout() {
         {selectedPlan?.name} — {selectedPlan ? formatPrice(selectedPlan.price, selectedPlan.currency) : ''}
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {METHODS.map((m) => (
+        {visibleMethods.map((m) => (
           <button
             key={m.key}
             onClick={() => setMethodKey(m.key)}

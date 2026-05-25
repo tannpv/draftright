@@ -24,6 +24,15 @@ export class AppSettings {
   @Column({ type: 'text', default: 'Arabic,Chinese (Simplified),Chinese (Traditional),Czech,Danish,Dutch,English,Finnish,French,German,Greek,Hebrew,Hindi,Hungarian,Indonesian,Italian,Japanese,Korean,Malay,Norwegian,Polish,Portuguese,Romanian,Russian,Spanish,Swedish,Thai,Turkish,Ukrainian,Vietnamese' })
   supported_languages: string;
 
+  // --- Payment ---
+  /**
+   * Comma-separated payment methods shown on the storefront + accepted at
+   * checkout, e.g. "stripe,vietqr". Empty falls back to the
+   * PAYMENT_ENABLED_METHODS env var. Admin-controlled (no restart needed).
+   */
+  @Column({ type: 'varchar', length: 200, default: '' })
+  payment_methods_enabled: string;
+
   // --- Payment: Stripe ---
   @Column({ type: 'varchar', length: 500, default: '' })
   stripe_secret_key: string;

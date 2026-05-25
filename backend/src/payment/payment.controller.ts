@@ -12,6 +12,13 @@ import { CreateCheckoutDto } from './dto/create-checkout.dto';
 export class PaymentController {
   constructor(private readonly paymentService: PaymentService) {}
 
+  // --- Public: which payment methods the storefront should show ---
+
+  @Get('methods')
+  async enabledMethods() {
+    return { methods: await this.paymentService.getEnabledMethods() };
+  }
+
   // --- Authenticated: create checkout ---
 
   @UseGuards(JwtAuthGuard)

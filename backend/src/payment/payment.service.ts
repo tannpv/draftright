@@ -18,19 +18,6 @@ import { PAYMENT_PENDING_TTL_MS } from '../common/app-config';
 export class PaymentService {
   private strategies: Map<string, PaymentStrategy>;
 
-  /**
-   * Methods that are publicly exposed. Controlled via env var
-   * `PAYMENT_ENABLED_METHODS=stripe,vietqr` (comma-separated).
-   *
-   * Phase 3a default = "stripe" only. VietQR/Casso will be added in Phase 3b
-   * once the Vietnamese LLC is registered (Casso requires business docs).
-   * PayPal + Momo stay implemented but disabled — webhooks return 404,
-   * checkout requests rejected — until they're explicitly enabled.
-   *
-   * `bank_transfer` is an alias for `vietqr` — only enabled if `vietqr` is.
-   */
-  private readonly enabledMethods: Set<string>;
-
   private readonly logger = new Logger(PaymentService.name);
 
   constructor(
@@ -54,19 +41,33 @@ export class PaymentService {
       ['vietqr', this.vietqrStrategy],
       ['bank_transfer', this.vietqrStrategy],
     ]);
+  }
 
-    const raw = (process.env.PAYMENT_ENABLED_METHODS || 'stripe').toLowerCase();
-    this.enabledMethods = new Set(raw.split(',').map((s) => s.trim()).filter(Boolean));
-    // bank_transfer is implicitly enabled iff vietqr is enabled
-    if (this.enabledMethods.has('vietqr')) this.enabledMethods.add('bank_transfer');
+  /**
+   * Enabled payment methods, admin-controlled via the
+   * `payment_methods_enabled` setting (CSV). Falls back to the
+   * PAYMENT_ENABLED_METHODS env var, then "stripe", when unset. Read fresh each
+   * call so admin toggles take effect without a restart.
+   * `bank_transfer` is implicitly enabled iff `vietqr` is.
+   */
+  async getEnabledMethods(): Promise<string[]> {
+    const settings = await this.settingsRepo.findOne({ where: {} });
+    const raw = (settings?.payment_methods_enabled || process.env.PAYMENT_ENABLED_METHODS || 'stripe').toLowerCase();
+    const set = new Set(raw.split(',').map((s) => s.trim()).filter(Boolean));
+    if (set.has('vietqr')) set.add('bank_transfer');
+    return [...set];
+  }
+
+  private async assertEnabled(method: string): Promise<void> {
+    const enabled = await this.getEnabledMethods();
+    if (!enabled.includes(method)) {
+      throw new NotFoundException(`Payment method '${method}' is not enabled.`);
+    }
   }
 
   // --- Generic: get strategy by method ---
 
   private getStrategy(method: string): PaymentStrategy {
-    if (!this.enabledMethods.has(method)) {
-      throw new NotFoundException(`Payment method '${method}' is not enabled.`);
-    }
     const strategy = this.strategies.get(method);
     if (!strategy) throw new BadRequestException(`Unsupported payment method: ${method}`);
     return strategy;
@@ -85,6 +86,7 @@ export class PaymentService {
     if (!plan) throw new NotFoundException('Plan not found');
     if (plan.price_cents === 0) throw new BadRequestException('Cannot purchase a free plan');
 
+    await this.assertEnabled(method);
     const strategy = this.getStrategy(method);
 
     // Load user for Stripe customer reuse + email pre-fill
@@ -133,6 +135,7 @@ export class PaymentService {
   // --- Generic: handle webhook from any provider ---
 
   async handleWebhook(method: string, payload: any, headers: any): Promise<{ success: boolean; reference_code?: string }> {
+    await this.assertEnabled(method);
     const strategy = this.getStrategy(method);
     const action: WebhookAction = await strategy.verifyWebhook(payload, headers);
 
