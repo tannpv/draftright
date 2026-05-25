@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../api';
 import Toast from '../components/Toast';
+import { timeAgo } from '../lib/format';
+import { toneStyle, type Tone } from '../lib/status';
 
 /* ── Types ────────────────────────────────────────────── */
 
@@ -60,26 +62,8 @@ function severityStyle(severity: string): { color: string; bg: string } {
   }
 }
 
-function statusStyle(status: number): { color: string; bg: string } {
-  switch (status) {
-    case 0: return { color: 'var(--danger)', bg: 'rgba(250,137,107,0.12)' };
-    case 1: case 2: case 3: return { color: 'var(--warning)', bg: 'rgba(255,174,31,0.12)' };
-    case 4: return { color: 'var(--secondary)', bg: 'rgba(73,190,255,0.12)' };
-    case 5: return { color: 'var(--success)', bg: 'rgba(19,222,185,0.12)' };
-    default: return { color: 'var(--muted)', bg: 'rgba(124,143,172,0.12)' };
-  }
-}
-
-function timeAgo(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const m = Math.floor(diff / 60000);
-  if (m < 1) return 'just now';
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  const d = Math.floor(h / 24);
-  return `${d}d ago`;
-}
+const ERROR_TONE: Record<number, Tone> = { 0: 'danger', 1: 'warning', 2: 'warning', 3: 'warning', 4: 'info', 5: 'success' };
+const statusStyle = (status: number) => toneStyle(ERROR_TONE[status] ?? 'muted');
 
 /* ── Page ─────────────────────────────────────────────── */
 

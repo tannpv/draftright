@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../api';
+import { toneStyle, type Tone } from '../lib/status';
 
 interface Transaction {
   id: string;
@@ -36,14 +37,8 @@ function storeLabel(store_type: string): { label: string; color: string; bg: str
   }
 }
 
-function statusStyle(status: string): { color: string; bg: string } {
-  switch (status) {
-    case 'active':    return { color: 'var(--success)', bg: 'rgba(19,222,185,0.12)' };
-    case 'cancelled': return { color: 'var(--danger)', bg: 'rgba(250,137,107,0.12)' };
-    case 'expired':   return { color: 'var(--muted)', bg: 'rgba(124,143,172,0.12)' };
-    default:          return { color: 'var(--muted)', bg: 'rgba(124,143,172,0.12)' };
-  }
-}
+const TX_TONE: Record<string, Tone> = { active: 'success', cancelled: 'danger', expired: 'muted' };
+const statusStyle = (status: string) => toneStyle(TX_TONE[status] ?? 'muted');
 
 const PAGE_SIZE = 20;
 

@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../api';
 import DataTable from '../components/DataTable';
 import Toast from '../components/Toast';
+import { formatCurrency } from '../lib/format';
+import { toneStyle, type Tone } from '../lib/status';
 
 /* ── Types ────────────────────────────────────────────── */
 
@@ -46,13 +48,6 @@ interface PaymentStats {
 
 /* ── Helpers ──────────────────────────────────────────── */
 
-function formatAmount(amount: number, currency: string): string {
-  // Stripe convention: USD in cents, VND in whole units.
-  if (currency === 'USD') return `$${(amount / 100).toFixed(2)}`;
-  if (currency === 'VND') return `${amount.toLocaleString('en-US')} ₫`;
-  return `${amount} ${currency}`;
-}
-
 function methodBadge(method: string): { icon: string; label: string } {
   switch (method) {
     case 'stripe':        return { icon: '\uD83D\uDCB3', label: 'Stripe' };
@@ -63,16 +58,10 @@ function methodBadge(method: string): { icon: string; label: string } {
   }
 }
 
-function statusStyle(status: string): { color: string; bg: string } {
-  switch (status) {
-    case 'pending':   return { color: 'var(--warning)', bg: 'rgba(255,174,31,0.12)' };
-    case 'completed': return { color: 'var(--success)', bg: 'rgba(19,222,185,0.12)' };
-    case 'failed':    return { color: 'var(--danger)', bg: 'rgba(250,137,107,0.12)' };
-    case 'refunded':  return { color: 'var(--secondary)', bg: 'rgba(73,190,255,0.12)' };
-    case 'expired':   return { color: 'var(--muted)', bg: 'rgba(124,143,172,0.12)' };
-    default:          return { color: 'var(--muted)', bg: 'rgba(124,143,172,0.12)' };
-  }
-}
+const PAYMENT_TONE: Record<string, Tone> = {
+  pending: 'warning', completed: 'success', failed: 'danger', refunded: 'info', expired: 'muted',
+};
+const statusStyle = (status: string) => toneStyle(PAYMENT_TONE[status] ?? 'muted');
 
 /* ── Filter tabs ──────────────────────────────────────── */
 
@@ -279,7 +268,7 @@ export default function PaymentsPage() {
       sortKey: 'amount',
       render: (row: Payment) => (
         <span style={{ color: 'var(--success)', fontSize: 14, fontWeight: 600 }}>
-          {formatAmount(row.amount, row.currency)}
+          {formatCurrency(row.amount, row.currency)}
         </span>
       ),
     },
@@ -523,7 +512,7 @@ export default function PaymentsPage() {
                 <span style={{ color: 'var(--text)' }}>{confirmPayment.user?.email || '—'}</span>
 
                 <span style={{ color: 'var(--muted)' }}>Amount:</span>
-                <span style={{ color: 'var(--success)', fontWeight: 600 }}>{formatAmount(confirmPayment.amount, confirmPayment.currency)}</span>
+                <span style={{ color: 'var(--success)', fontWeight: 600 }}>{formatCurrency(confirmPayment.amount, confirmPayment.currency)}</span>
 
                 <span style={{ color: 'var(--muted)' }}>Method:</span>
                 <span style={{ color: 'var(--text)' }}>
@@ -604,7 +593,7 @@ export default function PaymentsPage() {
                 <span style={{ color: 'var(--muted)' }}>User:</span>
                 <span style={{ color: 'var(--text)' }}>{refundPayment.user?.email || '—'}</span>
                 <span style={{ color: 'var(--muted)' }}>Amount:</span>
-                <span style={{ color: 'var(--success)', fontWeight: 600 }}>{formatAmount(refundPayment.amount, refundPayment.currency)}</span>
+                <span style={{ color: 'var(--success)', fontWeight: 600 }}>{formatCurrency(refundPayment.amount, refundPayment.currency)}</span>
               </div>
             </div>
             <div style={{ marginBottom: 20 }}>

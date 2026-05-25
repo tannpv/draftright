@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import Modal from '../components/Modal';
 import Toast from '../components/Toast';
 import { apiFetch } from '../api';
+import { formatCurrency } from '../lib/format';
 
 interface UsageLog {
   id: string;
@@ -403,7 +404,7 @@ export default function UserDetailPage() {
                   <tr key={tx.id} style={{ borderBottom: '1px solid var(--border)' }}>
                     <td style={{ padding: '13px 22px', color: 'var(--text)', fontSize: 14, fontWeight: 500 }}>{tx.plan_name}</td>
                     <td style={{ padding: '13px 22px', color: tx.price_cents === 0 ? 'var(--muted)' : 'var(--success)', fontSize: 14, fontWeight: 600 }}>
-                      {tx.price_cents === 0 ? 'Free' : `$${(tx.price_cents / 100).toFixed(2)}`}
+                      {tx.price_cents === 0 ? 'Free' : formatCurrency(tx.price_cents)}
                     </td>
                     <td style={{ padding: '13px 22px' }}>{storeBadge(tx.store_type)}</td>
                     <td style={{ padding: '13px 22px' }}>{statusBadge(tx.status)}</td>

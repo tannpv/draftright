@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../api';
+import { formatCurrency } from '../lib/format';
 
 interface MonthStat {
   month: string;
@@ -19,10 +20,6 @@ interface Analytics {
   total_revenue: number;
   plans_breakdown: PlanBreakdown[];
   monthly_stats: MonthStat[];
-}
-
-function formatCents(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
 }
 
 function formatMonth(m: string): string {
@@ -173,8 +170,8 @@ export default function AnalyticsPage() {
       {/* Summary row */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16, marginBottom: 24 }}>
         {[
-          { label: 'MRR', value: formatCents(analytics?.mrr || 0), color: 'var(--success)' },
-          { label: 'Total Revenue (12mo)', value: formatCents(totalRevenue), color: 'var(--primary)' },
+          { label: 'MRR', value: formatCurrency(analytics?.mrr || 0), color: 'var(--success)' },
+          { label: 'Total Revenue (12mo)', value: formatCurrency(totalRevenue), color: 'var(--primary)' },
           { label: 'Active Plans', value: String(breakdown.length), color: 'var(--warning)' },
         ].map(card => (
           <div key={card.label} style={{ background: 'var(--card)', borderRadius: 7, padding: '18px 22px' }}>
@@ -191,7 +188,7 @@ export default function AnalyticsPage() {
         ) : (
           <BarChart
             data={revenueData}
-            formatValue={(v) => v === 0 ? '$0' : formatCents(v)}
+            formatValue={(v) => v === 0 ? '$0' : formatCurrency(v)}
             color="var(--primary)"
             height={160}
           />
@@ -253,7 +250,7 @@ export default function AnalyticsPage() {
                         <td style={{ padding: '13px 16px', color: 'var(--text)', fontSize: 14, fontWeight: 500 }}>{b.plan_name}</td>
                         <td style={{ padding: '13px 16px', color: 'var(--primary)', fontSize: 14, fontWeight: 700 }}>{b.active_count}</td>
                         <td style={{ padding: '13px 16px', color: 'var(--text)', fontSize: 14 }}>
-                          {b.price_cents === 0 ? 'Free' : formatCents(b.price_cents)}
+                          {b.price_cents === 0 ? 'Free' : formatCurrency(b.price_cents)}
                         </td>
                         <td style={{ padding: '13px 16px', fontSize: 14 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

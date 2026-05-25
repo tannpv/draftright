@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../api';
 import DataTable from '../components/DataTable';
 import Toast from '../components/Toast';
+import { timeAgo } from '../lib/format';
+import { toneStyle, type Tone } from '../lib/status';
 
 /* ── Types ────────────────────────────────────────────── */
 
@@ -42,31 +44,15 @@ function sourceIcon(source: string): string {
   return '🌐'; // 🌐
 }
 
+const BUG_STATUS: Record<string, { tone: Tone; label: string }> = {
+  new:       { tone: 'primary', label: 'New' },
+  reviewing: { tone: 'warning', label: 'Reviewing' },
+  resolved:  { tone: 'success', label: 'Resolved' },
+  wont_fix:  { tone: 'muted',   label: "Won't fix" },
+};
 function statusStyle(status: string): { color: string; bg: string; label: string } {
-  switch (status) {
-    case 'new':       return { color: 'var(--primary)', bg: 'rgba(93,135,255,0.12)',  label: 'New' };
-    case 'reviewing': return { color: 'var(--warning)', bg: 'rgba(255,174,31,0.12)',  label: 'Reviewing' };
-    case 'resolved':  return { color: 'var(--success)', bg: 'rgba(19,222,185,0.12)',  label: 'Resolved' };
-    case 'wont_fix':  return { color: 'var(--muted)', bg: 'rgba(124,143,172,0.18)', label: "Won't fix" };
-    default:          return { color: 'var(--muted)', bg: 'rgba(124,143,172,0.12)', label: status || '—' };
-  }
-}
-
-function timeAgo(iso: string): string {
-  if (!iso) return '—';
-  const diff = Date.now() - new Date(iso).getTime();
-  const s = Math.floor(diff / 1000);
-  if (s < 60)         return 'just now';
-  const m = Math.floor(s / 60);
-  if (m < 60)         return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24)         return `${h}h ago`;
-  const d = Math.floor(h / 24);
-  if (d < 30)         return `${d}d ago`;
-  const mo = Math.floor(d / 30);
-  if (mo < 12)        return `${mo}mo ago`;
-  const y = Math.floor(d / 365);
-  return `${y}y ago`;
+  const e = BUG_STATUS[status];
+  return e ? { ...toneStyle(e.tone), label: e.label } : { ...toneStyle('muted'), label: status || '—' };
 }
 
 function truncate(text: string, max: number): string {

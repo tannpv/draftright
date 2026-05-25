@@ -3,6 +3,7 @@ import DataTable from '../components/DataTable';
 import Modal from '../components/Modal';
 import Toast from '../components/Toast';
 import { apiFetch } from '../api';
+import { formatCurrency } from '../lib/format';
 
 interface Plan {
   id: string;
@@ -32,12 +33,6 @@ const emptyForm = {
   trial_days: '30',
   stripe_price_id: '',
 };
-
-function formatPrice(cents: number, currency: string | null): string {
-  // VND: stored as whole VND (Stripe convention); USD: cents
-  if ((currency || 'USD') === 'USD') return `$${(cents / 100).toFixed(2)}`;
-  return `${cents.toLocaleString('en-US')} ${currency}`;
-}
 
 export default function PlansPage() {
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -175,7 +170,7 @@ export default function PlansPage() {
       key: 'price_cents',
       sortKey: 'price',
       render: (row: Plan) => (
-        <span style={{ color: 'var(--text)', fontWeight: 600 }}>{formatPrice(row.price_cents, row.currency)}</span>
+        <span style={{ color: 'var(--text)', fontWeight: 600 }}>{formatCurrency(row.price_cents, row.currency)}</span>
       ),
     },
     {
