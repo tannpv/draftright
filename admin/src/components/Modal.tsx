@@ -43,8 +43,8 @@ export default function Modal({ title, children, onClose, footer }: ModalProps) 
       <div
         style={{
           position: 'relative',
-          background: '#2a3547',
-          border: '1px solid #333f55',
+          background: 'var(--card)',
+          border: '1px solid var(--border)',
           borderRadius: 7,
           width: '100%',
           maxWidth: 520,
@@ -59,16 +59,16 @@ export default function Modal({ title, children, onClose, footer }: ModalProps) 
             alignItems: 'center',
             justifyContent: 'space-between',
             padding: '18px 22px',
-            borderBottom: '1px solid #333f55',
+            borderBottom: '1px solid var(--border)',
           }}
         >
-          <h2 style={{ color: '#eaeff4', fontSize: 16, fontWeight: 600, margin: 0 }}>{title}</h2>
+          <h2 style={{ color: 'var(--text)', fontSize: 16, fontWeight: 600, margin: 0 }}>{title}</h2>
           <button
             onClick={onClose}
             style={{
               background: 'transparent',
               border: 'none',
-              color: '#7c8fac',
+              color: 'var(--muted)',
               cursor: 'pointer',
               fontSize: 20,
               lineHeight: 1,
@@ -79,8 +79,8 @@ export default function Modal({ title, children, onClose, footer }: ModalProps) 
               borderRadius: 5,
               transition: 'color 0.15s',
             }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = '#eaeff4'; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = '#7c8fac'; }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--text)'; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--muted)'; }}
           >
             &times;
           </button>
@@ -97,7 +97,7 @@ export default function Modal({ title, children, onClose, footer }: ModalProps) 
               justifyContent: 'flex-end',
               gap: 10,
               padding: '14px 22px',
-              borderTop: '1px solid #333f55',
+              borderTop: '1px solid var(--border)',
             }}
           >
             {footer}

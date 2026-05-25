@@ -57,19 +57,19 @@ export default function ProfilePage() {
   return (
     <div style={{ maxWidth: 560 }}>
       <div style={{ marginBottom: 24 }}>
-        <h1 style={{ color: '#eaeff4', fontSize: 22, fontWeight: 700, margin: '0 0 4px' }}>My Profile</h1>
-        <p style={{ color: '#7c8fac', fontSize: 13, margin: 0 }}>Manage your account</p>
+        <h1 style={{ color: 'var(--text)', fontSize: 22, fontWeight: 700, margin: '0 0 4px' }}>My Profile</h1>
+        <p style={{ color: 'var(--muted)', fontSize: 13, margin: 0 }}>Manage your account</p>
       </div>
 
       {/* Profile Info */}
-      <div style={{ background: '#2a3547', borderRadius: 7, padding: '22px', marginBottom: 20 }}>
+      <div style={{ background: 'var(--card)', borderRadius: 7, padding: '22px', marginBottom: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16 }}>
           <div
             style={{
               width: 56,
               height: 56,
               borderRadius: '50%',
-              background: 'linear-gradient(135deg, #5d87ff, #49beff)',
+              background: 'linear-gradient(135deg, var(--primary), var(--secondary))',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -82,21 +82,21 @@ export default function ProfilePage() {
             {adminEmail.charAt(0).toUpperCase()}
           </div>
           <div>
-            <p style={{ color: '#eaeff4', fontSize: 16, fontWeight: 600, margin: 0 }}>{adminName}</p>
-            <p style={{ color: '#7c8fac', fontSize: 13, margin: '2px 0 0' }}>{adminEmail}</p>
+            <p style={{ color: 'var(--text)', fontSize: 16, fontWeight: 600, margin: 0 }}>{adminName}</p>
+            <p style={{ color: 'var(--muted)', fontSize: 13, margin: '2px 0 0' }}>{adminEmail}</p>
             <span className="badge badge-primary" style={{ marginTop: 6, display: 'inline-block' }}>Administrator</span>
           </div>
         </div>
       </div>
 
       {/* Change Password */}
-      <div style={{ background: '#2a3547', borderRadius: 7 }}>
-        <div style={{ padding: '16px 22px', borderBottom: '1px solid #333f55' }}>
-          <h3 style={{ color: '#eaeff4', fontSize: 15, fontWeight: 600, margin: 0 }}>Change Password</h3>
+      <div style={{ background: 'var(--card)', borderRadius: 7 }}>
+        <div style={{ padding: '16px 22px', borderBottom: '1px solid var(--border)' }}>
+          <h3 style={{ color: 'var(--text)', fontSize: 15, fontWeight: 600, margin: 0 }}>Change Password</h3>
         </div>
         <div style={{ padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div>
-            <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Current Password</label>
+            <label style={{ display: 'block', color: 'var(--text)', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Current Password</label>
             <input
               type="password"
               value={currentPassword}
@@ -106,7 +106,7 @@ export default function ProfilePage() {
             />
           </div>
           <div>
-            <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>New Password</label>
+            <label style={{ display: 'block', color: 'var(--text)', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>New Password</label>
             <input
               type="password"
               value={newPassword}
@@ -116,7 +116,7 @@ export default function ProfilePage() {
             />
           </div>
           <div>
-            <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Confirm New Password</label>
+            <label style={{ display: 'block', color: 'var(--text)', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Confirm New Password</label>
             <input
               type="password"
               value={confirmPassword}

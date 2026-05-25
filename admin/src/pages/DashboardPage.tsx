@@ -54,8 +54,8 @@ export default function DashboardPage() {
     <div>
       {/* Page header */}
       <div style={{ marginBottom: 24 }}>
-        <h1 style={{ color: '#eaeff4', fontSize: 22, fontWeight: 700, margin: '0 0 4px' }}>Dashboard</h1>
-        <p style={{ color: '#7c8fac', fontSize: 13, margin: 0 }}>
+        <h1 style={{ color: 'var(--text)', fontSize: 22, fontWeight: 700, margin: '0 0 4px' }}>Dashboard</h1>
+        <p style={{ color: 'var(--muted)', fontSize: 13, margin: 0 }}>
           Overview of your DraftRight platform
         </p>
       </div>
@@ -126,13 +126,13 @@ export default function DashboardPage() {
         {/* Plans breakdown card */}
         <div
           style={{
-            background: '#2a3547',
+            background: 'var(--card)',
             borderRadius: 7,
             padding: '18px 22px',
             gridColumn: 'span 2',
           }}
         >
-          <p style={{ color: '#7c8fac', fontSize: 13, fontWeight: 500, margin: '0 0 12px' }}>Active Plans Breakdown</p>
+          <p style={{ color: 'var(--muted)', fontSize: 13, fontWeight: 500, margin: '0 0 12px' }}>Active Plans Breakdown</p>
           {analytics && analytics.plans_breakdown.length > 0 ? (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 24px' }}>
               {analytics.plans_breakdown.map((p) => (
@@ -143,22 +143,22 @@ export default function DashboardPage() {
                       width: 8,
                       height: 8,
                       borderRadius: '50%',
-                      background: '#5d87ff',
+                      background: 'var(--primary)',
                       flexShrink: 0,
                     }}
                   />
-                  <span style={{ color: '#eaeff4', fontSize: 14, fontWeight: 600 }}>{p.active_count}</span>
-                  <span style={{ color: '#7c8fac', fontSize: 13 }}>{p.plan_name}</span>
+                  <span style={{ color: 'var(--text)', fontSize: 14, fontWeight: 600 }}>{p.active_count}</span>
+                  <span style={{ color: 'var(--muted)', fontSize: 13 }}>{p.plan_name}</span>
                 </div>
               ))}
             </div>
           ) : (
-            <p style={{ color: '#7c8fac', fontSize: 13, margin: 0 }}>No active subscriptions</p>
+            <p style={{ color: 'var(--muted)', fontSize: 13, margin: 0 }}>No active subscriptions</p>
           )}
         </div>
       </div>
 
-      <p style={{ color: '#333f55', fontSize: 12, margin: 0 }}>
+      <p style={{ color: 'var(--border)', fontSize: 12, margin: 0 }}>
         Auto-refreshes every 30 seconds
       </p>
     </div>

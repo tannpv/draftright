@@ -39,7 +39,7 @@ interface BarChartProps {
   height?: number;
 }
 
-function BarChart({ data, formatValue, color = '#5d87ff', height = 140 }: BarChartProps) {
+function BarChart({ data, formatValue, color = 'var(--primary)', height = 140 }: BarChartProps) {
   const max = Math.max(...data.map(d => d.value), 1);
 
   return (
@@ -68,7 +68,7 @@ function BarChart({ data, formatValue, color = '#5d87ff', height = 140 }: BarCha
               }}
             >
               {/* Value on top */}
-              <span style={{ color: '#eaeff4', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>
+              <span style={{ color: 'var(--text)', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>
                 {formatValue ? formatValue(d.value) : d.value}
               </span>
 
@@ -86,11 +86,11 @@ function BarChart({ data, formatValue, color = '#5d87ff', height = 140 }: BarCha
               />
 
               {/* Month label */}
-              <span style={{ color: '#7c8fac', fontSize: 11, whiteSpace: 'nowrap' }}>{d.label}</span>
+              <span style={{ color: 'var(--muted)', fontSize: 11, whiteSpace: 'nowrap' }}>{d.label}</span>
 
               {/* Sub-label (churn) */}
               {d.subLabel !== undefined && (
-                <span style={{ color: d.subLabelColor || '#fa896b', fontSize: 10, whiteSpace: 'nowrap' }}>
+                <span style={{ color: d.subLabelColor || 'var(--danger)', fontSize: 10, whiteSpace: 'nowrap' }}>
                   {d.subLabel}
                 </span>
               )}
@@ -105,9 +105,9 @@ function BarChart({ data, formatValue, color = '#5d87ff', height = 140 }: BarCha
 /* ── Section card wrapper ───────────────────────────────── */
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div style={{ background: '#2a3547', borderRadius: 7, overflow: 'hidden', marginBottom: 24 }}>
-      <div style={{ padding: '16px 22px', borderBottom: '1px solid #333f55' }}>
-        <h3 style={{ color: '#eaeff4', fontSize: 15, fontWeight: 600, margin: 0 }}>{title}</h3>
+    <div style={{ background: 'var(--card)', borderRadius: 7, overflow: 'hidden', marginBottom: 24 }}>
+      <div style={{ padding: '16px 22px', borderBottom: '1px solid var(--border)' }}>
+        <h3 style={{ color: 'var(--text)', fontSize: 15, fontWeight: 600, margin: 0 }}>{title}</h3>
       </div>
       <div style={{ padding: '20px 22px' }}>{children}</div>
     </div>
@@ -135,7 +135,7 @@ export default function AnalyticsPage() {
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '80px 0', color: '#7c8fac' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '80px 0', color: 'var(--muted)' }}>
         Loading analytics...
       </div>
     );
@@ -155,15 +155,15 @@ export default function AnalyticsPage() {
     label: formatMonth(s.month),
     value: s.new_subscriptions,
     subLabel: s.churned > 0 ? `-${s.churned}` : '',
-    subLabelColor: '#fa896b',
+    subLabelColor: 'var(--danger)',
   }));
 
   return (
     <div>
       {/* Page header */}
       <div style={{ marginBottom: 24 }}>
-        <h1 style={{ color: '#eaeff4', fontSize: 22, fontWeight: 700, margin: '0 0 4px' }}>Analytics</h1>
-        <p style={{ color: '#7c8fac', fontSize: 13, margin: 0 }}>
+        <h1 style={{ color: 'var(--text)', fontSize: 22, fontWeight: 700, margin: '0 0 4px' }}>Analytics</h1>
+        <p style={{ color: 'var(--muted)', fontSize: 13, margin: 0 }}>
           Subscription and revenue trends over the last 12 months
         </p>
       </div>
@@ -173,12 +173,12 @@ export default function AnalyticsPage() {
       {/* Summary row */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16, marginBottom: 24 }}>
         {[
-          { label: 'MRR', value: formatCents(analytics?.mrr || 0), color: '#13deb9' },
-          { label: 'Total Revenue (12mo)', value: formatCents(totalRevenue), color: '#5d87ff' },
-          { label: 'Active Plans', value: String(breakdown.length), color: '#ffae1f' },
+          { label: 'MRR', value: formatCents(analytics?.mrr || 0), color: 'var(--success)' },
+          { label: 'Total Revenue (12mo)', value: formatCents(totalRevenue), color: 'var(--primary)' },
+          { label: 'Active Plans', value: String(breakdown.length), color: 'var(--warning)' },
         ].map(card => (
-          <div key={card.label} style={{ background: '#2a3547', borderRadius: 7, padding: '18px 22px' }}>
-            <p style={{ color: '#7c8fac', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 8px' }}>{card.label}</p>
+          <div key={card.label} style={{ background: 'var(--card)', borderRadius: 7, padding: '18px 22px' }}>
+            <p style={{ color: 'var(--muted)', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 8px' }}>{card.label}</p>
             <p style={{ color: card.color, fontSize: 26, fontWeight: 700, margin: 0 }}>{card.value}</p>
           </div>
         ))}
@@ -187,12 +187,12 @@ export default function AnalyticsPage() {
       {/* Revenue bar chart */}
       <Card title="Monthly Revenue">
         {revenueData.every(d => d.value === 0) ? (
-          <p style={{ color: '#7c8fac', fontSize: 13, margin: 0 }}>No revenue data yet.</p>
+          <p style={{ color: 'var(--muted)', fontSize: 13, margin: 0 }}>No revenue data yet.</p>
         ) : (
           <BarChart
             data={revenueData}
             formatValue={(v) => v === 0 ? '$0' : formatCents(v)}
-            color="#5d87ff"
+            color="var(--primary)"
             height={160}
           />
         )}
@@ -201,15 +201,15 @@ export default function AnalyticsPage() {
       {/* Subscribers bar chart */}
       <Card title="New Subscriptions per Month">
         {subData.every(d => d.value === 0) ? (
-          <p style={{ color: '#7c8fac', fontSize: 13, margin: 0 }}>No subscription data yet.</p>
+          <p style={{ color: 'var(--muted)', fontSize: 13, margin: 0 }}>No subscription data yet.</p>
         ) : (
           <>
             <BarChart
               data={subData}
-              color="#13deb9"
+              color="var(--success)"
               height={140}
             />
-            <p style={{ color: '#7c8fac', fontSize: 11, margin: '10px 0 0' }}>
+            <p style={{ color: 'var(--muted)', fontSize: 11, margin: '10px 0 0' }}>
               Red numbers below bars indicate churned subscriptions that month.
             </p>
           </>
@@ -219,19 +219,19 @@ export default function AnalyticsPage() {
       {/* Plans breakdown table */}
       <Card title="Plans Breakdown">
         {breakdown.length === 0 ? (
-          <p style={{ color: '#7c8fac', fontSize: 13, margin: 0 }}>No active subscriptions.</p>
+          <p style={{ color: 'var(--muted)', fontSize: 13, margin: 0 }}>No active subscriptions.</p>
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
-                <tr style={{ borderBottom: '2px solid #333f55' }}>
+                <tr style={{ borderBottom: '2px solid var(--border)' }}>
                   {['Plan Name', 'Active Users', 'Plan Price', '% of Subs'].map(h => (
                     <th
                       key={h}
                       style={{
                         padding: '10px 16px',
                         textAlign: 'left',
-                        color: '#7c8fac',
+                        color: 'var(--muted)',
                         fontSize: 12,
                         fontWeight: 700,
                         textTransform: 'uppercase',
@@ -249,25 +249,25 @@ export default function AnalyticsPage() {
                   return breakdown.map((b, i) => {
                     const pct = totalActive > 0 ? ((b.active_count / totalActive) * 100).toFixed(1) : '0.0';
                     return (
-                      <tr key={i} style={{ borderBottom: '1px solid #333f55' }}>
-                        <td style={{ padding: '13px 16px', color: '#eaeff4', fontSize: 14, fontWeight: 500 }}>{b.plan_name}</td>
-                        <td style={{ padding: '13px 16px', color: '#5d87ff', fontSize: 14, fontWeight: 700 }}>{b.active_count}</td>
-                        <td style={{ padding: '13px 16px', color: '#eaeff4', fontSize: 14 }}>
+                      <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
+                        <td style={{ padding: '13px 16px', color: 'var(--text)', fontSize: 14, fontWeight: 500 }}>{b.plan_name}</td>
+                        <td style={{ padding: '13px 16px', color: 'var(--primary)', fontSize: 14, fontWeight: 700 }}>{b.active_count}</td>
+                        <td style={{ padding: '13px 16px', color: 'var(--text)', fontSize: 14 }}>
                           {b.price_cents === 0 ? 'Free' : formatCents(b.price_cents)}
                         </td>
                         <td style={{ padding: '13px 16px', fontSize: 14 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            <div style={{ flex: 1, maxWidth: 120, height: 6, background: '#333f55', borderRadius: 3 }}>
+                            <div style={{ flex: 1, maxWidth: 120, height: 6, background: 'var(--border)', borderRadius: 3 }}>
                               <div
                                 style={{
                                   width: `${pct}%`,
                                   height: '100%',
-                                  background: '#5d87ff',
+                                  background: 'var(--primary)',
                                   borderRadius: 3,
                                 }}
                               />
                             </div>
-                            <span style={{ color: '#7c8fac', fontSize: 13 }}>{pct}%</span>
+                            <span style={{ color: 'var(--muted)', fontSize: 13 }}>{pct}%</span>
                           </div>
                         </td>
                       </tr>

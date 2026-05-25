@@ -64,12 +64,12 @@ function InfoRow({ label, children }: { label: string; children: React.ReactNode
         justifyContent: 'space-between',
         alignItems: 'center',
         padding: '10px 0',
-        borderBottom: '1px solid #333f55',
+        borderBottom: '1px solid var(--border)',
         fontSize: 14,
       }}
     >
-      <span style={{ color: '#7c8fac' }}>{label}</span>
-      <span style={{ color: '#eaeff4', fontWeight: 500 }}>{children}</span>
+      <span style={{ color: 'var(--muted)' }}>{label}</span>
+      <span style={{ color: 'var(--text)', fontWeight: 500 }}>{children}</span>
     </div>
   );
 }
@@ -77,14 +77,14 @@ function InfoRow({ label, children }: { label: string; children: React.ReactNode
 /* ── Info card ──────────────────────────────────────────── */
 function InfoCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div style={{ background: '#2a3547', borderRadius: 7 }}>
+    <div style={{ background: 'var(--card)', borderRadius: 7 }}>
       <div
         style={{
           padding: '16px 22px',
-          borderBottom: '1px solid #333f55',
+          borderBottom: '1px solid var(--border)',
         }}
       >
-        <h3 style={{ color: '#eaeff4', fontSize: 15, fontWeight: 600, margin: 0 }}>{title}</h3>
+        <h3 style={{ color: 'var(--text)', fontSize: 15, fontWeight: 600, margin: 0 }}>{title}</h3>
       </div>
       <div style={{ padding: '4px 22px 12px' }}>{children}</div>
     </div>
@@ -93,11 +93,11 @@ function InfoCard({ title, children }: { title: string; children: React.ReactNod
 
 function storeBadge(store_type: string) {
   const map: Record<string, { label: string; color: string; bg: string }> = {
-    google_play:   { label: 'Google Play',   color: '#13deb9', bg: 'rgba(19,222,185,0.12)' },
-    apple_iap:     { label: 'Apple IAP',     color: '#49beff', bg: 'rgba(73,190,255,0.12)' },
-    admin_granted: { label: 'Admin Granted', color: '#ffae1f', bg: 'rgba(255,174,31,0.12)' },
+    google_play:   { label: 'Google Play',   color: 'var(--success)', bg: 'rgba(19,222,185,0.12)' },
+    apple_iap:     { label: 'Apple IAP',     color: 'var(--secondary)', bg: 'rgba(73,190,255,0.12)' },
+    admin_granted: { label: 'Admin Granted', color: 'var(--warning)', bg: 'rgba(255,174,31,0.12)' },
   };
-  const s = map[store_type] || { label: store_type, color: '#7c8fac', bg: 'rgba(124,143,172,0.12)' };
+  const s = map[store_type] || { label: store_type, color: 'var(--muted)', bg: 'rgba(124,143,172,0.12)' };
   return (
     <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600, background: s.bg, color: s.color }}>
       {s.label}
@@ -107,11 +107,11 @@ function storeBadge(store_type: string) {
 
 function statusBadge(status: string) {
   const map: Record<string, { color: string; bg: string }> = {
-    active:    { color: '#13deb9', bg: 'rgba(19,222,185,0.12)' },
-    cancelled: { color: '#fa896b', bg: 'rgba(250,137,107,0.12)' },
-    expired:   { color: '#7c8fac', bg: 'rgba(124,143,172,0.12)' },
+    active:    { color: 'var(--success)', bg: 'rgba(19,222,185,0.12)' },
+    cancelled: { color: 'var(--danger)', bg: 'rgba(250,137,107,0.12)' },
+    expired:   { color: 'var(--muted)', bg: 'rgba(124,143,172,0.12)' },
   };
-  const s = map[status] || { color: '#7c8fac', bg: 'rgba(124,143,172,0.12)' };
+  const s = map[status] || { color: 'var(--muted)', bg: 'rgba(124,143,172,0.12)' };
   return (
     <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600, background: s.bg, color: s.color, textTransform: 'capitalize' }}>
       {status}
@@ -230,7 +230,7 @@ export default function UserDetailPage() {
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '80px 0', color: '#7c8fac', gap: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '80px 0', color: 'var(--muted)', gap: 10 }}>
         Loading user...
       </div>
     );
@@ -252,11 +252,11 @@ export default function UserDetailPage() {
         onClick={() => navigate('/users')}
         style={{
           display: 'flex', alignItems: 'center', gap: 6, background: 'transparent',
-          border: 'none', color: '#7c8fac', fontSize: 13, cursor: 'pointer',
+          border: 'none', color: 'var(--muted)', fontSize: 13, cursor: 'pointer',
           padding: 0, marginBottom: 20, fontFamily: 'inherit', transition: 'color 0.15s',
         }}
-        onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = '#5d87ff'; }}
-        onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = '#7c8fac'; }}
+        onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--primary)'; }}
+        onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--muted)'; }}
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <polyline points="15 18 9 12 15 6" />
@@ -267,10 +267,10 @@ export default function UserDetailPage() {
       {/* Page title */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>
-          <h1 style={{ color: '#eaeff4', fontSize: 22, fontWeight: 700, margin: '0 0 4px' }}>
+          <h1 style={{ color: 'var(--text)', fontSize: 22, fontWeight: 700, margin: '0 0 4px' }}>
             {user.name || user.email}
           </h1>
-          <p style={{ color: '#7c8fac', fontSize: 13, margin: 0 }}>{user.email}</p>
+          <p style={{ color: 'var(--muted)', fontSize: 13, margin: 0 }}>{user.email}</p>
         </div>
         <span className={`badge ${user.is_active ? 'badge-success' : 'badge-muted'}`} style={{ marginTop: 4 }}>
           {user.is_active ? 'Active' : 'Inactive'}
@@ -304,34 +304,34 @@ export default function UserDetailPage() {
               )}
             </>
           ) : (
-            <p style={{ color: '#7c8fac', fontSize: 13, padding: '16px 0' }}>No active subscription</p>
+            <p style={{ color: 'var(--muted)', fontSize: 13, padding: '16px 0' }}>No active subscription</p>
           )}
         </InfoCard>
       </div>
 
       {/* Actions card */}
-      <div style={{ background: '#2a3547', borderRadius: 7, padding: '18px 22px', marginBottom: 20 }}>
-        <h3 style={{ color: '#eaeff4', fontSize: 15, fontWeight: 600, margin: '0 0 14px' }}>Actions</h3>
+      <div style={{ background: 'var(--card)', borderRadius: 7, padding: '18px 22px', marginBottom: 20 }}>
+        <h3 style={{ color: 'var(--text)', fontSize: 15, fontWeight: 600, margin: '0 0 14px' }}>Actions</h3>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
           <button
             onClick={toggleActive}
             disabled={saving}
             className={`btn btn-sm ${user.is_active ? 'btn-danger' : 'btn-primary'}`}
-            style={{ background: user.is_active ? 'rgba(250,137,107,0.12)' : 'rgba(19,222,185,0.12)', color: user.is_active ? '#fa896b' : '#13deb9', border: `1px solid ${user.is_active ? 'rgba(250,137,107,0.25)' : 'rgba(19,222,185,0.25)'}` }}
+            style={{ background: user.is_active ? 'rgba(250,137,107,0.12)' : 'rgba(19,222,185,0.12)', color: user.is_active ? 'var(--danger)' : 'var(--success)', border: `1px solid ${user.is_active ? 'rgba(250,137,107,0.25)' : 'rgba(19,222,185,0.25)'}` }}
           >
             {user.is_active ? 'Deactivate User' : 'Activate User'}
           </button>
           <button
             onClick={() => setShowRoleModal(true)}
             className="btn btn-sm"
-            style={{ background: 'rgba(93,135,255,0.1)', color: '#5d87ff', border: '1px solid rgba(93,135,255,0.25)' }}
+            style={{ background: 'rgba(93,135,255,0.1)', color: 'var(--primary)', border: '1px solid rgba(93,135,255,0.25)' }}
           >
             Change Role
           </button>
           <button
             onClick={() => setShowGrantModal(true)}
             className="btn btn-sm"
-            style={{ background: 'rgba(73,190,255,0.1)', color: '#49beff', border: '1px solid rgba(73,190,255,0.25)' }}
+            style={{ background: 'rgba(73,190,255,0.1)', color: 'var(--secondary)', border: '1px solid rgba(73,190,255,0.25)' }}
           >
             Grant Subscription
           </button>
@@ -339,18 +339,18 @@ export default function UserDetailPage() {
       </div>
 
       {/* Recent Usage */}
-      <div style={{ background: '#2a3547', borderRadius: 7, overflow: 'hidden' }}>
-        <div style={{ padding: '16px 22px', borderBottom: '1px solid #333f55' }}>
-          <h3 style={{ color: '#eaeff4', fontSize: 15, fontWeight: 600, margin: 0 }}>Recent Usage (last 20)</h3>
+      <div style={{ background: 'var(--card)', borderRadius: 7, overflow: 'hidden' }}>
+        <div style={{ padding: '16px 22px', borderBottom: '1px solid var(--border)' }}>
+          <h3 style={{ color: 'var(--text)', fontSize: 15, fontWeight: 600, margin: 0 }}>Recent Usage (last 20)</h3>
         </div>
 
         {recentUsage.length > 0 ? (
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
-                <tr style={{ borderBottom: '2px solid #333f55' }}>
+                <tr style={{ borderBottom: '2px solid var(--border)' }}>
                   {['Date', 'Tone', 'Input', 'Output', 'Time'].map((h) => (
-                    <th key={h} style={{ padding: '12px 22px', textAlign: 'left', color: '#7c8fac', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    <th key={h} style={{ padding: '12px 22px', textAlign: 'left', color: 'var(--muted)', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                       {h}
                     </th>
                   ))}
@@ -358,30 +358,30 @@ export default function UserDetailPage() {
               </thead>
               <tbody>
                 {recentUsage.map((log) => (
-                  <tr key={log.id} style={{ borderBottom: '1px solid #333f55' }}>
-                    <td style={{ padding: '13px 22px', color: '#7c8fac', fontSize: 13 }}>
+                  <tr key={log.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                    <td style={{ padding: '13px 22px', color: 'var(--muted)', fontSize: 13 }}>
                       {new Date(log.created_at).toLocaleString()}
                     </td>
-                    <td style={{ padding: '13px 22px', color: '#eaeff4', fontSize: 14, textTransform: 'capitalize' }}>{log.tone}</td>
-                    <td style={{ padding: '13px 22px', color: '#7c8fac', fontSize: 13 }}>{log.input_length} chars</td>
-                    <td style={{ padding: '13px 22px', color: '#7c8fac', fontSize: 13 }}>{log.output_length} chars</td>
-                    <td style={{ padding: '13px 22px', color: '#7c8fac', fontSize: 13 }}>{log.response_time_ms}ms</td>
+                    <td style={{ padding: '13px 22px', color: 'var(--text)', fontSize: 14, textTransform: 'capitalize' }}>{log.tone}</td>
+                    <td style={{ padding: '13px 22px', color: 'var(--muted)', fontSize: 13 }}>{log.input_length} chars</td>
+                    <td style={{ padding: '13px 22px', color: 'var(--muted)', fontSize: 13 }}>{log.output_length} chars</td>
+                    <td style={{ padding: '13px 22px', color: 'var(--muted)', fontSize: 13 }}>{log.response_time_ms}ms</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         ) : (
-          <p style={{ padding: '32px 22px', color: '#7c8fac', fontSize: 13, textAlign: 'center', margin: 0 }}>
+          <p style={{ padding: '32px 22px', color: 'var(--muted)', fontSize: 13, textAlign: 'center', margin: 0 }}>
             No usage logs found.
           </p>
         )}
       </div>
 
       {/* Transaction History */}
-      <div style={{ background: '#2a3547', borderRadius: 7, overflow: 'hidden', marginTop: 20 }}>
-        <div style={{ padding: '16px 22px', borderBottom: '1px solid #333f55' }}>
-          <h3 style={{ color: '#eaeff4', fontSize: 15, fontWeight: 600, margin: 0 }}>
+      <div style={{ background: 'var(--card)', borderRadius: 7, overflow: 'hidden', marginTop: 20 }}>
+        <div style={{ padding: '16px 22px', borderBottom: '1px solid var(--border)' }}>
+          <h3 style={{ color: 'var(--text)', fontSize: 15, fontWeight: 600, margin: 0 }}>
             Transaction History ({txHistory.length})
           </h3>
         </div>
@@ -390,9 +390,9 @@ export default function UserDetailPage() {
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
-                <tr style={{ borderBottom: '2px solid #333f55' }}>
+                <tr style={{ borderBottom: '2px solid var(--border)' }}>
                   {['Plan', 'Amount', 'Store', 'Status', 'Started', 'Expires'].map(h => (
-                    <th key={h} style={{ padding: '12px 22px', textAlign: 'left', color: '#7c8fac', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>
+                    <th key={h} style={{ padding: '12px 22px', textAlign: 'left', color: 'var(--muted)', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>
                       {h}
                     </th>
                   ))}
@@ -400,17 +400,17 @@ export default function UserDetailPage() {
               </thead>
               <tbody>
                 {txHistory.map(tx => (
-                  <tr key={tx.id} style={{ borderBottom: '1px solid #333f55' }}>
-                    <td style={{ padding: '13px 22px', color: '#eaeff4', fontSize: 14, fontWeight: 500 }}>{tx.plan_name}</td>
-                    <td style={{ padding: '13px 22px', color: tx.price_cents === 0 ? '#7c8fac' : '#13deb9', fontSize: 14, fontWeight: 600 }}>
+                  <tr key={tx.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                    <td style={{ padding: '13px 22px', color: 'var(--text)', fontSize: 14, fontWeight: 500 }}>{tx.plan_name}</td>
+                    <td style={{ padding: '13px 22px', color: tx.price_cents === 0 ? 'var(--muted)' : 'var(--success)', fontSize: 14, fontWeight: 600 }}>
                       {tx.price_cents === 0 ? 'Free' : `$${(tx.price_cents / 100).toFixed(2)}`}
                     </td>
                     <td style={{ padding: '13px 22px' }}>{storeBadge(tx.store_type)}</td>
                     <td style={{ padding: '13px 22px' }}>{statusBadge(tx.status)}</td>
-                    <td style={{ padding: '13px 22px', color: '#7c8fac', fontSize: 13, whiteSpace: 'nowrap' }}>
+                    <td style={{ padding: '13px 22px', color: 'var(--muted)', fontSize: 13, whiteSpace: 'nowrap' }}>
                       {new Date(tx.started_at).toLocaleDateString()}
                     </td>
-                    <td style={{ padding: '13px 22px', color: '#7c8fac', fontSize: 13, whiteSpace: 'nowrap' }}>
+                    <td style={{ padding: '13px 22px', color: 'var(--muted)', fontSize: 13, whiteSpace: 'nowrap' }}>
                       {tx.expires_at ? new Date(tx.expires_at).toLocaleDateString() : '—'}
                     </td>
                   </tr>
@@ -419,7 +419,7 @@ export default function UserDetailPage() {
             </table>
           </div>
         ) : (
-          <p style={{ padding: '32px 22px', color: '#7c8fac', fontSize: 13, textAlign: 'center', margin: 0 }}>
+          <p style={{ padding: '32px 22px', color: 'var(--muted)', fontSize: 13, textAlign: 'center', margin: 0 }}>
             No transaction history.
           </p>
         )}
@@ -440,7 +440,7 @@ export default function UserDetailPage() {
           }
         >
           <div>
-            <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Role</label>
+            <label style={{ display: 'block', color: 'var(--text)', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Role</label>
             <select
               value={newRole}
               onChange={(e) => setNewRole(e.target.value)}
@@ -468,7 +468,7 @@ export default function UserDetailPage() {
           }
         >
           <div>
-            <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Plan</label>
+            <label style={{ display: 'block', color: 'var(--text)', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Plan</label>
             <select
               value={grantPlanId}
               onChange={(e) => setGrantPlanId(e.target.value)}

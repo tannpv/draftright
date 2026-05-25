@@ -181,19 +181,19 @@ export default function ProvidersPage() {
       header: 'Name',
       key: 'name',
       sortKey: 'name',
-      render: (row: Provider) => <span style={{ color: '#eaeff4', fontWeight: 600 }}>{row.name}</span>,
+      render: (row: Provider) => <span style={{ color: 'var(--text)', fontWeight: 600 }}>{row.name}</span>,
     },
     {
       header: 'Type',
       key: 'type',
       sortKey: 'type',
-      render: (row: Provider) => <span style={{ color: '#7c8fac', textTransform: 'capitalize' }}>{row.type}</span>,
+      render: (row: Provider) => <span style={{ color: 'var(--muted)', textTransform: 'capitalize' }}>{row.type}</span>,
     },
     {
       header: 'Endpoint',
       key: 'endpoint_url',
       render: (row: Provider) => (
-        <span style={{ color: '#7c8fac', fontSize: 12, fontFamily: 'monospace', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', display: 'inline-block' }}>
+        <span style={{ color: 'var(--muted)', fontSize: 12, fontFamily: 'monospace', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', display: 'inline-block' }}>
           {row.endpoint_url}
         </span>
       ),
@@ -203,7 +203,7 @@ export default function ProvidersPage() {
       key: 'model',
       sortKey: 'model',
       render: (row: Provider) => (
-        <span style={{ color: '#49beff', fontSize: 12, fontFamily: 'monospace' }}>{row.model}</span>
+        <span style={{ color: 'var(--secondary)', fontSize: 12, fontFamily: 'monospace' }}>{row.model}</span>
       ),
     },
     {
@@ -213,7 +213,7 @@ export default function ProvidersPage() {
       render: (row: Provider) =>
         row.is_default
           ? <span className="badge badge-primary">Default</span>
-          : <span style={{ color: '#333f55' }}>—</span>,
+          : <span style={{ color: 'var(--border)' }}>—</span>,
     },
     {
       header: 'Active',
@@ -234,21 +234,21 @@ export default function ProvidersPage() {
             onClick={(e) => { e.stopPropagation(); testConnection(row); }}
             disabled={testingId === row.id}
             className="btn btn-sm"
-            style={{ background: 'rgba(124,143,172,0.1)', color: '#7c8fac', border: '1px solid #333f55', opacity: testingId === row.id ? 0.5 : 1 }}
+            style={{ background: 'rgba(124,143,172,0.1)', color: 'var(--muted)', border: '1px solid var(--border)', opacity: testingId === row.id ? 0.5 : 1 }}
           >
             {testingId === row.id ? 'Testing...' : 'Test'}
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); openEdit(row); }}
             className="btn btn-sm"
-            style={{ background: 'rgba(93,135,255,0.1)', color: '#5d87ff', border: '1px solid rgba(93,135,255,0.2)' }}
+            style={{ background: 'rgba(93,135,255,0.1)', color: 'var(--primary)', border: '1px solid rgba(93,135,255,0.2)' }}
           >
             Edit
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); deleteProvider(row); }}
             className="btn btn-sm"
-            style={{ background: 'rgba(250,137,107,0.1)', color: '#fa896b', border: '1px solid rgba(250,137,107,0.2)' }}
+            style={{ background: 'rgba(250,137,107,0.1)', color: 'var(--danger)', border: '1px solid rgba(250,137,107,0.2)' }}
           >
             Delete
           </button>
@@ -262,8 +262,8 @@ export default function ProvidersPage() {
       {/* Page header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>
-          <h1 style={{ color: '#eaeff4', fontSize: 22, fontWeight: 700, margin: '0 0 4px' }}>AI Providers</h1>
-          <p style={{ color: '#7c8fac', fontSize: 13, margin: 0 }}>Manage AI provider configurations</p>
+          <h1 style={{ color: 'var(--text)', fontSize: 22, fontWeight: 700, margin: '0 0 4px' }}>AI Providers</h1>
+          <p style={{ color: 'var(--muted)', fontSize: 13, margin: 0 }}>Manage AI provider configurations</p>
         </div>
         <button onClick={openCreate} className="btn btn-primary">
           + Add Provider
@@ -282,13 +282,13 @@ export default function ProvidersPage() {
           style={{
             flex: '1 1 280px', maxWidth: 360,
             padding: '8px 14px 8px 36px',
-            borderRadius: 7, border: '1px solid #333f55', background: '#202936',
-            color: '#eaeff4', fontSize: 13, fontFamily: 'inherit', outline: 'none',
+            borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg)',
+            color: 'var(--text)', fontSize: 13, fontFamily: 'inherit', outline: 'none',
             backgroundImage: "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%237c8fac' stroke-width='2'><circle cx='11' cy='11' r='8'/><path d='M21 21l-4.35-4.35'/></svg>\")",
             backgroundRepeat: 'no-repeat', backgroundPosition: '12px center',
           }}
         />
-        <div style={{ display: 'flex', gap: 4, padding: 4, background: '#202936', border: '1px solid #333f55', borderRadius: 7 }}>
+        <div style={{ display: 'flex', gap: 4, padding: 4, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 7 }}>
           {(['all','active','inactive'] as const).map((s) => (
             <button
               key={s}
@@ -297,7 +297,7 @@ export default function ProvidersPage() {
                 padding: '6px 14px', borderRadius: 5, fontSize: 12, fontWeight: 600,
                 border: 'none', cursor: 'pointer', fontFamily: 'inherit',
                 background: statusFilter === s ? 'rgba(93,135,255,0.15)' : 'transparent',
-                color: statusFilter === s ? '#5d87ff' : '#7c8fac',
+                color: statusFilter === s ? 'var(--primary)' : 'var(--muted)',
                 textTransform: 'capitalize',
               }}
             >
@@ -305,7 +305,7 @@ export default function ProvidersPage() {
             </button>
           ))}
         </div>
-        <span style={{ marginLeft: 'auto', color: '#7c8fac', fontSize: 12 }}>
+        <span style={{ marginLeft: 'auto', color: 'var(--muted)', fontSize: 12 }}>
           {total > 0 ? `${total} ${total === 1 ? 'provider' : 'providers'}` : ''}
         </span>
       </div>
@@ -345,7 +345,7 @@ export default function ProvidersPage() {
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div>
-              <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Name</label>
+              <label style={{ display: 'block', color: 'var(--text)', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Name</label>
               <input
                 type="text"
                 value={form.name}
@@ -355,7 +355,7 @@ export default function ProvidersPage() {
               />
             </div>
             <div>
-              <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Type</label>
+              <label style={{ display: 'block', color: 'var(--text)', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Type</label>
               <select
                 value={form.type}
                 onChange={(e) => handleTypeChange(e.target.value)}
@@ -368,7 +368,7 @@ export default function ProvidersPage() {
               </select>
             </div>
             <div>
-              <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Endpoint URL</label>
+              <label style={{ display: 'block', color: 'var(--text)', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Endpoint URL</label>
               <input
                 type="text"
                 value={form.endpoint_url}
@@ -378,7 +378,7 @@ export default function ProvidersPage() {
               />
             </div>
             <div>
-              <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Model</label>
+              <label style={{ display: 'block', color: 'var(--text)', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Model</label>
               <input
                 type="text"
                 value={form.model}
@@ -388,9 +388,9 @@ export default function ProvidersPage() {
               />
             </div>
             <div>
-              <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>
-                API Key{editingProvider && <span style={{ color: '#7c8fac', fontWeight: 400 }}> (leave blank to keep existing)</span>}
-                {form.type === 'ollama' && <span style={{ color: '#13deb9', fontWeight: 400 }}> (not required for Ollama)</span>}
+              <label style={{ display: 'block', color: 'var(--text)', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>
+                API Key{editingProvider && <span style={{ color: 'var(--muted)', fontWeight: 400 }}> (leave blank to keep existing)</span>}
+                {form.type === 'ollama' && <span style={{ color: 'var(--success)', fontWeight: 400 }}> (not required for Ollama)</span>}
               </label>
               <input
                 type="password"
@@ -407,9 +407,9 @@ export default function ProvidersPage() {
                   id="isDefault"
                   checked={form.is_default}
                   onChange={(e) => setForm({ ...form, is_default: e.target.checked })}
-                  style={{ width: 16, height: 16, accentColor: '#5d87ff', cursor: 'pointer' }}
+                  style={{ width: 16, height: 16, accentColor: 'var(--primary)', cursor: 'pointer' }}
                 />
-                <label htmlFor="isDefault" style={{ color: '#eaeff4', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>Default</label>
+                <label htmlFor="isDefault" style={{ color: 'var(--text)', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>Default</label>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <input
@@ -417,9 +417,9 @@ export default function ProvidersPage() {
                   id="providerActive"
                   checked={form.is_active}
                   onChange={(e) => setForm({ ...form, is_active: e.target.checked })}
-                  style={{ width: 16, height: 16, accentColor: '#5d87ff', cursor: 'pointer' }}
+                  style={{ width: 16, height: 16, accentColor: 'var(--primary)', cursor: 'pointer' }}
                 />
-                <label htmlFor="providerActive" style={{ color: '#eaeff4', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>Active</label>
+                <label htmlFor="providerActive" style={{ color: 'var(--text)', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>Active</label>
               </div>
             </div>
           </div>

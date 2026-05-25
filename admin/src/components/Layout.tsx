@@ -175,7 +175,7 @@ export default function Layout() {
   }, []);
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: '#202936' }}>
+    <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg)' }}>
 
       {/* ── Overlay (mobile/collapsed) ──────────────────── */}
       {!collapsed ? null : null}
@@ -188,8 +188,8 @@ export default function Layout() {
           top: 0,
           width: 270,
           height: '100vh',
-          background: '#202936',
-          borderRight: '1px solid #333f55',
+          background: 'var(--bg)',
+          borderRight: '1px solid var(--border)',
           display: 'flex',
           flexDirection: 'column',
           zIndex: 100,
@@ -199,14 +199,14 @@ export default function Layout() {
         }}
       >
         {/* Logo */}
-        <div style={{ padding: '24px 20px 20px', borderBottom: '1px solid #333f55' }}>
+        <div style={{ padding: '24px 20px 20px', borderBottom: '1px solid var(--border)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div
               style={{
                 width: 34,
                 height: 34,
                 borderRadius: 8,
-                background: 'linear-gradient(135deg, #5d87ff, #49beff)',
+                background: 'linear-gradient(135deg, var(--primary), var(--secondary))',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -219,15 +219,15 @@ export default function Layout() {
               </svg>
             </div>
             <div>
-              <p style={{ color: '#eaeff4', fontWeight: 700, fontSize: 15, margin: 0, lineHeight: 1.2 }}>DraftRight</p>
-              <p style={{ color: '#7c8fac', fontSize: 11, margin: 0, letterSpacing: '0.05em' }}>Admin Portal</p>
+              <p style={{ color: 'var(--text)', fontWeight: 700, fontSize: 15, margin: 0, lineHeight: 1.2 }}>DraftRight</p>
+              <p style={{ color: 'var(--muted)', fontSize: 11, margin: 0, letterSpacing: '0.05em' }}>Admin Portal</p>
             </div>
           </div>
         </div>
 
         {/* Nav section label */}
         <div style={{ padding: '16px 20px 6px' }}>
-          <p style={{ color: '#7c8fac', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', margin: 0 }}>
+          <p style={{ color: 'var(--muted)', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', margin: 0 }}>
             Navigation
           </p>
         </div>
@@ -246,7 +246,7 @@ export default function Layout() {
                 padding: '10px 10px',
                 borderRadius: 7,
                 marginBottom: 2,
-                color: isActive ? '#5d87ff' : '#7c8fac',
+                color: isActive ? 'var(--primary)' : 'var(--muted)',
                 background: isActive ? 'rgba(93,135,255,0.1)' : 'transparent',
                 fontWeight: isActive ? 600 : 400,
                 fontSize: 14,
@@ -257,14 +257,14 @@ export default function Layout() {
                 const el = e.currentTarget as HTMLAnchorElement;
                 if (!el.classList.contains('active')) {
                   el.style.background = 'rgba(93,135,255,0.06)';
-                  el.style.color = '#eaeff4';
+                  el.style.color = 'var(--text)';
                 }
               }}
               onMouseLeave={(e) => {
                 const el = e.currentTarget as HTMLAnchorElement;
                 if (!el.getAttribute('aria-current')) {
                   el.style.background = 'transparent';
-                  el.style.color = '#7c8fac';
+                  el.style.color = 'var(--muted)';
                 }
               }}
             >
@@ -281,7 +281,7 @@ export default function Layout() {
             padding: '12px',
             borderRadius: 7,
             background: 'rgba(51,63,85,0.4)',
-            borderTop: '1px solid #333f55',
+            borderTop: '1px solid var(--border)',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
@@ -290,7 +290,7 @@ export default function Layout() {
                 width: 34,
                 height: 34,
                 borderRadius: '50%',
-                background: 'linear-gradient(135deg, #5d87ff, #49beff)',
+                background: 'linear-gradient(135deg, var(--primary), var(--secondary))',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -303,8 +303,8 @@ export default function Layout() {
               {email.charAt(0).toUpperCase()}
             </div>
             <div style={{ minWidth: 0, flex: 1 }}>
-              <p style={{ color: '#eaeff4', fontSize: 13, fontWeight: 600, margin: 0, lineHeight: 1.3 }}>Admin</p>
-              <p style={{ color: '#7c8fac', fontSize: 11, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <p style={{ color: 'var(--text)', fontSize: 13, fontWeight: 600, margin: 0, lineHeight: 1.3 }}>Admin</p>
+              <p style={{ color: 'var(--muted)', fontSize: 11, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {email}
               </p>
             </div>
@@ -320,7 +320,7 @@ export default function Layout() {
               borderRadius: 7,
               border: 'none',
               background: 'transparent',
-              color: '#7c8fac',
+              color: 'var(--muted)',
               fontSize: 13,
               fontWeight: 500,
               cursor: 'pointer',
@@ -329,11 +329,11 @@ export default function Layout() {
             }}
             onMouseEnter={(e) => {
               (e.currentTarget as HTMLButtonElement).style.background = 'rgba(250,137,107,0.1)';
-              (e.currentTarget as HTMLButtonElement).style.color = '#fa896b';
+              (e.currentTarget as HTMLButtonElement).style.color = 'var(--danger)';
             }}
             onMouseLeave={(e) => {
               (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
-              (e.currentTarget as HTMLButtonElement).style.color = '#7c8fac';
+              (e.currentTarget as HTMLButtonElement).style.color = 'var(--muted)';
             }}
           >
             <IconLogout />
@@ -353,8 +353,8 @@ export default function Layout() {
             left: sidebarWidth,
             right: 0,
             height: 70,
-            background: '#202936',
-            borderBottom: '1px solid #333f55',
+            background: 'var(--bg)',
+            borderBottom: '1px solid var(--border)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -381,13 +381,13 @@ export default function Layout() {
               onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
               title={collapsed ? 'Show sidebar' : 'Hide sidebar'}
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7c8fac" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="3" y1="6" x2="21" y2="6" />
                 <line x1="3" y1="12" x2="21" y2="12" />
                 <line x1="3" y1="18" x2="21" y2="18" />
               </svg>
             </button>
-            <span style={{ color: '#7c8fac', fontSize: 13, marginLeft: 4 }}>DraftRight Admin</span>
+            <span style={{ color: 'var(--muted)', fontSize: 13, marginLeft: 4 }}>DraftRight Admin</span>
           </div>
           <NavLink
             to="/profile"
@@ -395,7 +395,7 @@ export default function Layout() {
               width: 34,
               height: 34,
               borderRadius: '50%',
-              background: 'linear-gradient(135deg, #5d87ff, #49beff)',
+              background: 'linear-gradient(135deg, var(--primary), var(--secondary))',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -421,8 +421,8 @@ export default function Layout() {
               marginBottom: 20,
               borderRadius: 8,
               background: 'rgba(250,137,107,0.15)',
-              border: '1px solid #fa896b',
-              color: '#fa896b',
+              border: '1px solid var(--danger)',
+              color: 'var(--danger)',
               fontSize: 14,
               fontWeight: 500,
             }}>
