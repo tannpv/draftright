@@ -103,7 +103,21 @@ export default function PaymentsPage() {
   const [error, setError] = useState('');
 
   const [stats, setStats] = useState<PaymentStats | null>(null);
-  const [testMode, setTestMode] = useState(false);
+  // Per-provider modes (sandbox/test vs live), from settings. A payment whose
+  // provider is in sandbox/test gets a "Simulate paid" button.
+  const [modes, setModes] = useState<Record<string, string>>({});
+
+  // Maps a payment method to its provider's mode field; sandbox/test → simulatable.
+  const isSandbox = (method: string): boolean => {
+    const m =
+      method === 'stripe' ? modes.stripe_mode
+      : method === 'paypal' ? modes.paypal_mode
+      : method === 'momo' ? modes.momo_mode
+      : modes.sepay_mode; // vietqr + bank_transfer are confirmed via SePay
+    return m === 'sandbox' || m === 'test';
+  };
+  const anySandbox = ['stripe_mode', 'paypal_mode', 'momo_mode', 'sepay_mode']
+    .some((k) => modes[k] === 'sandbox' || modes[k] === 'test');
 
   // Modal state
   const [confirmPayment, setConfirmPayment] = useState<Payment | null>(null);
@@ -151,9 +165,15 @@ export default function PaymentsPage() {
 
   useEffect(() => {
     fetchStats();
-    // Surface payment test mode so the admin knows "Confirm" = simulate a payment.
+    // Load per-provider modes so the admin knows when "Confirm" = simulate.
     apiFetch('/admin/settings')
-      .then((s) => setTestMode(!!(s as { payment_test_mode?: boolean }).payment_test_mode))
+      .then((s) => {
+        const x = s as Record<string, string>;
+        setModes({
+          stripe_mode: x.stripe_mode, paypal_mode: x.paypal_mode,
+          momo_mode: x.momo_mode, sepay_mode: x.sepay_mode,
+        });
+      })
       .catch(() => {});
   }, [fetchStats]);
 
@@ -331,7 +351,7 @@ export default function PaymentsPage() {
                 setConfirmNotes('');
               }}
             >
-              {testMode ? '🧪 Simulate paid' : 'Confirm'}
+              {isSandbox(row.method) ? '🧪 Simulate paid' : 'Confirm'}
             </button>
           )}
           {row.status === 'completed' && row.method === 'stripe' && (
@@ -385,10 +405,10 @@ export default function PaymentsPage() {
         </p>
       </div>
 
-      {testMode && (
+      {anySandbox && (
         <div style={{ marginBottom: 24, padding: '12px 16px', borderRadius: 8,
             border: '1px solid rgba(255,174,31,0.4)', background: 'rgba(255,174,31,0.08)', color: '#ffae1f', fontSize: 13 }}>
-          🧪 <strong>Payment Test Mode is ON.</strong> No real charges. Use “Simulate paid” on a pending payment to complete it and activate the subscription for testing. Turn off in Settings → Payment to go live.
+          🧪 <strong>A payment provider is in sandbox/test mode.</strong> Pending payments on a sandbox provider show “Simulate paid” — completing one activates the subscription with no real charge. Set each provider to <strong>live</strong> in Settings → Payment to go live.
         </div>
       )}
 

@@ -9,7 +9,6 @@ interface Settings {
   refresh_token_expiry_days: number;
   max_input_length: number;
   supported_languages: string;
-  payment_test_mode: boolean;
   // Payment
   stripe_secret_key: string;
   stripe_webhook_secret: string;
@@ -122,7 +121,6 @@ export default function SettingsPage() {
   const defaults: Settings = {
     environment: 'testing', trial_limit: 3, token_expiry_minutes: 15, refresh_token_expiry_days: 90, max_input_length: 3000,
     supported_languages: ALL_LANGUAGES.join(','),
-    payment_test_mode: false,
     stripe_secret_key: '', stripe_webhook_secret: '', stripe_mode: 'test',
     paypal_client_id: '', paypal_client_secret: '', paypal_mode: 'sandbox',
     momo_partner_code: '', momo_access_key: '', momo_secret_key: '', momo_mode: 'sandbox',
@@ -309,30 +307,10 @@ export default function SettingsPage() {
       {/* ===== PAYMENT TAB ===== */}
       {activeTab === 'payment' && (
         <>
-          {/* Test/Live mode toggle */}
-          <div className="card" style={{ marginBottom: 24,
-              border: settings.payment_test_mode ? '1px solid rgba(255,174,31,0.4)' : '1px solid rgba(19,222,185,0.4)',
-              background: settings.payment_test_mode ? 'rgba(255,174,31,0.06)' : 'rgba(19,222,185,0.06)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' as const }}>
-              <div>
-                <h2 style={{ color: '#eaeff4', fontSize: 16, fontWeight: 600, marginBottom: 4 }}>
-                  {settings.payment_test_mode ? '🧪 Payment Test Mode' : '🟢 Payment Live Mode'}
-                </h2>
-                <p style={{ color: '#7c8fac', fontSize: 12, margin: 0 }}>
-                  {settings.payment_test_mode
-                    ? 'Sandbox: no real charges. You can "Simulate paid" on pending payments to activate a subscription for testing.'
-                    : 'Live: real charges via the configured providers. Turn ON to test safely before launch.'}
-                </p>
-              </div>
-              <button onClick={() => set('payment_test_mode')(!settings.payment_test_mode)} className="btn" style={{
-                  padding: '8px 18px', borderRadius: 8, fontWeight: 600, cursor: 'pointer',
-                  border: settings.payment_test_mode ? '2px solid #ffae1f' : '2px solid #13deb9',
-                  background: settings.payment_test_mode ? 'rgba(255,174,31,0.12)' : 'rgba(19,222,185,0.12)',
-                  color: settings.payment_test_mode ? '#ffae1f' : '#13deb9' }}>
-                {settings.payment_test_mode ? 'TEST MODE: ON' : 'TEST MODE: OFF'}
-              </button>
-            </div>
-          </div>
+          <p style={{ color: '#7c8fac', fontSize: 13, marginBottom: 20 }}>
+            Each provider has its own <strong style={{ color: '#eaeff4' }}>mode</strong> (sandbox/test vs live). A pending
+            payment whose provider is in sandbox/test can be completed with the “🧪 Simulate paid” button on the Payments page.
+          </p>
 
           {/* Stripe */}
           <div className="card" style={{ marginBottom: 24 }}>
