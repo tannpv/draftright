@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Resend } from 'resend';
 import { AppSettings } from '../admin/entities/app-settings.entity';
+import { EmailLog, EmailStatus } from './entities/email-log.entity';
 
 @Injectable()
 export class EmailService {
@@ -13,7 +14,20 @@ export class EmailService {
   constructor(
     @InjectRepository(AppSettings)
     private readonly settingsRepo: Repository<AppSettings>,
+    @InjectRepository(EmailLog)
+    private readonly emailLogRepo: Repository<EmailLog>,
   ) {}
+
+  /** Best-effort audit row for every send attempt (never throws). */
+  private async record(to: string, subject: string, type: string, status: EmailStatus, providerId: string | null, error: string | null): Promise<void> {
+    try {
+      await this.emailLogRepo.save(this.emailLogRepo.create({
+        to_email: to, subject, email_type: type, status, provider_id: providerId, error,
+      }));
+    } catch (e: any) {
+      this.logger.warn(`email_logs write failed: ${e?.message}`);
+    }
+  }
 
   /**
    * Read API key + from address from AppSettings (admin portal) and fall back
@@ -47,16 +61,19 @@ export class EmailService {
     const c = await this.getClient();
     if (!c) {
       this.logger.warn(`Resend not configured — would send ${label} to ${to}`);
+      await this.record(to, subject, label, 'skipped', null, 'Resend not configured');
       if (throwOnError) throw new InternalServerErrorException('Resend API key not configured');
       return;
     }
     const result = await c.client.emails.send({ from: c.from, to, subject, html });
     if (result.error) {
       this.logger.error(`Resend error sending ${label} to ${to}: ${result.error.message}`);
+      await this.record(to, subject, label, 'failed', null, result.error.message);
       if (throwOnError) throw new InternalServerErrorException(`Email send failed: ${result.error.message}`);
       return;
     }
     this.logger.log(`${label} sent to ${to} (id=${result.data?.id})`);
+    await this.record(to, subject, label, 'sent', result.data?.id ?? null, null);
   }
 
   async sendVerificationEmail(toEmail: string, name: string, code: string): Promise<void> {

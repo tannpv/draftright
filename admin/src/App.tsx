@@ -12,6 +12,7 @@ import AnalyticsPage from './pages/AnalyticsPage';
 import TransactionsPage from './pages/TransactionsPage';
 import PaymentsPage from './pages/PaymentsPage';
 import SettingsPage from './pages/SettingsPage';
+import EmailLogsPage from './pages/EmailLogsPage';
 import AdminUsersPage from './pages/AdminUsersPage';
 import ErrorsPage from './pages/ErrorsPage';
 import BugReportsPage from './pages/BugReportsPage';
@@ -42,6 +43,7 @@ export default function App() {
             <Route path="/transactions" element={<TransactionsPage />} />
             <Route path="/payments" element={<PaymentsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/email-logs" element={<EmailLogsPage />} />
             <Route path="/admin-users" element={<AdminUsersPage />} />
             <Route path="/errors" element={<ErrorsPage />} />
             <Route path="/bug-reports" element={<BugReportsPage />} />
