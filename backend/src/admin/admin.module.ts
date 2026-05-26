@@ -12,6 +12,7 @@ import { UsageModule } from '../usage/usage.module';
 import { RewriteModule } from '../rewrite/rewrite.module';
 import { AppSettings } from './entities/app-settings.entity';
 import { AdminUser } from './entities/admin-user.entity';
+import { EmailLog } from '../email/entities/email-log.entity';
 import { PaymentModule } from '../payment/payment.module';
 import { UpdatesModule } from '../updates/updates.module';
 import { ErrorsModule } from '../errors/errors.module';
@@ -19,7 +20,7 @@ import { BugReportsModule } from '../bug-reports/bug-reports.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([AppSettings, AdminUser]),
+    TypeOrmModule.forFeature([AppSettings, AdminUser, EmailLog]),
     JwtModule.register({}),
     UsersModule,
     PlansModule,

@@ -15,6 +15,7 @@ import { RewriteLogService } from '../rewrite/rewrite-log.service';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AppSettings } from './entities/app-settings.entity';
+import { EmailLog } from '../email/entities/email-log.entity';
 import { AdminUser } from './entities/admin-user.entity';
 import { PaymentService } from '../payment/payment.service';
 import * as bcrypt from 'bcryptjs';
@@ -47,6 +48,8 @@ export class AdminController {
     private readonly settingsRepo: Repository<AppSettings>,
     @InjectRepository(AdminUser)
     private readonly adminUserRepo: Repository<AdminUser>,
+    @InjectRepository(EmailLog)
+    private readonly emailLogRepo: Repository<EmailLog>,
     private readonly paymentService: PaymentService,
     private readonly releasesService: ReleasesService,
     private readonly policiesService: PoliciesService,
@@ -321,6 +324,20 @@ export class AdminController {
   }
 
   // --- Settings ---
+
+  @Get('email-logs')
+  async emailLogs(@Query() q: Record<string, string>) {
+    const limit = Math.min(parseInt(q.limit) || 50, 200);
+    const page = Math.max(parseInt(q.page) || 1, 1);
+    const where = q.status ? { status: q.status as any } : {};
+    const [rows, total] = await this.emailLogRepo.findAndCount({
+      where,
+      order: { created_at: 'DESC' },
+      take: limit,
+      skip: (page - 1) * limit,
+    });
+    return { rows, total };
+  }
 
   @Get('settings')
   async getSettings() {

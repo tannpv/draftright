@@ -2,11 +2,12 @@ import { Module, Global } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { EmailService } from './email.service';
 import { AppSettings } from '../admin/entities/app-settings.entity';
+import { EmailLog } from './entities/email-log.entity';
 
 @Global()
 @Module({
-  imports: [TypeOrmModule.forFeature([AppSettings])],
+  imports: [TypeOrmModule.forFeature([AppSettings, EmailLog])],
   providers: [EmailService],
-  exports: [EmailService],
+  exports: [EmailService, TypeOrmModule],
 })
 export class EmailModule {}
