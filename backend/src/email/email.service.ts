@@ -4,6 +4,8 @@ import { Repository } from 'typeorm';
 import { Resend } from 'resend';
 import { AppSettings } from '../admin/entities/app-settings.entity';
 import { EmailLog, EmailStatus } from './entities/email-log.entity';
+import { EmailTemplate } from './entities/email-template.entity';
+import { EMAIL_TEMPLATE_MAP } from './email-templates';
 
 @Injectable()
 export class EmailService {
@@ -16,6 +18,8 @@ export class EmailService {
     private readonly settingsRepo: Repository<AppSettings>,
     @InjectRepository(EmailLog)
     private readonly emailLogRepo: Repository<EmailLog>,
+    @InjectRepository(EmailTemplate)
+    private readonly templateRepo: Repository<EmailTemplate>,
   ) {}
 
   /** Best-effort audit row for every send attempt (never throws). */
@@ -77,7 +81,7 @@ export class EmailService {
   }
 
   async sendVerificationEmail(toEmail: string, name: string, code: string): Promise<void> {
-    await this.deliver(toEmail, 'Verify your DraftRight email', this.renderVerification(name, code), 'verification email', true);
+    await this.sendTemplated('verification', toEmail, { name: name || 'there', code }, true);
   }
 
   /**
@@ -101,123 +105,61 @@ export class EmailService {
    * Fires from SubscriptionsCron when expires_at is in the 3-day window.
    */
   async sendRenewalReminder(toEmail: string, name: string, planName: string, expiresAt: Date, currency: string, amount: number): Promise<void> {
-    await this.deliver(
-      toEmail,
-      `DraftRight ${planName} renews on ${expiresAt.toDateString()}`,
-      this.renderRenewalReminder(name, planName, expiresAt, currency, amount),
-      'renewal reminder',
-    );
+    await this.sendTemplated('renewal-reminder', toEmail, {
+      name: name || 'there', plan: planName, expires: expiresAt.toDateString(), amount: this.formatAmount(currency, amount),
+    });
   }
 
-  /**
-   * Notifies the user that a renewal charge failed. Stripe Smart Retries will
-   * try 3 more times automatically; this email gives the user a chance to
-   * update their card before the subscription is cancelled.
-   */
   async sendPaymentFailed(toEmail: string, name: string, planName: string): Promise<void> {
-    await this.deliver(
-      toEmail,
-      `Action needed: renewal payment failed for DraftRight ${planName}`,
-      this.renderPaymentFailed(name, planName),
-      'payment-failed',
-    );
+    await this.sendTemplated('payment-failed', toEmail, { name: name || 'there', plan: planName });
   }
 
   /** Confirms a successful payment — the subscription is now active. */
   async sendSubscriptionActivated(toEmail: string, name: string, planName: string, expiresAt: Date, currency: string, amount: number): Promise<void> {
-    await this.deliver(
-      toEmail,
-      `Your DraftRight ${planName} subscription is active`,
-      this.renderSubscriptionActivated(name, planName, expiresAt, currency, amount),
-      'subscription-activated',
-    );
+    await this.sendTemplated('subscription-activated', toEmail, {
+      name: name || 'there', plan: planName, expires: expiresAt.toDateString(), amount: this.formatAmount(currency, amount),
+    });
   }
 
   /** Notifies the user that their subscription has lapsed (renew to restore). */
   async sendSubscriptionExpired(toEmail: string, name: string, planName: string): Promise<void> {
-    await this.deliver(
-      toEmail,
-      `Your DraftRight ${planName} subscription has expired`,
-      this.renderSubscriptionExpired(name, planName),
-      'subscription-expired',
-    );
+    await this.sendTemplated('subscription-expired', toEmail, { name: name || 'there', plan: planName });
+  }
+
+  // --- Template rendering: DB override → built-in default → {{var}} substitution ---
+
+  private async sendTemplated(key: string, toEmail: string, vars: Record<string, string>, throwOnError = false): Promise<void> {
+    const { subject, html } = await this.renderTemplate(key, vars);
+    await this.deliver(toEmail, subject, html, key, throwOnError);
+  }
+
+  /** Resolve a template (admin override or built-in default) and fill {{vars}}. */
+  async renderTemplate(key: string, vars: Record<string, string>): Promise<{ subject: string; html: string }> {
+    const def = EMAIL_TEMPLATE_MAP[key];
+    let row: EmailTemplate | null = null;
+    try {
+      row = await this.templateRepo.findOne({ where: { template_key: key } });
+    } catch {
+      /* email_templates table optional — fall back to defaults */
+    }
+    const subjectTpl = row?.subject ?? def?.subject ?? '';
+    const htmlTpl = row?.html ?? def?.html ?? '';
+    return {
+      subject: this.substitute(subjectTpl, vars, false),
+      html: this.substitute(htmlTpl, vars, true),
+    };
+  }
+
+  /** Replace {{token}} with vars[token]; HTML-escape values in html context. */
+  private substitute(tpl: string, vars: Record<string, string>, escape: boolean): string {
+    return tpl.replace(/\{\{(\w+)\}\}/g, (_m, k) => {
+      const v = vars[k] ?? '';
+      return escape ? this.escapeHtml(v) : v;
+    });
   }
 
   private formatAmount(currency: string, amount: number): string {
     return currency === 'USD' ? `$${(amount / 100).toFixed(2)}` : `${amount.toLocaleString('en-US')} ${currency}`;
-  }
-
-  private renderSubscriptionActivated(name: string, planName: string, expiresAt: Date, currency: string, amount: number): string {
-    const safeName = this.escapeHtml(name || 'there');
-    const safePlan = this.escapeHtml(planName);
-    return `<!doctype html>
-<html><body style="font-family:-apple-system,system-ui,sans-serif;background:#f5f5f7;padding:32px;margin:0;">
-  <div style="max-width:480px;margin:0 auto;background:#fff;border-radius:12px;padding:32px;">
-    <h1 style="font-size:20px;margin:0 0 16px;color:#111;">You're all set, ${safeName} 🎉</h1>
-    <p style="color:#444;line-height:1.5;margin:0 0 16px;">Your payment of <strong>${this.formatAmount(currency, amount)}</strong> was received and your DraftRight <strong>${safePlan}</strong> subscription is now active.</p>
-    <p style="color:#444;line-height:1.5;margin:0 0 16px;">Active until <strong>${expiresAt.toDateString()}</strong>. Enjoy unlimited rewrites across all your devices.</p>
-    <p style="color:#888;font-size:13px;margin:24px 0 0;">— DraftRight</p>
-  </div>
-</body></html>`;
-  }
-
-  private renderSubscriptionExpired(name: string, planName: string): string {
-    const safeName = this.escapeHtml(name || 'there');
-    const safePlan = this.escapeHtml(planName);
-    return `<!doctype html>
-<html><body style="font-family:-apple-system,system-ui,sans-serif;background:#f5f5f7;padding:32px;margin:0;">
-  <div style="max-width:480px;margin:0 auto;background:#fff;border-radius:12px;padding:32px;">
-    <h1 style="font-size:20px;margin:0 0 16px;color:#111;">Your subscription has expired</h1>
-    <p style="color:#444;line-height:1.5;margin:0 0 16px;">Hi ${safeName} — your DraftRight <strong>${safePlan}</strong> subscription has ended, and your account is back on the free plan.</p>
-    <p style="color:#444;line-height:1.5;margin:0 0 16px;">Renew any time to restore unlimited rewrites: <a href="https://draftright.info/account" style="color:#5b3df6;">draftright.info/account</a></p>
-    <p style="color:#888;font-size:13px;margin:24px 0 0;">— DraftRight</p>
-  </div>
-</body></html>`;
-  }
-
-  private renderRenewalReminder(name: string, planName: string, expiresAt: Date, currency: string, amount: number): string {
-    const safeName = this.escapeHtml(name || 'there');
-    const safePlan = this.escapeHtml(planName);
-    const dateStr = expiresAt.toDateString();
-    const amountStr = currency === 'USD'
-      ? `$${(amount / 100).toFixed(2)}`
-      : `${amount.toLocaleString('en-US')} ${currency}`;
-    return `<!doctype html>
-<html><body style="font-family:-apple-system,system-ui,sans-serif;background:#f5f5f7;padding:32px;margin:0;">
-  <div style="max-width:480px;margin:0 auto;background:#fff;border-radius:12px;padding:32px;">
-    <h1 style="font-size:20px;margin:0 0 16px;color:#111;">Heads up, ${safeName}</h1>
-    <p style="color:#444;line-height:1.5;margin:0 0 16px;">Your DraftRight ${safePlan} subscription renews on <strong>${dateStr}</strong>. We'll charge ${amountStr} to your saved payment method.</p>
-    <p style="color:#444;line-height:1.5;margin:0 0 16px;">No action needed if everything looks right. To update your card or cancel, visit your account settings.</p>
-    <p style="color:#888;font-size:13px;margin:24px 0 0;">— DraftRight</p>
-  </div>
-</body></html>`;
-  }
-
-  private renderPaymentFailed(name: string, planName: string): string {
-    const safeName = this.escapeHtml(name || 'there');
-    const safePlan = this.escapeHtml(planName);
-    return `<!doctype html>
-<html><body style="font-family:-apple-system,system-ui,sans-serif;background:#f5f5f7;padding:32px;margin:0;">
-  <div style="max-width:480px;margin:0 auto;background:#fff;border-radius:12px;padding:32px;">
-    <h1 style="font-size:20px;margin:0 0 16px;color:#111;">Payment didn't go through</h1>
-    <p style="color:#444;line-height:1.5;margin:0 0 16px;">Hi ${safeName} — we tried to charge your saved card to renew your DraftRight ${safePlan} subscription, but the charge failed.</p>
-    <p style="color:#444;line-height:1.5;margin:0 0 16px;">We'll automatically retry over the next few days. You can update your payment method any time to fix this faster.</p>
-    <p style="color:#888;font-size:13px;margin:24px 0 0;">— DraftRight</p>
-  </div>
-</body></html>`;
-  }
-
-  private renderVerification(name: string, code: string): string {
-    const safeName = this.escapeHtml(name);
-    return `<!doctype html>
-<html><body style="font-family:-apple-system,system-ui,sans-serif;background:#f5f5f7;padding:32px;margin:0;">
-  <div style="max-width:480px;margin:0 auto;background:#fff;border-radius:12px;padding:32px;">
-    <h1 style="font-size:20px;margin:0 0 16px;color:#111;">Welcome to DraftRight, ${safeName}</h1>
-    <p style="color:#444;line-height:1.5;margin:0 0 16px;">Confirm your email by entering this 6-digit code on the verification page:</p>
-    <div style="font-size:32px;font-weight:600;letter-spacing:8px;text-align:center;background:#f0f0f0;padding:16px;border-radius:8px;margin:24px 0;color:#111;">${code}</div>
-    <p style="color:#888;font-size:13px;margin:0;">This code expires in 15 minutes. If you didn't sign up, you can safely ignore this email.</p>
-  </div>
-</body></html>`;
   }
 
   private escapeHtml(s: string): string {

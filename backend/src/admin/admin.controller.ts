@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Res, Header, BadRequestException,
+  Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Res, Header, BadRequestException, NotFoundException,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
@@ -16,6 +16,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AppSettings } from './entities/app-settings.entity';
 import { EmailLog } from '../email/entities/email-log.entity';
+import { EmailTemplate } from '../email/entities/email-template.entity';
+import { EMAIL_TEMPLATES, EMAIL_TEMPLATE_MAP } from '../email/email-templates';
 import { AdminUser } from './entities/admin-user.entity';
 import { PaymentService } from '../payment/payment.service';
 import * as bcrypt from 'bcryptjs';
@@ -50,6 +52,8 @@ export class AdminController {
     private readonly adminUserRepo: Repository<AdminUser>,
     @InjectRepository(EmailLog)
     private readonly emailLogRepo: Repository<EmailLog>,
+    @InjectRepository(EmailTemplate)
+    private readonly emailTemplateRepo: Repository<EmailTemplate>,
     private readonly paymentService: PaymentService,
     private readonly releasesService: ReleasesService,
     private readonly policiesService: PoliciesService,
@@ -337,6 +341,54 @@ export class AdminController {
       skip: (page - 1) * limit,
     });
     return { rows, total };
+  }
+
+  // --- Email templates (editable; falls back to built-in defaults) ---
+
+  @Get('email-templates')
+  async listEmailTemplates() {
+    const overrides = await this.emailTemplateRepo.find();
+    const byKey = new Map(overrides.map((o) => [o.template_key, o]));
+    return EMAIL_TEMPLATES.map((def) => {
+      const o = byKey.get(def.key);
+      return {
+        key: def.key,
+        label: def.label,
+        variables: def.variables,
+        subject: o?.subject ?? def.subject,
+        html: o?.html ?? def.html,
+        customized: !!o,
+        default_subject: def.subject,
+        default_html: def.html,
+      };
+    });
+  }
+
+  @Patch('email-templates/:key')
+  async updateEmailTemplate(@Param('key') key: string, @Body() body: { subject: string; html: string }) {
+    if (!EMAIL_TEMPLATE_MAP[key]) throw new NotFoundException('Unknown template');
+    await this.emailTemplateRepo.save(
+      this.emailTemplateRepo.create({ template_key: key, subject: body.subject, html: body.html }),
+    );
+    return { ok: true };
+  }
+
+  /** Reset to the built-in default (remove the override row). */
+  @Delete('email-templates/:key')
+  async resetEmailTemplate(@Param('key') key: string) {
+    await this.emailTemplateRepo.delete({ template_key: key });
+    return { ok: true };
+  }
+
+  /** Rendered preview with sample data. */
+  @Get('email-templates/:key/preview')
+  async previewEmailTemplate(@Param('key') key: string) {
+    if (!EMAIL_TEMPLATE_MAP[key]) throw new NotFoundException('Unknown template');
+    const sample: Record<string, string> = {
+      name: 'Tan', code: '123456', plan: 'Pro', amount: '124.000 ₫',
+      expires: new Date(Date.now() + 30 * 86400000).toDateString(),
+    };
+    return this.emailService.renderTemplate(key, sample);
   }
 
   @Get('settings')

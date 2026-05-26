@@ -150,6 +150,7 @@ const navItems = [
   { path: '/payments',      label: 'Payments',      icon: <IconPayments />,      exact: false },
   { path: '/settings',      label: 'Settings',      icon: <IconSettings />,      exact: false },
   { path: '/email-logs',    label: 'Email Logs',    icon: <IconSettings />,      exact: false },
+  { path: '/email-templates', label: 'Email Templates', icon: <IconSettings />,  exact: false },
   { path: '/admin-users',   label: 'Admin Users',   icon: <IconAdminUsers />,    exact: false },
   { path: '/inbox',         label: 'Inbox',         icon: <IconErrors />,        exact: false },
   { path: '/errors',        label: 'Error Reports', icon: <IconErrors />,        exact: false },
