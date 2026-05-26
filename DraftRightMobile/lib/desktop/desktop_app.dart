@@ -283,7 +283,6 @@ class _DesktopAppState extends State<DesktopApp> with WindowListener {
         );
 
       case _PanelState.hidden:
-      default:
         // Transparent placeholder — the window is hidden by window_manager
         return const SizedBox.shrink();
     }

@@ -1,12 +1,11 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io' show Platform;
 import 'dart:math';
 
 import 'package:flutter/services.dart';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:draftright_mobile/services/api_client.dart';
 import 'package:draftright_mobile/services/logger_service.dart';
 
 /// Manages the long-lived `dr_ext_*` extension token used by the iOS
@@ -39,8 +38,10 @@ class ExtensionTokenService {
   static const _kExtensionToken = 'draftright.extensionToken';
 
   String _baseUrl;
+  late final ApiClient _api = ApiClient(baseUrl: _baseUrl);
   set baseUrl(String url) {
     _baseUrl = url;
+    _api.baseUrl = url;
   }
 
   /// Returns the per-install device id, generating and persisting one on
@@ -64,28 +65,9 @@ class ExtensionTokenService {
     final name = _deviceName();
 
     try {
-      final response = await http
-          .post(
-            Uri.parse('$_baseUrl/auth/extension-tokens'),
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': 'Bearer $accessToken',
-            },
-            body: jsonEncode({'device_id': id, 'device_name': name}),
-          )
-          .timeout(const Duration(seconds: 15));
-
-      if (response.statusCode >= 400) {
-        DRLogger.error(
-          'Mint extension token failed: ${response.statusCode} ${response.body}',
-          category: 'AUTH',
-        );
-        return;
-      }
-
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
-      final token = data['token'] as String;
-      await storeToken(token);
+      final data = await _api.postJson('/auth/extension-tokens',
+          token: accessToken, body: {'device_id': id, 'device_name': name});
+      await storeToken(data['token'] as String);
       DRLogger.log('Extension token minted and stored', category: 'AUTH');
     } catch (e) {
       DRLogger.error('Mint extension token errored: $e', category: 'AUTH');
