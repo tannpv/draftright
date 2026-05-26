@@ -37,26 +37,30 @@ export class EmailService {
     return { client: this._client, from };
   }
 
-  async sendVerificationEmail(toEmail: string, name: string, code: string): Promise<void> {
+  /**
+   * Single send path for every email: resolves the Resend client, sends, and
+   * logs. `throwOnError` distinguishes user-facing flows (verify/test — surface
+   * the failure) from best-effort notifications (cron/transactional — never
+   * block on email). Every public method is a thin wrapper over this.
+   */
+  private async deliver(to: string, subject: string, html: string, label: string, throwOnError = false): Promise<void> {
     const c = await this.getClient();
     if (!c) {
-      this.logger.warn(`Resend not configured — would send verification code ${code} to ${toEmail}`);
+      this.logger.warn(`Resend not configured — would send ${label} to ${to}`);
+      if (throwOnError) throw new InternalServerErrorException('Resend API key not configured');
       return;
     }
-
-    const html = this.renderVerification(name, code);
-    const result = await c.client.emails.send({
-      from: c.from,
-      to: toEmail,
-      subject: 'Verify your DraftRight email',
-      html,
-    });
-
+    const result = await c.client.emails.send({ from: c.from, to, subject, html });
     if (result.error) {
-      this.logger.error(`Resend error sending to ${toEmail}: ${result.error.message}`);
-      throw new InternalServerErrorException(`Email send failed: ${result.error.message}`);
+      this.logger.error(`Resend error sending ${label} to ${to}: ${result.error.message}`);
+      if (throwOnError) throw new InternalServerErrorException(`Email send failed: ${result.error.message}`);
+      return;
     }
-    this.logger.log(`Verification email sent to ${toEmail} (id=${result.data?.id})`);
+    this.logger.log(`${label} sent to ${to} (id=${result.data?.id})`);
+  }
+
+  async sendVerificationEmail(toEmail: string, name: string, code: string): Promise<void> {
+    await this.deliver(toEmail, 'Verify your DraftRight email', this.renderVerification(name, code), 'verification email', true);
   }
 
   /**
@@ -64,26 +68,15 @@ export class EmailService {
    * Throws on any error so the admin sees the failure reason in their toast.
    */
   async sendTestEmail(toEmail: string): Promise<void> {
-    const c = await this.getClient();
-    if (!c) throw new InternalServerErrorException('Resend API key not configured');
-    const result = await c.client.emails.send({
-      from: c.from,
-      to: toEmail,
-      subject: 'DraftRight test email',
-      html: `<!doctype html>
+    const html = `<!doctype html>
 <html><body style="font-family:-apple-system,system-ui,sans-serif;background:#f5f5f7;padding:32px;margin:0;">
   <div style="max-width:480px;margin:0 auto;background:#fff;border-radius:12px;padding:32px;">
     <h1 style="font-size:20px;margin:0 0 16px;color:#111;">It works.</h1>
-    <p style="color:#444;line-height:1.5;margin:0 0 16px;">If you can read this, your Resend API key + sender domain are set up correctly. Renewal reminders, verification codes, and payment-failed notices will all flow through this configuration.</p>
+    <p style="color:#444;line-height:1.5;margin:0 0 16px;">If you can read this, your Resend API key + sender domain are set up correctly. Renewal reminders, verification codes, and payment notices will all flow through this configuration.</p>
     <p style="color:#888;font-size:13px;margin:24px 0 0;">— DraftRight admin test, sent ${new Date().toISOString()}</p>
   </div>
-</body></html>`,
-    });
-    if (result.error) {
-      this.logger.error(`Test email to ${toEmail} failed: ${result.error.message}`);
-      throw new InternalServerErrorException(result.error.message);
-    }
-    this.logger.log(`Test email sent to ${toEmail} (id=${result.data?.id})`);
+</body></html>`;
+    await this.deliver(toEmail, 'DraftRight test email', html, 'test email', true);
   }
 
   /**
@@ -91,23 +84,12 @@ export class EmailService {
    * Fires from SubscriptionsCron when expires_at is in the 3-day window.
    */
   async sendRenewalReminder(toEmail: string, name: string, planName: string, expiresAt: Date, currency: string, amount: number): Promise<void> {
-    const c = await this.getClient();
-    if (!c) {
-      this.logger.warn(`Resend not configured — would send renewal reminder to ${toEmail}`);
-      return;
-    }
-    const html = this.renderRenewalReminder(name, planName, expiresAt, currency, amount);
-    const result = await c.client.emails.send({
-      from: c.from,
-      to: toEmail,
-      subject: `DraftRight ${planName} renews on ${expiresAt.toDateString()}`,
-      html,
-    });
-    if (result.error) {
-      this.logger.error(`Resend error sending renewal reminder to ${toEmail}: ${result.error.message}`);
-      return; // best-effort — don't block cron
-    }
-    this.logger.log(`Renewal reminder sent to ${toEmail} (id=${result.data?.id})`);
+    await this.deliver(
+      toEmail,
+      `DraftRight ${planName} renews on ${expiresAt.toDateString()}`,
+      this.renderRenewalReminder(name, planName, expiresAt, currency, amount),
+      'renewal reminder',
+    );
   }
 
   /**
@@ -116,23 +98,64 @@ export class EmailService {
    * update their card before the subscription is cancelled.
    */
   async sendPaymentFailed(toEmail: string, name: string, planName: string): Promise<void> {
-    const c = await this.getClient();
-    if (!c) {
-      this.logger.warn(`Resend not configured — would send payment-failed to ${toEmail}`);
-      return;
-    }
-    const html = this.renderPaymentFailed(name, planName);
-    const result = await c.client.emails.send({
-      from: c.from,
-      to: toEmail,
-      subject: `Action needed: renewal payment failed for DraftRight ${planName}`,
-      html,
-    });
-    if (result.error) {
-      this.logger.error(`Resend error sending payment-failed to ${toEmail}: ${result.error.message}`);
-      return;
-    }
-    this.logger.log(`Payment-failed email sent to ${toEmail} (id=${result.data?.id})`);
+    await this.deliver(
+      toEmail,
+      `Action needed: renewal payment failed for DraftRight ${planName}`,
+      this.renderPaymentFailed(name, planName),
+      'payment-failed',
+    );
+  }
+
+  /** Confirms a successful payment — the subscription is now active. */
+  async sendSubscriptionActivated(toEmail: string, name: string, planName: string, expiresAt: Date, currency: string, amount: number): Promise<void> {
+    await this.deliver(
+      toEmail,
+      `Your DraftRight ${planName} subscription is active`,
+      this.renderSubscriptionActivated(name, planName, expiresAt, currency, amount),
+      'subscription-activated',
+    );
+  }
+
+  /** Notifies the user that their subscription has lapsed (renew to restore). */
+  async sendSubscriptionExpired(toEmail: string, name: string, planName: string): Promise<void> {
+    await this.deliver(
+      toEmail,
+      `Your DraftRight ${planName} subscription has expired`,
+      this.renderSubscriptionExpired(name, planName),
+      'subscription-expired',
+    );
+  }
+
+  private formatAmount(currency: string, amount: number): string {
+    return currency === 'USD' ? `$${(amount / 100).toFixed(2)}` : `${amount.toLocaleString('en-US')} ${currency}`;
+  }
+
+  private renderSubscriptionActivated(name: string, planName: string, expiresAt: Date, currency: string, amount: number): string {
+    const safeName = this.escapeHtml(name || 'there');
+    const safePlan = this.escapeHtml(planName);
+    return `<!doctype html>
+<html><body style="font-family:-apple-system,system-ui,sans-serif;background:#f5f5f7;padding:32px;margin:0;">
+  <div style="max-width:480px;margin:0 auto;background:#fff;border-radius:12px;padding:32px;">
+    <h1 style="font-size:20px;margin:0 0 16px;color:#111;">You're all set, ${safeName} 🎉</h1>
+    <p style="color:#444;line-height:1.5;margin:0 0 16px;">Your payment of <strong>${this.formatAmount(currency, amount)}</strong> was received and your DraftRight <strong>${safePlan}</strong> subscription is now active.</p>
+    <p style="color:#444;line-height:1.5;margin:0 0 16px;">Active until <strong>${expiresAt.toDateString()}</strong>. Enjoy unlimited rewrites across all your devices.</p>
+    <p style="color:#888;font-size:13px;margin:24px 0 0;">— DraftRight</p>
+  </div>
+</body></html>`;
+  }
+
+  private renderSubscriptionExpired(name: string, planName: string): string {
+    const safeName = this.escapeHtml(name || 'there');
+    const safePlan = this.escapeHtml(planName);
+    return `<!doctype html>
+<html><body style="font-family:-apple-system,system-ui,sans-serif;background:#f5f5f7;padding:32px;margin:0;">
+  <div style="max-width:480px;margin:0 auto;background:#fff;border-radius:12px;padding:32px;">
+    <h1 style="font-size:20px;margin:0 0 16px;color:#111;">Your subscription has expired</h1>
+    <p style="color:#444;line-height:1.5;margin:0 0 16px;">Hi ${safeName} — your DraftRight <strong>${safePlan}</strong> subscription has ended, and your account is back on the free plan.</p>
+    <p style="color:#444;line-height:1.5;margin:0 0 16px;">Renew any time to restore unlimited rewrites: <a href="https://draftright.info/account" style="color:#5b3df6;">draftright.info/account</a></p>
+    <p style="color:#888;font-size:13px;margin:24px 0 0;">— DraftRight</p>
+  </div>
+</body></html>`;
   }
 
   private renderRenewalReminder(name: string, planName: string, expiresAt: Date, currency: string, amount: number): string {

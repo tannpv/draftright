@@ -17,6 +17,7 @@ describe('PaymentService — enabled methods', () => {
   const subsService = {} as any;
   const stripeStrategy = { createCheckout: jest.fn(), verifyWebhook: jest.fn() } as any;
   const vietqrStrategy = { createCheckout: jest.fn(), verifyWebhook: jest.fn() } as any;
+  const emailService = { sendSubscriptionActivated: jest.fn(), sendSubscriptionExpired: jest.fn() } as any;
 
   let svc: PaymentService;
   const ORIGINAL_ENV = process.env.PAYMENT_ENABLED_METHODS;
@@ -25,7 +26,7 @@ describe('PaymentService — enabled methods', () => {
     jest.clearAllMocks();
     delete process.env.PAYMENT_ENABLED_METHODS;
     svc = new PaymentService(
-      paymentRepo, userRepo, settingsRepo, plansService, subsService, stripeStrategy, vietqrStrategy,
+      paymentRepo, userRepo, settingsRepo, plansService, subsService, stripeStrategy, vietqrStrategy, emailService,
     );
   });
   afterAll(() => {
