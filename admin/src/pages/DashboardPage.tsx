@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import StatCard from '../components/StatCard';
 import { apiFetch } from '../api';
+import { formatCurrency } from '../lib/format';
 
 interface Stats {
   total_users: number;
@@ -21,9 +22,6 @@ interface Analytics {
   plans_breakdown: PlanBreakdown[];
 }
 
-function formatCents(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
-}
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<Stats | null>(null);
@@ -113,13 +111,13 @@ export default function DashboardPage() {
         <StatCard
           icon="💰"
           label="MRR"
-          value={analytics ? formatCents(analytics.mrr) : '—'}
+          value={analytics ? formatCurrency(analytics.mrr, 'VND') : '—'}
           color="green"
         />
         <StatCard
           icon="💵"
           label="Total Revenue"
-          value={analytics ? formatCents(analytics.total_revenue) : '—'}
+          value={analytics ? formatCurrency(analytics.total_revenue, 'VND') : '—'}
           color="blue"
         />
 
