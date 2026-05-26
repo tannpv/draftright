@@ -11,6 +11,7 @@ import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { User } from '../users/entities/user.entity';
 import { AppSettings } from '../admin/entities/app-settings.entity';
 import { generatePaymentReference } from './payment-reference';
+import { EmailService } from '../email/email.service';
 import { PAYMENT_PENDING_TTL_MS } from '../common/app-config';
 
 @Injectable()
@@ -30,6 +31,7 @@ export class PaymentService {
     private readonly subscriptionsService: SubscriptionsService,
     private readonly stripeStrategy: StripeStrategy,
     private readonly vietqrStrategy: VietQRStrategy,
+    private readonly emailService: EmailService,
   ) {
     this.strategies = new Map<string, BasePaymentStrategy>([
       ['stripe', this.stripeStrategy],
@@ -242,6 +244,18 @@ export class PaymentService {
     }
 
     await this.subscriptionsService.grant(payment.user_id, payment.plan_id, expiresAt);
+
+    // Best-effort "subscription active" email — never block activation on it.
+    try {
+      const user = await this.userRepo.findOne({ where: { id: payment.user_id } });
+      if (user?.email) {
+        await this.emailService.sendSubscriptionActivated(
+          user.email, user.name, payment.plan?.name || 'Pro', expiresAt, payment.currency, payment.amount,
+        );
+      }
+    } catch (e: any) {
+      this.logger.warn(`subscription-activated email failed: ${e?.message}`);
+    }
   }
 
   // --- Generic: get payment status ---

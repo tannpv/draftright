@@ -81,13 +81,39 @@ export class SubscriptionsCron {
    * After this, the rewrite-quota guard treats the user as free-tier.
    */
   private async expireLapsedSubscriptions(): Promise<void> {
-    const result = await this.subsRepo
+    // Load the lapsed rows first (with user + plan) so we can email each one,
+    // then flip them to EXPIRED.
+    const lapsed = await this.subsRepo.find({
+      where: [
+        { status: SubscriptionStatus.ACTIVE, expires_at: LessThan(new Date()) },
+        { status: SubscriptionStatus.CANCELLED, expires_at: LessThan(new Date()) },
+      ],
+      relations: ['user', 'plan'],
+    });
+    if (lapsed.length === 0) {
+      this.logger.log('No lapsed subscriptions');
+      return;
+    }
+
+    await this.subsRepo
       .createQueryBuilder()
       .update(Subscription)
       .set({ status: SubscriptionStatus.EXPIRED })
-      .where('status IN (:...statuses)', { statuses: [SubscriptionStatus.ACTIVE, SubscriptionStatus.CANCELLED] })
-      .andWhere('expires_at IS NOT NULL AND expires_at < NOW()')
+      .whereInIds(lapsed.map((s) => s.id))
       .execute();
-    this.logger.log(`Expired ${result.affected ?? 0} lapsed subscription(s)`);
+    this.logger.log(`Expired ${lapsed.length} lapsed subscription(s)`);
+
+    for (const sub of lapsed) {
+      if (!sub.user?.email || !sub.plan) continue;
+      try {
+        await this.emailService.sendSubscriptionExpired(
+          sub.user.email,
+          sub.user.name || sub.user.email,
+          sub.plan.name,
+        );
+      } catch (err: any) {
+        this.logger.error(`Failed to send expired email for sub ${sub.id}: ${err.message}`);
+      }
+    }
   }
 }
