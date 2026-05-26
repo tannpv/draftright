@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:path_provider/path_provider.dart';
 
 /// Log severity. Lines are tagged `[LEVEL]` so failures are skimmable and
@@ -36,7 +37,7 @@ class DRLogger {
     final levelTag = level.name.toUpperCase().padRight(5);
     final line = '[$timestamp] [$levelTag] [$category] $message';
     _logFile?.writeAsStringSync('$line\n', mode: FileMode.append);
-    assert(() { print(line); return true; }());
+    assert(() { debugPrint(line); return true; }());
   }
 
   /// Log a handled-but-degraded condition at [LogLevel.warn].
