@@ -181,7 +181,7 @@ export default function TransactionsPage() {
 
                       {/* Amount */}
                       <td style={{ padding: '13px 16px', color: tx.price_cents === 0 ? 'var(--muted)' : 'var(--success)', fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap' }}>
-                        {tx.price_cents === 0 ? 'Free' : formatCurrency(tx.price_cents)}
+                        {tx.price_cents === 0 ? 'Free' : formatCurrency(tx.price_cents, 'VND')}
                       </td>
 
                       {/* Store badge */}
