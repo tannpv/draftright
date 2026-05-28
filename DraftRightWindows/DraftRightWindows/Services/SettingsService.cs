@@ -82,6 +82,11 @@ public sealed class SettingsService
                 return;
 
             BackendUrl = loaded.BackendUrl ?? BackendUrl;
+            // Dev/self-host override: DRAFTRIGHT_BACKEND_URL env var wins over the
+            // persisted file value. UI no longer exposes this field, so this is
+            // the only way to point a release build at a non-prod backend.
+            var env = Environment.GetEnvironmentVariable("DRAFTRIGHT_BACKEND_URL");
+            if (!string.IsNullOrWhiteSpace(env)) BackendUrl = env.Trim();
             HotkeyModifiers = loaded.HotkeyModifiers ?? HotkeyModifiers;
             HotkeyKey = loaded.HotkeyKey ?? HotkeyKey;
             TranslateLanguage = loaded.TranslateLanguage ?? TranslateLanguage;

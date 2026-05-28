@@ -188,19 +188,9 @@ internal static class SettingsFormBuilder
         var tab = MakeTab("General");
         int y = 16;
 
-        // Backend Server section
-        tab.Controls.Add(MakeSectionHeader("Backend Server", y));
-        y += 30;
-        tab.Controls.Add(MakeFieldLabel("Backend URL", y));
-        y += 18;
-        var urlBox = MakeTextBox(y, App.Settings.BackendUrl ?? "");
-        urlBox.TextChanged += (_, _) =>
-        {
-            App.Settings.BackendUrl = urlBox.Text.Trim();
-            App.Settings.Save();
-        };
-        tab.Controls.Add(urlBox);
-        y += 44;
+        // Backend URL is no longer user-editable from the Settings UI — see
+        // Constants.DefaultBackendUrl + AppSettings (env var / settings file
+        // override path for self-hosting developers).
 
         // General section
         tab.Controls.Add(MakeSectionHeader("General", y));
