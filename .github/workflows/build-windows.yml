@@ -77,8 +77,10 @@ jobs:
             Write-Error "GOOGLE_OAUTH_CLIENT_SECRET_WINDOWS repo secret is not set. Add it under Settings → Secrets and variables → Actions."
             exit 1
           }
-          $src = "DraftRightWindows/DraftRightWindows/Services/GoogleOAuthConfig.cs.template"
-          $dst = "DraftRightWindows/DraftRightWindows/Services/GoogleOAuthConfig.cs"
+          # Paths are relative to the job's working-directory
+          # (DraftRightWindows/DraftRightWindows) set in defaults.
+          $src = "Services/GoogleOAuthConfig.cs.template"
+          $dst = "Services/GoogleOAuthConfig.cs"
           (Get-Content $src -Raw).Replace("REPLACE_ME", $env:GOOGLE_OAUTH_CLIENT_SECRET_WINDOWS) | Set-Content -Path $dst -Encoding UTF8
           Write-Host "Wrote $dst from template"
 
