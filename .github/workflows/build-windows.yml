@@ -429,20 +429,19 @@ jobs:
         shell: pwsh
         run: |
           # The VS-only _BuildMsixUploadPackage target is not available on CI runners.
-          # Build it manually: zip the .msix (+ .msixsym) into a .msixupload that the
-          # Partner Center API and web portal both accept.
+          # Build it manually: zip ONLY the .msix into a .msixupload. Partner Center
+          # rejects bundles that include .msixsym (symbol files) with "not supported"
+          # validation errors, so we omit them — they're optional debug aids, not
+          # required for Store submission.
           $msix = Get-ChildItem -Path AppPackages -Recurse -Include *.msix | Select-Object -First 1
           if (-not $msix) {
             Write-Host "AppPackages tree:"
             Get-ChildItem -Path AppPackages -Recurse | Select-Object FullName, Length
             throw "No .msix found in AppPackages"
           }
-          $sym = Get-ChildItem -Path AppPackages -Recurse -Include *.msixsym | Select-Object -First 1
           $shortSha = $env:COMMIT_SHA.Substring(0, 7)
           $upload = "AppPackages\DraftRight-Store-$shortSha.msixupload"
-          $toZip = @($msix.FullName)
-          if ($sym) { $toZip += $sym.FullName }
-          Compress-Archive -Path $toZip -DestinationPath $upload -Force
+          Compress-Archive -Path $msix.FullName -DestinationPath $upload -Force
           $sizeMB = [math]::Round((Get-Item $upload).Length / 1MB, 1)
           Write-Host "Created $upload ($sizeMB MB) from $($msix.Name)"
           Add-Content -Path $env:GITHUB_ENV -Value "MSIX_NAME=DraftRight-Store-$shortSha.msixupload"
