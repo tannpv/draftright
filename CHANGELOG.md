@@ -13,6 +13,8 @@ ignored by the extractor), e.g. `## 2.3.6 — 2026-05-20`.
 
 ## 2.3.13 — 2026-05-28
 - Sign in with Google now works on Windows: a Google button on the Settings → Account screen opens your browser, completes sign-in, and signs you into DraftRight.
+- The menu-bar icon (macOS) now shows a small red dot when a new update is available — no more silent waiting; you can see at a glance when there's something new to install.
+- Internal: the Backend URL field has been removed from Settings on every platform. All builds point at the production server by default.
 
 ## 2.3.12 — 2026-05-27
 - Fixed "Sign in with Google" on macOS, which was failing with an authorization error. Google login now works again.
