@@ -96,6 +96,27 @@ public sealed class ApiClient : IDisposable
     }
 
     /// <summary>
+    /// Exchange a third-party identity token (e.g. a Google id_token from
+    /// <see cref="GoogleOAuth.AuthenticateAsync"/>) for a DraftRight session.
+    /// Mirrors the Flutter mobile client's social-login flow so the backend's
+    /// /auth/social user creation/linking is shared across platforms.
+    /// </summary>
+    public async Task<AuthResponse> SocialLoginAsync(
+        string provider, string idToken, string? name = null, string? email = null, string? avatarUrl = null)
+    {
+        DRLogger.Log($"SocialLoginAsync: provider={provider}", DRLogger.Category.API);
+        var body = new
+        {
+            provider,
+            id_token = idToken,
+            name,
+            email,
+            avatar_url = avatarUrl,
+        };
+        return await PostAsync<AuthResponse>("/auth/social", body, autoRefresh: false);
+    }
+
+    /// <summary>
     /// Exchanges a refresh token for a fresh access/refresh pair.
     /// Does not auto-retry on 401 — a 401 here means the refresh token itself is invalid.
     /// </summary>
