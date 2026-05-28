@@ -14,6 +14,11 @@ import 'package:draftright_mobile/services/logger_service.dart';
 class AuthService extends ChangeNotifier {
   static const _keyAccess = 'draftright.accessToken';
   static const _keyRefresh = 'draftright.refreshToken';
+  // Android requires the web/server client ID so Google includes the server
+  // audience in the ID token — without it, idToken is null on Android.
+  // iOS reads its client from GIDClientID in Info.plist; this is harmless there.
+  static const _googleServerClientId =
+      '22951518033-gf853ftmf4emivffk0su2bik42j7cmai.apps.googleusercontent.com';
   // Note: shared_preferences plugin auto-prefixes 'flutter.' to all keys.
   // Storing as 'draftright.accessToken' actually persists as 'flutter.draftright.accessToken'
   // which is exactly what the Android keyboard's SharedSettings reads.
@@ -90,7 +95,10 @@ class AuthService extends ChangeNotifier {
   // --- Social Login ---
 
   Future<void> signInWithGoogle() async {
-    final googleSignIn = GoogleSignIn(scopes: ['email', 'profile']);
+    final googleSignIn = GoogleSignIn(
+      scopes: ['email', 'profile'],
+      serverClientId: _googleServerClientId,
+    );
     final account = await googleSignIn.signIn();
     if (account == null) throw Exception('Google sign-in cancelled');
 

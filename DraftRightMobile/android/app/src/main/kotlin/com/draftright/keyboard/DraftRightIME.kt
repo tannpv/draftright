@@ -4,9 +4,11 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.inputmethodservice.InputMethodService
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.view.View
+import android.view.WindowInsets
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.ExtractedTextRequest
 import android.widget.LinearLayout
@@ -73,6 +75,7 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
         keyboard = kb
         root.addView(kb)
 
+        applyNavBarBottomInset(root)
         rootLayout = root
         return root
     }
@@ -86,6 +89,16 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
         // never seed this one. `restarting` (same field re-init, e.g. rotation)
         // is left alone to avoid disrupting an in-progress composition.
         if (!restarting) controller?.composer?.reset()
+    }
+
+    override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
+        super.onStartInputView(info, restarting)
+        // onCreateInputView is called once and its view is cached. If the user
+        // changes enabled languages in Settings and then switches back to any
+        // text field, the controller still reflects the old language list.
+        // Syncing here ensures the keyboard always matches current settings
+        // without destroying and recreating the entire view.
+        syncControllerWithSettings()
     }
 
     override fun onFinishInput() {
@@ -303,5 +316,35 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
 
     private fun dpToPx(dp: Int): Int {
         return (dp * resources.displayMetrics.density).toInt()
+    }
+
+    private fun syncControllerWithSettings() {
+        if (!::settings.isInitialized) return
+        val c = controller ?: return
+        val desired = settings.enabledLanguageIds
+        if (desired == c.enabled.map { it.id }) return
+        val active = settings.activeLanguageId
+            .takeIf { it in desired }
+            ?: c.current.id.takeIf { it in desired }
+            ?: desired.firstOrNull()
+            ?: "en"
+        controller = KeyboardController(registry, enabledIds = desired, activeId = active)
+        keyboard?.languagePack = controller!!.current
+    }
+
+    private fun applyNavBarBottomInset(root: View) {
+        // OEM navigation bars (Xiaomi / Samsung gesture nav) overlap the
+        // keyboard bottom row. Setting a window-inset listener lets the OS
+        // push the bottom padding out dynamically whenever the nav bar
+        // appears or resizes, without hard-coding a pixel value.
+        root.setOnApplyWindowInsetsListener { v, insets ->
+            val bottom = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
+                insets.getInsets(WindowInsets.Type.navigationBars()).bottom
+            else
+                @Suppress("DEPRECATION") insets.systemWindowInsetBottom
+            v.setPadding(v.paddingLeft, v.paddingTop, v.paddingRight, bottom)
+            insets
+        }
+        root.requestApplyInsets()
     }
 }
