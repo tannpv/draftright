@@ -133,7 +133,15 @@ if [ -n "$DB_PLATFORM" ]; then
   # missing section just publishes empty notes with a warning; the CI release
   # path enforces it.
   SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  if NOTES="$("$SCRIPT_DIR/changelog-extract.sh" "$VERSION" "$SCRIPT_DIR/../CHANGELOG.md" 2>/dev/null)"; then
+  # Pass the platform code so the extractor only returns notes scoped to this
+  # release target (### macOS / ### Windows / ### All platforms). Otherwise
+  # Windows-only bullets leak into the macOS publish and vice-versa. Pipeline
+  # arg "ios-sim" maps to extractor code "ios"; others pass through.
+  case "$PLATFORM" in
+    ios-sim) NOTES_PLATFORM="ios" ;;
+    *)       NOTES_PLATFORM="$PLATFORM" ;;
+  esac
+  if NOTES="$("$SCRIPT_DIR/changelog-extract.sh" "$VERSION" "$NOTES_PLATFORM" "$SCRIPT_DIR/../CHANGELOG.md" 2>/dev/null)"; then
     echo "    notes:    $(printf '%s' "$NOTES" | head -1) …"
   else
     echo "    notes:    (!) no CHANGELOG.md section for $VERSION — publishing empty notes" >&2
