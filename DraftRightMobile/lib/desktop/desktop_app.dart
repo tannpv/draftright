@@ -316,21 +316,6 @@ class _DesktopSettingsContent extends StatefulWidget {
 }
 
 class _DesktopSettingsContentState extends State<_DesktopSettingsContent> {
-  late TextEditingController _backendUrlController;
-
-  @override
-  void initState() {
-    super.initState();
-    final settings = context.read<SettingsService>();
-    _backendUrlController = TextEditingController(text: settings.backendUrl);
-  }
-
-  @override
-  void dispose() {
-    _backendUrlController.dispose();
-    super.dispose();
-  }
-
   Future<void> _logout() async {
     await context.read<AuthService>().logout();
   }
@@ -353,24 +338,9 @@ class _DesktopSettingsContentState extends State<_DesktopSettingsContent> {
             else
               const Text('Not signed in — open on mobile to log in.',
                   style: TextStyle(color: Colors.grey)),
-            const SizedBox(height: 24),
-            const Text('Backend Server',
-                style: TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _backendUrlController,
-              decoration: const InputDecoration(
-                labelText: 'Backend URL',
-                helperText: 'Leave default unless self-hosting',
-                border: OutlineInputBorder(),
-              ),
-              onChanged: (value) {
-                if (value.isNotEmpty) {
-                  settings.setBackendUrl(value);
-                  context.read<AuthService>().setBaseUrl(value);
-                }
-              },
-            ),
+            // Backend URL no longer user-editable — production points at
+            // api.draftright.info. Dev override:
+            //   --dart-define=DRAFTRIGHT_BACKEND_URL=http://localhost:3000
             const SizedBox(height: 24),
             const Text('Translation Language',
                 style: TextStyle(fontWeight: FontWeight.bold)),

@@ -3,8 +3,17 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:draftright_mobile/models/tone.dart';
 import 'auth_service.dart';
 
-// Default to production backend always. Devs running local backend can override via Settings UI.
-const String kDefaultBackendUrl = 'https://api.draftright.info';
+// Production default. The Settings UI no longer exposes this — developers
+// self-hosting can override at build time with:
+//   flutter run --dart-define=DRAFTRIGHT_BACKEND_URL=http://localhost:3000
+// The compile-time value takes precedence over any persisted SharedPreferences
+// value, so a release build always points at production regardless of what an
+// old install previously wrote to disk.
+const String _kBuildBackendUrl = String.fromEnvironment(
+  'DRAFTRIGHT_BACKEND_URL',
+  defaultValue: 'https://api.draftright.info',
+);
+const String kDefaultBackendUrl = _kBuildBackendUrl;
 
 /// Normalize a URL by trimming trailing slashes.
 String _normalizeUrl(String url) {
@@ -41,9 +50,10 @@ class SettingsService extends ChangeNotifier {
 
   Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
-    _backendUrl = _normalizeUrl(
-      _prefs.getString('draftright.backendUrl') ?? kDefaultBackendUrl,
-    );
+    // Always use the compile-time const — the Settings UI is gone, and any
+    // stale value previously persisted by an older build must not point a
+    // user at a defunct local/test backend.
+    _backendUrl = _normalizeUrl(kDefaultBackendUrl);
     _translateLanguage = _prefs.getString('draftright.translateLanguage') ?? 'Vietnamese';
     _enabledTones = _prefs.getStringList('draftright.enabledTones')
         ?? Tone.values.map((t) => t.apiValue).toList();

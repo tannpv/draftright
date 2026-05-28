@@ -21,6 +21,11 @@ enum AppMode: String, CaseIterable, Identifiable {
 
 @MainActor
 final class AppModel: ObservableObject {
+    /// Single source of truth for the production backend URL. The Settings UI
+    /// no longer exposes this — see init() for the env-var/UserDefaults override
+    /// path used by developers self-hosting.
+    static let defaultBackendUrl = "https://api.draftright.info"
+
     @Published var accessToken: String = "" {
         didSet { KeychainHelper.save(accessToken, forKey: "accessToken") }
     }
@@ -127,7 +132,17 @@ final class AppModel: ObservableObject {
         let storedLaunchAtLogin = UserDefaults.standard.bool(forKey: Keys.launchAtLogin)
         KeepAliveAgent.reconcile(desiredRunAtLoad: storedLaunchAtLogin)
 
-        self.backendUrl = UserDefaults.standard.string(forKey: Keys.backendUrl) ?? "http://localhost:3000"
+        // Backend URL is no longer user-editable from the Settings UI. Production
+        // installs always point at api.draftright.info; developers self-hosting
+        // can override at launch with the DRAFTRIGHT_BACKEND_URL environment
+        // variable (e.g. `DRAFTRIGHT_BACKEND_URL=http://localhost:3000 open …`).
+        // Persisted UserDefaults value (from older installs) still takes
+        // precedence so we don't silently break anyone running a custom server.
+        let envOverride = ProcessInfo.processInfo.environment["DRAFTRIGHT_BACKEND_URL"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let storedUrl = UserDefaults.standard.string(forKey: Keys.backendUrl)
+        self.backendUrl = (envOverride?.isEmpty == false ? envOverride : nil)
+            ?? (storedUrl?.isEmpty == false ? storedUrl : nil)
+            ?? AppModel.defaultBackendUrl
         self.launchAtLogin = UserDefaults.standard.bool(forKey: Keys.launchAtLogin)
         self.translateLanguage = UserDefaults.standard.string(forKey: Keys.translateLanguage) ?? "Vietnamese"
         self.hotkeyString = UserDefaults.standard.string(forKey: Keys.hotkey) ?? ""
