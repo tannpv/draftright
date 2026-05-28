@@ -17,35 +17,22 @@
   build completes. None of these matter for an unpackaged WinUI app
   (WindowsPackageType=None, AppxPackage=false), so the no-ops are safe.
 
-  Gated on `EnableMsixTooling != 'true'` so CI runs (which set
-  -p:EnableMsixTooling=true and have full VS Build Tools installed) skip
-  these shims and use the real targets.
-
-  Imported automatically because MSBuild auto-imports Directory.Build.targets
-  AFTER Sdk.targets, so target redefinitions here win.
+  NOTE: MSBuild <Target Condition="..."> does NOT prevent target override registration —
+  the condition only gates execution. So the no-op stubs live in a separate file
+  that is conditionally Imported here. When EnableMsixTooling=true (CI MSIX build),
+  the Import is skipped at parse-time and the real WinAppSdk/VS targets remain active,
+  allowing resources.pri generation to work.
 -->
 <Project>
   <PropertyGroup Condition="'$(EnableMsixTooling)' != 'true'">
     <AppxGeneratePriEnabled>false</AppxGeneratePriEnabled>
   </PropertyGroup>
 
-  <!-- Targets that invoke ExpandPriContent (Microsoft.Build.Packaging.Pri.Tasks). -->
-  <Target Name="_GenerateProjectPriFileCore" Condition="'$(EnableMsixTooling)' != 'true'" />
-  <Target Name="_ExpandProjectPriFile"       Condition="'$(EnableMsixTooling)' != 'true'" />
-  <Target Name="AddPriPayloadFilesToCopyToOutputDirectoryItems" Condition="'$(EnableMsixTooling)' != 'true'" />
-  <Target Name="_ExpandPriFiles"             Condition="'$(EnableMsixTooling)' != 'true'" />
-
-  <!-- Targets that invoke ExpandPayloadDirectories / GetDefaultResourceLanguage /
-       GetPackageArchitecture / ValidateConfiguration (Microsoft.Build.AppxPackage). -->
-  <Target Name="GetMrtPackagingOutputs"      Condition="'$(EnableMsixTooling)' != 'true'" Returns="@(PackagingOutputs)" />
-  <Target Name="_GetPackageArchitecture"     Condition="'$(EnableMsixTooling)' != 'true'" />
-  <Target Name="_GetDefaultResourceLanguage" Condition="'$(EnableMsixTooling)' != 'true'" />
-  <Target Name="_ValidateConfiguration"      Condition="'$(EnableMsixTooling)' != 'true'" />
-
-  <!-- Sub-targets gated by other conditions; safe to no-op. -->
-  <Target Name="_GeneratePrisForPortableLibraries"     Condition="'$(EnableMsixTooling)' != 'true'" />
-  <Target Name="_GetPriFilesFromPayload"               Condition="'$(EnableMsixTooling)' != 'true'" />
-  <Target Name="_GenerateProjectPriConfigurationFiles" Condition="'$(EnableMsixTooling)' != 'true'" />
+  <!-- Import no-op stubs only for non-MSIX (local dev without VS Build Tools).
+       Import conditions are evaluated at parse time: when EnableMsixTooling=true
+       this file is never loaded and real WinAppSdk PRI/packaging targets run. -->
+  <Import Project="$(MSBuildThisFileDirectory)Directory.Build.noop-stubs.targets"
+          Condition="'$(EnableMsixTooling)' != 'true'" />
 
   <!-- CopyLocalFilesOutputGroup (used by publish) calls RemovePayloadDuplicates,
        another VS-only task. Replace with a pass-through that just forwards

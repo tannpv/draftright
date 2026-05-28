@@ -355,3 +355,85 @@ jobs:
             exit 1
           fi
           echo "✓ installer serving — $CT, $CL bytes"
+
+  # ── MSIX bundle for Microsoft Store submission ──────────────────────────
+  # Single-project MSIX: WindowsPackageType=MSIX activates AppxPackage targets
+  # which produce an .msixbundle for x64+arm64. Submitted to Microsoft Store,
+  # which signs the bundle automatically before publishing — no developer
+  # cert required. Independent of the unpackaged Inno-installer build above.
+  msix:
+    name: Build MSIX bundle for Microsoft Store
+    runs-on: windows-latest
+    timeout-minutes: 25
+
+    env:
+      COMMIT_SHA: ${{ github.sha }}
+
+    defaults:
+      run:
+        working-directory: DraftRightWindows/DraftRightWindows
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Restore
+        run: msbuild /t:Restore /p:Configuration=Release /p:Platform=x64
+
+      - name: Build MSIX (x64, StoreUpload)
+        shell: pwsh
+        run: |
+          # Platform=x64 is the WinUI 3 architecture selector for MSIX.
+          # RuntimeIdentifier is deliberately omitted: it shifts output to a
+          # win-x64/ subfolder but resources.pri is generated at the parent
+          # path, causing APPX0702. PackageArchitecture=x64 tells the WinAppSdk
+          # recipe target the target arch (fixes WinAppSdkGenerateAppxPackageRecipe).
+          msbuild `
+            /t:Rebuild `
+            /p:Configuration=Release `
+            /p:Platform=x64 `
+            /p:WindowsPackageType=MSIX `
+            /p:EnableMsixTooling=true `
+            /p:GenerateAppxPackageOnBuild=true `
+            /p:UapAppxPackageBuildMode=StoreUpload `
+            /p:AppxBundle=Never `
+            /p:PackageArchitecture=x64 `
+            /p:AppxPackageDir=AppPackages\
+
+      - name: Create .msixupload
+        shell: pwsh
+        run: |
+          # The VS-only _BuildMsixUploadPackage target is not available on CI runners.
+          # Build it manually: zip the .msix (+ .msixsym) into a .msixupload that the
+          # Partner Center API and web portal both accept.
+          $msix = Get-ChildItem -Path AppPackages -Recurse -Include *.msix | Select-Object -First 1
+          if (-not $msix) {
+            Write-Host "AppPackages tree:"
+            Get-ChildItem -Path AppPackages -Recurse | Select-Object FullName, Length
+            throw "No .msix found in AppPackages"
+          }
+          $sym = Get-ChildItem -Path AppPackages -Recurse -Include *.msixsym | Select-Object -First 1
+          $shortSha = $env:COMMIT_SHA.Substring(0, 7)
+          $upload = "AppPackages\DraftRight-Store-$shortSha.msixupload"
+          $toZip = @($msix.FullName)
+          if ($sym) { $toZip += $sym.FullName }
+          Compress-Archive -Path $toZip -DestinationPath $upload -Force
+          $sizeMB = [math]::Round((Get-Item $upload).Length / 1MB, 1)
+          Write-Host "Created $upload ($sizeMB MB) from $($msix.Name)"
+          Add-Content -Path $env:GITHUB_ENV -Value "MSIX_NAME=DraftRight-Store-$shortSha.msixupload"
+          Add-Content -Path $env:GITHUB_ENV -Value "MSIX_PATH=DraftRightWindows/DraftRightWindows/AppPackages/DraftRight-Store-$shortSha.msixupload"
+
+      - name: Upload MSIX bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: DraftRight-MSIX-Store
+          path: ${{ env.MSIX_PATH }}
+          retention-days: 30
