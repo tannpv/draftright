@@ -11,6 +11,10 @@ needed:** line.
 Heading format must stay `## <version>` (a date after an em dash is optional and
 ignored by the extractor), e.g. `## 2.3.6 — 2026-05-20`.
 
+## 2.3.14 — 2026-05-28
+- Windows: when DraftRight is installed from the Microsoft Store, updates now go through the Store automatically. The "Update available" badge on the tray icon still works — clicking it asks the Store to download and install the new version immediately instead of waiting for the Store's own schedule.
+- Sideload (.exe) installs are unaffected: those continue to use the built-in HTTP updater.
+
 ## 2.3.13 — 2026-05-28
 - Sign in with Google now works on Windows: a Google button on the Settings → Account screen opens your browser, completes sign-in, and signs you into DraftRight.
 - The menu-bar icon (macOS) now shows a small red dot when a new update is available — no more silent waiting; you can see at a glance when there's something new to install.
