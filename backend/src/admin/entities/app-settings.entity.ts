@@ -110,6 +110,22 @@ export class AppSettings {
   @Column({ type: 'varchar', length: 500, default: '' })
   apple_key_id: string;
 
+  // --- Lemon Squeezy (MoR credit-card payments) ---
+  @Column({ type: 'varchar', length: 500, default: '' })
+  lemonsqueezy_api_key: string;
+
+  @Column({ type: 'varchar', length: 100, default: '' })
+  lemonsqueezy_store_id: string;
+
+  @Column({ type: 'varchar', length: 500, default: '' })
+  lemonsqueezy_webhook_secret: string;
+
+  @Column({ type: 'varchar', length: 100, default: '' })
+  lemonsqueezy_variant_monthly: string;
+
+  @Column({ type: 'varchar', length: 100, default: '' })
+  lemonsqueezy_variant_yearly: string;
+
   // --- Diagnostics ---
   // Minimum severity desktop/mobile clients should write to their local logs:
   // 'off' | 'errors' | 'warnings' | 'info'. Surfaced via GET /health so every

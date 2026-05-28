@@ -6,6 +6,7 @@ import { CheckoutResult, WebhookAction } from './strategies/payment-strategy.int
 import { BasePaymentStrategy } from './strategies/base-payment.strategy';
 import { StripeStrategy } from './strategies/stripe.strategy';
 import { VietQRStrategy } from './strategies/vietqr.strategy';
+import { LemonSqueezyStrategy } from './strategies/lemonsqueezy.strategy';
 import { PlansService } from '../plans/plans.service';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { User } from '../users/entities/user.entity';
@@ -31,12 +32,14 @@ export class PaymentService {
     private readonly subscriptionsService: SubscriptionsService,
     private readonly stripeStrategy: StripeStrategy,
     private readonly vietqrStrategy: VietQRStrategy,
+    private readonly lemonSqueezyStrategy: LemonSqueezyStrategy,
     private readonly emailService: EmailService,
   ) {
     this.strategies = new Map<string, BasePaymentStrategy>([
       ['stripe', this.stripeStrategy],
       ['vietqr', this.vietqrStrategy],
       ['bank_transfer', this.vietqrStrategy],
+      ['lemonsqueezy', this.lemonSqueezyStrategy],
     ]);
   }
 

@@ -25,8 +25,9 @@ describe('PaymentService — enabled methods', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     delete process.env.PAYMENT_ENABLED_METHODS;
+    const lemonSqueezyStrategy = {} as any;
     svc = new PaymentService(
-      paymentRepo, userRepo, settingsRepo, plansService, subsService, stripeStrategy, vietqrStrategy, emailService,
+      paymentRepo, userRepo, settingsRepo, plansService, subsService, stripeStrategy, vietqrStrategy, lemonSqueezyStrategy, emailService,
     );
   });
   afterAll(() => {

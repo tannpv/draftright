@@ -81,4 +81,9 @@ export class PaymentController {
   async sepayWebhook(@Body() body: any, @Req() req: Request) {
     return this.paymentService.handleWebhook('vietqr', body, req.headers);
   }
+
+  @Post('webhook/lemonsqueezy')
+  async lemonSqueezyWebhook(@Req() req: RawBodyRequest<Request>) {
+    return this.paymentService.handleWebhook('lemonsqueezy', req.rawBody, req.headers);
+  }
 }

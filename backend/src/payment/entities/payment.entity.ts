@@ -11,6 +11,7 @@ export enum PaymentMethod {
   MOMO = 'momo',
   VIETQR = 'vietqr',
   BANK_TRANSFER = 'bank_transfer',
+  LEMONSQUEEZY = 'lemonsqueezy',
 }
 
 export enum PaymentStatus {

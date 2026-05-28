@@ -34,14 +34,14 @@ const toPlan = (p: ApiPlan): Plan => ({
 });
 
 interface Method {
-  key: 'stripe' | 'vietqr' | 'bank_transfer';
+  key: 'stripe' | 'vietqr' | 'bank_transfer' | 'lemonsqueezy';
   icon: string;
   label: string;
   sub: string;
 }
 
 const METHODS: Method[] = [
-  { key: 'stripe', icon: '💳', label: 'Credit/Debit Card', sub: 'Visa, Mastercard, Apple Pay, Google Pay' },
+  { key: 'lemonsqueezy', icon: '💳', label: 'Credit / Debit Card', sub: 'Visa, Mastercard, Amex — worldwide via Lemon Squeezy' },
   { key: 'vietqr', icon: '📱', label: 'VietQR', sub: 'Scan QR with any Vietnamese banking app' },
   { key: 'bank_transfer', icon: '🏦', label: 'Bank Transfer', sub: 'Manual transfer to MB Bank' },
 ];
@@ -255,7 +255,7 @@ export default function Checkout() {
         }
         const data: CheckoutResponse = await res.json();
         setCheckoutData(data);
-        if (methodKey === 'stripe' && data.redirect_url) {
+        if (data.redirect_url) {
           window.location.href = data.redirect_url;
           return;
         }
@@ -480,14 +480,15 @@ export default function Checkout() {
   );
 
   const renderProcessing = () => {
-    if (methodKey === 'stripe' || methodKey === 'paypal') {
+    if (methodKey === 'stripe' || methodKey === 'paypal' || methodKey === 'lemonsqueezy') {
+      const providerLabel =
+        methodKey === 'stripe' ? 'Stripe' :
+        methodKey === 'lemonsqueezy' ? 'Lemon Squeezy' :
+        'PayPal';
       return (
         <div className="text-center py-12">
           <Spinner />
-          <p className="mt-4 text-lg text-white">
-            Redirecting to{' '}
-            {methodKey === 'stripe' ? 'Stripe' : methodKey === 'momo' ? 'Momo' : 'PayPal'}...
-          </p>
+          <p className="mt-4 text-lg text-white">Redirecting to {providerLabel}...</p>
         </div>
       );
     }
