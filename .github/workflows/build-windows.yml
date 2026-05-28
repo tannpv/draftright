@@ -385,6 +385,23 @@ jobs:
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
+      # Same secret-materialization step as the unpackaged build above —
+      # the MSIX compilation also needs GoogleOAuthConfig.cs to exist, since
+      # GoogleOAuth.cs references GoogleOAuthConfig.ClientSecret.
+      - name: Write GoogleOAuthConfig.cs from secret
+        shell: pwsh
+        env:
+          GOOGLE_OAUTH_CLIENT_SECRET_WINDOWS: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET_WINDOWS }}
+        run: |
+          if (-not $env:GOOGLE_OAUTH_CLIENT_SECRET_WINDOWS) {
+            Write-Error "GOOGLE_OAUTH_CLIENT_SECRET_WINDOWS repo secret is not set."
+            exit 1
+          }
+          $src = "Services/GoogleOAuthConfig.cs.template"
+          $dst = "Services/GoogleOAuthConfig.cs"
+          (Get-Content $src -Raw).Replace("REPLACE_ME", $env:GOOGLE_OAUTH_CLIENT_SECRET_WINDOWS) | Set-Content -Path $dst -Encoding UTF8
+          Write-Host "Wrote $dst from template"
+
       - name: Restore
         run: msbuild /t:Restore /p:Configuration=Release /p:Platform=x64
 
