@@ -690,6 +690,61 @@ internal static class SettingsFormBuilder
                 }
             };
             tab.Controls.Add(signInBtn);
+
+            // "Continue with Google" — single button covers BOTH sign-in and
+            // sign-up: the backend's /auth/social endpoint creates the user
+            // on first call and signs in existing users on every call after,
+            // so a separate Register screen isn't needed on Windows.
+            // Public Desktop OAuth client + PKCE in
+            // GoogleOAuth.AuthenticateAsync exchanges the id_token at
+            // /auth/social for a DraftRight session, exactly like the
+            // iOS/Android/macOS clients.
+            var googleBtn = MakeSecondaryButton("Continue with Google", 16, y + 44, 448);
+            googleBtn.Click += async (_, _) =>
+            {
+                setStatus("", ErrorRed);
+                googleBtn.Enabled = false;
+                signInBtn.Enabled = false;
+                try
+                {
+                    App.Api.SetBaseUrl(App.Settings.BackendUrl ?? "");
+                    var idToken = await GoogleOAuth.AuthenticateAsync();
+                    var result = await App.Api.SocialLoginAsync("google", idToken);
+                    if (!string.IsNullOrEmpty(result.AccessToken))
+                    {
+                        App.Auth.SaveTokens(result.AccessToken, result.RefreshToken, result.User?.Email);
+                        App.Api.SetToken(result.AccessToken);
+                        PopulateAccountTab(tab);
+                    }
+                    else
+                    {
+                        setStatus("Google sign-in failed.", ErrorRed);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    setStatus(ex.Message, ErrorRed);
+                    DRLogger.Error($"Google sign-in error: {ex}", DRLogger.Category.AUTH);
+                }
+                finally
+                {
+                    try { googleBtn.Enabled = true; signInBtn.Enabled = true; }
+                    catch (ObjectDisposedException) { }
+                }
+            };
+            tab.Controls.Add(googleBtn);
+
+            // Communicates that the Google button is also the sign-up path,
+            // since there's no separate Register screen on Windows.
+            var googleHint = new WinForms.Label
+            {
+                Text = "New to DraftRight? Use \"Continue with Google\" to create your account in seconds.",
+                Font = new Font("Segoe UI", 8.5f),
+                ForeColor = TextMuted,
+                Location = new Point(16, y + 80),
+                AutoSize = true,
+            };
+            tab.Controls.Add(googleHint);
         }
     }
 

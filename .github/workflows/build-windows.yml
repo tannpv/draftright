@@ -62,6 +62,26 @@ jobs:
       - name: Show .NET info
         run: dotnet --info
 
+      # Materialize the gitignored GoogleOAuthConfig.cs from the repo secret
+      # so the Google sign-in code can compile against the real client_secret.
+      # The template (.cs.template) is committed; the secret never enters git.
+      # Fails the build clearly if the secret isn't set, instead of silently
+      # shipping "REPLACE_ME". String.Replace is used (not here-string
+      # interpolation) so the secret bytes can't break C# tokenization.
+      - name: Write GoogleOAuthConfig.cs from secret
+        shell: pwsh
+        env:
+          GOOGLE_OAUTH_CLIENT_SECRET_WINDOWS: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET_WINDOWS }}
+        run: |
+          if (-not $env:GOOGLE_OAUTH_CLIENT_SECRET_WINDOWS) {
+            Write-Error "GOOGLE_OAUTH_CLIENT_SECRET_WINDOWS repo secret is not set. Add it under Settings → Secrets and variables → Actions."
+            exit 1
+          }
+          $src = "DraftRightWindows/DraftRightWindows/Services/GoogleOAuthConfig.cs.template"
+          $dst = "DraftRightWindows/DraftRightWindows/Services/GoogleOAuthConfig.cs"
+          (Get-Content $src -Raw).Replace("REPLACE_ME", $env:GOOGLE_OAUTH_CLIENT_SECRET_WINDOWS) | Set-Content -Path $dst -Encoding UTF8
+          Write-Host "Wrote $dst from template"
+
       - name: Restore
         run: dotnet restore -r "$env:RUNTIME"
 

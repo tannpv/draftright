@@ -11,6 +11,12 @@ needed:** line.
 Heading format must stay `## <version>` (a date after an em dash is optional and
 ignored by the extractor), e.g. `## 2.3.6 — 2026-05-20`.
 
+## 2.3.13 — 2026-05-28
+- Sign in with Google now works on Windows: a Google button on the Settings → Account screen opens your browser, completes sign-in, and signs you into DraftRight.
+
+## 2.3.12 — 2026-05-27
+- Fixed "Sign in with Google" on macOS, which was failing with an authorization error. Google login now works again.
+
 ## 2.3.11 — 2026-05-20
 - The "Default Tone (auto-run)" setting now appears under Advanced mode, where it actually applies.
 - Internal cleanup and stability improvements across the tray, settings, and update flow.
