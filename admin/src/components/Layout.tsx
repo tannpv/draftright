@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { verifyBackend, API_URL } from '../api';
 import { logout, getAdminEmail } from '../auth';
+import { useInboxCounts } from '../hooks/useInboxCounts';
 import ReportBugButton from './ReportBugButton';
 
 /* ── SVG Icons (inline, no external deps) ───────────────── */
@@ -152,7 +153,8 @@ const navItems = [
   { path: '/email-logs',    label: 'Email Logs',    icon: <IconSettings />,      exact: false },
   { path: '/email-templates', label: 'Email Templates', icon: <IconSettings />,  exact: false },
   { path: '/admin-users',   label: 'Admin Users',   icon: <IconAdminUsers />,    exact: false },
-  { path: '/inbox',         label: 'Inbox',         icon: <IconErrors />,        exact: false },
+  // Inbox moved to the top-right header (with unread badge) so admins always
+  // see the count without scanning the sidebar. The /inbox route still works.
   { path: '/errors',        label: 'Error Reports', icon: <IconErrors />,        exact: false },
   { path: '/bug-reports',   label: 'Bug Reports',   icon: <IconBugReports />,    exact: false },
   { path: '/versions',      label: 'App Versions',  icon: <IconVersions />,      exact: false },
@@ -163,6 +165,7 @@ export default function Layout() {
   const [collapsed, setCollapsed] = useState(false);
   const sidebarWidth = collapsed ? 0 : 270;
   const [backendWarning, setBackendWarning] = useState<string | null>(null);
+  const inboxCounts = useInboxCounts();
 
   useEffect(() => {
     verifyBackend().then((result) => {
@@ -391,28 +394,86 @@ export default function Layout() {
             </button>
             <span style={{ color: 'var(--muted)', fontSize: 13, marginLeft: 4 }}>DraftRight Admin</span>
           </div>
-          <NavLink
-            to="/profile"
-            style={{
-              width: 34,
-              height: 34,
-              borderRadius: '50%',
-              background: 'linear-gradient(135deg, var(--primary), var(--secondary))',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 13,
-              fontWeight: 700,
-              color: '#fff',
-              textDecoration: 'none',
-              transition: 'opacity 0.15s',
-            }}
-            title="My Profile"
-            onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.opacity = '0.85'; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.opacity = '1'; }}
-          >
-            {email.charAt(0).toUpperCase()}
-          </NavLink>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {/* Inbox button + unread badge — replaces the sidebar Inbox entry. */}
+            <NavLink
+              to="/inbox"
+              title={
+                inboxCounts && inboxCounts.total > 0
+                  ? `Inbox — ${inboxCounts.new_bugs} new bug(s), ${inboxCounts.new_features} feature request(s), ${inboxCounts.new_errors} error(s)`
+                  : 'Inbox — no new items'
+              }
+              style={{
+                position: 'relative',
+                width: 34,
+                height: 34,
+                borderRadius: 8,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--muted)',
+                textDecoration: 'none',
+                transition: 'background 0.15s, color 0.15s',
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLAnchorElement).style.background = 'rgba(93,135,255,0.10)';
+                (e.currentTarget as HTMLAnchorElement).style.color = 'var(--text)';
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLAnchorElement).style.background = 'transparent';
+                (e.currentTarget as HTMLAnchorElement).style.color = 'var(--muted)';
+              }}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M22 12h-6l-2 3h-4l-2-3H2" />
+                <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11Z" />
+              </svg>
+              {inboxCounts && inboxCounts.total > 0 && (
+                <span style={{
+                  position: 'absolute',
+                  top: -2,
+                  right: -2,
+                  minWidth: 18,
+                  height: 18,
+                  padding: '0 5px',
+                  borderRadius: 9,
+                  background: 'var(--danger)',
+                  color: '#fff',
+                  fontSize: 10,
+                  fontWeight: 700,
+                  lineHeight: '18px',
+                  textAlign: 'center',
+                  border: '2px solid var(--bg)',
+                  boxSizing: 'content-box',
+                }}>
+                  {inboxCounts.total > 99 ? '99+' : inboxCounts.total}
+                </span>
+              )}
+            </NavLink>
+
+            <NavLink
+              to="/profile"
+              style={{
+                width: 34,
+                height: 34,
+                borderRadius: '50%',
+                background: 'linear-gradient(135deg, var(--primary), var(--secondary))',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 13,
+                fontWeight: 700,
+                color: '#fff',
+                textDecoration: 'none',
+                transition: 'opacity 0.15s',
+              }}
+              title="My Profile"
+              onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.opacity = '0.85'; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.opacity = '1'; }}
+            >
+              {email.charAt(0).toUpperCase()}
+            </NavLink>
+          </div>
         </header>
 
         {/* Page content */}
