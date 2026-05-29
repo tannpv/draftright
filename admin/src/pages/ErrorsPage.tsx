@@ -8,6 +8,7 @@ import { toneStyle, type Tone } from '../lib/status';
 
 interface ErrorReport {
   id: string;
+  display_no: number | null;
   platform: string;
   app_version: string | null;
   severity: string;
@@ -230,6 +231,7 @@ export default function ErrorsPage() {
         <table className="w-full text-sm">
           <thead className="bg-[var(--bg)] text-[var(--muted)] text-xs uppercase tracking-wider">
             <tr>
+              <th className="px-4 py-3 text-left">Ref</th>
               <th className="px-4 py-3 text-left">Platform</th>
               <th className="px-4 py-3 text-left">Type / Message</th>
               <th className="px-4 py-3 text-left">Severity</th>
@@ -240,10 +242,10 @@ export default function ErrorsPage() {
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={6} className="text-center text-[var(--muted)] py-12">Loading…</td></tr>
+              <tr><td colSpan={7} className="text-center text-[var(--muted)] py-12">Loading…</td></tr>
             )}
             {!loading && items.length === 0 && (
-              <tr><td colSpan={6} className="text-center text-[var(--muted)] py-12">No errors collected yet. Either things are going great, or no clients have reported in.</td></tr>
+              <tr><td colSpan={7} className="text-center text-[var(--muted)] py-12">No errors collected yet. Either things are going great, or no clients have reported in.</td></tr>
             )}
             {items.map((row) => (
               <tr
@@ -251,6 +253,9 @@ export default function ErrorsPage() {
                 onClick={() => setSelected(row)}
                 className="border-t border-[var(--border)] hover:bg-[var(--bg)] cursor-pointer"
               >
+                <td className="px-4 py-3 font-mono text-xs font-semibold text-[var(--primary)] whitespace-nowrap">
+                  {row.display_no != null ? `ERR-${row.display_no}` : '—'}
+                </td>
                 <td className="px-4 py-3 text-[var(--text)]">
                   {PLATFORM_ICONS[row.platform] || '?'} {row.platform}
                   <div className="text-xs text-[var(--muted)]">{row.app_version || ''}</div>
@@ -292,6 +297,13 @@ export default function ErrorsPage() {
           >
             <div className="flex items-start justify-between mb-4">
               <div>
+                <div className="flex items-center gap-2 mb-1">
+                  {selected.display_no != null && (
+                    <span className="font-mono text-xs font-semibold text-[var(--primary)] bg-[var(--primary)]/15 px-2 py-0.5 rounded">
+                      ERR-{selected.display_no}
+                    </span>
+                  )}
+                </div>
                 <h2 className="text-lg font-bold text-white">
                   {PLATFORM_ICONS[selected.platform]} {selected.error_type || 'Error'}
                 </h2>

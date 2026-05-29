@@ -9,6 +9,9 @@ import { toneStyle, type Tone } from '../lib/status';
 
 interface BugReport {
   id: string;
+  display_no: number | null;
+  /** 'bug' | 'feature' — drives the ref prefix and which page surfaces it. */
+  kind: 'bug' | 'feature' | string;
   source: string;
   description: string;
   screenshot_path: string | null;
@@ -247,6 +250,24 @@ export default function BugReportsPage() {
   /* ── Table columns ────────────────────────────────── */
   const columns = [
     {
+      header: 'Ref',
+      key: 'display_no',
+      sortKey: 'display_no',
+      render: (row: BugReport) => (
+        <span style={{
+          color: 'var(--primary)',
+          fontFamily: 'ui-monospace, SFMono-Regular, monospace',
+          fontSize: 12,
+          fontWeight: 600,
+          whiteSpace: 'nowrap',
+        }}>
+          {row.display_no != null
+            ? `${row.kind === 'feature' ? 'FR' : 'BUG'}-${row.display_no}`
+            : '—'}
+        </span>
+      ),
+    },
+    {
       header: 'Source',
       key: 'source',
       sortKey: 'source',
@@ -452,8 +473,23 @@ export default function BugReportsPage() {
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18, gap: 16 }}>
               <div>
+                {selected.display_no != null && (
+                  <div style={{
+                    display: 'inline-block',
+                    fontFamily: 'ui-monospace, SFMono-Regular, monospace',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: 'var(--primary)',
+                    background: 'rgba(93, 135, 255, 0.15)',
+                    padding: '2px 8px',
+                    borderRadius: 4,
+                    marginBottom: 6,
+                  }}>
+                    {selected.kind === 'feature' ? 'FR' : 'BUG'}-{selected.display_no}
+                  </div>
+                )}
                 <h2 style={{ color: 'var(--text)', fontSize: 18, fontWeight: 700, margin: '0 0 4px' }}>
-                  Bug Report
+                  {selected.kind === 'feature' ? 'Feature Request' : 'Bug Report'}
                 </h2>
                 <p style={{ color: 'var(--muted)', fontSize: 12, margin: 0, fontFamily: 'monospace' }}>
                   {selected.id}
