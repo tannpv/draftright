@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 
 import 'package:draftright_mobile/services/error_reporter.dart';
 import 'package:draftright_mobile/widgets/report_bug_sheet.dart';
@@ -50,29 +51,39 @@ class _ErrorNoticeOverlayState extends State<ErrorNoticeOverlay> {
     if (_lastShownAt == err.at) return;
     _lastShownAt = err.at;
 
-    final messenger = _messengerKey.currentState;
-    if (messenger == null) return;
-    messenger.clearSnackBars();
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text('Something went wrong: ${err.shortLine}'),
-        duration: const Duration(seconds: 8),
-        action: SnackBarAction(
-          label: 'REPORT',
-          onPressed: () {
-            final ctx = _messengerKey.currentContext;
-            if (ctx == null) return;
-            showReportBugSheet(
-              ctx,
-              currentRoute: '/error-notice',
-              initialDescription:
-                  'Auto-captured error:\n${err.errorType}: ${err.message}\n\n'
-                  'What I was doing when it happened:\n',
-            );
-          },
+    // Defer to the next frame. If the notifier fires synchronously from
+    // inside a Flutter build (PlatformDispatcher.onError can be invoked
+    // while a widget is rebuilding) calling ScaffoldMessenger.showSnackBar
+    // directly throws "setState during build", which itself goes through
+    // PlatformDispatcher → _enqueue → notifies us again → infinite loop →
+    // main-thread starvation → Android ANR. Confirmed on Galaxy A52
+    // 2026-05-29: "Input dispatching timed out, waited 10003ms".
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final messenger = _messengerKey.currentState;
+      if (messenger == null) return;
+      messenger.clearSnackBars();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Something went wrong: ${err.shortLine}'),
+          duration: const Duration(seconds: 8),
+          action: SnackBarAction(
+            label: 'REPORT',
+            onPressed: () {
+              final ctx = _messengerKey.currentContext;
+              if (ctx == null) return;
+              showReportBugSheet(
+                ctx,
+                currentRoute: '/error-notice',
+                initialDescription:
+                    'Auto-captured error:\n${err.errorType}: ${err.message}\n\n'
+                    'What I was doing when it happened:\n',
+              );
+            },
+          ),
         ),
-      ),
-    );
+      );
+    });
   }
 
   @override

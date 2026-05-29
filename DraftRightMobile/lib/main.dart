@@ -139,8 +139,18 @@ class _BootstrapState extends State<_Bootstrap> {
       });
 
       auth.addListener(() async {
-        final token = await auth.getAccessToken();
-        ErrorReporter.setBearerToken(token);
+        // getAccessToken() throws "Not logged in" when no token is present
+        // (expected state after logout). Swallow that locally — letting the
+        // throw escape the listener turned every notifyListeners() into an
+        // unhandled microtask exception, which PlatformDispatcher.onError
+        // funnelled back into ErrorReporter on a hot path. Catch it and just
+        // null the bearer; sign-in will refill it on success.
+        try {
+          final token = await auth.getAccessToken();
+          ErrorReporter.setBearerToken(token);
+        } catch (_) {
+          ErrorReporter.setBearerToken(null);
+        }
       });
 
       // Wire crash reporting now that we know the backend URL. Synchronous

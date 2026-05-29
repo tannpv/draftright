@@ -160,6 +160,24 @@ class ErrorReporter {
     } catch (_) {/* ignore */}
   }
 
+  /// Patterns that should never reach /errors — expected non-issues that
+  /// were being thrown as Exceptions for control flow (e.g. AuthService
+  /// throwing "Not logged in" when bootstrap tries to load a token before
+  /// the user has signed in). Match by substring on the error message;
+  /// case-sensitive. Keep this list short — the real fix is to stop
+  /// throwing for expected control flow, but suppressing here keeps the
+  /// /errors stream free of noise while we work back to that.
+  static const _suppressedSubstrings = <String>[
+    'Not logged in',
+  ];
+
+  static bool _isSuppressed(String message) {
+    for (final s in _suppressedSubstrings) {
+      if (message.contains(s)) return true;
+    }
+    return false;
+  }
+
   static void _enqueue({
     required String errorType,
     required String message,
@@ -167,6 +185,7 @@ class ErrorReporter {
     String severity = 'error',
     Map<String, dynamic>? context,
   }) {
+    if (_isSuppressed(message)) return;
     final platform = _detectPlatform();
     final entry = <String, dynamic>{
       'platform': platform,
