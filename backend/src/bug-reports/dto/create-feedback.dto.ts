@@ -38,4 +38,8 @@ export class CreateFeedbackDto {
 
   @IsOptional() @IsString() @MaxLength(255)
   user_email?: string;
+
+  /** Honeypot — see CreateBugReportDto.website. */
+  @IsOptional() @IsString() @MaxLength(255)
+  website?: string;
 }

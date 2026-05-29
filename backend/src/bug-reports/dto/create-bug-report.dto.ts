@@ -29,6 +29,16 @@ export class CreateBugReportDto {
    */
   @IsOptional() @IsString()
   context?: string;
+
+  /**
+   * Honeypot. Legitimate clients never populate this — the form widget hides
+   * it with display:none or a tabindex=-1 trick — so a non-empty value is a
+   * reliable signal that an automated form-filler submitted the report. The
+   * controller drops these silently with a 201 to deny the bot the failure
+   * signal it would use to retry. Field name "website" is conventional bait.
+   */
+  @IsOptional() @IsString() @MaxLength(255)
+  website?: string;
 }
 
 export class UpdateBugReportDto {

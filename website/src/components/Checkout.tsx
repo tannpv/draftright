@@ -480,15 +480,13 @@ export default function Checkout() {
   );
 
   const renderProcessing = () => {
-    if (methodKey === 'stripe' || methodKey === 'paypal' || methodKey === 'lemonsqueezy') {
-      const providerLabel =
-        methodKey === 'stripe' ? 'Stripe' :
-        methodKey === 'lemonsqueezy' ? 'Lemon Squeezy' :
-        'PayPal';
+    if (methodKey === 'lemonsqueezy') {
+      // Stripe + PayPal were dropped from the storefront when LS replaced them
+      // as the card processor; if either ships back, add their labels here.
       return (
         <div className="text-center py-12">
           <Spinner />
-          <p className="mt-4 text-lg text-white">Redirecting to {providerLabel}...</p>
+          <p className="mt-4 text-lg text-white">Redirecting to Lemon Squeezy...</p>
         </div>
       );
     }

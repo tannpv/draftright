@@ -1,7 +1,8 @@
 import {
-  Controller, Post, Get, Body, Param, Query, Req, HttpCode, UnauthorizedException,
+  Controller, Post, Get, Body, Param, Query, Req, HttpCode, UnauthorizedException, Logger,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { Request } from 'express';
 import { BugReportsService } from './bug-reports.service';
 import { CreateFeedbackDto } from './dto/create-feedback.dto';
@@ -20,12 +21,25 @@ import { decodeOptionalUserId } from './jwt-user';
 @ApiTags('feedback')
 @Controller('feedback')
 export class FeedbackController {
+  private readonly logger = new Logger(FeedbackController.name);
   constructor(private readonly feedback: BugReportsService) {}
 
+  // See BugReportsController for the rationale: 5/min and 30/hour per IP is
+  // tight enough to kill scripted spam while letting a frustrated user file a
+  // run of legit reports.
+  @Throttle({
+    minute: { limit: 5, ttl: 60_000 },
+    hour:   { limit: 30, ttl: 3_600_000 },
+  })
   @Post()
   @HttpCode(201)
   @ApiOperation({ summary: 'Submit a bug report or feature request' })
   async create(@Body() dto: CreateFeedbackDto, @Req() req: Request) {
+    // Honeypot — see CreateBugReportDto.website.
+    if (dto.website && dto.website.trim().length > 0) {
+      this.logger.warn(`Honeypot triggered (IP=${req.ip}, source=${dto.source}) — dropping submission`);
+      return { id: null, message: 'Received. Thanks!' };
+    }
     const row = await this.feedback.createFeedback(dto, decodeOptionalUserId(req));
     return { id: row.id, message: dto.kind === 'feature' ? 'Feature request received. Thanks!' : 'Bug report received. Thanks!' };
   }

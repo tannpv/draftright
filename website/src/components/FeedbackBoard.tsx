@@ -184,6 +184,7 @@ function SubmitFeatureForm({ apiUrl, hasToken, onCreated }: SubmitProps) {
   const [email, setEmail] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [website, setWebsite] = useState(''); // honeypot
 
   // Esc-to-close + lock body scroll while the modal is open.
   useEffect(() => {
@@ -220,6 +221,7 @@ function SubmitFeatureForm({ apiUrl, hasToken, onCreated }: SubmitProps) {
       const body: Record<string, unknown> = {
         kind: 'feature', title: title.trim(), target_platform: platform,
         description: description.trim(), source: 'web',
+        website, // honeypot — empty for humans
       };
       if (!token && email.trim()) body.user_email = email.trim();
       const res = await fetch(`${apiUrl}/feedback`, {
@@ -245,6 +247,20 @@ function SubmitFeatureForm({ apiUrl, hasToken, onCreated }: SubmitProps) {
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-6">
           <form onSubmit={submit}
             className="w-full max-w-md rounded-xl border border-zinc-700 bg-zinc-900 p-5 text-sm shadow-2xl">
+            {/* Honeypot — off-screen so humans never touch it. */}
+            <div aria-hidden="true" style={{ position: 'absolute', left: '-10000px', width: '1px', height: '1px', overflow: 'hidden' }}>
+              <label>
+                Website
+                <input
+                  type="text"
+                  name="website"
+                  tabIndex={-1}
+                  autoComplete="off"
+                  value={website}
+                  onChange={(e) => setWebsite(e.target.value)}
+                />
+              </label>
+            </div>
             <h3 id="suggest-feature-title" className="mb-1 text-base font-semibold">Suggest a feature</h3>
             <p className="mb-4 text-xs text-zinc-500">
               {hasToken ? 'Submitted under your account.' : 'Public on the feature board.'}
