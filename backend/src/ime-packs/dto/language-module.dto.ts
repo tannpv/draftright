@@ -1,8 +1,15 @@
 // The uniform descriptor for every keyboard language in the container model.
-// Bundled languages (.composition / .passthrough) ship in the app with no data
-// download; candidate languages (.candidate, RIME-driven) carry a downloadable
-// dictionary pack. The manifest is the server-driven catalog: publishing a new
-// pack makes a language appear in-app with no app update.
+// A language can ship with two kinds of optional downloadable data:
+//   * `pack`         — the input-engine data (RIME schemas + dict for JP/ZH/KO).
+//                      Required when bundled=false.
+//   * `wordlistPack` — the suggestion-engine data (trigram word + bigram lists
+//                      for Latin scripts: VI, EN, FR, ES, DE, IT, PT). Optional
+//                      even for bundled languages; the IME falls back to its
+//                      built-in bootstrap list if the pack hasn't been
+//                      installed yet.
+//
+// The manifest is the server-driven catalog: publishing a new pack makes
+// suggestions appear in-app with no app update.
 
 export type InputMethod = 'composition' | 'candidate' | 'passthrough';
 export type EngineKind = 'composition' | 'rime' | 'none';
@@ -22,6 +29,7 @@ export interface LanguageModule {
   inputMethod: InputMethod;
   engine: EngineKind;
   layout: string; // "qwerty" | "romaji" | "pinyin"
-  bundled: boolean; // true => ships in the app, no download
-  pack?: LanguagePack; // present iff !bundled
+  bundled: boolean; // true => engine ships in the app, no download
+  pack?: LanguagePack; // engine data (RIME); present iff !bundled
+  wordlistPack?: LanguagePack; // suggestion data; optional for any language
 }

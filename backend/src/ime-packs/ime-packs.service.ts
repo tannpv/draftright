@@ -13,7 +13,14 @@ const PACK_BASE = 'https://draftright.info/ime-packs';
 export class ImePacksService {
   private readonly modules: LanguageModule[] = [
     { id: 'en', displayName: 'English', inputMethod: 'passthrough', engine: 'none', layout: 'qwerty', bundled: true },
-    { id: 'vi', displayName: 'Tiếng Việt', inputMethod: 'composition', engine: 'composition', layout: 'qwerty', bundled: true },
+    {
+      id: 'vi', displayName: 'Tiếng Việt', inputMethod: 'composition', engine: 'composition', layout: 'qwerty', bundled: true,
+      // First downloadable wordlist — replaces the in-APK ~200-entry bootstrap
+      // once installed. sha256/sizeBytes filled at publish time by
+      // scripts/build-word-list-pack.sh; empty here is the "pack not yet
+      // built / not yet uploaded" state, which the client safely ignores.
+      wordlistPack: { url: `${PACK_BASE}/draftright-wordlist-vi-v1.tsv`, version: 1, sizeBytes: 0, sha256: '', minEngineVersion: 1 },
+    },
     { id: 'fr', displayName: 'Français', inputMethod: 'composition', engine: 'composition', layout: 'qwerty', bundled: true },
     { id: 'es', displayName: 'Español', inputMethod: 'composition', engine: 'composition', layout: 'qwerty', bundled: true },
     { id: 'de', displayName: 'Deutsch', inputMethod: 'composition', engine: 'composition', layout: 'qwerty', bundled: true },

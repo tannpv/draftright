@@ -22,15 +22,28 @@ object WordListLoader {
 
     /** Load a word-frequency list + an optional bigram successor file. */
     fun loadWords(context: Context, wordsResId: Int, bigramsResId: Int?): InMemoryWordList {
-        val words = parseWords(context, wordsResId)
-        val bigrams = if (bigramsResId != null) parseBigrams(context, bigramsResId) else emptyMap()
-        Log.i(TAG, "Loaded ${words.size} words; bigram heads=${bigrams.size}")
+        val words = parseWords { line -> readResource(context, wordsResId, line) }
+        val bigrams = if (bigramsResId != null) parseBigrams { line -> readResource(context, bigramsResId, line) } else emptyMap()
+        Log.i(TAG, "Loaded ${words.size} words; bigram heads=${bigrams.size} (from raw res)")
         return InMemoryWordList(words, bigrams)
     }
 
-    private fun parseWords(context: Context, resId: Int): List<Pair<String, Int>> {
+    /**
+     * Load a TSV pack from disk — used after [WordListPackResolver] picks
+     * the latest installed pack. Same format as the bundled raw resource
+     * so the build script can produce one artifact for both code paths.
+     */
+    fun loadWordsFromFile(wordsFile: java.io.File, bigramsFile: java.io.File? = null): InMemoryWordList {
+        val words = parseWords { handler -> readFile(wordsFile, handler) }
+        val bigrams = if (bigramsFile != null && bigramsFile.exists())
+            parseBigrams { handler -> readFile(bigramsFile, handler) } else emptyMap()
+        Log.i(TAG, "Loaded ${words.size} words; bigram heads=${bigrams.size} (from ${wordsFile.name})")
+        return InMemoryWordList(words, bigrams)
+    }
+
+    private inline fun parseWords(crossinline readLines: (handler: (String) -> Unit) -> Unit): List<Pair<String, Int>> {
         val out = ArrayList<Pair<String, Int>>(2048)
-        readLines(context, resId) { line ->
+        readLines { line ->
             val tab = line.indexOf('\t')
             if (tab <= 0) return@readLines
             val word = line.substring(0, tab).trim()
@@ -44,9 +57,9 @@ object WordListLoader {
         return out
     }
 
-    private fun parseBigrams(context: Context, resId: Int): Map<String, Map<String, Int>> {
+    private inline fun parseBigrams(crossinline readLines: (handler: (String) -> Unit) -> Unit): Map<String, Map<String, Int>> {
         val out = HashMap<String, HashMap<String, Int>>()
-        readLines(context, resId) { line ->
+        readLines { line ->
             val parts = line.split('\t')
             if (parts.size != 3) return@readLines
             val prev = parts[0].trim()
@@ -59,8 +72,18 @@ object WordListLoader {
         return out
     }
 
-    private inline fun readLines(context: Context, resId: Int, handle: (String) -> Unit) {
+    private fun readResource(context: Context, resId: Int, handle: (String) -> Unit) {
         context.resources.openRawResource(resId).bufferedReader(Charsets.UTF_8).useLines { seq ->
+            for (raw in seq) {
+                val line = raw.trim()
+                if (line.isEmpty() || line.startsWith('#')) continue
+                handle(line)
+            }
+        }
+    }
+
+    private fun readFile(file: java.io.File, handle: (String) -> Unit) {
+        file.bufferedReader(Charsets.UTF_8).useLines { seq ->
             for (raw in seq) {
                 val line = raw.trim()
                 if (line.isEmpty() || line.startsWith('#')) continue
