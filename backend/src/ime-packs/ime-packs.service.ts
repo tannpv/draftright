@@ -12,7 +12,10 @@ const PACK_BASE = 'https://draftright.info/ime-packs';
 @Injectable()
 export class ImePacksService {
   private readonly modules: LanguageModule[] = [
-    { id: 'en', displayName: 'English', inputMethod: 'passthrough', engine: 'none', layout: 'qwerty', bundled: true },
+    {
+      id: 'en', displayName: 'English', inputMethod: 'passthrough', engine: 'none', layout: 'qwerty', bundled: true,
+      wordlistPack: { url: `${PACK_BASE}/draftright-wordlist-en-v1.tsv`, version: 1, sizeBytes: 0, sha256: '', minEngineVersion: 1 },
+    },
     {
       id: 'vi', displayName: 'Tiếng Việt', inputMethod: 'composition', engine: 'composition', layout: 'qwerty', bundled: true,
       // First downloadable wordlist — replaces the in-APK ~200-entry bootstrap
@@ -21,7 +24,10 @@ export class ImePacksService {
       // built / not yet uploaded" state, which the client safely ignores.
       wordlistPack: { url: `${PACK_BASE}/draftright-wordlist-vi-v1.tsv`, version: 1, sizeBytes: 0, sha256: '', minEngineVersion: 1 },
     },
-    { id: 'fr', displayName: 'Français', inputMethod: 'composition', engine: 'composition', layout: 'qwerty', bundled: true },
+    {
+      id: 'fr', displayName: 'Français', inputMethod: 'composition', engine: 'composition', layout: 'qwerty', bundled: true,
+      wordlistPack: { url: `${PACK_BASE}/draftright-wordlist-fr-v1.tsv`, version: 1, sizeBytes: 0, sha256: '', minEngineVersion: 1 },
+    },
     { id: 'es', displayName: 'Español', inputMethod: 'composition', engine: 'composition', layout: 'qwerty', bundled: true },
     { id: 'de', displayName: 'Deutsch', inputMethod: 'composition', engine: 'composition', layout: 'qwerty', bundled: true },
     { id: 'it', displayName: 'Italiano', inputMethod: 'composition', engine: 'composition', layout: 'qwerty', bundled: true },

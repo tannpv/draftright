@@ -37,4 +37,16 @@ public struct FrenchLanguagePack: LanguagePack {
         "c": ["ç"],
         "y": ["ÿ"],
     ]
+
+    public static var appGroupContainer: URL?
+    private static let wordlistPackPrefix = "draftright-wordlist-fr"
+
+    public func makeCandidateEngine() -> CandidateEngine? {
+        let wordList = WordListPackResolver.loadOrFallback(
+            appGroupContainer: Self.appGroupContainer,
+            packIdPrefix: Self.wordlistPackPrefix,
+            fallback: { FrenchBootstrapWordList.wordList }
+        )
+        return TrigramCandidateEngine(wordList: wordList)
+    }
 }

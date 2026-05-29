@@ -6,7 +6,26 @@ public struct EnglishLanguagePack: LanguagePack {
     public let locale = Locale(identifier: "en")
     public let longPressAccents: [Character: [Character]] = [:]
 
+    /// App Group container — set by KeyboardViewController. Nil keeps the
+    /// resolver in fallback-only mode (sim + unit tests).
+    public static var appGroupContainer: URL?
+
+    /// Pack id prefix matching the backend manifest's wordlistPack URL.
+    private static let wordlistPackPrefix = "draftright-wordlist-en"
+
     public init() {}
+
+    /// Trigram completions sourced from a downloaded wordlist pack when
+    /// installed, otherwise the in-bundle bootstrap list. Same shape as
+    /// VietnameseLanguagePack — Rule #1 (reusable pattern).
+    public func makeCandidateEngine() -> CandidateEngine? {
+        let wordList = WordListPackResolver.loadOrFallback(
+            appGroupContainer: Self.appGroupContainer,
+            packIdPrefix: Self.wordlistPackPrefix,
+            fallback: { EnglishBootstrapWordList.wordList }
+        )
+        return TrigramCandidateEngine(wordList: wordList)
+    }
 
     public var alphaRows: [[KeyDef]] {
         [
