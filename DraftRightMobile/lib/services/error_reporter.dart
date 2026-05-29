@@ -169,6 +169,9 @@ class ErrorReporter {
   /// /errors stream free of noise while we work back to that.
   static const _suppressedSubstrings = <String>[
     'Not logged in',
+    // The ErrorNoticeOverlay catches this internally now, but if any other
+    // caller hits it on a Scaffold-less route it is also a known non-issue.
+    'no descendant Scaffolds to present to',
   ];
 
   static bool _isSuppressed(String message) {

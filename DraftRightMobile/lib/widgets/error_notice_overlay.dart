@@ -62,27 +62,37 @@ class _ErrorNoticeOverlayState extends State<ErrorNoticeOverlay> {
       if (!mounted) return;
       final messenger = _messengerKey.currentState;
       if (messenger == null) return;
-      messenger.clearSnackBars();
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text('Something went wrong: ${err.shortLine}'),
-          duration: const Duration(seconds: 8),
-          action: SnackBarAction(
-            label: 'REPORT',
-            onPressed: () {
-              final ctx = _messengerKey.currentContext;
-              if (ctx == null) return;
-              showReportBugSheet(
-                ctx,
-                currentRoute: '/error-notice',
-                initialDescription:
-                    'Auto-captured error:\n${err.errorType}: ${err.message}\n\n'
-                    'What I was doing when it happened:\n',
-              );
-            },
+      // showSnackBar asserts that a descendant Scaffold is registered. During
+      // bootstrap (splash MaterialApp, before LoginScreen mounts) or on
+      // Scaffold-less routes there is none, so the call throws AssertionError.
+      // Swallow it — the error was already auto-submitted to /errors above;
+      // the snackbar is a "nice-to-have" visibility layer, not the recording
+      // path. Without this guard, the assertion itself goes through
+      // FlutterError.onError → _enqueue → notifies us → next frame → throws
+      // again — a loop that was the root cause of the Galaxy A52 ANR.
+      try {
+        messenger.clearSnackBars();
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('Something went wrong: ${err.shortLine}'),
+            duration: const Duration(seconds: 8),
+            action: SnackBarAction(
+              label: 'REPORT',
+              onPressed: () {
+                final ctx = _messengerKey.currentContext;
+                if (ctx == null) return;
+                showReportBugSheet(
+                  ctx,
+                  currentRoute: '/error-notice',
+                  initialDescription:
+                      'Auto-captured error:\n${err.errorType}: ${err.message}\n\n'
+                      'What I was doing when it happened:\n',
+                );
+              },
+            ),
           ),
-        ),
-      );
+        );
+      } catch (_) {/* no Scaffold yet — skip silently */}
     });
   }
 
