@@ -111,7 +111,7 @@ class _ReportBugSheetState extends State<_ReportBugSheet> {
     final auth = context.read<AuthService>();
     final isLoggedIn = auth.isLoggedIn;
 
-    final ok = await BugReportService.submitBugReport(
+    final result = await BugReportService.submitBugReport(
       description: _descriptionController.text.trim(),
       screenshot: _screenshot,
       userEmail: isLoggedIn ? null : _emailController.text.trim(),
@@ -126,17 +126,20 @@ class _ReportBugSheetState extends State<_ReportBugSheet> {
     if (!mounted) return;
     setState(() => _submitting = false);
 
-    if (ok) {
+    if (result.ok) {
       navigator.pop();
       messenger.showSnackBar(
         const SnackBar(content: Text('Thanks! We\'ll look into it.')),
       );
     } else {
+      // Surface the server's explanation (e.g. "only PNG or JPEG screenshots
+      // are accepted") instead of a generic failure so the user can
+      // self-correct — no more silent fails.
       messenger.showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Could not submit bug report. Check your connection and try again.',
-          ),
+        SnackBar(
+          content: Text(result.errorMessage
+              ?? 'Could not submit bug report. Check your connection and try again.'),
+          duration: const Duration(seconds: 6),
         ),
       );
     }

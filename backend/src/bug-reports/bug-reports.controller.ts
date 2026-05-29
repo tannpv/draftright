@@ -11,7 +11,18 @@ import { CreateBugReportDto } from './dto/create-bug-report.dto';
 import { decodeOptionalUserId } from './jwt-user';
 
 const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
-const ALLOWED_MIMES = ['image/png', 'image/jpeg', 'image/jpg'];
+// Accept every modern phone-camera / screenshot format. Samsung + Pixel
+// galleries hand back HEIC/HEIF; Pixel screenshots are PNG; iOS share-sheet
+// can deliver WebP; older Androids hand back GIF for short screen recordings.
+// Anything narrower silently 400s the submission for users with default
+// camera settings (real failure mode observed 2026-05-29 on Galaxy A52).
+const ALLOWED_MIMES = [
+  'image/png',
+  'image/jpeg', 'image/jpg',
+  'image/webp',
+  'image/heic', 'image/heif',
+  'image/gif',
+];
 
 /**
  * Public endpoint that any client (admin portal, marketing site, web
