@@ -2,6 +2,8 @@ import { Injectable, BadRequestException, NotFoundException, Logger } from '@nes
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, MoreThanOrEqual } from 'typeorm';
 import { Payment, PaymentMethod, PaymentStatus } from './entities/payment.entity';
+// Default payment-method when nothing is configured. Single point of change.
+const DEFAULT_PAYMENT_METHOD = PaymentMethod.STRIPE;
 import { CheckoutResult, WebhookAction } from './strategies/payment-strategy.interface';
 import { BasePaymentStrategy } from './strategies/base-payment.strategy';
 import { StripeStrategy } from './strategies/stripe.strategy';
@@ -35,11 +37,15 @@ export class PaymentService {
     private readonly lemonSqueezyStrategy: LemonSqueezyStrategy,
     private readonly emailService: EmailService,
   ) {
+    // Use the PaymentMethod enum (entities/payment.entity.ts) as the keys —
+    // the same enum the DB rows use, so adding a new method only requires one
+    // edit per concern (enum value + strategy class), never a scatter of
+    // string literals across the service / controller / DTOs.
     this.strategies = new Map<string, BasePaymentStrategy>([
-      ['stripe', this.stripeStrategy],
-      ['vietqr', this.vietqrStrategy],
-      ['bank_transfer', this.vietqrStrategy],
-      ['lemonsqueezy', this.lemonSqueezyStrategy],
+      [PaymentMethod.STRIPE,        this.stripeStrategy],
+      [PaymentMethod.VIETQR,        this.vietqrStrategy],
+      [PaymentMethod.BANK_TRANSFER, this.vietqrStrategy],
+      [PaymentMethod.LEMONSQUEEZY,  this.lemonSqueezyStrategy],
     ]);
   }
 
@@ -52,9 +58,9 @@ export class PaymentService {
    */
   async getEnabledMethods(): Promise<string[]> {
     const settings = await this.settingsRepo.findOne({ where: {} });
-    const raw = (settings?.payment_methods_enabled || process.env.PAYMENT_ENABLED_METHODS || 'stripe').toLowerCase();
+    const raw = (settings?.payment_methods_enabled || process.env.PAYMENT_ENABLED_METHODS || DEFAULT_PAYMENT_METHOD).toLowerCase();
     const set = new Set(raw.split(',').map((s) => s.trim()).filter(Boolean));
-    if (set.has('vietqr')) set.add('bank_transfer');
+    if (set.has(PaymentMethod.VIETQR)) set.add(PaymentMethod.BANK_TRANSFER);
     return [...set];
   }
 

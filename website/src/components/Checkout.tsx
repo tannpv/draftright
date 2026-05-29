@@ -33,17 +33,31 @@ const toPlan = (p: ApiPlan): Plan => ({
   badge: p.billing_period === 'yearly' ? 'Best value' : null,
 });
 
+/**
+ * Single source of truth for payment-method identifiers. Mirrors the backend
+ * `PaymentMethod` enum (backend/src/payment/entities/payment.entity.ts) and
+ * is the canonical key the UI compares against — avoid scattering raw string
+ * literals like `methodKey === 'lemonsqueezy'` across the file.
+ */
+export const PaymentMethodKey = {
+  STRIPE:        'stripe',
+  VIETQR:        'vietqr',
+  BANK_TRANSFER: 'bank_transfer',
+  LEMONSQUEEZY:  'lemonsqueezy',
+} as const;
+export type PaymentMethodKey = (typeof PaymentMethodKey)[keyof typeof PaymentMethodKey];
+
 interface Method {
-  key: 'stripe' | 'vietqr' | 'bank_transfer' | 'lemonsqueezy';
+  key: PaymentMethodKey;
   icon: string;
   label: string;
   sub: string;
 }
 
 const METHODS: Method[] = [
-  { key: 'lemonsqueezy', icon: '💳', label: 'Credit / Debit Card', sub: 'Visa, Mastercard, Amex — worldwide via Lemon Squeezy' },
-  { key: 'vietqr', icon: '📱', label: 'VietQR', sub: 'Scan QR with any Vietnamese banking app' },
-  { key: 'bank_transfer', icon: '🏦', label: 'Bank Transfer', sub: 'Manual transfer to MB Bank' },
+  { key: PaymentMethodKey.LEMONSQUEEZY,  icon: '💳', label: 'Credit / Debit Card', sub: 'Visa, Mastercard, Amex — worldwide via Lemon Squeezy' },
+  { key: PaymentMethodKey.VIETQR,        icon: '📱', label: 'VietQR',              sub: 'Scan QR with any Vietnamese banking app' },
+  { key: PaymentMethodKey.BANK_TRANSFER, icon: '🏦', label: 'Bank Transfer',       sub: 'Manual transfer to MB Bank' },
 ];
 
 const formatVnd = (n: number) =>
@@ -480,7 +494,7 @@ export default function Checkout() {
   );
 
   const renderProcessing = () => {
-    if (methodKey === 'lemonsqueezy') {
+    if (methodKey === PaymentMethodKey.LEMONSQUEEZY) {
       // Stripe + PayPal were dropped from the storefront when LS replaced them
       // as the card processor; if either ships back, add their labels here.
       return (
