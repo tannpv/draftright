@@ -31,7 +31,8 @@ describe('FeedbackController', () => {
     const token = jwt.sign({ sub: 'user-9' }, SECRET);
     const out = await ctrl.create({ kind: 'feature', title: 'X', target_platform: 'mac', description: 'd', source: 'web' } as any, reqWith(token));
     expect(svc.createFeedback).toHaveBeenCalledWith(expect.objectContaining({ kind: 'feature' }), 'user-9');
-    expect(out).toEqual({ id: 'r1', message: 'Feature request received. Thanks!' });
+    // display_no isn't on the mock so ref is null and message lacks the ref suffix.
+    expect(out).toEqual({ id: 'r1', ref: null, message: 'Feature request received. Thanks!' });
   });
 
   it('POST /feedback treats a bad token as anonymous', async () => {

@@ -9,6 +9,7 @@ import { Request } from 'express';
 import { BugReportsService } from './bug-reports.service';
 import { CreateBugReportDto } from './dto/create-bug-report.dto';
 import { decodeOptionalUserId } from './jwt-user';
+import { formatDisplayNumber } from '../common/display-number';
 
 const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
 // Accept every modern phone-camera / screenshot format. Samsung + Pixel
@@ -88,6 +89,13 @@ export class BugReportsController {
         : undefined,
       userId,
     );
-    return { id: row.id, message: 'Bug report received. Thanks!' };
+    const ref = formatDisplayNumber('bug', row.display_no);
+    return {
+      id: row.id,
+      ref,
+      message: ref
+        ? `Bug report received. Thanks! Reference: ${ref}`
+        : 'Bug report received. Thanks!',
+    };
   }
 }

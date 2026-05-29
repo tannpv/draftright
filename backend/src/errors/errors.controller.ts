@@ -4,6 +4,7 @@ import { Throttle } from '@nestjs/throttler';
 import { Request } from 'express';
 import { ErrorsService } from './errors.service';
 import { CreateErrorReportDto } from './dto/create-error-report.dto';
+import { formatDisplayNumber } from '../common/display-number';
 import * as jwt from 'jsonwebtoken';
 
 /**
@@ -50,6 +51,7 @@ export class ErrorsController {
     return {
       ok: true,
       id: row.id,
+      ref: formatDisplayNumber('error', row.display_no),
       fingerprint: row.fingerprint,
       count: row.count,
       first_seen_at: row.first_seen_at,

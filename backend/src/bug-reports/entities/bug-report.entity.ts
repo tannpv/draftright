@@ -22,6 +22,15 @@ export class BugReport {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  /**
+   * Short human-readable number — surfaces as "BUG-1042" / "FR-58" in the
+   * admin UI and user confirmations so callers don't have to read a UUID
+   * out loud. Auto-assigned by the bug_reports_display_no_seq sequence;
+   * migration: backend/sql/2026-05-29-display-numbers.sql.
+   */
+  @Column({ type: 'bigint', name: 'display_no', generated: 'increment' })
+  display_no: number;
+
   @Column({ type: 'varchar', length: 50 })
   source: string;
 

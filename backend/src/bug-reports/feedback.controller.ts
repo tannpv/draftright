@@ -7,6 +7,7 @@ import { Request } from 'express';
 import { BugReportsService } from './bug-reports.service';
 import { CreateFeedbackDto } from './dto/create-feedback.dto';
 import { decodeOptionalUserId } from './jwt-user';
+import { formatDisplayNumber, ReportKind } from '../common/display-number';
 
 /**
  * Public feedback API powering the upvote board at draftright.info/feedback
@@ -41,7 +42,13 @@ export class FeedbackController {
       return { id: null, message: 'Received. Thanks!' };
     }
     const row = await this.feedback.createFeedback(dto, decodeOptionalUserId(req));
-    return { id: row.id, message: dto.kind === 'feature' ? 'Feature request received. Thanks!' : 'Bug report received. Thanks!' };
+    const ref = formatDisplayNumber(dto.kind as ReportKind, row.display_no);
+    const noun = dto.kind === 'feature' ? 'Feature request' : 'Bug report';
+    return {
+      id: row.id,
+      ref,
+      message: ref ? `${noun} received. Thanks! Reference: ${ref}` : `${noun} received. Thanks!`,
+    };
   }
 
   @Get()
