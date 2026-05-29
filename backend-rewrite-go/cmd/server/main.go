@@ -3,8 +3,8 @@
 // concrete adapters get wired into use cases. Everything else stays
 // pluggable behind the ports in internal/domain.
 //
-// Task 1 scaffold: HTTP server with /health + /rewrite stubs only.
-// Real adapters land in Tasks 4-7 (see README + plan).
+// Task 2 state: HTTP server with /health (public) + /rewrite (JWT-protected).
+// Real rewrite pipeline (SSE + provider call + quota) lands in Task 7.
 package main
 
 import (
@@ -17,47 +17,58 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	internalhttp "github.com/tannpv/draftright-rewrite/internal/http"
+	authpkg "github.com/tannpv/draftright-rewrite/internal/platform/auth"
+	"github.com/tannpv/draftright-rewrite/internal/platform/config"
 )
 
 const (
-	// Listen address. Override via LISTEN_ADDR env when the prod
-	// container is also serving on 3001 already — but Task 1 ships with
-	// a fixed default so the quick-start instructions in README work
-	// without extra env wiring.
-	defaultListenAddr = ":3001"
-
-	// Generous deadlines for Task 1; tightened in Task 7 once SSE
+	// Generous deadlines for Tasks 2-6; tightened in Task 7 once SSE
 	// streaming is wired (write deadline becomes per-request).
 	readTimeout  = 10 * time.Second
 	writeTimeout = 60 * time.Second
 	idleTimeout  = 120 * time.Second
-	// Graceful shutdown window — long enough for SSE streams in flight
+	// Graceful shutdown window — long enough for in-flight SSE streams
 	// (Task 7) to finish a token, short enough that prod redeploys
 	// don't drag.
 	shutdownTimeout = 15 * time.Second
 )
 
 func main() {
-	log := newLogger()
-	addr := envOr("LISTEN_ADDR", defaultListenAddr)
+	cfg, err := config.Load()
+	if err != nil {
+		// We can't use slog here yet — logger needs the level from
+		// config. Fall back to stderr + exit 1 with a clear message
+		// so a misconfigured deploy fails loudly.
+		_, _ = os.Stderr.WriteString("FATAL: " + err.Error() + "\n")
+		os.Exit(2)
+	}
+
+	log := newLogger(cfg.LogLevel)
+	verifier := authpkg.NewVerifier(cfg.JWTSecret)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", handleHealth)
-	mux.HandleFunc("/rewrite", handleRewriteStub)
+	// /rewrite now requires a valid JWT. RequireAuth wraps the
+	// stub handler so a real handler in Task 7 plugs in without
+	// touching the wiring.
+	mux.Handle("/rewrite", internalhttp.RequireAuth(verifier, log)(http.HandlerFunc(handleRewriteStub)))
 
 	srv := &http.Server{
-		Addr:         addr,
+		Addr:         cfg.Listen,
 		Handler:      withRequestLogging(log, mux),
 		ReadTimeout:  readTimeout,
 		WriteTimeout: writeTimeout,
 		IdleTimeout:  idleTimeout,
 	}
 
-	// Run the server on a goroutine so the main goroutine can listen for
-	// signals + drive graceful shutdown. Without this split, SIGTERM
-	// would either be ignored or kill in-flight requests mid-stream.
+	// Run the server on a goroutine so the main goroutine can listen
+	// for signals + drive graceful shutdown. Without this split,
+	// SIGTERM would either be ignored or kill in-flight requests
+	// mid-stream.
 	go func() {
-		log.Info("listening", "addr", addr)
+		log.Info("listening", "addr", cfg.Listen, "env", cfg.AppEnv)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Error("server crashed", "err", err)
 			os.Exit(1)
@@ -81,13 +92,13 @@ func main() {
 }
 
 // newLogger returns a JSON-output slog suitable for prod log aggregation
-// (Loki/CloudWatch/etc.) Level defaults to INFO; override via LOG_LEVEL.
+// (Loki/CloudWatch/etc.) Level threshold parsed from config.LogLevel.
 //
-// Kept in main.go for Task 1 simplicity; moves to
-// internal/platform/logger/ in Task 0.2-equivalent (see plan Task 2).
-func newLogger() *slog.Logger {
+// Kept in main.go for Task 2 simplicity; moves to
+// internal/platform/logger/ once a second consumer exists.
+func newLogger(levelStr string) *slog.Logger {
 	level := slog.LevelInfo
-	switch os.Getenv("LOG_LEVEL") {
+	switch levelStr {
 	case "debug":
 		level = slog.LevelDebug
 	case "warn":
@@ -99,9 +110,8 @@ func newLogger() *slog.Logger {
 }
 
 // withRequestLogging wraps the handler with one structured log line per
-// request (method, path, status, duration). Kept minimal for Task 1;
-// gets replaced by a proper middleware chain in Task 7 (chi router) with
-// correlation-id, recover-on-panic, and Prometheus metrics added.
+// request. Replaced by the chi middleware chain in Task 7 (adds
+// correlation-id, recover-on-panic, and Prometheus metrics).
 func withRequestLogging(log *slog.Logger, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -118,8 +128,7 @@ func withRequestLogging(log *slog.Logger, next http.Handler) http.Handler {
 }
 
 // statusRecorder captures the response status code so the logging
-// middleware can record it. Standard pattern — http.ResponseWriter
-// itself doesn't expose the status after WriteHeader is called.
+// middleware can record it.
 type statusRecorder struct {
 	http.ResponseWriter
 	status int
@@ -131,7 +140,7 @@ func (s *statusRecorder) WriteHeader(code int) {
 }
 
 // handleHealth is the kubelet/Docker-healthcheck probe target.
-// Returns 200 unconditionally for Task 1; will check Postgres + Redis
+// Returns 200 unconditionally for Task 2; will check Postgres + Redis
 // + AI-provider reachability in a future task.
 func handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{
@@ -140,35 +149,34 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleRewriteStub returns a placeholder until Task 7 wires the real
-// SSE streaming pipeline. Documented so anyone hitting it during the
-// scaffold phase doesn't think prod is broken.
+// handleRewriteStub returns the verified user id from the JWT, proving
+// the auth middleware works end-to-end. Real SSE pipeline lands in Task 7.
 func handleRewriteStub(w http.ResponseWriter, r *http.Request) {
+	claims, ok := internalhttp.ClaimsFromContext(r.Context())
+	if !ok {
+		// Middleware misconfigured — route wrapped at registration
+		// time, so this branch only fires on a programmer error.
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "auth middleware missing",
+		})
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]string{
 		"text":    "Hello from Go!",
 		"tone":    "placeholder",
 		"service": "rewrite-go",
-		"note":    "Task 1 scaffold — real rewrite pipeline lands in Task 7. See README.",
+		"user_id": claims.UserID(),
+		"role":    claims.Role,
+		"note":    "Task 2 — JWT verified. Real SSE pipeline lands in Task 7.",
 	})
 }
 
-// writeJSON encodes a value as JSON with the correct headers. Centralised
-// so future handlers don't repeat the boilerplate (Rule #1 — reusable).
+// writeJSON encodes a value as JSON with the correct headers.
+// Centralised so future handlers don't repeat the boilerplate (Rule #1).
 func writeJSON(w http.ResponseWriter, status int, body any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(body); err != nil {
-		// Last-resort log; the response is already partially written so
-		// we can't change the status anymore.
 		slog.Error("write json failed", "err", err)
 	}
-}
-
-// envOr returns the env value or the fallback when unset/empty.
-// Will move to internal/platform/config in Task 2.
-func envOr(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
 }
