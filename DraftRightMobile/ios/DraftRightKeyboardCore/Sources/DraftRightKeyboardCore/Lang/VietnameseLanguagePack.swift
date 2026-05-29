@@ -15,4 +15,11 @@ public struct VietnameseLanguagePack: LanguagePack {
     public var symbols2Rows: [[KeyDef]] { base.symbols2Rows }
 
     public func makeComposer() -> Composer? { TelexComposer() }
+
+    /// Trigram completions sourced from the bootstrap word list. Engine
+    /// is cheap to construct (shares the static `wordList`); the IME
+    /// caller may still cache the result for the session.
+    public func makeCandidateEngine() -> CandidateEngine? {
+        TrigramCandidateEngine(wordList: VietnameseBootstrapWordList.wordList)
+    }
 }
