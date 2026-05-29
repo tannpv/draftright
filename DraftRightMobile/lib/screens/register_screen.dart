@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:draftright_mobile/services/auth_service.dart';
 import 'package:draftright_mobile/widgets/social_login_buttons.dart';
+import 'package:draftright_mobile/widgets/anonymous_bug_report_button.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -173,6 +174,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   onPressed: () => Navigator.of(context).pop(),
                   child: const Text('Already have an account? Sign in'),
                 ),
+                // Anonymous bug-report escape hatch — mirrors LoginScreen.
+                const SizedBox(height: 4),
+                const AnonymousBugReportButton(routeName: '/register'),
               ],
             ),
           ),
