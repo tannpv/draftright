@@ -1,0 +1,55 @@
+# Local dev compose — boots the Go service alone (Task 1) and prepares
+# the Postgres + Redis sidecars that Task 3 onward will wire up. The
+# parent backend/ NestJS service runs in its OWN compose; the two
+# services share Postgres + Redis once we wire it (Task 3+).
+#
+# Override per developer via docker-compose.override.yml (gitignored).
+
+services:
+  rewrite-go:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dr-rewrite-go-dev
+    ports:
+      - "3001:3001"
+    environment:
+      LISTEN_ADDR: ":3001"
+      LOG_LEVEL: "debug"
+      # Task 2 adds JWT_SECRET (shared with NestJS).
+      # Task 3 adds DATABASE_URL.
+      # Task 7+ adds OPENAI_API_KEY etc.
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:3001/health || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+    # Task 3+ adds:
+    # depends_on:
+    #   postgres: { condition: service_healthy }
+    #   redis:    { condition: service_started }
+
+  # Sidecar Postgres / Redis stubs commented out for Task 1. Uncomment
+  # when Task 3 begins.
+  # postgres:
+  #   image: postgres:16-alpine
+  #   environment:
+  #     POSTGRES_USER: draftright
+  #     POSTGRES_PASSWORD: draftright
+  #     POSTGRES_DB: draftright
+  #   ports: ["5432:5432"]
+  #   volumes: ["pg-data:/var/lib/postgresql/data"]
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U draftright"]
+  #     interval: 5s
+  #     timeout: 3s
+  #     retries: 5
+  #
+  # redis:
+  #   image: redis:7-alpine
+  #   ports: ["6379:6379"]
+  #
+# volumes:
+#   pg-data:
