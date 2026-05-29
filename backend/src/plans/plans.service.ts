@@ -15,6 +15,18 @@ export class PlansService {
     return this.plansRepo.find({ order: { created_at: 'ASC' } });
   }
 
+  /**
+   * Active plans for the public website/app pricing + checkout, cheapest first.
+   * The client fetches these instead of hard-coding plan IDs, so prices and
+   * plan changes made in admin never go stale on the storefront.
+   */
+  async findPublic(): Promise<Plan[]> {
+    return this.plansRepo.find({
+      where: { is_active: true },
+      order: { price_cents: 'ASC' },
+    });
+  }
+
   async findAllPaginated(query: ListQuery): Promise<ListResult<Plan>> {
     const qb = this.plansRepo.createQueryBuilder('plan');
     return applyListQuery(

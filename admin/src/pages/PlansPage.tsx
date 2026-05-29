@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import DataTable from '../components/DataTable';
 import Modal from '../components/Modal';
 import Toast from '../components/Toast';
-import { apiFetch } from '../api';
+import { apiFetch, SEARCH_DEBOUNCE_MS } from '../api';
+import { formatCurrency } from '../lib/format';
 
 interface Plan {
   id: string;
@@ -32,12 +33,6 @@ const emptyForm = {
   trial_days: '30',
   stripe_price_id: '',
 };
-
-function formatPrice(cents: number, currency: string | null): string {
-  // VND: stored as whole VND (Stripe convention); USD: cents
-  if ((currency || 'USD') === 'USD') return `$${(cents / 100).toFixed(2)}`;
-  return `${cents.toLocaleString('en-US')} ${currency}`;
-}
 
 export default function PlansPage() {
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -87,7 +82,7 @@ export default function PlansPage() {
 
   // Debounce search input → search state.
   useEffect(() => {
-    const t = setTimeout(() => { setSearch(searchInput); setPage(1); }, 300);
+    const t = setTimeout(() => { setSearch(searchInput); setPage(1); }, SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(t);
   }, [searchInput]);
 
@@ -163,38 +158,38 @@ export default function PlansPage() {
       header: 'Name',
       key: 'name',
       sortKey: 'name',
-      render: (row: Plan) => <span style={{ color: '#eaeff4', fontWeight: 600 }}>{row.name}</span>,
+      render: (row: Plan) => <span style={{ color: 'var(--text)', fontWeight: 600 }}>{row.name}</span>,
     },
     {
       header: 'Daily Limit',
       key: 'daily_limit',
-      render: (row: Plan) => <span style={{ color: '#7c8fac' }}>{row.daily_limit === -1 ? 'Unlimited' : row.daily_limit}</span>,
+      render: (row: Plan) => <span style={{ color: 'var(--muted)' }}>{row.daily_limit === -1 ? 'Unlimited' : row.daily_limit}</span>,
     },
     {
       header: 'Price',
       key: 'price_cents',
       sortKey: 'price',
       render: (row: Plan) => (
-        <span style={{ color: '#eaeff4', fontWeight: 600 }}>{formatPrice(row.price_cents, row.currency)}</span>
+        <span style={{ color: 'var(--text)', fontWeight: 600 }}>{formatCurrency(row.price_cents, row.currency)}</span>
       ),
     },
     {
       header: 'Billing Period',
       key: 'billing_period',
       sortKey: 'billing_period',
-      render: (row: Plan) => <span style={{ color: '#7c8fac', textTransform: 'capitalize' as const }}>{row.billing_period}</span>,
+      render: (row: Plan) => <span style={{ color: 'var(--muted)', textTransform: 'capitalize' as const }}>{row.billing_period}</span>,
     },
     {
       header: 'Trial',
       key: 'trial_days',
       sortKey: 'trial_days',
-      render: (row: Plan) => <span style={{ color: '#7c8fac' }}>{row.trial_days || 0}d</span>,
+      render: (row: Plan) => <span style={{ color: 'var(--muted)' }}>{row.trial_days || 0}d</span>,
     },
     {
       header: 'Stripe Price',
       key: 'stripe_price_id',
       render: (row: Plan) => (
-        <span style={{ color: '#7c8fac', fontFamily: 'monospace', fontSize: 11 }}>
+        <span style={{ color: 'var(--muted)', fontFamily: 'monospace', fontSize: 11 }}>
           {row.stripe_price_id ? `${row.stripe_price_id.slice(0, 14)}…` : '—'}
         </span>
       ),
@@ -217,14 +212,14 @@ export default function PlansPage() {
           <button
             onClick={(e) => { e.stopPropagation(); openEdit(row); }}
             className="btn btn-sm"
-            style={{ background: 'rgba(93,135,255,0.1)', color: '#5d87ff', border: '1px solid rgba(93,135,255,0.2)' }}
+            style={{ background: 'rgba(93,135,255,0.1)', color: 'var(--primary)', border: '1px solid rgba(93,135,255,0.2)' }}
           >
             Edit
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); deletePlan(row); }}
             className="btn btn-sm"
-            style={{ background: 'rgba(250,137,107,0.1)', color: '#fa896b', border: '1px solid rgba(250,137,107,0.2)' }}
+            style={{ background: 'rgba(250,137,107,0.1)', color: 'var(--danger)', border: '1px solid rgba(250,137,107,0.2)' }}
           >
             Delete
           </button>
@@ -238,8 +233,8 @@ export default function PlansPage() {
       {/* Page header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>
-          <h1 style={{ color: '#eaeff4', fontSize: 22, fontWeight: 700, margin: '0 0 4px' }}>Plans</h1>
-          <p style={{ color: '#7c8fac', fontSize: 13, margin: 0 }}>Manage subscription plans</p>
+          <h1 style={{ color: 'var(--text)', fontSize: 22, fontWeight: 700, margin: '0 0 4px' }}>Plans</h1>
+          <p style={{ color: 'var(--muted)', fontSize: 13, margin: 0 }}>Manage subscription plans</p>
         </div>
         <button onClick={openCreate} className="btn btn-primary">
           + Create Plan
@@ -258,13 +253,13 @@ export default function PlansPage() {
           style={{
             flex: '1 1 280px', maxWidth: 360,
             padding: '8px 14px 8px 36px',
-            borderRadius: 7, border: '1px solid #333f55', background: '#202936',
-            color: '#eaeff4', fontSize: 13, fontFamily: 'inherit', outline: 'none',
+            borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg)',
+            color: 'var(--text)', fontSize: 13, fontFamily: 'inherit', outline: 'none',
             backgroundImage: "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%237c8fac' stroke-width='2'><circle cx='11' cy='11' r='8'/><path d='M21 21l-4.35-4.35'/></svg>\")",
             backgroundRepeat: 'no-repeat', backgroundPosition: '12px center',
           }}
         />
-        <div style={{ display: 'flex', gap: 4, padding: 4, background: '#202936', border: '1px solid #333f55', borderRadius: 7 }}>
+        <div style={{ display: 'flex', gap: 4, padding: 4, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 7 }}>
           {(['all','active','inactive'] as const).map((s) => (
             <button
               key={s}
@@ -273,7 +268,7 @@ export default function PlansPage() {
                 padding: '6px 14px', borderRadius: 5, fontSize: 12, fontWeight: 600,
                 border: 'none', cursor: 'pointer', fontFamily: 'inherit',
                 background: statusFilter === s ? 'rgba(93,135,255,0.15)' : 'transparent',
-                color: statusFilter === s ? '#5d87ff' : '#7c8fac',
+                color: statusFilter === s ? 'var(--primary)' : 'var(--muted)',
                 textTransform: 'capitalize',
               }}
             >
@@ -281,7 +276,7 @@ export default function PlansPage() {
             </button>
           ))}
         </div>
-        <span style={{ marginLeft: 'auto', color: '#7c8fac', fontSize: 12 }}>
+        <span style={{ marginLeft: 'auto', color: 'var(--muted)', fontSize: 12 }}>
           {total > 0 ? `${total} ${total === 1 ? 'plan' : 'plans'}` : ''}
         </span>
       </div>
@@ -321,7 +316,7 @@ export default function PlansPage() {
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div>
-              <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Name</label>
+              <label style={{ display: 'block', color: 'var(--text)', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Name</label>
               <input
                 type="text"
                 value={form.name}
@@ -331,7 +326,7 @@ export default function PlansPage() {
               />
             </div>
             <div>
-              <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Daily Limit (-1 = unlimited)</label>
+              <label style={{ display: 'block', color: 'var(--text)', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Daily Limit (-1 = unlimited)</label>
               <input
                 type="number"
                 value={form.daily_limit}
@@ -343,7 +338,7 @@ export default function PlansPage() {
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div>
-                <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Currency</label>
+                <label style={{ display: 'block', color: 'var(--text)', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Currency</label>
                 <select
                   value={form.currency}
                   onChange={(e) => setForm({ ...form, currency: e.target.value })}
@@ -354,7 +349,7 @@ export default function PlansPage() {
                 </select>
               </div>
               <div>
-                <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>
+                <label style={{ display: 'block', color: 'var(--text)', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>
                   Price ({form.currency === 'USD' ? 'cents' : 'whole VND'})
                 </label>
                 <input
@@ -369,7 +364,7 @@ export default function PlansPage() {
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div>
-                <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Billing Period</label>
+                <label style={{ display: 'block', color: 'var(--text)', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Billing Period</label>
                 <select
                   value={form.billing_period}
                   onChange={(e) => setForm({ ...form, billing_period: e.target.value })}
@@ -381,7 +376,7 @@ export default function PlansPage() {
                 </select>
               </div>
               <div>
-                <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Trial Days</label>
+                <label style={{ display: 'block', color: 'var(--text)', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Trial Days</label>
                 <input
                   type="number"
                   value={form.trial_days}
@@ -393,7 +388,7 @@ export default function PlansPage() {
               </div>
             </div>
             <div>
-              <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Stripe Price ID</label>
+              <label style={{ display: 'block', color: 'var(--text)', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Stripe Price ID</label>
               <input
                 type="text"
                 value={form.stripe_price_id}
@@ -402,7 +397,7 @@ export default function PlansPage() {
                 className="dark-input"
                 style={{ fontFamily: 'monospace', fontSize: 12 }}
               />
-              <p style={{ color: '#7c8fac', fontSize: 11, margin: '6px 0 0' }}>
+              <p style={{ color: 'var(--muted)', fontSize: 11, margin: '6px 0 0' }}>
                 Run <code>scripts/sync-stripe-prices.js</code> after editing price to mint a fresh Stripe Price.
               </p>
             </div>
@@ -412,9 +407,9 @@ export default function PlansPage() {
                 id="is_active"
                 checked={form.is_active}
                 onChange={(e) => setForm({ ...form, is_active: e.target.checked })}
-                style={{ width: 16, height: 16, accentColor: '#5d87ff', cursor: 'pointer' }}
+                style={{ width: 16, height: 16, accentColor: 'var(--primary)', cursor: 'pointer' }}
               />
-              <label htmlFor="is_active" style={{ color: '#eaeff4', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>Active</label>
+              <label htmlFor="is_active" style={{ color: 'var(--text)', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>Active</label>
             </div>
           </div>
         </Modal>

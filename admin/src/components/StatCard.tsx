@@ -6,10 +6,10 @@ interface StatCardProps {
 }
 
 const colorMap: Record<string, { bg: string; color: string }> = {
-  blue:   { bg: 'rgba(93,135,255,0.12)',  color: '#5d87ff' },
-  green:  { bg: 'rgba(19,222,185,0.12)',  color: '#13deb9' },
-  purple: { bg: 'rgba(73,190,255,0.12)',  color: '#49beff' },
-  orange: { bg: 'rgba(255,174,31,0.12)',  color: '#ffae1f' },
+  blue:   { bg: 'rgba(93,135,255,0.12)',  color: 'var(--primary)' },
+  green:  { bg: 'rgba(19,222,185,0.12)',  color: 'var(--success)' },
+  purple: { bg: 'rgba(73,190,255,0.12)',  color: 'var(--secondary)' },
+  orange: { bg: 'rgba(255,174,31,0.12)',  color: 'var(--warning)' },
 };
 
 export default function StatCard({ icon, label, value, color = 'blue' }: StatCardProps) {
@@ -18,7 +18,7 @@ export default function StatCard({ icon, label, value, color = 'blue' }: StatCar
   return (
     <div
       style={{
-        background: '#2a3547',
+        background: 'var(--card)',
         borderRadius: 7,
         padding: '22px 26px',
         display: 'flex',
@@ -46,8 +46,8 @@ export default function StatCard({ icon, label, value, color = 'blue' }: StatCar
 
       {/* Text */}
       <div>
-        <p style={{ color: '#7c8fac', fontSize: 13, margin: 0, fontWeight: 500 }}>{label}</p>
-        <p style={{ color: '#eaeff4', fontSize: 26, fontWeight: 700, margin: '2px 0 0', lineHeight: 1.2 }}>
+        <p style={{ color: 'var(--muted)', fontSize: 13, margin: 0, fontWeight: 500 }}>{label}</p>
+        <p style={{ color: 'var(--text)', fontSize: 26, fontWeight: 700, margin: '2px 0 0', lineHeight: 1.2 }}>
           {value}
         </p>
       </div>

@@ -9,44 +9,67 @@ interface Plan {
   id: PlanId;
   name: string;
   price: number;
+  currency: string;
   period: 'month' | 'year';
   badge: string | null;
 }
 
-const PLANS: Plan[] = [
-  {
-    id: 'ead6d324-f463-4454-89e4-b620f85642c6',
-    name: 'Pro Monthly',
-    price: 99000,
-    period: 'month',
-    badge: null,
-  },
-  {
-    id: '67039e75-d2e8-469b-a0f5-0abf52217b11',
-    name: 'Pro Yearly',
-    price: 999000,
-    period: 'year',
-    badge: 'Save 17%',
-  },
-];
+// Plans come from the backend (GET /plans) so prices + IDs never go stale.
+interface ApiPlan {
+  id: string;
+  name: string;
+  price_cents: number;
+  currency: string | null;
+  billing_period: 'none' | 'monthly' | 'yearly';
+  is_active: boolean;
+}
+
+const toPlan = (p: ApiPlan): Plan => ({
+  id: p.id,
+  name: p.name,
+  price: p.price_cents,
+  currency: (p.currency || 'VND').toUpperCase(),
+  period: p.billing_period === 'yearly' ? 'year' : 'month',
+  badge: p.billing_period === 'yearly' ? 'Best value' : null,
+});
+
+/**
+ * Single source of truth for payment-method identifiers. Mirrors the backend
+ * `PaymentMethod` enum (backend/src/payment/entities/payment.entity.ts) and
+ * is the canonical key the UI compares against — avoid scattering raw string
+ * literals like `methodKey === 'lemonsqueezy'` across the file.
+ */
+export const PaymentMethodKey = {
+  STRIPE:        'stripe',
+  VIETQR:        'vietqr',
+  BANK_TRANSFER: 'bank_transfer',
+  LEMONSQUEEZY:  'lemonsqueezy',
+} as const;
+export type PaymentMethodKey = (typeof PaymentMethodKey)[keyof typeof PaymentMethodKey];
 
 interface Method {
-  key: 'stripe' | 'paypal' | 'momo' | 'vietqr' | 'bank_transfer';
+  key: PaymentMethodKey;
   icon: string;
   label: string;
   sub: string;
 }
 
 const METHODS: Method[] = [
-  { key: 'stripe', icon: '💳', label: 'Credit/Debit Card', sub: 'Visa, Mastercard, Apple Pay, Google Pay' },
-  { key: 'paypal', icon: '🅿️', label: 'PayPal', sub: 'PayPal account' },
-  { key: 'momo', icon: '💳', label: 'Momo', sub: 'Pay with Momo e-wallet' },
-  { key: 'vietqr', icon: '📱', label: 'VietQR', sub: 'Scan QR with any Vietnamese banking app' },
-  { key: 'bank_transfer', icon: '🏦', label: 'Bank Transfer', sub: 'Manual transfer to MB Bank' },
+  { key: PaymentMethodKey.LEMONSQUEEZY,  icon: '💳', label: 'Credit / Debit Card', sub: 'Visa, Mastercard, Amex — worldwide via Lemon Squeezy' },
+  { key: PaymentMethodKey.VIETQR,        icon: '📱', label: 'VietQR',              sub: 'Scan QR with any Vietnamese banking app' },
+  { key: PaymentMethodKey.BANK_TRANSFER, icon: '🏦', label: 'Bank Transfer',       sub: 'Manual transfer to MB Bank' },
 ];
 
 const formatVnd = (n: number) =>
   new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(n);
+
+// price_cents is whole VND for VND plans (99000 = 99.000₫) but minor units for
+// currencies with cents (499 USD = $4.99). Format by each plan's own currency.
+const formatPrice = (priceCents: number, currency: string) => {
+  const c = (currency || 'VND').toUpperCase();
+  if (c === 'VND') return formatVnd(priceCents);
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: c }).format(priceCents / 100);
+};
 
 type Step = 'plan' | 'method' | 'auth' | 'processing' | 'success';
 type AuthMode = 'login' | 'register';
@@ -88,12 +111,50 @@ export default function Checkout() {
   const [checkoutData, setCheckoutData] = useState<CheckoutResponse | null>(null);
   const [topError, setTopError] = useState('');
   const [paymentStatus, setPaymentStatus] = useState('');
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [plansError, setPlansError] = useState('');
+  // null until loaded → show all; otherwise only these methods.
+  const [enabledMethods, setEnabledMethods] = useState<string[] | null>(null);
+  const visibleMethods = enabledMethods ? METHODS.filter((m) => enabledMethods.includes(m.key)) : METHODS;
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const selectedPlan = PLANS.find((p) => p.id === planId);
+  const selectedPlan = plans.find((p) => p.id === planId);
 
   const getToken = () =>
-    typeof window !== 'undefined' ? localStorage.getItem('draftright_token') : null;
+    typeof window !== 'undefined' ? localStorage.getItem('dr_access_token') : null;
+
+  // Load active plans + enabled payment methods from the backend.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API}/plans`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data: ApiPlan[] = await res.json();
+        if (cancelled) return;
+        const paid = data.filter((p) => p.billing_period !== 'none').map(toPlan);
+        setPlans(paid);
+        const wanted = new URLSearchParams(window.location.search).get('plan');
+        if (wanted && paid.some((p) => p.id === wanted)) setPlanId(wanted);
+      } catch (err) {
+        if (!cancelled) setPlansError(err instanceof Error ? err.message : 'Could not load plans');
+      }
+    })();
+    // Enabled payment methods (admin-controlled). On failure, show all.
+    (async () => {
+      try {
+        const res = await fetch(`${API}/payment/methods`);
+        if (!res.ok) return;
+        const data: { methods?: string[] } = await res.json();
+        if (!cancelled && Array.isArray(data.methods)) setEnabledMethods(data.methods);
+      } catch {
+        /* keep default (all) */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(
     () => () => {
@@ -129,7 +190,8 @@ export default function Checkout() {
         throw new Error(err?.message || 'Authentication failed');
       }
       const data = await res.json();
-      localStorage.setItem('draftright_token', data.access_token);
+      localStorage.setItem('dr_access_token', data.access_token);
+      if (data.refresh_token) localStorage.setItem('dr_refresh_token', data.refresh_token);
       void startCheckout(data.access_token);
     } catch (err) {
       setAuthError(err instanceof Error ? err.message : 'Something went wrong');
@@ -152,7 +214,8 @@ export default function Checkout() {
         throw new Error(err?.message || 'Social login failed');
       }
       const data = await res.json();
-      localStorage.setItem('draftright_token', data.access_token);
+      localStorage.setItem('dr_access_token', data.access_token);
+      if (data.refresh_token) localStorage.setItem('dr_refresh_token', data.refresh_token);
       void startCheckout(data.access_token);
     } catch (err) {
       setAuthError(err instanceof Error ? err.message : 'Something went wrong');
@@ -206,10 +269,7 @@ export default function Checkout() {
         }
         const data: CheckoutResponse = await res.json();
         setCheckoutData(data);
-        if (
-          (methodKey === 'stripe' || methodKey === 'paypal' || methodKey === 'momo') &&
-          data.redirect_url
-        ) {
+        if (data.redirect_url) {
           window.location.href = data.redirect_url;
           return;
         }
@@ -250,8 +310,10 @@ export default function Checkout() {
     <div>
       <h2 className="text-2xl font-bold text-white mb-2">Choose your plan</h2>
       <p className="text-gray-400 mb-8">Unlock unlimited rewrites and all platforms.</p>
+      {plansError && <p className="mb-4 text-sm text-red-400">Could not load plans: {plansError}</p>}
+      {plans.length === 0 && !plansError && <p className="text-gray-500">Loading plans…</p>}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {PLANS.map((p) => (
+        {plans.map((p) => (
           <button
             key={p.id}
             onClick={() => setPlanId(p.id)}
@@ -268,12 +330,12 @@ export default function Checkout() {
             )}
             <div className="text-lg font-semibold text-white">{p.name}</div>
             <div className="mt-2">
-              <span className="text-3xl font-extrabold text-white">{formatVnd(p.price)}</span>
+              <span className="text-3xl font-extrabold text-white">{formatPrice(p.price, p.currency)}</span>
               <span className="text-gray-500 ml-1">/ {p.period}</span>
             </div>
             {p.period === 'year' && (
               <div className="mt-1 text-sm text-emerald-400">
-                {formatVnd(Math.round(p.price / 12))}/month
+                {formatPrice(Math.round(p.price / 12), p.currency)}/month
               </div>
             )}
           </button>
@@ -286,10 +348,10 @@ export default function Checkout() {
     <div>
       <h2 className="text-2xl font-bold text-white mb-2">Payment method</h2>
       <p className="text-gray-400 mb-8">
-        {selectedPlan?.name} — {selectedPlan ? formatVnd(selectedPlan.price) : ''}
+        {selectedPlan?.name} — {selectedPlan ? formatPrice(selectedPlan.price, selectedPlan.currency) : ''}
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {METHODS.map((m) => (
+        {visibleMethods.map((m) => (
           <button
             key={m.key}
             onClick={() => setMethodKey(m.key)}
@@ -432,14 +494,13 @@ export default function Checkout() {
   );
 
   const renderProcessing = () => {
-    if (methodKey === 'stripe' || methodKey === 'paypal') {
+    if (methodKey === PaymentMethodKey.LEMONSQUEEZY) {
+      // Stripe + PayPal were dropped from the storefront when LS replaced them
+      // as the card processor; if either ships back, add their labels here.
       return (
         <div className="text-center py-12">
           <Spinner />
-          <p className="mt-4 text-lg text-white">
-            Redirecting to{' '}
-            {methodKey === 'stripe' ? 'Stripe' : methodKey === 'momo' ? 'Momo' : 'PayPal'}...
-          </p>
+          <p className="mt-4 text-lg text-white">Redirecting to Lemon Squeezy...</p>
         </div>
       );
     }

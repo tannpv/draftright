@@ -1,14 +1,15 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import {
-  PaymentStrategy,
   CheckoutResult,
   WebhookAction,
   CreateCheckoutOptions,
 } from './payment-strategy.interface';
+import { BasePaymentStrategy } from './base-payment.strategy';
 import { Payment } from '../entities/payment.entity';
 import { AppSettings } from '../../admin/entities/app-settings.entity';
+import { websiteUrl } from '../../common/app-config';
 
 /**
  * Stripe strategy — Phase 3a refactor.
@@ -24,20 +25,19 @@ import { AppSettings } from '../../admin/entities/app-settings.entity';
  * with env-var fallback so local dev still works without DB seeding.
  */
 @Injectable()
-export class StripeStrategy implements PaymentStrategy {
-  private readonly logger = new Logger(StripeStrategy.name);
-
+export class StripeStrategy extends BasePaymentStrategy {
   constructor(
-    @InjectRepository(AppSettings)
-    private readonly settingsRepo: Repository<AppSettings>,
-  ) {}
+    @InjectRepository(AppSettings) settingsRepo: Repository<AppSettings>,
+  ) {
+    super(settingsRepo);
+  }
 
   /**
    * Pull credentials from AppSettings (set via admin portal). Falls back to env
    * vars if DB value is empty — useful for first deploy + tests.
    */
   private async getCredentials(): Promise<{ secretKey: string; webhookSecret: string }> {
-    const settings = await this.settingsRepo.findOne({ where: {} });
+    const settings = await this.getSettings();
     return {
       secretKey: settings?.stripe_secret_key || process.env.STRIPE_SECRET_KEY || '',
       webhookSecret: settings?.stripe_webhook_secret || process.env.STRIPE_WEBHOOK_SECRET || '',
@@ -82,9 +82,9 @@ export class StripeStrategy implements PaymentStrategy {
         ...(plan.trial_days > 0 ? { trial_period_days: plan.trial_days } : {}),
       },
       success_url: options?.success_url
-        || `${process.env.WEBSITE_URL || 'http://localhost:4000'}/payment/success?ref=${payment.reference_code}`,
+        || `${websiteUrl()}/payment/success?ref=${payment.reference_code}`,
       cancel_url: options?.cancel_url
-        || `${process.env.WEBSITE_URL || 'http://localhost:4000'}/payment/cancel`,
+        || `${websiteUrl()}/payment/cancel`,
       // Required so we can find the user later if Stripe creates a Customer fresh
       client_reference_id: payment.user_id,
     };

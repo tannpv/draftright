@@ -16,14 +16,26 @@
       <a href="/download" class="hover:text-white transition-colors">Download</a>
     </div>
 
-    <!-- CTAs -->
+    <!-- CTAs — guest links hidden until JS confirms logged-out (avoids flash) -->
     <div class="flex items-center gap-4">
-      <a
-        href="/signup"
-        class="hidden sm:inline-block text-sm font-medium text-gray-300 hover:text-white transition-colors"
-      >
+      <!-- Guest (logged out) -->
+      <a data-auth="guest" href="/login" style="display:none"
+        class="hidden sm:inline-block text-sm font-medium text-gray-300 hover:text-white transition-colors">
+        Log in
+      </a>
+      <a data-auth="guest" href="/signup" style="display:none"
+        class="hidden sm:inline-block text-sm font-medium text-gray-300 hover:text-white transition-colors">
         Sign up
       </a>
+      <!-- Authenticated -->
+      <a data-auth="user" href="/account" style="display:none"
+        class="hidden sm:inline-block text-sm font-medium text-gray-300 hover:text-white transition-colors">
+        Account
+      </a>
+      <button data-auth="user" id="nav-logout" type="button" style="display:none"
+        class="hidden sm:inline-block text-sm font-medium text-gray-300 hover:text-white transition-colors">
+        Log out
+      </button>
       <a
         href="/#playground"
         class="rounded-full bg-brand-400 px-5 py-2 text-sm font-semibold text-white hover:bg-brand-500 transition-colors"
@@ -33,3 +45,26 @@
     </div>
   </div>
 </nav>
+
+<script is:inline>
+  // Toggle nav auth links based on the stored session token. Both sets start
+  // hidden (inline style) to avoid a flash of the wrong state; clearing the
+  // inline style lets the responsive Tailwind classes take over.
+  (function () {
+    var loggedIn = !!localStorage.getItem('dr_access_token');
+    document.querySelectorAll('[data-auth="guest"]').forEach(function (el) {
+      el.style.display = loggedIn ? 'none' : '';
+    });
+    document.querySelectorAll('[data-auth="user"]').forEach(function (el) {
+      el.style.display = loggedIn ? '' : 'none';
+    });
+    var logout = document.getElementById('nav-logout');
+    if (logout) {
+      logout.addEventListener('click', function () {
+        localStorage.removeItem('dr_access_token');
+        localStorage.removeItem('dr_refresh_token');
+        window.location.href = '/';
+      });
+    }
+  })();
+</script>

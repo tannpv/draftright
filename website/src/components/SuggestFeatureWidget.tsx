@@ -31,6 +31,7 @@ export default function SuggestFeatureWidget() {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [website, setWebsite] = useState(''); // honeypot
 
   const token = getAccessToken();
   const canSubmit = title.trim().length > 0 && description.trim().length > 0 && !busy;
@@ -48,6 +49,7 @@ export default function SuggestFeatureWidget() {
         target_platform: platform,
         description: description.trim(),
         source: 'web',
+        website, // honeypot — empty for humans, filled by bots; server drops if set
       };
       if (!token && email.trim()) body.user_email = email.trim();
       const res = await fetch(`${API_URL}/feedback`, {
@@ -96,6 +98,20 @@ export default function SuggestFeatureWidget() {
               </>
             ) : (
               <form onSubmit={submit}>
+                {/* Honeypot — off-screen so humans never touch it. */}
+                <div aria-hidden="true" style={{ position: 'absolute', left: '-10000px', width: '1px', height: '1px', overflow: 'hidden' }}>
+                  <label>
+                    Website
+                    <input
+                      type="text"
+                      name="website"
+                      tabIndex={-1}
+                      autoComplete="off"
+                      value={website}
+                      onChange={(e) => setWebsite(e.target.value)}
+                    />
+                  </label>
+                </div>
                 <h3 style={{ marginBottom: 4 }}>Suggest a feature</h3>
                 <p style={{ color: '#94a3b8', fontSize: 12, marginBottom: 16 }}>
                   {token ? 'Submitted under your account. ' : ''}Public on the feature board.

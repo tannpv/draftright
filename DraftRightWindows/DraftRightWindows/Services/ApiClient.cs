@@ -96,6 +96,27 @@ public sealed class ApiClient : IDisposable
     }
 
     /// <summary>
+    /// Exchange a third-party identity token (e.g. a Google id_token from
+    /// <see cref="GoogleOAuth.AuthenticateAsync"/>) for a DraftRight session.
+    /// Mirrors the Flutter mobile client's social-login flow so the backend's
+    /// /auth/social user creation/linking is shared across platforms.
+    /// </summary>
+    public async Task<AuthResponse> SocialLoginAsync(
+        string provider, string idToken, string? name = null, string? email = null, string? avatarUrl = null)
+    {
+        DRLogger.Log($"SocialLoginAsync: provider={provider}", DRLogger.Category.API);
+        var body = new
+        {
+            provider,
+            id_token = idToken,
+            name,
+            email,
+            avatar_url = avatarUrl,
+        };
+        return await PostAsync<AuthResponse>("/auth/social", body, autoRefresh: false);
+    }
+
+    /// <summary>
     /// Exchanges a refresh token for a fresh access/refresh pair.
     /// Does not auto-retry on 401 — a 401 here means the refresh token itself is invalid.
     /// </summary>
@@ -311,18 +332,38 @@ public sealed class ApiClient : IDisposable
 
         if (!response.IsSuccessStatusCode)
         {
-            // Try to extract a message from the error body
-            string detail;
+            // Extract a user-facing message from the error body. NestJS
+            // class-validator returns `{"message":["email must be an email"]}`
+            // (string[]) for DTO failures and `{"message":"…"}` (string) for
+            // most other errors — we have to handle both, otherwise the
+            // array falls through to the raw JSON body and the user sees
+            // stack-trace soup. See BUG-18 / BUG-19 (2026-05-29).
+            string detail = body;
             try
             {
                 using var doc = JsonDocument.Parse(body);
-                detail = doc.RootElement.TryGetProperty("message", out var msg)
-                    ? msg.GetString() ?? body
-                    : body;
+                if (doc.RootElement.TryGetProperty("message", out var msg))
+                {
+                    if (msg.ValueKind == JsonValueKind.String)
+                    {
+                        detail = msg.GetString() ?? body;
+                    }
+                    else if (msg.ValueKind == JsonValueKind.Array && msg.GetArrayLength() > 0)
+                    {
+                        // Join with "; " so multi-field validations show all problems.
+                        var parts = new List<string>();
+                        foreach (var el in msg.EnumerateArray())
+                        {
+                            var s = el.GetString();
+                            if (!string.IsNullOrEmpty(s)) parts.Add(s);
+                        }
+                        if (parts.Count > 0) detail = string.Join("; ", parts);
+                    }
+                }
             }
             catch
             {
-                detail = body;
+                /* body wasn't JSON — keep raw */
             }
 
             // Truncated body preview so error log entries don't bloat the log
@@ -334,7 +375,8 @@ public sealed class ApiClient : IDisposable
 
             throw new ApiException(
                 $"API {(int)response.StatusCode} {response.ReasonPhrase}: {detail}",
-                response.StatusCode);
+                response.StatusCode,
+                serverMessage: detail);
         }
 
         return JsonSerializer.Deserialize<T>(body, JsonOptions)
@@ -351,9 +393,19 @@ public class ApiException : Exception
 {
     public System.Net.HttpStatusCode StatusCode { get; }
 
-    public ApiException(string message, System.Net.HttpStatusCode statusCode)
+    /// <summary>
+    /// User-facing message extracted from the server's response body —
+    /// e.g. "email must be an email" without the "API 400 Bad Request:"
+    /// prefix or surrounding JSON. UI surfaces should prefer this over
+    /// <see cref="Exception.Message"/> so users don't see stack-trace soup.
+    /// Falls back to <see cref="Exception.Message"/> when null.
+    /// </summary>
+    public string? ServerMessage { get; }
+
+    public ApiException(string message, System.Net.HttpStatusCode statusCode, string? serverMessage = null)
         : base(message)
     {
         StatusCode = statusCode;
+        ServerMessage = serverMessage;
     }
 }

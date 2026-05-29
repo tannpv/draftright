@@ -54,7 +54,7 @@ export default function AccountPage() {
   useEffect(() => {
     const t = localStorage.getItem('dr_access_token');
     if (!t) {
-      window.location.href = '/signup?next=' + encodeURIComponent('/account');
+      window.location.href = '/login?next=' + encodeURIComponent('/account');
       return;
     }
     setToken(t);
@@ -74,7 +74,7 @@ export default function AccountPage() {
       });
       if (res.status === 401) {
         localStorage.removeItem('dr_access_token');
-        window.location.href = '/signup?next=' + encodeURIComponent('/account');
+        window.location.href = '/login?next=' + encodeURIComponent('/account');
         return;
       }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -86,21 +86,10 @@ export default function AccountPage() {
     }
   };
 
-  const subscribe = async () => {
-    if (!token) return;
-    setActionLoading('subscribe');
-    try {
-      const res = await fetch(`${API}/lemonsqueezy/checkout`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data: { url: string } = await res.json();
-      window.location.href = data.url;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not start checkout');
-      setActionLoading(null);
-    }
+  // Subscribe / renew go through the multi-method checkout (VietQR, card, …),
+  // the canonical pay flow. (LemonSqueezy "manage" stays only for LS-billed subs.)
+  const subscribe = () => {
+    window.location.href = '/checkout';
   };
 
   const manage = async () => {
@@ -161,7 +150,11 @@ export default function AccountPage() {
     return <p className="text-center text-red-400">{error ?? 'Account not found'}</p>;
   }
 
-  const isPro = account.subscription?.plan_name === 'Pro' && account.subscription.status === 'active';
+  const sub = account.subscription;
+  const isActive = !!sub && sub.status === 'active';
+  const isPro = sub?.plan_name === 'Pro' && isActive;
+  const isExpired = !!sub && sub.status !== 'active';
+  const isLemonSqueezy = sub?.store_type === 'lemonsqueezy';
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -185,37 +178,52 @@ export default function AccountPage() {
       <div className="rounded-2xl border border-dark-border bg-dark-card p-8">
         <p className="text-sm text-gray-500 mb-2">Current plan</p>
         <div className="flex items-baseline gap-3">
-          <span className="text-3xl font-bold text-white">{account.subscription?.plan_name ?? 'No plan'}</span>
-          {isPro && <span className="text-xs uppercase tracking-wider text-brand-400">Active</span>}
+          <span className="text-3xl font-bold text-white">{isActive ? (sub?.plan_name ?? 'No plan') : 'No active plan'}</span>
+          {isActive && <span className="text-xs uppercase tracking-wider text-brand-400">Active</span>}
+          {isExpired && <span className="text-xs uppercase tracking-wider text-yellow-400">Expired</span>}
         </div>
 
-        {account.subscription && (
+        {sub && (
           <div className="mt-4 space-y-1 text-sm text-gray-400">
             <p>
-              Daily limit: <span className="text-white">{account.subscription.daily_limit === -1 ? 'Unlimited' : account.subscription.daily_limit}</span> · Used today: <span className="text-white">{account.subscription.usage_today}</span>
+              Daily limit: <span className="text-white">{sub.daily_limit === -1 ? 'Unlimited' : sub.daily_limit}</span> · Used today: <span className="text-white">{sub.usage_today}</span>
             </p>
-            {account.subscription.expires_at && (
-              <p>Renews / expires: <span className="text-white">{new Date(account.subscription.expires_at).toLocaleDateString()}</span></p>
+            {sub.expires_at && (
+              <p>{isActive ? 'Renews / expires' : 'Expired on'}: <span className="text-white">{new Date(sub.expires_at).toLocaleDateString()}</span></p>
             )}
           </div>
         )}
 
+        {isExpired && (
+          <p className="mt-4 rounded-lg bg-yellow-500/10 border border-yellow-500/30 p-3 text-sm text-yellow-300">
+            Your subscription has ended. Renew to restore unlimited rewrites.
+          </p>
+        )}
+
         <div className="mt-6 flex gap-3">
-          {isPro ? (
-            <button
-              onClick={manage}
-              disabled={actionLoading === 'manage'}
-              className="rounded-full bg-brand-400 px-6 py-2.5 text-sm font-semibold text-white hover:bg-brand-500 disabled:opacity-50"
-            >
-              {actionLoading === 'manage' ? 'Opening…' : 'Manage subscription'}
-            </button>
+          {isActive ? (
+            isLemonSqueezy ? (
+              <button
+                onClick={manage}
+                disabled={actionLoading === 'manage'}
+                className="rounded-full bg-brand-400 px-6 py-2.5 text-sm font-semibold text-white hover:bg-brand-500 disabled:opacity-50"
+              >
+                {actionLoading === 'manage' ? 'Opening…' : 'Manage subscription'}
+              </button>
+            ) : (
+              <button
+                onClick={subscribe}
+                className="rounded-full border border-brand-400 px-6 py-2.5 text-sm font-semibold text-brand-400 hover:bg-brand-400/10"
+              >
+                Change plan
+              </button>
+            )
           ) : (
             <button
               onClick={subscribe}
-              disabled={actionLoading === 'subscribe'}
               className="rounded-full bg-brand-400 px-6 py-2.5 text-sm font-semibold text-white hover:bg-brand-500 disabled:opacity-50"
             >
-              {actionLoading === 'subscribe' ? 'Opening checkout…' : 'Upgrade to Pro · $4.99/mo'}
+              {isExpired ? 'Renew subscription' : 'Subscribe to Pro'}
             </button>
           )}
           <a href="/download" className="rounded-full border border-brand-400 px-6 py-2.5 text-sm font-semibold text-brand-400 hover:bg-brand-400/10">

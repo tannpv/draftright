@@ -31,7 +31,7 @@ export default function Toast({ message, type, onClose, duration = 3500 }: Toast
           gap: 12,
           padding: '12px 18px',
           borderRadius: 7,
-          background: '#2a3547',
+          background: 'var(--card)',
           border: `1px solid ${isSuccess ? 'rgba(19,222,185,0.3)' : 'rgba(250,137,107,0.3)'}`,
           boxShadow: '0 8px 30px rgba(0,0,0,0.3)',
           minWidth: 260,
@@ -49,7 +49,7 @@ export default function Toast({ message, type, onClose, duration = 3500 }: Toast
             alignItems: 'center',
             justifyContent: 'center',
             flexShrink: 0,
-            color: isSuccess ? '#13deb9' : '#fa896b',
+            color: isSuccess ? 'var(--success)' : 'var(--danger)',
             fontSize: 14,
             fontWeight: 700,
           }}
@@ -57,14 +57,14 @@ export default function Toast({ message, type, onClose, duration = 3500 }: Toast
           {isSuccess ? '✓' : '✕'}
         </div>
 
-        <span style={{ color: '#eaeff4', fontSize: 13, fontWeight: 500, flex: 1 }}>{message}</span>
+        <span style={{ color: 'var(--text)', fontSize: 13, fontWeight: 500, flex: 1 }}>{message}</span>
 
         <button
           onClick={onClose}
           style={{
             background: 'transparent',
             border: 'none',
-            color: '#7c8fac',
+            color: 'var(--muted)',
             cursor: 'pointer',
             fontSize: 16,
             lineHeight: 1,

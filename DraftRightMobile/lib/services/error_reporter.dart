@@ -7,6 +7,33 @@ import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+/// One captured error, surfaced to the UI for an on-screen notice. The
+/// reporter publishes the latest of these via [ErrorReporter.lastError] so
+/// any widget can react (banner, snackbar, dev overlay) without depending
+/// on the full backend submission pipeline.
+class CapturedError {
+  final String errorType;
+  final String message;
+  final String? stack;
+  final String severity;
+  final DateTime at;
+  const CapturedError({
+    required this.errorType,
+    required this.message,
+    this.stack,
+    this.severity = 'error',
+    required this.at,
+  });
+
+  /// Short single-line preview suitable for a snackbar / banner.
+  String get shortLine {
+    final firstLine = message.split('\n').first.trim();
+    return firstLine.length > 140
+        ? '${firstLine.substring(0, 137)}…'
+        : firstLine;
+  }
+}
+
 /// Reports unhandled errors and exceptions to the DraftRight backend's
 /// /errors endpoint. Wrap your `runApp(...)` call in
 /// `ErrorReporter.run(() => runApp(...), backendUrl: ...)` and crashes
@@ -22,6 +49,13 @@ class ErrorReporter {
   static final _queue = <Map<String, dynamic>>[];
   static const _persistKey = 'draftright.error_reporter.queue';
   static bool _flushScheduled = false;
+
+  /// Latest captured error, or null if none yet. UI widgets can subscribe to
+  /// this to show an on-screen notice ("something went wrong: …") without
+  /// having to wrap every call site in try/catch. Cleared by calling
+  /// `lastError.value = null` after the user dismisses the banner.
+  static final ValueNotifier<CapturedError?> lastError =
+      ValueNotifier<CapturedError?>(null);
 
   /// Install crash handlers + record the backend URL / bearer token.
   ///
@@ -126,6 +160,27 @@ class ErrorReporter {
     } catch (_) {/* ignore */}
   }
 
+  /// Patterns that should never reach /errors — expected non-issues that
+  /// were being thrown as Exceptions for control flow (e.g. AuthService
+  /// throwing "Not logged in" when bootstrap tries to load a token before
+  /// the user has signed in). Match by substring on the error message;
+  /// case-sensitive. Keep this list short — the real fix is to stop
+  /// throwing for expected control flow, but suppressing here keeps the
+  /// /errors stream free of noise while we work back to that.
+  static const _suppressedSubstrings = <String>[
+    'Not logged in',
+    // The ErrorNoticeOverlay catches this internally now, but if any other
+    // caller hits it on a Scaffold-less route it is also a known non-issue.
+    'no descendant Scaffolds to present to',
+  ];
+
+  static bool _isSuppressed(String message) {
+    for (final s in _suppressedSubstrings) {
+      if (message.contains(s)) return true;
+    }
+    return false;
+  }
+
   static void _enqueue({
     required String errorType,
     required String message,
@@ -133,6 +188,7 @@ class ErrorReporter {
     String severity = 'error',
     Map<String, dynamic>? context,
   }) {
+    if (_isSuppressed(message)) return;
     final platform = _detectPlatform();
     final entry = <String, dynamic>{
       'platform': platform,
@@ -147,6 +203,21 @@ class ErrorReporter {
     if (_queue.length > 100) _queue.removeAt(0); // bound queue
     _persistQueue(); // fire-and-forget
     _scheduleFlush();
+
+    // Surface only severities the user couldn't already see — anything routed
+    // through reportHandled with severity='warning' is a known/handled failure
+    // whose caller already shows its own UI (banner, snackbar). Raising the
+    // overlay too would double-notify. Auto-captured 'error'/'fatal' are the
+    // unexpected ones the user needs to be told about.
+    if (severity == 'error' || severity == 'fatal') {
+      lastError.value = CapturedError(
+        errorType: errorType,
+        message: message,
+        stack: stack,
+        severity: severity,
+        at: DateTime.now(),
+      );
+    }
   }
 
   static String _detectPlatform() {

@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { databaseConfig } from './config/database.config';
 import { HealthModule } from './health/health.module';
 import { UsersModule } from './users/users.module';
@@ -22,6 +24,15 @@ import { ImePacksModule } from './ime-packs/ime-packs.module';
 @Module({
   imports: [
     TypeOrmModule.forRoot(databaseConfig()),
+    // Global per-IP rate limit, applied via APP_GUARD below. The anon endpoints
+    // (/bug-reports, /feedback, /errors) further tighten this with @Throttle()
+    // decorators. Multi-window definition lets us catch both burst spam
+    // ("60 in 10 seconds") and slow drip spam ("1000 in an hour").
+    ThrottlerModule.forRoot([
+      { name: 'short',  ttl: 10_000,   limit: 60   }, // 60 req / 10 s
+      { name: 'medium', ttl: 60_000,   limit: 200  }, // 200 req / min
+      { name: 'long',   ttl: 3_600_000, limit: 2000 }, // 2000 req / hour
+    ]),
     EmailModule,
     HealthModule,
     UsersModule,
@@ -39,6 +50,12 @@ import { ImePacksModule } from './ime-packs/ime-packs.module';
     BugReportsModule,
     ExtractionModule,
     ImePacksModule,
+  ],
+  providers: [
+    // Global guard so ThrottlerModule's limits apply to every controller
+    // without per-controller @UseGuards. Overridden per-route by @Throttle()
+    // on the anon endpoints, and bypassed by @SkipThrottle() on health.
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })
 export class AppModule {}

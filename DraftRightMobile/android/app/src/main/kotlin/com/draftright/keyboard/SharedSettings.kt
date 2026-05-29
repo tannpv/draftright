@@ -49,24 +49,35 @@ class SharedSettings(context: Context) {
     val activeLanguageId: String
         get() = prefs.getString("flutter.draftright.activeLanguageId", "en") ?: "en"
 
-    private fun parseStringList(raw: String?): List<String> {
-        if (raw.isNullOrBlank()) return emptyList()
-        // Flutter's shared_preferences_android prefixes StringList values
-        // with a sentinel (base64 of "This is the prefix for a list.") to
-        // distinguish a List<String> from a plain String at read time.
-        // Strip it; what remains is a valid JSON array.
-        val jsonText = raw.trim().removePrefix(FLUTTER_LIST_PREFIX)
-        return try {
-            val arr = JSONArray(jsonText)
-            (0 until arr.length()).mapNotNull { i ->
-                arr.optString(i).takeIf { it.isNotEmpty() }
-            }
-        } catch (_: JSONException) {
-            emptyList()
-        }
-    }
+    private fun parseStringList(raw: String?) = Companion.parseStringList(raw)
 
-    private companion object {
-        const val FLUTTER_LIST_PREFIX = "VGhpcyBpcyB0aGUgcHJlZml4IGZvciBhIGxpc3Qu!"
+    internal companion object {
+        // shared_preferences_android 2.x encodes StringList with a base64 sentinel
+        // followed by "!" then the JSON array. Older plugin versions omit the "!".
+        // Both must be handled so users upgrading from old installs don't lose their
+        // enabled-language list (which collapses to ["en"], silently killing language
+        // switching).
+        const val LEGACY_LIST_PREFIX = "VGhpcyBpcyB0aGUgcHJlZml4IGZvciBhIGxpc3Qu"
+        const val JSON_LIST_PREFIX = "$LEGACY_LIST_PREFIX!"
+
+        internal fun parseStringList(raw: String?): List<String> {
+            if (raw.isNullOrBlank()) return emptyList()
+            val s = raw.trim()
+                .removePrefix(JSON_LIST_PREFIX)
+                .removePrefix(LEGACY_LIST_PREFIX)
+                .trim()
+            try {
+                val arr = JSONArray(s)
+                val out = (0 until arr.length()).mapNotNull { i ->
+                    arr.optString(i).takeIf { it.isNotEmpty() }
+                }
+                if (out.isNotEmpty()) return out
+            } catch (_: Exception) { }
+            // Fallback: Kotlin toString format "[en, vi]" — unquoted, comma-space
+            return s.removePrefix("[").removeSuffix("]")
+                .split(",")
+                .map { it.trim().trim('"') }
+                .filter { it.isNotEmpty() }
+        }
     }
 }

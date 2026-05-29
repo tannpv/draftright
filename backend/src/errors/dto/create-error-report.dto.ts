@@ -25,4 +25,8 @@ export class CreateErrorReportDto {
 
   @IsOptional() @IsString() @MaxLength(100)
   device_id?: string;
+
+  /** Honeypot. See backend/src/bug-reports/dto/create-bug-report.dto.ts. */
+  @IsOptional() @IsString() @MaxLength(255)
+  website?: string;
 }

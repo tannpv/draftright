@@ -1,22 +1,23 @@
-import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { PaymentStrategy, CheckoutResult, WebhookAction, CreateCheckoutOptions } from './payment-strategy.interface';
+import { CheckoutResult, WebhookAction, CreateCheckoutOptions } from './payment-strategy.interface';
+import { BasePaymentStrategy } from './base-payment.strategy';
 import { Payment } from '../entities/payment.entity';
 import { AppSettings } from '../../admin/entities/app-settings.entity';
+import { extractPaymentReference } from '../payment-reference';
 
 @Injectable()
-export class VietQRStrategy implements PaymentStrategy {
-  private readonly logger = new Logger(VietQRStrategy.name);
-
+export class VietQRStrategy extends BasePaymentStrategy {
   constructor(
-    @InjectRepository(AppSettings)
-    private readonly settingsRepo: Repository<AppSettings>,
-  ) {}
+    @InjectRepository(AppSettings) settingsRepo: Repository<AppSettings>,
+  ) {
+    super(settingsRepo);
+  }
 
   /** Read bank + provider credentials from AppSettings (admin portal), env fallback. */
   private async getCredentials() {
-    const s = await this.settingsRepo.findOne({ where: {} });
+    const s = await this.getSettings();
     return {
       bankId: s?.vietqr_bank_id || process.env.VIETQR_BANK_ID || 'MB',
       accountNumber: s?.vietqr_account_number || process.env.VIETQR_ACCOUNT_NUMBER || '0000000000',
@@ -86,29 +87,26 @@ export class VietQRStrategy implements PaymentStrategy {
     // Casso:
     if (payload.data && Array.isArray(payload.data)) {
       for (const tx of payload.data) {
-        const desc = (tx.description || '').toUpperCase();
-        const match = desc.match(/DR-[A-Z]+-[A-Z0-9]+/);
-        if (match && tx.amount > 0) {
-          return { type: 'payment_completed', reference_code: match[0] };
+        const ref = extractPaymentReference(tx.description);
+        if (ref && tx.amount > 0) {
+          return { type: 'payment_completed', reference_code: ref };
         }
       }
     }
 
     // SePay:
     if (payload.content && payload.transferAmount) {
-      const desc = (payload.content || '').toUpperCase();
-      const match = desc.match(/DR-[A-Z]+-[A-Z0-9]+/);
-      if (match && payload.transferAmount > 0) {
-        return { type: 'payment_completed', reference_code: match[0] };
+      const ref = extractPaymentReference(payload.content);
+      if (ref && payload.transferAmount > 0) {
+        return { type: 'payment_completed', reference_code: ref };
       }
     }
 
     // MB Bank BaaS:
     if (payload.transactionId && payload.description) {
-      const desc = (payload.description || '').toUpperCase();
-      const match = desc.match(/DR-[A-Z]+-[A-Z0-9]+/);
-      if (match && payload.creditAmount > 0) {
-        return { type: 'payment_completed', reference_code: match[0] };
+      const ref = extractPaymentReference(payload.description);
+      if (ref && payload.creditAmount > 0) {
+        return { type: 'payment_completed', reference_code: ref };
       }
     }
 

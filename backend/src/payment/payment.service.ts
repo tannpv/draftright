@@ -2,33 +2,24 @@ import { Injectable, BadRequestException, NotFoundException, Logger } from '@nes
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, MoreThanOrEqual } from 'typeorm';
 import { Payment, PaymentMethod, PaymentStatus } from './entities/payment.entity';
-import { PaymentStrategy, CheckoutResult, WebhookAction } from './strategies/payment-strategy.interface';
+// Default payment-method when nothing is configured. Single point of change.
+const DEFAULT_PAYMENT_METHOD = PaymentMethod.STRIPE;
+import { CheckoutResult, WebhookAction } from './strategies/payment-strategy.interface';
+import { BasePaymentStrategy } from './strategies/base-payment.strategy';
 import { StripeStrategy } from './strategies/stripe.strategy';
-import { PayPalStrategy } from './strategies/paypal.strategy';
 import { VietQRStrategy } from './strategies/vietqr.strategy';
-import { MomoStrategy } from './strategies/momo.strategy';
+import { LemonSqueezyStrategy } from './strategies/lemonsqueezy.strategy';
 import { PlansService } from '../plans/plans.service';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { User } from '../users/entities/user.entity';
 import { AppSettings } from '../admin/entities/app-settings.entity';
-import { randomBytes } from 'crypto';
+import { generatePaymentReference } from './payment-reference';
+import { EmailService } from '../email/email.service';
+import { PAYMENT_PENDING_TTL_MS } from '../common/app-config';
 
 @Injectable()
 export class PaymentService {
-  private strategies: Map<string, PaymentStrategy>;
-
-  /**
-   * Methods that are publicly exposed. Controlled via env var
-   * `PAYMENT_ENABLED_METHODS=stripe,vietqr` (comma-separated).
-   *
-   * Phase 3a default = "stripe" only. VietQR/Casso will be added in Phase 3b
-   * once the Vietnamese LLC is registered (Casso requires business docs).
-   * PayPal + Momo stay implemented but disabled — webhooks return 404,
-   * checkout requests rejected — until they're explicitly enabled.
-   *
-   * `bank_transfer` is an alias for `vietqr` — only enabled if `vietqr` is.
-   */
-  private readonly enabledMethods: Set<string>;
+  private strategies: Map<string, BasePaymentStrategy>;
 
   private readonly logger = new Logger(PaymentService.name);
 
@@ -42,41 +33,52 @@ export class PaymentService {
     private readonly plansService: PlansService,
     private readonly subscriptionsService: SubscriptionsService,
     private readonly stripeStrategy: StripeStrategy,
-    private readonly paypalStrategy: PayPalStrategy,
     private readonly vietqrStrategy: VietQRStrategy,
-    private readonly momoStrategy: MomoStrategy,
+    private readonly lemonSqueezyStrategy: LemonSqueezyStrategy,
+    private readonly emailService: EmailService,
   ) {
-    this.strategies = new Map<string, PaymentStrategy>([
-      ['stripe', this.stripeStrategy],
-      ['paypal', this.paypalStrategy],
-      ['momo', this.momoStrategy],
-      ['vietqr', this.vietqrStrategy],
-      ['bank_transfer', this.vietqrStrategy],
+    // Use the PaymentMethod enum (entities/payment.entity.ts) as the keys —
+    // the same enum the DB rows use, so adding a new method only requires one
+    // edit per concern (enum value + strategy class), never a scatter of
+    // string literals across the service / controller / DTOs.
+    this.strategies = new Map<string, BasePaymentStrategy>([
+      [PaymentMethod.STRIPE,        this.stripeStrategy],
+      [PaymentMethod.VIETQR,        this.vietqrStrategy],
+      [PaymentMethod.BANK_TRANSFER, this.vietqrStrategy],
+      [PaymentMethod.LEMONSQUEEZY,  this.lemonSqueezyStrategy],
     ]);
+  }
 
-    const raw = (process.env.PAYMENT_ENABLED_METHODS || 'stripe').toLowerCase();
-    this.enabledMethods = new Set(raw.split(',').map((s) => s.trim()).filter(Boolean));
-    // bank_transfer is implicitly enabled iff vietqr is enabled
-    if (this.enabledMethods.has('vietqr')) this.enabledMethods.add('bank_transfer');
+  /**
+   * Enabled payment methods, admin-controlled via the
+   * `payment_methods_enabled` setting (CSV). Falls back to the
+   * PAYMENT_ENABLED_METHODS env var, then "stripe", when unset. Read fresh each
+   * call so admin toggles take effect without a restart.
+   * `bank_transfer` is implicitly enabled iff `vietqr` is.
+   */
+  async getEnabledMethods(): Promise<string[]> {
+    const settings = await this.settingsRepo.findOne({ where: {} });
+    const raw = (settings?.payment_methods_enabled || process.env.PAYMENT_ENABLED_METHODS || DEFAULT_PAYMENT_METHOD).toLowerCase();
+    const set = new Set(raw.split(',').map((s) => s.trim()).filter(Boolean));
+    if (set.has(PaymentMethod.VIETQR)) set.add(PaymentMethod.BANK_TRANSFER);
+    return [...set];
+  }
+
+  private async assertEnabled(method: string): Promise<void> {
+    const enabled = await this.getEnabledMethods();
+    if (!enabled.includes(method)) {
+      throw new NotFoundException(`Payment method '${method}' is not enabled.`);
+    }
   }
 
   // --- Generic: get strategy by method ---
 
-  private getStrategy(method: string): PaymentStrategy {
-    if (!this.enabledMethods.has(method)) {
-      throw new NotFoundException(`Payment method '${method}' is not enabled.`);
-    }
+  private getStrategy(method: string): BasePaymentStrategy {
     const strategy = this.strategies.get(method);
     if (!strategy) throw new BadRequestException(`Unsupported payment method: ${method}`);
     return strategy;
   }
 
-  // --- Generic: generate unique reference code ---
-
-  private generateReferenceCode(): string {
-    const rand = randomBytes(4).toString('hex').toUpperCase();
-    return `DR-PRO-${rand}`;
-  }
 
   // --- Generic: create checkout ---
 
@@ -90,6 +92,7 @@ export class PaymentService {
     if (!plan) throw new NotFoundException('Plan not found');
     if (plan.price_cents === 0) throw new BadRequestException('Cannot purchase a free plan');
 
+    await this.assertEnabled(method);
     const strategy = this.getStrategy(method);
 
     // Load user for Stripe customer reuse + email pre-fill
@@ -104,8 +107,8 @@ export class PaymentService {
       currency: plan.currency || 'USD',
       method: method as PaymentMethod,
       status: PaymentStatus.PENDING,
-      reference_code: this.generateReferenceCode(),
-      expires_at: new Date(Date.now() + 30 * 60 * 1000), // 30 min expiry
+      reference_code: generatePaymentReference(),
+      expires_at: new Date(Date.now() + PAYMENT_PENDING_TTL_MS), // 30 min expiry
     });
     // Eagerly attach the plan so the strategy can read it without a re-fetch
     (payment as any).plan = plan;
@@ -138,6 +141,7 @@ export class PaymentService {
   // --- Generic: handle webhook from any provider ---
 
   async handleWebhook(method: string, payload: any, headers: any): Promise<{ success: boolean; reference_code?: string }> {
+    await this.assertEnabled(method);
     const strategy = this.getStrategy(method);
     const action: WebhookAction = await strategy.verifyWebhook(payload, headers);
 
@@ -249,6 +253,18 @@ export class PaymentService {
     }
 
     await this.subscriptionsService.grant(payment.user_id, payment.plan_id, expiresAt);
+
+    // Best-effort "subscription active" email — never block activation on it.
+    try {
+      const user = await this.userRepo.findOne({ where: { id: payment.user_id } });
+      if (user?.email) {
+        await this.emailService.sendSubscriptionActivated(
+          user.email, user.name, payment.plan?.name || 'Pro', expiresAt, payment.currency, payment.amount,
+        );
+      }
+    } catch (e: any) {
+      this.logger.warn(`subscription-activated email failed: ${e?.message}`);
+    }
   }
 
   // --- Generic: get payment status ---

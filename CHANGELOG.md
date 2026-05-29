@@ -1,15 +1,48 @@
 # DraftRight — Changelog
 
-User-facing release notes. **One `## <version>` section per release.** The
-release pipeline extracts the section whose heading matches the version being
-published and writes it into the update server (`app_releases.release_notes`),
-so every client can show a "What's New" notice on the first launch after
-updating. Keep entries short and written for end users; if a version needs the
-user to *do* something after updating, say so explicitly under a **Action
-needed:** line.
+User-facing release notes. **One `## <version>` section per release**, with
+**per-platform sub-sections** so each store/installer only sees notes that
+apply to it.
 
-Heading format must stay `## <version>` (a date after an em dash is optional and
-ignored by the extractor), e.g. `## 2.3.6 — 2026-05-20`.
+```
+## 2.3.X — YYYY-MM-DD
+### macOS
+- mac-only bullet
+### Windows
+- windows-only bullet
+### All platforms
+- cross-cutting bullet
+```
+
+The release pipeline (`scripts/release-publish.sh`) passes the target platform
+to `scripts/changelog-extract.sh`, which keeps only the matching sub-section
+plus `### All platforms` and writes the result into `app_releases.release_notes`.
+A Windows-only line under `### Windows` will never appear in the macOS
+"What's New" notice (and vice versa).
+
+If a version needs the user to *do* something after updating, say so
+explicitly under an **Action needed:** line inside the relevant sub-section.
+
+## 2.3.15 — 2026-05-29
+### Windows
+- Sign-in now validates your email + password before sending — empty fields and obvious typos surface as friendly inline messages instead of triggering a server round-trip.
+- Login errors show the server's actual reason ("Invalid credentials", "email must be an email", etc.) instead of the raw stack trace some users were seeing.
+
+## 2.3.14 — 2026-05-28
+### Windows
+- When DraftRight is installed from the Microsoft Store, updates now go through the Store automatically. The "Update available" badge on the tray icon still works — clicking it asks the Store to download and install the new version immediately instead of waiting for the Store's own schedule.
+- Sideload (.exe) installs are unaffected: they continue to use the built-in updater.
+
+## 2.3.13 — 2026-05-28
+### macOS
+- The menu-bar icon now shows a small red dot when a new version is available — no more silent waiting; you can see at a glance when there's something new to install.
+### Windows
+- Sign in with Google now works: a Google button on the Settings → Account screen opens your browser, completes sign-in, and signs you into DraftRight.
+### All platforms
+- Internal: the Backend URL field has been removed from Settings. All builds point at the production server by default.
+
+## 2.3.12 — 2026-05-27
+- Fixed "Sign in with Google" on macOS, which was failing with an authorization error. Google login now works again.
 
 ## 2.3.11 — 2026-05-20
 - The "Default Tone (auto-run)" setting now appears under Advanced mode, where it actually applies.

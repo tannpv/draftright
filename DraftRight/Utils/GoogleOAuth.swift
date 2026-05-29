@@ -1,33 +1,53 @@
 import AuthenticationServices
 import AppKit
+import CryptoKit
 
-/// Handles Google OAuth flow using ASWebAuthenticationSession.
-/// Opens a secure browser sheet, gets the auth code, exchanges it for an id_token.
+/// Google OAuth flow for a *native* macOS app — iOS-type client + PKCE +
+/// reversed-scheme redirect. Web-type clients are blocked by Google for
+/// custom-scheme callbacks (returns "redirect_uri_mismatch" or "Error 400:
+/// invalid_request"), so the client must be registered as iOS in the Google
+/// Cloud Console. PKCE replaces the client_secret as the proof-of-possession,
+/// so this code has no secret embedded.
+///
+/// Flow:
+///   1. Generate PKCE verifier + S256 challenge.
+///   2. Open ASWebAuthenticationSession with the reversed-scheme redirect.
+///   3. Browser hits `com.googleusercontent.apps.<id>:/oauth2callback?code=…`.
+///   4. Exchange the auth code + verifier for an id_token at /token.
 enum GoogleOAuth {
-    private static let clientId = "22951518033-gf853ftmf4emivffk0su2bik42j7cmai.apps.googleusercontent.com"
-    private static let redirectURI = "com.draftright.app.v2:/oauth2callback"
+    // iOS-type OAuth client (project 22951518033). Reversed scheme is the
+    // bundle-id-shaped value Google issues alongside the client_id for native
+    // apps; it's the only redirect scheme an iOS-type client accepts.
+    private static let clientId = "22951518033-dvkn61dhibse9fu83ohh51mlovd7269a.apps.googleusercontent.com"
+    private static let reversedClientScheme = "com.googleusercontent.apps.22951518033-dvkn61dhibse9fu83ohh51mlovd7269a"
+    private static let redirectURI = "\(reversedClientScheme):/oauth2callback"
+    private static let authEndpoint = "https://accounts.google.com/o/oauth2/v2/auth"
     private static let tokenEndpoint = "https://oauth2.googleapis.com/token"
 
-    /// Runs the full OAuth flow: browser → auth code → exchange → id_token
+    /// Runs the full OAuth flow: browser → auth code → exchange → id_token.
     @MainActor
     static func authenticate() async throws -> String {
-        let authCode = try await getAuthCode()
-        let idToken = try await exchangeCodeForToken(authCode)
+        let verifier = pkceVerifier()
+        let challenge = pkceChallenge(verifier)
+        let authCode = try await getAuthCode(challenge: challenge)
+        let idToken = try await exchangeCodeForToken(code: authCode, verifier: verifier)
         return idToken
     }
 
     // MARK: - Step 1: Get auth code via browser
 
     @MainActor
-    private static func getAuthCode() async throws -> String {
+    private static func getAuthCode(challenge: String) async throws -> String {
         let scopes = "openid email profile"
-        let authURL = "https://accounts.google.com/o/oauth2/v2/auth"
+        let escapedScopes = scopes.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? scopes
+        let escapedRedirect = redirectURI.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? redirectURI
+        let authURL = authEndpoint
             + "?client_id=\(clientId)"
-            + "&redirect_uri=\(redirectURI)"
+            + "&redirect_uri=\(escapedRedirect)"
             + "&response_type=code"
-            + "&scope=\(scopes.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? scopes)"
-            + "&access_type=offline"
-            + "&prompt=consent"
+            + "&scope=\(escapedScopes)"
+            + "&code_challenge=\(challenge)"
+            + "&code_challenge_method=S256"
 
         guard let url = URL(string: authURL) else {
             throw OAuthError.invalidURL
@@ -36,7 +56,7 @@ enum GoogleOAuth {
         return try await withCheckedThrowingContinuation { continuation in
             let session = ASWebAuthenticationSession(
                 url: url,
-                callbackURLScheme: "com.draftright.app.v2"
+                callbackURLScheme: reversedClientScheme
             ) { callbackURL, error in
                 if let error {
                     continuation.resume(throwing: error)
@@ -51,7 +71,6 @@ enum GoogleOAuth {
                 continuation.resume(returning: code)
             }
 
-            // Use a window-based presentation context
             let presenter = OAuthPresenter()
             session.presentationContextProvider = presenter
             objc_setAssociatedObject(session, "presenter", presenter, .OBJC_ASSOCIATION_RETAIN)
@@ -63,7 +82,7 @@ enum GoogleOAuth {
 
     // MARK: - Step 2: Exchange auth code for id_token
 
-    private static func exchangeCodeForToken(_ code: String) async throws -> String {
+    private static func exchangeCodeForToken(code: String, verifier: String) async throws -> String {
         guard let url = URL(string: tokenEndpoint) else {
             throw OAuthError.invalidURL
         }
@@ -72,11 +91,14 @@ enum GoogleOAuth {
         request.httpMethod = "POST"
         request.addValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
 
+        // iOS-type clients are *public* — no client_secret. PKCE's code_verifier
+        // is the proof-of-possession instead.
         let body = [
             "code=\(code)",
             "client_id=\(clientId)",
             "redirect_uri=\(redirectURI)",
             "grant_type=authorization_code",
+            "code_verifier=\(verifier)",
         ].joined(separator: "&")
         request.httpBody = body.data(using: .utf8)
 
@@ -93,6 +115,27 @@ enum GoogleOAuth {
         }
 
         return idToken
+    }
+
+    // MARK: - PKCE helpers
+
+    private static func pkceVerifier() -> String {
+        var bytes = [UInt8](repeating: 0, count: 32)
+        _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        return base64URLEncode(Data(bytes))
+    }
+
+    private static func pkceChallenge(_ verifier: String) -> String {
+        let hash = SHA256.hash(data: Data(verifier.utf8))
+        return base64URLEncode(Data(hash))
+    }
+
+    /// base64url without padding (the encoding OAuth/PKCE require).
+    private static func base64URLEncode(_ data: Data) -> String {
+        data.base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
     }
 
     // MARK: - Errors
@@ -118,7 +161,6 @@ enum GoogleOAuth {
 
 private class OAuthPresenter: NSObject, ASWebAuthenticationPresentationContextProviding {
     func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
-        // Use any existing window, or create one
         return NSApp.windows.first(where: { $0.isVisible }) ?? NSApp.windows.first ?? ASPresentationAnchor()
     }
 }

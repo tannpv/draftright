@@ -40,6 +40,8 @@ export default function ReportBugWidget({ playgroundState }: Props) {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [hasToken, setHasToken] = useState(false);
+  // Honeypot — see the hidden <input name="website"> in the JSX below.
+  const [website, setWebsite] = useState('');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Detect login state when modal opens.
@@ -114,6 +116,8 @@ export default function ReportBugWidget({ playgroundState }: Props) {
     try {
       const token = getAccessToken();
       const fd = new FormData();
+      // Honeypot — bots fill this, humans don't. Backend drops silently.
+      fd.append('website', website);
       fd.append('description', trimmed);
       fd.append('source', 'web-playground');
       fd.append('app_version', APP_VERSION);
@@ -231,6 +235,20 @@ export default function ReportBugWidget({ playgroundState }: Props) {
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-4">
+                {/* Honeypot — off-screen + aria-hidden so humans never touch it. */}
+                <div aria-hidden="true" style={{ position: 'absolute', left: '-10000px', top: 'auto', width: '1px', height: '1px', overflow: 'hidden' }}>
+                  <label>
+                    Website
+                    <input
+                      type="text"
+                      name="website"
+                      tabIndex={-1}
+                      autoComplete="off"
+                      value={website}
+                      onChange={(e) => setWebsite(e.target.value)}
+                    />
+                  </label>
+                </div>
                 <div>
                   <label htmlFor="rb-description" className="block text-sm font-medium text-slate-300 mb-1.5">
                     What went wrong? <span className="text-red-400">*</span>

@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
-import { verifyBackend } from '../api';
+import { verifyBackend, API_URL } from '../api';
 import { logout, getAdminEmail } from '../auth';
+import { useInboxCounts } from '../hooks/useInboxCounts';
 import ReportBugButton from './ReportBugButton';
 
 /* ── SVG Icons (inline, no external deps) ───────────────── */
@@ -149,8 +150,11 @@ const navItems = [
   { path: '/transactions',  label: 'Transactions',  icon: <IconTransactions />,  exact: false },
   { path: '/payments',      label: 'Payments',      icon: <IconPayments />,      exact: false },
   { path: '/settings',      label: 'Settings',      icon: <IconSettings />,      exact: false },
+  { path: '/email-logs',    label: 'Email Logs',    icon: <IconSettings />,      exact: false },
+  { path: '/email-templates', label: 'Email Templates', icon: <IconSettings />,  exact: false },
   { path: '/admin-users',   label: 'Admin Users',   icon: <IconAdminUsers />,    exact: false },
-  { path: '/inbox',         label: 'Inbox',         icon: <IconErrors />,        exact: false },
+  // Inbox moved to the top-right header (with unread badge) so admins always
+  // see the count without scanning the sidebar. The /inbox route still works.
   { path: '/errors',        label: 'Error Reports', icon: <IconErrors />,        exact: false },
   { path: '/bug-reports',   label: 'Bug Reports',   icon: <IconBugReports />,    exact: false },
   { path: '/versions',      label: 'App Versions',  icon: <IconVersions />,      exact: false },
@@ -161,21 +165,22 @@ export default function Layout() {
   const [collapsed, setCollapsed] = useState(false);
   const sidebarWidth = collapsed ? 0 : 270;
   const [backendWarning, setBackendWarning] = useState<string | null>(null);
+  const inboxCounts = useInboxCounts();
 
   useEffect(() => {
     verifyBackend().then((result) => {
       if (result === 'wrong_server') {
-        const url = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+        const url = API_URL;
         setBackendWarning(`Connected to wrong backend -- expected DraftRight API on ${url}`);
       } else if (result === 'unreachable') {
-        const url = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+        const url = API_URL;
         setBackendWarning(`Backend unreachable at ${url}`);
       }
     });
   }, []);
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: '#202936' }}>
+    <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg)' }}>
 
       {/* ── Overlay (mobile/collapsed) ──────────────────── */}
       {!collapsed ? null : null}
@@ -188,8 +193,8 @@ export default function Layout() {
           top: 0,
           width: 270,
           height: '100vh',
-          background: '#202936',
-          borderRight: '1px solid #333f55',
+          background: 'var(--bg)',
+          borderRight: '1px solid var(--border)',
           display: 'flex',
           flexDirection: 'column',
           zIndex: 100,
@@ -199,14 +204,14 @@ export default function Layout() {
         }}
       >
         {/* Logo */}
-        <div style={{ padding: '24px 20px 20px', borderBottom: '1px solid #333f55' }}>
+        <div style={{ padding: '24px 20px 20px', borderBottom: '1px solid var(--border)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div
               style={{
                 width: 34,
                 height: 34,
                 borderRadius: 8,
-                background: 'linear-gradient(135deg, #5d87ff, #49beff)',
+                background: 'linear-gradient(135deg, var(--primary), var(--secondary))',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -219,15 +224,15 @@ export default function Layout() {
               </svg>
             </div>
             <div>
-              <p style={{ color: '#eaeff4', fontWeight: 700, fontSize: 15, margin: 0, lineHeight: 1.2 }}>DraftRight</p>
-              <p style={{ color: '#7c8fac', fontSize: 11, margin: 0, letterSpacing: '0.05em' }}>Admin Portal</p>
+              <p style={{ color: 'var(--text)', fontWeight: 700, fontSize: 15, margin: 0, lineHeight: 1.2 }}>DraftRight</p>
+              <p style={{ color: 'var(--muted)', fontSize: 11, margin: 0, letterSpacing: '0.05em' }}>Admin Portal</p>
             </div>
           </div>
         </div>
 
         {/* Nav section label */}
         <div style={{ padding: '16px 20px 6px' }}>
-          <p style={{ color: '#7c8fac', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', margin: 0 }}>
+          <p style={{ color: 'var(--muted)', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', margin: 0 }}>
             Navigation
           </p>
         </div>
@@ -246,7 +251,7 @@ export default function Layout() {
                 padding: '10px 10px',
                 borderRadius: 7,
                 marginBottom: 2,
-                color: isActive ? '#5d87ff' : '#7c8fac',
+                color: isActive ? 'var(--primary)' : 'var(--muted)',
                 background: isActive ? 'rgba(93,135,255,0.1)' : 'transparent',
                 fontWeight: isActive ? 600 : 400,
                 fontSize: 14,
@@ -257,14 +262,14 @@ export default function Layout() {
                 const el = e.currentTarget as HTMLAnchorElement;
                 if (!el.classList.contains('active')) {
                   el.style.background = 'rgba(93,135,255,0.06)';
-                  el.style.color = '#eaeff4';
+                  el.style.color = 'var(--text)';
                 }
               }}
               onMouseLeave={(e) => {
                 const el = e.currentTarget as HTMLAnchorElement;
                 if (!el.getAttribute('aria-current')) {
                   el.style.background = 'transparent';
-                  el.style.color = '#7c8fac';
+                  el.style.color = 'var(--muted)';
                 }
               }}
             >
@@ -281,7 +286,7 @@ export default function Layout() {
             padding: '12px',
             borderRadius: 7,
             background: 'rgba(51,63,85,0.4)',
-            borderTop: '1px solid #333f55',
+            borderTop: '1px solid var(--border)',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
@@ -290,7 +295,7 @@ export default function Layout() {
                 width: 34,
                 height: 34,
                 borderRadius: '50%',
-                background: 'linear-gradient(135deg, #5d87ff, #49beff)',
+                background: 'linear-gradient(135deg, var(--primary), var(--secondary))',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -303,8 +308,8 @@ export default function Layout() {
               {email.charAt(0).toUpperCase()}
             </div>
             <div style={{ minWidth: 0, flex: 1 }}>
-              <p style={{ color: '#eaeff4', fontSize: 13, fontWeight: 600, margin: 0, lineHeight: 1.3 }}>Admin</p>
-              <p style={{ color: '#7c8fac', fontSize: 11, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <p style={{ color: 'var(--text)', fontSize: 13, fontWeight: 600, margin: 0, lineHeight: 1.3 }}>Admin</p>
+              <p style={{ color: 'var(--muted)', fontSize: 11, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {email}
               </p>
             </div>
@@ -320,7 +325,7 @@ export default function Layout() {
               borderRadius: 7,
               border: 'none',
               background: 'transparent',
-              color: '#7c8fac',
+              color: 'var(--muted)',
               fontSize: 13,
               fontWeight: 500,
               cursor: 'pointer',
@@ -329,11 +334,11 @@ export default function Layout() {
             }}
             onMouseEnter={(e) => {
               (e.currentTarget as HTMLButtonElement).style.background = 'rgba(250,137,107,0.1)';
-              (e.currentTarget as HTMLButtonElement).style.color = '#fa896b';
+              (e.currentTarget as HTMLButtonElement).style.color = 'var(--danger)';
             }}
             onMouseLeave={(e) => {
               (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
-              (e.currentTarget as HTMLButtonElement).style.color = '#7c8fac';
+              (e.currentTarget as HTMLButtonElement).style.color = 'var(--muted)';
             }}
           >
             <IconLogout />
@@ -353,8 +358,8 @@ export default function Layout() {
             left: sidebarWidth,
             right: 0,
             height: 70,
-            background: '#202936',
-            borderBottom: '1px solid #333f55',
+            background: 'var(--bg)',
+            borderBottom: '1px solid var(--border)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -381,36 +386,94 @@ export default function Layout() {
               onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
               title={collapsed ? 'Show sidebar' : 'Hide sidebar'}
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7c8fac" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="3" y1="6" x2="21" y2="6" />
                 <line x1="3" y1="12" x2="21" y2="12" />
                 <line x1="3" y1="18" x2="21" y2="18" />
               </svg>
             </button>
-            <span style={{ color: '#7c8fac', fontSize: 13, marginLeft: 4 }}>DraftRight Admin</span>
+            <span style={{ color: 'var(--muted)', fontSize: 13, marginLeft: 4 }}>DraftRight Admin</span>
           </div>
-          <NavLink
-            to="/profile"
-            style={{
-              width: 34,
-              height: 34,
-              borderRadius: '50%',
-              background: 'linear-gradient(135deg, #5d87ff, #49beff)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 13,
-              fontWeight: 700,
-              color: '#fff',
-              textDecoration: 'none',
-              transition: 'opacity 0.15s',
-            }}
-            title="My Profile"
-            onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.opacity = '0.85'; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.opacity = '1'; }}
-          >
-            {email.charAt(0).toUpperCase()}
-          </NavLink>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {/* Inbox button + unread badge — replaces the sidebar Inbox entry. */}
+            <NavLink
+              to="/inbox"
+              title={
+                inboxCounts && inboxCounts.total > 0
+                  ? `Inbox — ${inboxCounts.new_bugs} new bug(s), ${inboxCounts.new_features} feature request(s), ${inboxCounts.new_errors} error(s)`
+                  : 'Inbox — no new items'
+              }
+              style={{
+                position: 'relative',
+                width: 34,
+                height: 34,
+                borderRadius: 8,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--muted)',
+                textDecoration: 'none',
+                transition: 'background 0.15s, color 0.15s',
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLAnchorElement).style.background = 'rgba(93,135,255,0.10)';
+                (e.currentTarget as HTMLAnchorElement).style.color = 'var(--text)';
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLAnchorElement).style.background = 'transparent';
+                (e.currentTarget as HTMLAnchorElement).style.color = 'var(--muted)';
+              }}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M22 12h-6l-2 3h-4l-2-3H2" />
+                <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11Z" />
+              </svg>
+              {inboxCounts && inboxCounts.total > 0 && (
+                <span style={{
+                  position: 'absolute',
+                  top: -2,
+                  right: -2,
+                  minWidth: 18,
+                  height: 18,
+                  padding: '0 5px',
+                  borderRadius: 9,
+                  background: 'var(--danger)',
+                  color: '#fff',
+                  fontSize: 10,
+                  fontWeight: 700,
+                  lineHeight: '18px',
+                  textAlign: 'center',
+                  border: '2px solid var(--bg)',
+                  boxSizing: 'content-box',
+                }}>
+                  {inboxCounts.total > 99 ? '99+' : inboxCounts.total}
+                </span>
+              )}
+            </NavLink>
+
+            <NavLink
+              to="/profile"
+              style={{
+                width: 34,
+                height: 34,
+                borderRadius: '50%',
+                background: 'linear-gradient(135deg, var(--primary), var(--secondary))',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 13,
+                fontWeight: 700,
+                color: '#fff',
+                textDecoration: 'none',
+                transition: 'opacity 0.15s',
+              }}
+              title="My Profile"
+              onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.opacity = '0.85'; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.opacity = '1'; }}
+            >
+              {email.charAt(0).toUpperCase()}
+            </NavLink>
+          </div>
         </header>
 
         {/* Page content */}
@@ -421,8 +484,8 @@ export default function Layout() {
               marginBottom: 20,
               borderRadius: 8,
               background: 'rgba(250,137,107,0.15)',
-              border: '1px solid #fa896b',
-              color: '#fa896b',
+              border: '1px solid var(--danger)',
+              color: 'var(--danger)',
               fontSize: 14,
               fontWeight: 500,
             }}>

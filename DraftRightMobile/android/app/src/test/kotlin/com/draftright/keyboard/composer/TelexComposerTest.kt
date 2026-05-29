@@ -71,6 +71,38 @@ class TelexComposerTest {
     }
 
     @Test
+    fun `nguyenx composes nguyễn via uye 3-vowel cluster auto-promote`() {
+        // No double-e; relies on the applyTone uye-cluster rule.
+        assertEquals("nguyễn", finalText(TelexComposer(), 'n', 'g', 'u', 'y', 'e', 'n', 'x'))
+    }
+
+    @Test
+    fun `nguyenex composes nguyễn via lookback ee through trailing consonant`() {
+        // The second 'e' scans past the trailing 'n' and promotes the
+        // buffered 'e' to ê before tone application.
+        assertEquals("nguyễn", finalText(TelexComposer(), 'n', 'g', 'u', 'y', 'e', 'n', 'e', 'x'))
+    }
+
+    @Test
+    fun `truongw composes trương via w lookback past ng`() {
+        // 'w' applies to the "uo" pair behind the trailing "ng".
+        assertEquals("trương", finalText(TelexComposer(), 't', 'r', 'u', 'o', 'n', 'g', 'w'))
+    }
+
+    @Test
+    fun `truongwr composes trưởng`() {
+        // 'w' adds horn to ư+ơ, 'r' adds hook to ơ.
+        assertEquals("trưởng", finalText(TelexComposer(), 't', 'r', 'u', 'o', 'n', 'g', 'w', 'r'))
+    }
+
+    @Test
+    fun `truowrng composes trưởng existing behavior preserved`() {
+        // Reordering used by many typists; this already worked but the
+        // test locks it in alongside the new truongwr case.
+        assertEquals("trưởng", finalText(TelexComposer(), 't', 'r', 'u', 'o', 'w', 'r', 'n', 'g'))
+    }
+
+    @Test
     fun `tiengs composes tiếng`() {
         assertEquals("tiếng", finalText(TelexComposer(), 't', 'i', 'e', 's', 'n', 'g'))
     }

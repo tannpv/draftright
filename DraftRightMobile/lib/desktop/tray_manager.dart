@@ -8,7 +8,6 @@ import 'package:draftright_mobile/screens/settings_screen.dart';
 
 class DraftRightTrayManager {
   final SystemTray _systemTray = SystemTray();
-  final AppWindow _appWindow = AppWindow();
 
   VoidCallback? onSettingsRequested;
   VoidCallback? onQuitRequested;

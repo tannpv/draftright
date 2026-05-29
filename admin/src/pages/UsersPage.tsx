@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DataTable from '../components/DataTable';
-import { apiFetch } from '../api';
+import { apiFetch, SEARCH_DEBOUNCE_MS, DEFAULT_PAGE_SIZE } from '../api';
 
 interface User {
   id: string;
@@ -29,7 +29,7 @@ export default function UsersPage() {
   const [sortBy, setSortBy] = useState<string>('created_at');
   const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('DESC');
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -61,7 +61,7 @@ export default function UsersPage() {
   }, [fetchUsers]);
 
   useEffect(() => {
-    const t = setTimeout(() => { setSearch(searchInput); setPage(1); }, 300);
+    const t = setTimeout(() => { setSearch(searchInput); setPage(1); }, SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(t);
   }, [searchInput]);
 
@@ -81,7 +81,7 @@ export default function UsersPage() {
       header: 'Usage Today',
       key: 'usage_today',
       render: (row: User) => (
-        <span style={{ color: '#7c8fac' }}>{String(row.usage_today ?? 0)}</span>
+        <span style={{ color: 'var(--muted)' }}>{String(row.usage_today ?? 0)}</span>
       ),
     },
     {
@@ -99,7 +99,7 @@ export default function UsersPage() {
       key: 'created_at',
       sortKey: 'created_at',
       render: (row: User) => (
-        <span style={{ color: '#7c8fac' }}>
+        <span style={{ color: 'var(--muted)' }}>
           {row.created_at ? new Date(row.created_at).toLocaleDateString() : '—'}
         </span>
       ),
@@ -111,8 +111,8 @@ export default function UsersPage() {
       {/* Page header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>
-          <h1 style={{ color: '#eaeff4', fontSize: 22, fontWeight: 700, margin: '0 0 4px' }}>Users</h1>
-          <p style={{ color: '#7c8fac', fontSize: 13, margin: 0 }}>{total} total users</p>
+          <h1 style={{ color: 'var(--text)', fontSize: 22, fontWeight: 700, margin: '0 0 4px' }}>Users</h1>
+          <p style={{ color: 'var(--muted)', fontSize: 13, margin: 0 }}>{total} total users</p>
         </div>
       </div>
 
@@ -130,13 +130,13 @@ export default function UsersPage() {
           style={{
             flex: '1 1 280px', maxWidth: 360,
             padding: '8px 14px 8px 36px',
-            borderRadius: 7, border: '1px solid #333f55', background: '#202936',
-            color: '#eaeff4', fontSize: 13, fontFamily: 'inherit', outline: 'none',
+            borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg)',
+            color: 'var(--text)', fontSize: 13, fontFamily: 'inherit', outline: 'none',
             backgroundImage: "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%237c8fac' stroke-width='2'><circle cx='11' cy='11' r='8'/><path d='M21 21l-4.35-4.35'/></svg>\")",
             backgroundRepeat: 'no-repeat', backgroundPosition: '12px center',
           }}
         />
-        <div style={{ display: 'flex', gap: 4, padding: 4, background: '#202936', border: '1px solid #333f55', borderRadius: 7 }}>
+        <div style={{ display: 'flex', gap: 4, padding: 4, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 7 }}>
           {(['all','active','inactive'] as const).map((s) => (
             <button
               key={s}
@@ -146,7 +146,7 @@ export default function UsersPage() {
                 padding: '6px 14px', borderRadius: 5, fontSize: 12, fontWeight: 600,
                 border: 'none', cursor: 'pointer', fontFamily: 'inherit',
                 background: statusFilter === s ? 'rgba(93,135,255,0.15)' : 'transparent',
-                color: statusFilter === s ? '#5d87ff' : '#7c8fac',
+                color: statusFilter === s ? 'var(--primary)' : 'var(--muted)',
                 textTransform: 'capitalize',
               }}
             >
@@ -154,7 +154,7 @@ export default function UsersPage() {
             </button>
           ))}
         </div>
-        <span style={{ marginLeft: 'auto', color: '#7c8fac', fontSize: 12 }}>
+        <span style={{ marginLeft: 'auto', color: 'var(--muted)', fontSize: 12 }}>
           {total > 0 ? `${total} ${total === 1 ? 'user' : 'users'}` : ''}
         </span>
       </div>

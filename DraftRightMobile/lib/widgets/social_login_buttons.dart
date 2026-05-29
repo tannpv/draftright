@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:draftright_mobile/services/auth_service.dart';
+import 'package:draftright_mobile/services/error_reporter.dart';
 
 /// True on iOS / iPadOS. Apple's App Store Guideline 4.8 requires that
 /// any third-party login service (Google, Facebook, TikTok, etc.) be
@@ -33,12 +34,18 @@ class _SocialLoginButtonsState extends State<SocialLoginButtons> {
     setState(() => _loadingProvider = provider);
     try {
       await action();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
-        );
-      }
+    } catch (e, stack) {
+      // Pipe the failure into ErrorReporter so it (a) auto-submits to
+      // /errors with provider context for triage, and (b) raises
+      // ErrorReporter.lastError → ErrorNoticeOverlay shows the snackbar
+      // with a [REPORT] button. Replaces the previous local snackbar so
+      // the user doesn't see two stacked messages.
+      ErrorReporter.reportHandled(
+        e,
+        stack: stack,
+        severity: 'error',
+        context: {'flow': 'social_login', 'provider': provider},
+      );
     } finally {
       if (mounted) setState(() => _loadingProvider = null);
     }

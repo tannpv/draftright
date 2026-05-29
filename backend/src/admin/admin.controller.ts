@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Res, Header, BadRequestException,
+  Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Res, Header, BadRequestException, NotFoundException,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
@@ -15,6 +15,9 @@ import { RewriteLogService } from '../rewrite/rewrite-log.service';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AppSettings } from './entities/app-settings.entity';
+import { EmailLog } from '../email/entities/email-log.entity';
+import { EmailTemplate } from '../email/entities/email-template.entity';
+import { EMAIL_TEMPLATES, EMAIL_TEMPLATE_MAP } from '../email/email-templates';
 import { AdminUser } from './entities/admin-user.entity';
 import { PaymentService } from '../payment/payment.service';
 import * as bcrypt from 'bcryptjs';
@@ -47,6 +50,10 @@ export class AdminController {
     private readonly settingsRepo: Repository<AppSettings>,
     @InjectRepository(AdminUser)
     private readonly adminUserRepo: Repository<AdminUser>,
+    @InjectRepository(EmailLog)
+    private readonly emailLogRepo: Repository<EmailLog>,
+    @InjectRepository(EmailTemplate)
+    private readonly emailTemplateRepo: Repository<EmailTemplate>,
     private readonly paymentService: PaymentService,
     private readonly releasesService: ReleasesService,
     private readonly policiesService: PoliciesService,
@@ -132,6 +139,38 @@ export class AdminController {
    *   ?status=open      'open' = not resolved (status<4 for errors, status not in {resolved, wont_fix} for bugs)
    *   ?limit=50         default 50, max 100
    */
+  /**
+   * Lightweight counts for the admin top-bar inbox badge — kept separate
+   * from /inbox (which paginates rows) so it can be polled every 60 s
+   * without dragging the full payload.
+   *
+   * Returns counts of items in their initial "new" state, broken down by
+   * type so the UI can render per-source badges if desired.
+   */
+  @Get('inbox/counts')
+  async inboxCounts() {
+    const [bugs, features, errors] = await Promise.all([
+      this.bugReportsService.findAllPaginated({
+        page: 1, limit: 1, status: 'new' as any, kind: 'bug',
+        sort_by: 'created_at', sort_order: 'DESC',
+      } as any),
+      this.bugReportsService.findAllPaginated({
+        page: 1, limit: 1, status: 'new' as any, kind: 'feature',
+        sort_by: 'created_at', sort_order: 'DESC',
+      } as any),
+      this.errorsService.list({ status: 0, limit: 1, offset: 0 }),
+    ]);
+    const new_bugs = (bugs as any).total ?? 0;
+    const new_features = (features as any).total ?? 0;
+    const new_errors = (errors as any).total ?? 0;
+    return {
+      new_bugs,
+      new_features,
+      new_errors,
+      total: new_bugs + new_features + new_errors,
+    };
+  }
+
   @Get('inbox')
   async listInbox(
     @Query('kind') kind?: string,
@@ -261,6 +300,11 @@ export class AdminController {
     return this.errorsService.setStatus(id, body.status, body.resolved_by);
   }
 
+  @Delete('errors/:id')
+  async deleteErrorReport(@Param('id') id: string) {
+    return this.errorsService.deleteOne(id);
+  }
+
   @Post('errors/:id/suggest-fix')
   async suggestFix(@Param('id') id: string) {
     return this.errorsService.suggestFix(id);
@@ -321,6 +365,68 @@ export class AdminController {
   }
 
   // --- Settings ---
+
+  @Get('email-logs')
+  async emailLogs(@Query() q: Record<string, string>) {
+    const limit = Math.min(parseInt(q.limit) || 50, 200);
+    const page = Math.max(parseInt(q.page) || 1, 1);
+    const where = q.status ? { status: q.status as any } : {};
+    const [rows, total] = await this.emailLogRepo.findAndCount({
+      where,
+      order: { created_at: 'DESC' },
+      take: limit,
+      skip: (page - 1) * limit,
+    });
+    return { rows, total };
+  }
+
+  // --- Email templates (editable; falls back to built-in defaults) ---
+
+  @Get('email-templates')
+  async listEmailTemplates() {
+    const overrides = await this.emailTemplateRepo.find();
+    const byKey = new Map(overrides.map((o) => [o.template_key, o]));
+    return EMAIL_TEMPLATES.map((def) => {
+      const o = byKey.get(def.key);
+      return {
+        key: def.key,
+        label: def.label,
+        variables: def.variables,
+        subject: o?.subject ?? def.subject,
+        html: o?.html ?? def.html,
+        customized: !!o,
+        default_subject: def.subject,
+        default_html: def.html,
+      };
+    });
+  }
+
+  @Patch('email-templates/:key')
+  async updateEmailTemplate(@Param('key') key: string, @Body() body: { subject: string; html: string }) {
+    if (!EMAIL_TEMPLATE_MAP[key]) throw new NotFoundException('Unknown template');
+    await this.emailTemplateRepo.save(
+      this.emailTemplateRepo.create({ template_key: key, subject: body.subject, html: body.html }),
+    );
+    return { ok: true };
+  }
+
+  /** Reset to the built-in default (remove the override row). */
+  @Delete('email-templates/:key')
+  async resetEmailTemplate(@Param('key') key: string) {
+    await this.emailTemplateRepo.delete({ template_key: key });
+    return { ok: true };
+  }
+
+  /** Rendered preview with sample data. */
+  @Get('email-templates/:key/preview')
+  async previewEmailTemplate(@Param('key') key: string) {
+    if (!EMAIL_TEMPLATE_MAP[key]) throw new NotFoundException('Unknown template');
+    const sample: Record<string, string> = {
+      name: 'Tan', code: '123456', plan: 'Pro', amount: '124.000 ₫',
+      expires: new Date(Date.now() + 30 * 86400000).toDateString(),
+    };
+    return this.emailService.renderTemplate(key, sample);
+  }
 
   @Get('settings')
   async getSettings() {

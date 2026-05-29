@@ -53,7 +53,7 @@ public class PlatformRelease
     public bool Required { get; set; }
 }
 
-public class UpdateService
+public class UpdateService : IUpdateService
 {
     private readonly string _currentVersion;
     private readonly string _backendUrl;

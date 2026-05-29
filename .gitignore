@@ -53,3 +53,8 @@ store-assets/windows/*.exe
 store-assets/windows/*.msix
 store-assets/windows/*.msi
 .superpowers/
+# Windows app — Google OAuth client_secret lives outside git. The
+# GoogleOAuthConfig.cs.template is committed; the real GoogleOAuthConfig.cs
+# (with the live secret) is generated/copied locally + on CI from the
+# GOOGLE_OAUTH_CLIENT_SECRET env var.
+DraftRightWindows/DraftRightWindows/Services/GoogleOAuthConfig.cs

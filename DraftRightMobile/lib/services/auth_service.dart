@@ -6,14 +6,19 @@ import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:draftright_mobile/services/api_client.dart';
 import 'package:draftright_mobile/services/extension_token_service.dart';
 import 'package:draftright_mobile/services/logger_service.dart';
 
 class AuthService extends ChangeNotifier {
   static const _keyAccess = 'draftright.accessToken';
   static const _keyRefresh = 'draftright.refreshToken';
+  // Android requires the web/server client ID so Google includes the server
+  // audience in the ID token — without it, idToken is null on Android.
+  // iOS reads its client from GIDClientID in Info.plist; this is harmless there.
+  static const _googleServerClientId =
+      '22951518033-gf853ftmf4emivffk0su2bik42j7cmai.apps.googleusercontent.com';
   // Note: shared_preferences plugin auto-prefixes 'flutter.' to all keys.
   // Storing as 'draftright.accessToken' actually persists as 'flutter.draftright.accessToken'
   // which is exactly what the Android keyboard's SharedSettings reads.
@@ -25,6 +30,7 @@ class AuthService extends ChangeNotifier {
   String? _accessToken;
   String? _refreshToken;
   String _baseUrl = 'http://localhost:3000';
+  final ApiClient _api = ApiClient(baseUrl: 'http://localhost:3000');
   late final ExtensionTokenService _extension =
       ExtensionTokenService(baseUrl: _baseUrl);
 
@@ -34,11 +40,13 @@ class AuthService extends ChangeNotifier {
   /// Called by SettingsService when backendUrl changes.
   void setBaseUrl(String url) {
     _baseUrl = url;
+    _api.baseUrl = url;
     _extension.baseUrl = url;
   }
 
   Future<void> init(String baseUrl) async {
     _baseUrl = baseUrl;
+    _api.baseUrl = baseUrl;
     try {
       _accessToken = await _secure.read(key: _keyAccess);
       _refreshToken = await _secure.read(key: _keyRefresh);
@@ -62,21 +70,9 @@ class AuthService extends ChangeNotifier {
   }
 
   Future<void> login(String email, String password) async {
-    final uri = Uri.parse('$_baseUrl/auth/login');
     final normalizedEmail = email.trim().toLowerCase();
     try {
-      final response = await http
-          .post(uri,
-              headers: {'Content-Type': 'application/json'},
-              body: jsonEncode({'email': normalizedEmail, 'password': password}))
-          .timeout(const Duration(seconds: 15));
-
-      if (response.statusCode >= 400) {
-        final body = _tryDecodeError(response.body);
-        throw Exception(body);
-      }
-
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final data = await _api.postJson('/auth/login', body: {'email': normalizedEmail, 'password': password});
       await _storeTokens(data['access_token'] as String, data['refresh_token'] as String);
       DRLogger.log('Login success: $email', category: 'AUTH');
     } catch (e) {
@@ -86,20 +82,8 @@ class AuthService extends ChangeNotifier {
   }
 
   Future<void> register(String name, String email, String password) async {
-    final uri = Uri.parse('$_baseUrl/auth/register');
     try {
-      final response = await http
-          .post(uri,
-              headers: {'Content-Type': 'application/json'},
-              body: jsonEncode({'name': name, 'email': email, 'password': password}))
-          .timeout(const Duration(seconds: 15));
-
-      if (response.statusCode >= 400) {
-        final body = _tryDecodeError(response.body);
-        throw Exception(body);
-      }
-
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final data = await _api.postJson('/auth/register', body: {'name': name, 'email': email, 'password': password});
       await _storeTokens(data['access_token'] as String, data['refresh_token'] as String);
       DRLogger.log('Register success: $email', category: 'AUTH');
     } catch (e) {
@@ -111,7 +95,10 @@ class AuthService extends ChangeNotifier {
   // --- Social Login ---
 
   Future<void> signInWithGoogle() async {
-    final googleSignIn = GoogleSignIn(scopes: ['email', 'profile']);
+    final googleSignIn = GoogleSignIn(
+      scopes: ['email', 'profile'],
+      serverClientId: _googleServerClientId,
+    );
     final account = await googleSignIn.signIn();
     if (account == null) throw Exception('Google sign-in cancelled');
 
@@ -141,25 +128,13 @@ class AuthService extends ChangeNotifier {
   }
 
   Future<void> _socialLogin(String provider, String idToken, {String? name, String? email, String? avatarUrl}) async {
-    final uri = Uri.parse('$_baseUrl/auth/social');
-    final response = await http
-        .post(uri,
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({
-              'provider': provider,
-              'id_token': idToken,
-              'name': name,
-              'email': email,
-              'avatar_url': avatarUrl,
-            }))
-        .timeout(const Duration(seconds: 15));
-
-    if (response.statusCode >= 400) {
-      final body = _tryDecodeError(response.body);
-      throw Exception(body);
-    }
-
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final data = await _api.postJson('/auth/social', body: {
+      'provider': provider,
+      'id_token': idToken,
+      'name': name,
+      'email': email,
+      'avatar_url': avatarUrl,
+    });
     await _storeTokens(data['access_token'] as String, data['refresh_token'] as String);
   }
 
@@ -191,23 +166,9 @@ class AuthService extends ChangeNotifier {
 
   Future<void> changePassword(String currentPassword, String newPassword) async {
     final token = await getAccessToken();
-    final uri = Uri.parse('$_baseUrl/auth/change-password');
-    final response = await http
-        .post(uri,
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': 'Bearer $token',
-            },
-            body: jsonEncode({
-              'current_password': currentPassword,
-              'new_password': newPassword,
-            }))
-        .timeout(const Duration(seconds: 15));
-
-    if (response.statusCode >= 400) {
-      final body = _tryDecodeError(response.body);
-      throw Exception(body);
-    }
+    await _api.postJson('/auth/change-password',
+        token: token,
+        body: {'current_password': currentPassword, 'new_password': newPassword});
   }
 
   /// Permanently delete the signed-in user's account (App Store Guideline
@@ -215,17 +176,7 @@ class AuthService extends ChangeNotifier {
   /// exactly like [logout] so the app returns to the signed-out state.
   Future<void> deleteAccount() async {
     final token = await getAccessToken();
-    final uri = Uri.parse('$_baseUrl/auth/account');
-    final response = await http
-        .delete(uri, headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        })
-        .timeout(const Duration(seconds: 15));
-
-    if (response.statusCode >= 400) {
-      throw Exception(_tryDecodeError(response.body));
-    }
+    await _api.deleteJson('/auth/account', token: token);
     await logout();
   }
 
@@ -233,16 +184,7 @@ class AuthService extends ChangeNotifier {
   Future<bool> tryRefresh() async {
     if (_refreshToken == null || _refreshToken!.isEmpty) return false;
     try {
-      final uri = Uri.parse('$_baseUrl/auth/refresh');
-      final response = await http
-          .post(uri,
-              headers: {'Content-Type': 'application/json'},
-              body: jsonEncode({'refresh_token': _refreshToken}))
-          .timeout(const Duration(seconds: 15));
-
-      if (response.statusCode >= 400) return false;
-
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final data = await _api.postJson('/auth/refresh', body: {'refresh_token': _refreshToken});
       await _storeTokens(data['access_token'] as String, data['refresh_token'] as String);
       return true;
     } catch (_) {
@@ -301,12 +243,4 @@ class AuthService extends ChangeNotifier {
     await _syncToAppGroup('draftright.activeLanguageId', id);
   }
 
-  String _tryDecodeError(String body) {
-    try {
-      final data = jsonDecode(body) as Map<String, dynamic>;
-      return (data['message'] ?? data['error'] ?? body).toString();
-    } catch (_) {
-      return body;
-    }
-  }
 }

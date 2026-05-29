@@ -59,9 +59,9 @@ const btnBase: React.CSSProperties = {
   padding: '0 10px',
   borderRadius: 6,
   fontSize: 13,
-  border: '1px solid #333f55',
+  border: '1px solid var(--border)',
   background: 'transparent',
-  color: '#7c8fac',
+  color: 'var(--muted)',
   cursor: 'pointer',
   fontFamily: 'inherit',
   transition: 'all 0.15s',
@@ -107,13 +107,13 @@ export default function DataTable<T = AnyRow>({
   const showPagination = !!onPageChange && (totalPages > 0);
 
   return (
-    <div style={{ background: '#2a3547', borderRadius: 7, overflow: 'hidden' }}>
+    <div style={{ background: 'var(--card)', borderRadius: 7, overflow: 'hidden' }}>
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
 
           {/* Head */}
           <thead>
-            <tr style={{ borderBottom: '2px solid #333f55' }}>
+            <tr style={{ borderBottom: '2px solid var(--border)' }}>
               {columns.map((col) => {
                 const isSortable = !!col.sortKey && !!onSortChange;
                 const isActive = isSortable && sortBy === col.sortKey;
@@ -129,7 +129,7 @@ export default function DataTable<T = AnyRow>({
                     style={{
                       padding: '13px 20px',
                       textAlign: 'left',
-                      color: isActive ? '#5d87ff' : '#7c8fac',
+                      color: isActive ? 'var(--primary)' : 'var(--muted)',
                       fontSize: 12,
                       fontWeight: 700,
                       textTransform: 'uppercase',
@@ -157,10 +157,10 @@ export default function DataTable<T = AnyRow>({
               <tr>
                 <td
                   colSpan={columns.length}
-                  style={{ padding: '40px 20px', textAlign: 'center', color: '#7c8fac', fontSize: 14 }}
+                  style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--muted)', fontSize: 14 }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5d87ff" strokeWidth="2" strokeLinecap="round">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" strokeWidth="2" strokeLinecap="round">
                       <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83">
                         <animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="1s" repeatCount="indefinite" />
                       </path>
@@ -173,7 +173,7 @@ export default function DataTable<T = AnyRow>({
               <tr>
                 <td
                   colSpan={columns.length}
-                  style={{ padding: '40px 20px', textAlign: 'center', color: '#7c8fac', fontSize: 14 }}
+                  style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--muted)', fontSize: 14 }}
                 >
                   {emptyMessage}
                 </td>
@@ -184,7 +184,7 @@ export default function DataTable<T = AnyRow>({
                   key={i}
                   onClick={() => onRowClick?.(row)}
                   style={{
-                    borderBottom: '1px solid #333f55',
+                    borderBottom: '1px solid var(--border)',
                     cursor: onRowClick ? 'pointer' : 'default',
                     transition: 'background 0.15s',
                   }}
@@ -204,7 +204,7 @@ export default function DataTable<T = AnyRow>({
                         padding: '14px 20px',
                         whiteSpace: 'nowrap',
                         fontSize: 14,
-                        color: '#eaeff4',
+                        color: 'var(--text)',
                       }}
                     >
                       {col.render
@@ -227,19 +227,19 @@ export default function DataTable<T = AnyRow>({
             alignItems: 'center',
             justifyContent: 'space-between',
             padding: '12px 16px',
-            borderTop: '1px solid #333f55',
+            borderTop: '1px solid var(--border)',
             gap: 16,
             flexWrap: 'wrap',
           }}
         >
           {/* Left — range + page-size selector */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14, color: '#7c8fac', fontSize: 13 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, color: 'var(--muted)', fontSize: 13 }}>
             {showRange ? (
               <span>
-                Showing <b style={{ color: '#eaeff4' }}>{rangeStart}–{rangeEnd}</b> of <b style={{ color: '#eaeff4' }}>{total}</b>
+                Showing <b style={{ color: 'var(--text)' }}>{rangeStart}–{rangeEnd}</b> of <b style={{ color: 'var(--text)' }}>{total}</b>
               </span>
             ) : (
-              <span>Page <b style={{ color: '#eaeff4' }}>{page}</b> of <b style={{ color: '#eaeff4' }}>{totalPages}</b></span>
+              <span>Page <b style={{ color: 'var(--text)' }}>{page}</b> of <b style={{ color: 'var(--text)' }}>{totalPages}</b></span>
             )}
 
             {pageSize !== undefined && onPageSizeChange && (
@@ -251,9 +251,9 @@ export default function DataTable<T = AnyRow>({
                   style={{
                     padding: '4px 8px',
                     borderRadius: 5,
-                    border: '1px solid #333f55',
-                    background: '#202936',
-                    color: '#eaeff4',
+                    border: '1px solid var(--border)',
+                    background: 'var(--bg)',
+                    color: 'var(--text)',
                     fontSize: 12,
                     fontFamily: 'inherit',
                     cursor: 'pointer',
@@ -276,7 +276,7 @@ export default function DataTable<T = AnyRow>({
               title="First page"
               style={{
                 ...btnBase,
-                color: page <= 1 ? '#333f55' : '#7c8fac',
+                color: page <= 1 ? 'var(--border)' : 'var(--muted)',
                 cursor: page <= 1 ? 'not-allowed' : 'pointer',
               }}
             >
@@ -290,7 +290,7 @@ export default function DataTable<T = AnyRow>({
               title="Previous page"
               style={{
                 ...btnBase,
-                color: page <= 1 ? '#333f55' : '#7c8fac',
+                color: page <= 1 ? 'var(--border)' : 'var(--muted)',
                 cursor: page <= 1 ? 'not-allowed' : 'pointer',
               }}
             >
@@ -300,7 +300,7 @@ export default function DataTable<T = AnyRow>({
             {/* Numbered pages */}
             {pageNumbers.map((p, idx) => (
               p === '…' ? (
-                <span key={`e-${idx}`} style={{ color: '#7c8fac', padding: '0 6px', fontSize: 13 }}>…</span>
+                <span key={`e-${idx}`} style={{ color: 'var(--muted)', padding: '0 6px', fontSize: 13 }}>…</span>
               ) : (
                 <button
                   key={p}
@@ -308,8 +308,8 @@ export default function DataTable<T = AnyRow>({
                   style={{
                     ...btnBase,
                     background: p === page ? 'rgba(93,135,255,0.15)' : 'transparent',
-                    color: p === page ? '#5d87ff' : '#7c8fac',
-                    borderColor: p === page ? 'rgba(93,135,255,0.4)' : '#333f55',
+                    color: p === page ? 'var(--primary)' : 'var(--muted)',
+                    borderColor: p === page ? 'rgba(93,135,255,0.4)' : 'var(--border)',
                     fontWeight: p === page ? 600 : 400,
                   }}
                 >
@@ -325,7 +325,7 @@ export default function DataTable<T = AnyRow>({
               title="Next page"
               style={{
                 ...btnBase,
-                color: page >= totalPages ? '#333f55' : '#7c8fac',
+                color: page >= totalPages ? 'var(--border)' : 'var(--muted)',
                 cursor: page >= totalPages ? 'not-allowed' : 'pointer',
               }}
             >
@@ -339,7 +339,7 @@ export default function DataTable<T = AnyRow>({
               title="Last page"
               style={{
                 ...btnBase,
-                color: page >= totalPages ? '#333f55' : '#7c8fac',
+                color: page >= totalPages ? 'var(--border)' : 'var(--muted)',
                 cursor: page >= totalPages ? 'not-allowed' : 'pointer',
               }}
             >
@@ -349,7 +349,7 @@ export default function DataTable<T = AnyRow>({
             {/* Jump-to-page (only when many pages) */}
             {totalPages > 7 && (
               <form onSubmit={handleJump} style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 8 }}>
-                <span style={{ color: '#7c8fac', fontSize: 12 }}>Go to</span>
+                <span style={{ color: 'var(--muted)', fontSize: 12 }}>Go to</span>
                 <input
                   type="number"
                   min={1}
@@ -362,9 +362,9 @@ export default function DataTable<T = AnyRow>({
                     height: 30,
                     padding: '0 8px',
                     borderRadius: 5,
-                    border: '1px solid #333f55',
-                    background: '#202936',
-                    color: '#eaeff4',
+                    border: '1px solid var(--border)',
+                    background: 'var(--bg)',
+                    color: 'var(--text)',
                     fontSize: 13,
                     fontFamily: 'inherit',
                     outline: 'none',

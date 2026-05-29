@@ -62,6 +62,28 @@ jobs:
       - name: Show .NET info
         run: dotnet --info
 
+      # Materialize the gitignored GoogleOAuthConfig.cs from the repo secret
+      # so the Google sign-in code can compile against the real client_secret.
+      # The template (.cs.template) is committed; the secret never enters git.
+      # Fails the build clearly if the secret isn't set, instead of silently
+      # shipping "REPLACE_ME". String.Replace is used (not here-string
+      # interpolation) so the secret bytes can't break C# tokenization.
+      - name: Write GoogleOAuthConfig.cs from secret
+        shell: pwsh
+        env:
+          GOOGLE_OAUTH_CLIENT_SECRET_WINDOWS: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET_WINDOWS }}
+        run: |
+          if (-not $env:GOOGLE_OAUTH_CLIENT_SECRET_WINDOWS) {
+            Write-Error "GOOGLE_OAUTH_CLIENT_SECRET_WINDOWS repo secret is not set. Add it under Settings → Secrets and variables → Actions."
+            exit 1
+          }
+          # Paths are relative to the job's working-directory
+          # (DraftRightWindows/DraftRightWindows) set in defaults.
+          $src = "Services/GoogleOAuthConfig.cs.template"
+          $dst = "Services/GoogleOAuthConfig.cs"
+          (Get-Content $src -Raw).Replace("REPLACE_ME", $env:GOOGLE_OAUTH_CLIENT_SECRET_WINDOWS) | Set-Content -Path $dst -Encoding UTF8
+          Write-Host "Wrote $dst from template"
+
       - name: Restore
         run: dotnet restore -r "$env:RUNTIME"
 
@@ -333,3 +355,101 @@ jobs:
             exit 1
           fi
           echo "✓ installer serving — $CT, $CL bytes"
+
+  # ── MSIX bundle for Microsoft Store submission ──────────────────────────
+  # Single-project MSIX: WindowsPackageType=MSIX activates AppxPackage targets
+  # which produce an .msixbundle for x64+arm64. Submitted to Microsoft Store,
+  # which signs the bundle automatically before publishing — no developer
+  # cert required. Independent of the unpackaged Inno-installer build above.
+  msix:
+    name: Build MSIX bundle for Microsoft Store
+    runs-on: windows-latest
+    timeout-minutes: 25
+
+    env:
+      COMMIT_SHA: ${{ github.sha }}
+
+    defaults:
+      run:
+        working-directory: DraftRightWindows/DraftRightWindows
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      # Same secret-materialization step as the unpackaged build above —
+      # the MSIX compilation also needs GoogleOAuthConfig.cs to exist, since
+      # GoogleOAuth.cs references GoogleOAuthConfig.ClientSecret.
+      - name: Write GoogleOAuthConfig.cs from secret
+        shell: pwsh
+        env:
+          GOOGLE_OAUTH_CLIENT_SECRET_WINDOWS: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET_WINDOWS }}
+        run: |
+          if (-not $env:GOOGLE_OAUTH_CLIENT_SECRET_WINDOWS) {
+            Write-Error "GOOGLE_OAUTH_CLIENT_SECRET_WINDOWS repo secret is not set."
+            exit 1
+          }
+          $src = "Services/GoogleOAuthConfig.cs.template"
+          $dst = "Services/GoogleOAuthConfig.cs"
+          (Get-Content $src -Raw).Replace("REPLACE_ME", $env:GOOGLE_OAUTH_CLIENT_SECRET_WINDOWS) | Set-Content -Path $dst -Encoding UTF8
+          Write-Host "Wrote $dst from template"
+
+      - name: Restore
+        run: msbuild /t:Restore /p:Configuration=Release /p:Platform=x64
+
+      - name: Build MSIX (x64, StoreUpload)
+        shell: pwsh
+        run: |
+          # Platform=x64 is the WinUI 3 architecture selector for MSIX.
+          # RuntimeIdentifier is deliberately omitted: it shifts output to a
+          # win-x64/ subfolder but resources.pri is generated at the parent
+          # path, causing APPX0702. PackageArchitecture=x64 tells the WinAppSdk
+          # recipe target the target arch (fixes WinAppSdkGenerateAppxPackageRecipe).
+          msbuild `
+            /t:Rebuild `
+            /p:Configuration=Release `
+            /p:Platform=x64 `
+            /p:WindowsPackageType=MSIX `
+            /p:EnableMsixTooling=true `
+            /p:GenerateAppxPackageOnBuild=true `
+            /p:UapAppxPackageBuildMode=StoreUpload `
+            /p:AppxBundle=Never `
+            /p:PackageArchitecture=x64 `
+            /p:AppxPackageDir=AppPackages\
+
+      - name: Create .msixupload
+        shell: pwsh
+        run: |
+          # The VS-only _BuildMsixUploadPackage target is not available on CI runners.
+          # Build it manually: zip ONLY the .msix into a .msixupload. Partner Center
+          # rejects bundles that include .msixsym (symbol files) with "not supported"
+          # validation errors, so we omit them — they're optional debug aids, not
+          # required for Store submission.
+          $msix = Get-ChildItem -Path AppPackages -Recurse -Include *.msix | Select-Object -First 1
+          if (-not $msix) {
+            Write-Host "AppPackages tree:"
+            Get-ChildItem -Path AppPackages -Recurse | Select-Object FullName, Length
+            throw "No .msix found in AppPackages"
+          }
+          $shortSha = $env:COMMIT_SHA.Substring(0, 7)
+          $upload = "AppPackages\DraftRight-Store-$shortSha.msixupload"
+          Compress-Archive -Path $msix.FullName -DestinationPath $upload -Force
+          $sizeMB = [math]::Round((Get-Item $upload).Length / 1MB, 1)
+          Write-Host "Created $upload ($sizeMB MB) from $($msix.Name)"
+          Add-Content -Path $env:GITHUB_ENV -Value "MSIX_NAME=DraftRight-Store-$shortSha.msixupload"
+          Add-Content -Path $env:GITHUB_ENV -Value "MSIX_PATH=DraftRightWindows/DraftRightWindows/AppPackages/DraftRight-Store-$shortSha.msixupload"
+
+      - name: Upload MSIX bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: DraftRight-MSIX-Store
+          path: ${{ env.MSIX_PATH }}
+          retention-days: 30

@@ -1,12 +1,17 @@
 import { useState, useEffect, useCallback } from 'react';
-import { apiFetch } from '../api';
+import { apiFetch, SEARCH_DEBOUNCE_MS, API_URL, DEFAULT_PAGE_SIZE } from '../api';
 import DataTable from '../components/DataTable';
 import Toast from '../components/Toast';
+import { timeAgo } from '../lib/format';
+import { toneStyle, type Tone } from '../lib/status';
 
 /* ── Types ────────────────────────────────────────────── */
 
 interface BugReport {
   id: string;
+  display_no: number | null;
+  /** 'bug' | 'feature' — drives the ref prefix and which page surfaces it. */
+  kind: 'bug' | 'feature' | string;
   source: string;
   description: string;
   screenshot_path: string | null;
@@ -42,31 +47,15 @@ function sourceIcon(source: string): string {
   return '🌐'; // 🌐
 }
 
+const BUG_STATUS: Record<string, { tone: Tone; label: string }> = {
+  new:       { tone: 'primary', label: 'New' },
+  reviewing: { tone: 'warning', label: 'Reviewing' },
+  resolved:  { tone: 'success', label: 'Resolved' },
+  wont_fix:  { tone: 'muted',   label: "Won't fix" },
+};
 function statusStyle(status: string): { color: string; bg: string; label: string } {
-  switch (status) {
-    case 'new':       return { color: '#5d87ff', bg: 'rgba(93,135,255,0.12)',  label: 'New' };
-    case 'reviewing': return { color: '#ffae1f', bg: 'rgba(255,174,31,0.12)',  label: 'Reviewing' };
-    case 'resolved':  return { color: '#13deb9', bg: 'rgba(19,222,185,0.12)',  label: 'Resolved' };
-    case 'wont_fix':  return { color: '#7c8fac', bg: 'rgba(124,143,172,0.18)', label: "Won't fix" };
-    default:          return { color: '#7c8fac', bg: 'rgba(124,143,172,0.12)', label: status || '—' };
-  }
-}
-
-function timeAgo(iso: string): string {
-  if (!iso) return '—';
-  const diff = Date.now() - new Date(iso).getTime();
-  const s = Math.floor(diff / 1000);
-  if (s < 60)         return 'just now';
-  const m = Math.floor(s / 60);
-  if (m < 60)         return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24)         return `${h}h ago`;
-  const d = Math.floor(h / 24);
-  if (d < 30)         return `${d}d ago`;
-  const mo = Math.floor(d / 30);
-  if (mo < 12)        return `${mo}mo ago`;
-  const y = Math.floor(d / 365);
-  return `${y}y ago`;
+  const e = BUG_STATUS[status];
+  return e ? { ...toneStyle(e.tone), label: e.label } : { ...toneStyle('muted'), label: status || '—' };
 }
 
 function truncate(text: string, max: number): string {
@@ -95,7 +84,6 @@ const FILTER_TABS: { key: StatusFilter; label: string }[] = [
 
 /* ── Screenshot loader (fetch with JWT, return blob URL) ── */
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 async function loadScreenshot(id: string): Promise<string> {
   const token = localStorage.getItem('token');
@@ -113,7 +101,7 @@ export default function BugReportsPage() {
   const [reports, setReports] = useState<BugReport[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [search, setSearch] = useState('');
   const [searchInput, setSearchInput] = useState('');
@@ -164,7 +152,7 @@ export default function BugReportsPage() {
 
   // Debounce search input.
   useEffect(() => {
-    const t = setTimeout(() => { setSearch(searchInput); setPage(1); }, 300);
+    const t = setTimeout(() => { setSearch(searchInput); setPage(1); }, SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(t);
   }, [searchInput]);
 
@@ -262,11 +250,29 @@ export default function BugReportsPage() {
   /* ── Table columns ────────────────────────────────── */
   const columns = [
     {
+      header: 'Ref',
+      key: 'display_no',
+      sortKey: 'display_no',
+      render: (row: BugReport) => (
+        <span style={{
+          color: 'var(--primary)',
+          fontFamily: 'ui-monospace, SFMono-Regular, monospace',
+          fontSize: 12,
+          fontWeight: 600,
+          whiteSpace: 'nowrap',
+        }}>
+          {row.display_no != null
+            ? `${row.kind === 'feature' ? 'FR' : 'BUG'}-${row.display_no}`
+            : '—'}
+        </span>
+      ),
+    },
+    {
       header: 'Source',
       key: 'source',
       sortKey: 'source',
       render: (row: BugReport) => (
-        <span style={{ color: '#eaeff4', fontSize: 13, whiteSpace: 'nowrap' }}>
+        <span style={{ color: 'var(--text)', fontSize: 13, whiteSpace: 'nowrap' }}>
           <span style={{ marginRight: 6 }}>{sourceIcon(row.source)}</span>
           {row.source}
         </span>
@@ -276,7 +282,7 @@ export default function BugReportsPage() {
       header: 'User',
       key: 'user_email',
       render: (row: BugReport) => (
-        <span style={{ color: row.user_email ? '#eaeff4' : '#7c8fac', fontSize: 13 }}>
+        <span style={{ color: row.user_email ? 'var(--text)' : 'var(--muted)', fontSize: 13 }}>
           {row.user_email || 'anonymous'}
         </span>
       ),
@@ -286,7 +292,7 @@ export default function BugReportsPage() {
       key: 'description',
       render: (row: BugReport) => (
         <span
-          style={{ color: '#eaeff4', fontSize: 13, whiteSpace: 'normal', display: 'block', maxWidth: 480 }}
+          style={{ color: 'var(--text)', fontSize: 13, whiteSpace: 'normal', display: 'block', maxWidth: 480 }}
           title={row.description}
         >
           {truncate(row.description, 80)}
@@ -331,7 +337,7 @@ export default function BugReportsPage() {
       key: 'created_at',
       sortKey: 'created_at',
       render: (row: BugReport) => (
-        <span style={{ color: '#7c8fac', fontSize: 13, whiteSpace: 'nowrap' }} title={new Date(row.created_at).toLocaleString()}>
+        <span style={{ color: 'var(--muted)', fontSize: 13, whiteSpace: 'nowrap' }} title={new Date(row.created_at).toLocaleString()}>
           {timeAgo(row.created_at)}
         </span>
       ),
@@ -349,7 +355,7 @@ export default function BugReportsPage() {
             }}
             style={{
               background: 'rgba(93,135,255,0.1)',
-              color: '#5d87ff',
+              color: 'var(--primary)',
               border: '1px solid rgba(93,135,255,0.2)',
               padding: '5px 12px',
               borderRadius: 6,
@@ -370,8 +376,8 @@ export default function BugReportsPage() {
     <div>
       {/* Page header */}
       <div style={{ marginBottom: 24 }}>
-        <h1 style={{ color: '#eaeff4', fontSize: 22, fontWeight: 700, margin: '0 0 4px' }}>Bug Reports</h1>
-        <p style={{ color: '#7c8fac', fontSize: 13, margin: 0 }}>
+        <h1 style={{ color: 'var(--text)', fontSize: 22, fontWeight: 700, margin: '0 0 4px' }}>Bug Reports</h1>
+        <p style={{ color: 'var(--muted)', fontSize: 13, margin: 0 }}>
           User-submitted bug reports from every DraftRight surface
         </p>
       </div>
@@ -386,8 +392,8 @@ export default function BugReportsPage() {
           style={{
             flex: '1 1 280px', maxWidth: 360,
             padding: '8px 14px 8px 36px',
-            borderRadius: 7, border: '1px solid #333f55', background: '#202936',
-            color: '#eaeff4', fontSize: 13, fontFamily: 'inherit', outline: 'none',
+            borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg)',
+            color: 'var(--text)', fontSize: 13, fontFamily: 'inherit', outline: 'none',
             backgroundImage: "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%237c8fac' stroke-width='2'><circle cx='11' cy='11' r='8'/><path d='M21 21l-4.35-4.35'/></svg>\")",
             backgroundRepeat: 'no-repeat', backgroundPosition: '12px center',
           }}
@@ -407,7 +413,7 @@ export default function BugReportsPage() {
                 cursor: 'pointer',
                 transition: 'all 0.15s',
                 background: statusFilter === tab.key ? 'rgba(93,135,255,0.15)' : 'transparent',
-                color: statusFilter === tab.key ? '#5d87ff' : '#7c8fac',
+                color: statusFilter === tab.key ? 'var(--primary)' : 'var(--muted)',
               }}
             >
               {tab.label}
@@ -416,7 +422,7 @@ export default function BugReportsPage() {
         </div>
       </div>
 
-      {error && <div className="alert-error" style={{ marginBottom: 20, padding: 12, borderRadius: 7, background: 'rgba(250,137,107,0.1)', border: '1px solid rgba(250,137,107,0.3)', color: '#fa896b', fontSize: 13 }}>{error}</div>}
+      {error && <div className="alert-error" style={{ marginBottom: 20, padding: 12, borderRadius: 7, background: 'rgba(250,137,107,0.1)', border: '1px solid rgba(250,137,107,0.3)', color: 'var(--danger)', fontSize: 13 }}>{error}</div>}
 
       <DataTable
         columns={columns}
@@ -453,7 +459,7 @@ export default function BugReportsPage() {
         >
           <div
             style={{
-              background: '#2a3547',
+              background: 'var(--card)',
               borderRadius: 10,
               padding: 28,
               width: '100%',
@@ -467,17 +473,32 @@ export default function BugReportsPage() {
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18, gap: 16 }}>
               <div>
-                <h2 style={{ color: '#eaeff4', fontSize: 18, fontWeight: 700, margin: '0 0 4px' }}>
-                  Bug Report
+                {selected.display_no != null && (
+                  <div style={{
+                    display: 'inline-block',
+                    fontFamily: 'ui-monospace, SFMono-Regular, monospace',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: 'var(--primary)',
+                    background: 'rgba(93, 135, 255, 0.15)',
+                    padding: '2px 8px',
+                    borderRadius: 4,
+                    marginBottom: 6,
+                  }}>
+                    {selected.kind === 'feature' ? 'FR' : 'BUG'}-{selected.display_no}
+                  </div>
+                )}
+                <h2 style={{ color: 'var(--text)', fontSize: 18, fontWeight: 700, margin: '0 0 4px' }}>
+                  {selected.kind === 'feature' ? 'Feature Request' : 'Bug Report'}
                 </h2>
-                <p style={{ color: '#7c8fac', fontSize: 12, margin: 0, fontFamily: 'monospace' }}>
+                <p style={{ color: 'var(--muted)', fontSize: 12, margin: 0, fontFamily: 'monospace' }}>
                   {selected.id}
                 </p>
               </div>
               <button
                 onClick={closeDetail}
                 style={{
-                  background: 'transparent', border: 'none', color: '#7c8fac',
+                  background: 'transparent', border: 'none', color: 'var(--muted)',
                   fontSize: 24, lineHeight: 1, cursor: 'pointer', padding: 0, fontFamily: 'inherit',
                 }}
                 title="Close"
@@ -488,16 +509,16 @@ export default function BugReportsPage() {
 
             {/* Description */}
             <div style={{ marginBottom: 20 }}>
-              <label style={{ display: 'block', color: '#7c8fac', fontSize: 12, fontWeight: 600, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              <label style={{ display: 'block', color: 'var(--muted)', fontSize: 12, fontWeight: 600, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 Description
               </label>
               <div
                 style={{
-                  background: '#202936',
-                  border: '1px solid #333f55',
+                  background: 'var(--bg)',
+                  border: '1px solid var(--border)',
                   borderRadius: 7,
                   padding: 12,
-                  color: '#eaeff4',
+                  color: 'var(--text)',
                   fontSize: 14,
                   lineHeight: 1.5,
                   whiteSpace: 'pre-wrap',
@@ -510,48 +531,48 @@ export default function BugReportsPage() {
 
             {/* Metadata grid */}
             <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '8px 16px', fontSize: 13, marginBottom: 20 }}>
-              <span style={{ color: '#7c8fac' }}>Reporter:</span>
-              <span style={{ color: selected.user_email ? '#eaeff4' : '#7c8fac' }}>
+              <span style={{ color: 'var(--muted)' }}>Reporter:</span>
+              <span style={{ color: selected.user_email ? 'var(--text)' : 'var(--muted)' }}>
                 {selected.user_email || 'anonymous'}
                 {selected.user_id && (
-                  <span style={{ color: '#7c8fac', fontFamily: 'monospace', fontSize: 11, marginLeft: 8 }}>
+                  <span style={{ color: 'var(--muted)', fontFamily: 'monospace', fontSize: 11, marginLeft: 8 }}>
                     ({selected.user_id})
                   </span>
                 )}
               </span>
 
-              <span style={{ color: '#7c8fac' }}>Source:</span>
-              <span style={{ color: '#eaeff4' }}>
+              <span style={{ color: 'var(--muted)' }}>Source:</span>
+              <span style={{ color: 'var(--text)' }}>
                 {sourceIcon(selected.source)} {selected.source}
               </span>
 
-              <span style={{ color: '#7c8fac' }}>App version:</span>
-              <span style={{ color: '#eaeff4', fontFamily: 'monospace', fontSize: 12 }}>
+              <span style={{ color: 'var(--muted)' }}>App version:</span>
+              <span style={{ color: 'var(--text)', fontFamily: 'monospace', fontSize: 12 }}>
                 {selected.app_version || '—'}
               </span>
 
-              <span style={{ color: '#7c8fac' }}>OS info:</span>
-              <span style={{ color: '#eaeff4' }}>{selected.os_info || '—'}</span>
+              <span style={{ color: 'var(--muted)' }}>OS info:</span>
+              <span style={{ color: 'var(--text)' }}>{selected.os_info || '—'}</span>
 
-              <span style={{ color: '#7c8fac' }}>Created:</span>
-              <span style={{ color: '#eaeff4' }}>
-                {new Date(selected.created_at).toLocaleString()} <span style={{ color: '#7c8fac' }}>({timeAgo(selected.created_at)})</span>
+              <span style={{ color: 'var(--muted)' }}>Created:</span>
+              <span style={{ color: 'var(--text)' }}>
+                {new Date(selected.created_at).toLocaleString()} <span style={{ color: 'var(--muted)' }}>({timeAgo(selected.created_at)})</span>
               </span>
             </div>
 
             {/* Context JSON */}
             {selected.context && Object.keys(selected.context).length > 0 && (
               <div style={{ marginBottom: 20 }}>
-                <label style={{ display: 'block', color: '#7c8fac', fontSize: 12, fontWeight: 600, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                <label style={{ display: 'block', color: 'var(--muted)', fontSize: 12, fontWeight: 600, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   Context
                 </label>
                 <pre
                   style={{
-                    background: '#202936',
-                    border: '1px solid #333f55',
+                    background: 'var(--bg)',
+                    border: '1px solid var(--border)',
                     borderRadius: 7,
                     padding: 12,
-                    color: '#eaeff4',
+                    color: 'var(--text)',
                     fontSize: 12,
                     lineHeight: 1.5,
                     fontFamily: 'monospace',
@@ -567,15 +588,15 @@ export default function BugReportsPage() {
             {/* Screenshot */}
             {(selected.screenshot_path || selected.screenshot_filename) && (
               <div style={{ marginBottom: 20 }}>
-                <label style={{ display: 'block', color: '#7c8fac', fontSize: 12, fontWeight: 600, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                <label style={{ display: 'block', color: 'var(--muted)', fontSize: 12, fontWeight: 600, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   Screenshot / Attachment
                 </label>
                 {screenshotError ? (
-                  <div style={{ background: 'rgba(250,137,107,0.1)', border: '1px solid rgba(250,137,107,0.3)', borderRadius: 7, padding: 12, color: '#fa896b', fontSize: 13 }}>
+                  <div style={{ background: 'rgba(250,137,107,0.1)', border: '1px solid rgba(250,137,107,0.3)', borderRadius: 7, padding: 12, color: 'var(--danger)', fontSize: 13 }}>
                     {screenshotError}
                   </div>
                 ) : screenshotUrl ? (
-                  <div style={{ border: '1px solid #333f55', borderRadius: 7, background: '#202936', overflow: 'hidden' }}>
+                  <div style={{ border: '1px solid var(--border)', borderRadius: 7, background: 'var(--bg)', overflow: 'hidden' }}>
                     <a
                       href={screenshotUrl}
                       target="_blank"
@@ -600,10 +621,10 @@ export default function BugReportsPage() {
                       justifyContent: 'space-between',
                       gap: 12,
                       padding: '8px 12px',
-                      borderTop: '1px solid #333f55',
-                      background: '#2a3547',
+                      borderTop: '1px solid var(--border)',
+                      background: 'var(--card)',
                       fontSize: 12,
-                      color: '#7c8fac',
+                      color: 'var(--muted)',
                     }}>
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }} title={selected.screenshot_filename || ''}>
                         📎 {selected.screenshot_filename || 'screenshot'}
@@ -617,7 +638,7 @@ export default function BugReportsPage() {
                             padding: '4px 10px',
                             borderRadius: 5,
                             background: 'rgba(73,190,255,0.15)',
-                            color: '#49beff',
+                            color: 'var(--secondary)',
                             fontSize: 12,
                             textDecoration: 'none',
                           }}
@@ -631,7 +652,7 @@ export default function BugReportsPage() {
                             padding: '4px 10px',
                             borderRadius: 5,
                             background: 'rgba(93,135,255,0.15)',
-                            color: '#5d87ff',
+                            color: 'var(--primary)',
                             fontSize: 12,
                             textDecoration: 'none',
                           }}
@@ -642,14 +663,14 @@ export default function BugReportsPage() {
                     </div>
                   </div>
                 ) : (
-                  <div style={{ color: '#7c8fac', fontSize: 13, fontStyle: 'italic' }}>Loading screenshot…</div>
+                  <div style={{ color: 'var(--muted)', fontSize: 13, fontStyle: 'italic' }}>Loading screenshot…</div>
                 )}
               </div>
             )}
 
             {/* Status dropdown */}
             <div style={{ marginBottom: 20 }}>
-              <label style={{ display: 'block', color: '#7c8fac', fontSize: 12, fontWeight: 600, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              <label style={{ display: 'block', color: 'var(--muted)', fontSize: 12, fontWeight: 600, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 Status
               </label>
               <select
@@ -661,9 +682,9 @@ export default function BugReportsPage() {
                   width: '100%',
                   padding: '8px 12px',
                   borderRadius: 7,
-                  border: '1px solid #333f55',
-                  background: '#202936',
-                  color: '#eaeff4',
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg)',
+                  color: 'var(--text)',
                   fontSize: 13,
                   fontFamily: 'inherit',
                   cursor: savingStatus ? 'wait' : 'pointer',
@@ -681,8 +702,8 @@ export default function BugReportsPage() {
 
             {/* Admin notes */}
             <div style={{ marginBottom: 24 }}>
-              <label style={{ display: 'block', color: '#7c8fac', fontSize: 12, fontWeight: 600, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Admin notes {savingNotes && <span style={{ color: '#5d87ff', textTransform: 'none', fontWeight: 400 }}> · saving…</span>}
+              <label style={{ display: 'block', color: 'var(--muted)', fontSize: 12, fontWeight: 600, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Admin notes {savingNotes && <span style={{ color: 'var(--primary)', textTransform: 'none', fontWeight: 400 }}> · saving…</span>}
               </label>
               <textarea
                 className="dark-input"
@@ -695,9 +716,9 @@ export default function BugReportsPage() {
                   width: '100%',
                   padding: 12,
                   borderRadius: 7,
-                  border: '1px solid #333f55',
-                  background: '#202936',
-                  color: '#eaeff4',
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg)',
+                  color: 'var(--text)',
                   fontSize: 13,
                   fontFamily: 'inherit',
                   resize: 'vertical',
@@ -708,16 +729,16 @@ export default function BugReportsPage() {
             </div>
 
             {/* Footer — delete button */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #333f55', paddingTop: 18 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border)', paddingTop: 18 }}>
               {confirmDelete ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ color: '#fa896b', fontSize: 13, fontWeight: 600 }}>Delete this report?</span>
+                  <span style={{ color: 'var(--danger)', fontSize: 13, fontWeight: 600 }}>Delete this report?</span>
                   <button
                     onClick={handleDelete}
                     disabled={deleting}
                     style={{
                       padding: '7px 16px',
-                      background: '#fa896b',
+                      background: 'var(--danger)',
                       color: '#fff',
                       border: 'none',
                       borderRadius: 7,
@@ -735,8 +756,8 @@ export default function BugReportsPage() {
                     style={{
                       padding: '7px 16px',
                       background: 'transparent',
-                      color: '#7c8fac',
-                      border: '1px solid #333f55',
+                      color: 'var(--muted)',
+                      border: '1px solid var(--border)',
                       borderRadius: 7,
                       fontSize: 13,
                       fontFamily: 'inherit',
@@ -752,7 +773,7 @@ export default function BugReportsPage() {
                   style={{
                     padding: '8px 18px',
                     background: 'transparent',
-                    color: '#fa896b',
+                    color: 'var(--danger)',
                     border: '1px solid rgba(250,137,107,0.3)',
                     borderRadius: 7,
                     fontSize: 13,
@@ -770,8 +791,8 @@ export default function BugReportsPage() {
                 style={{
                   padding: '8px 18px',
                   background: 'transparent',
-                  color: '#7c8fac',
-                  border: '1px solid #333f55',
+                  color: 'var(--muted)',
+                  border: '1px solid var(--border)',
                   borderRadius: 7,
                   fontSize: 13,
                   fontFamily: 'inherit',

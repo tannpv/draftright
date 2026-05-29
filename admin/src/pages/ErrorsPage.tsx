@@ -1,11 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../api';
 import Toast from '../components/Toast';
+import { timeAgo } from '../lib/format';
+import { toneStyle, type Tone } from '../lib/status';
 
 /* ── Types ────────────────────────────────────────────── */
 
 interface ErrorReport {
   id: string;
+  display_no: number | null;
   platform: string;
   app_version: string | null;
   severity: string;
@@ -52,34 +55,16 @@ const PLATFORM_ICONS: Record<string, string> = {
 
 function severityStyle(severity: string): { color: string; bg: string } {
   switch (severity) {
-    case 'fatal':   return { color: '#fa896b', bg: 'rgba(250,137,107,0.12)' };
-    case 'error':   return { color: '#ffae1f', bg: 'rgba(255,174,31,0.12)' };
-    case 'warning': return { color: '#49beff', bg: 'rgba(73,190,255,0.12)' };
-    case 'info':    return { color: '#13deb9', bg: 'rgba(19,222,185,0.12)' };
-    default:        return { color: '#7c8fac', bg: 'rgba(124,143,172,0.12)' };
+    case 'fatal':   return { color: 'var(--danger)', bg: 'rgba(250,137,107,0.12)' };
+    case 'error':   return { color: 'var(--warning)', bg: 'rgba(255,174,31,0.12)' };
+    case 'warning': return { color: 'var(--secondary)', bg: 'rgba(73,190,255,0.12)' };
+    case 'info':    return { color: 'var(--success)', bg: 'rgba(19,222,185,0.12)' };
+    default:        return { color: 'var(--muted)', bg: 'rgba(124,143,172,0.12)' };
   }
 }
 
-function statusStyle(status: number): { color: string; bg: string } {
-  switch (status) {
-    case 0: return { color: '#fa896b', bg: 'rgba(250,137,107,0.12)' };
-    case 1: case 2: case 3: return { color: '#ffae1f', bg: 'rgba(255,174,31,0.12)' };
-    case 4: return { color: '#49beff', bg: 'rgba(73,190,255,0.12)' };
-    case 5: return { color: '#13deb9', bg: 'rgba(19,222,185,0.12)' };
-    default: return { color: '#7c8fac', bg: 'rgba(124,143,172,0.12)' };
-  }
-}
-
-function timeAgo(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const m = Math.floor(diff / 60000);
-  if (m < 1) return 'just now';
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  const d = Math.floor(h / 24);
-  return `${d}d ago`;
-}
+const ERROR_TONE: Record<number, Tone> = { 0: 'danger', 1: 'warning', 2: 'warning', 3: 'warning', 4: 'info', 5: 'success' };
+const statusStyle = (status: number) => toneStyle(ERROR_TONE[status] ?? 'muted');
 
 /* ── Page ─────────────────────────────────────────────── */
 
@@ -127,6 +112,25 @@ export default function ErrorsPage() {
     }
   };
 
+  const [deleting, setDeleting] = useState(false);
+  const deleteError = async (id: string) => {
+    // Hard-delete confirmation. Errors are auto-captured noise more often
+    // than real signal, so admins frequently sweep them; one confirm is
+    // enough to prevent the slip but doesn't get in the way.
+    if (!window.confirm('Delete this error report permanently? This cannot be undone.')) return;
+    setDeleting(true);
+    try {
+      await apiFetch(`/admin/errors/${id}`, { method: 'DELETE' });
+      setToast({ msg: 'Error deleted', type: 'success' });
+      if (selected?.id === id) setSelected(null);
+      await load();
+    } catch (e: any) {
+      setToast({ msg: e.message || 'Delete failed', type: 'error' });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const [suggesting, setSuggesting] = useState(false);
   const [runningCron, setRunningCron] = useState(false);
   const runAiCron = async () => {
@@ -162,7 +166,7 @@ export default function ErrorsPage() {
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-2xl font-bold text-white">Error Reports</h1>
-          <p className="text-sm text-[#7c8fac] mt-1">
+          <p className="text-sm text-[var(--muted)] mt-1">
             {total} total &middot; Bug fingerprints from all client platforms.
           </p>
         </div>
@@ -171,13 +175,13 @@ export default function ErrorsPage() {
             onClick={runAiCron}
             disabled={runningCron}
             title="Run the AI fix-proposal cron right now (also runs hourly automatically)"
-            className="rounded-md bg-[#2a3547] hover:bg-[#5d87ff]/30 disabled:opacity-50 text-[#eaeff4] text-sm font-medium px-4 py-2 border border-[#333f55] transition-colors"
+            className="rounded-md bg-[var(--card)] hover:bg-[var(--primary)]/30 disabled:opacity-50 text-[var(--text)] text-sm font-medium px-4 py-2 border border-[var(--border)] transition-colors"
           >
             {runningCron ? '🧠 Cron running…' : '🧠 Run AI on new errors'}
           </button>
           <button
             onClick={load}
-            className="rounded-md bg-[#5d87ff] hover:bg-[#3b6cff] text-white text-sm font-medium px-4 py-2 transition-colors"
+            className="rounded-md bg-[var(--primary)] hover:bg-[#3b6cff] text-white text-sm font-medium px-4 py-2 transition-colors"
           >
             Refresh
           </button>
@@ -185,11 +189,11 @@ export default function ErrorsPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-3 mb-4 p-4 bg-[#2a3547] rounded-lg border border-[#333f55]">
+      <div className="flex flex-wrap gap-3 mb-4 p-4 bg-[var(--card)] rounded-lg border border-[var(--border)]">
         <select
           value={platform}
           onChange={(e) => setPlatform(e.target.value)}
-          className="bg-[#202936] border border-[#333f55] rounded px-3 py-2 text-sm text-[#eaeff4]"
+          className="bg-[var(--bg)] border border-[var(--border)] rounded px-3 py-2 text-sm text-[var(--text)]"
         >
           <option value="">All platforms</option>
           <option value="ios">iOS</option>
@@ -202,7 +206,7 @@ export default function ErrorsPage() {
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="bg-[#202936] border border-[#333f55] rounded px-3 py-2 text-sm text-[#eaeff4]"
+          className="bg-[var(--bg)] border border-[var(--border)] rounded px-3 py-2 text-sm text-[var(--text)]"
         >
           <option value="">All statuses</option>
           {Object.entries(STATUS_LABELS).map(([k, v]) => (
@@ -212,7 +216,7 @@ export default function ErrorsPage() {
         <select
           value={severityFilter}
           onChange={(e) => setSeverityFilter(e.target.value)}
-          className="bg-[#202936] border border-[#333f55] rounded px-3 py-2 text-sm text-[#eaeff4]"
+          className="bg-[var(--bg)] border border-[var(--border)] rounded px-3 py-2 text-sm text-[var(--text)]"
         >
           <option value="">All severity</option>
           <option value="fatal">Fatal</option>
@@ -223,10 +227,11 @@ export default function ErrorsPage() {
       </div>
 
       {/* Table */}
-      <div className="bg-[#2a3547] border border-[#333f55] rounded-lg overflow-hidden">
+      <div className="bg-[var(--card)] border border-[var(--border)] rounded-lg overflow-hidden">
         <table className="w-full text-sm">
-          <thead className="bg-[#202936] text-[#7c8fac] text-xs uppercase tracking-wider">
+          <thead className="bg-[var(--bg)] text-[var(--muted)] text-xs uppercase tracking-wider">
             <tr>
+              <th className="px-4 py-3 text-left">Ref</th>
               <th className="px-4 py-3 text-left">Platform</th>
               <th className="px-4 py-3 text-left">Type / Message</th>
               <th className="px-4 py-3 text-left">Severity</th>
@@ -237,24 +242,27 @@ export default function ErrorsPage() {
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={6} className="text-center text-[#7c8fac] py-12">Loading…</td></tr>
+              <tr><td colSpan={7} className="text-center text-[var(--muted)] py-12">Loading…</td></tr>
             )}
             {!loading && items.length === 0 && (
-              <tr><td colSpan={6} className="text-center text-[#7c8fac] py-12">No errors collected yet. Either things are going great, or no clients have reported in.</td></tr>
+              <tr><td colSpan={7} className="text-center text-[var(--muted)] py-12">No errors collected yet. Either things are going great, or no clients have reported in.</td></tr>
             )}
             {items.map((row) => (
               <tr
                 key={row.id}
                 onClick={() => setSelected(row)}
-                className="border-t border-[#333f55] hover:bg-[#202936] cursor-pointer"
+                className="border-t border-[var(--border)] hover:bg-[var(--bg)] cursor-pointer"
               >
-                <td className="px-4 py-3 text-[#eaeff4]">
-                  {PLATFORM_ICONS[row.platform] || '?'} {row.platform}
-                  <div className="text-xs text-[#7c8fac]">{row.app_version || ''}</div>
+                <td className="px-4 py-3 font-mono text-xs font-semibold text-[var(--primary)] whitespace-nowrap">
+                  {row.display_no != null ? `ERR-${row.display_no}` : '—'}
                 </td>
-                <td className="px-4 py-3 text-[#eaeff4]">
+                <td className="px-4 py-3 text-[var(--text)]">
+                  {PLATFORM_ICONS[row.platform] || '?'} {row.platform}
+                  <div className="text-xs text-[var(--muted)]">{row.app_version || ''}</div>
+                </td>
+                <td className="px-4 py-3 text-[var(--text)]">
                   <div className="font-mono text-xs">{row.error_type || '(no type)'}</div>
-                  <div className="text-xs text-[#7c8fac] truncate max-w-md">{row.message || ''}</div>
+                  <div className="text-xs text-[var(--muted)] truncate max-w-md">{row.message || ''}</div>
                 </td>
                 <td className="px-4 py-3">
                   <span
@@ -264,7 +272,7 @@ export default function ErrorsPage() {
                     {row.severity}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-[#eaeff4] font-mono">{row.count}</td>
+                <td className="px-4 py-3 text-[var(--text)] font-mono">{row.count}</td>
                 <td className="px-4 py-3">
                   <span
                     className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold"
@@ -273,7 +281,7 @@ export default function ErrorsPage() {
                     {STATUS_LABELS[row.status] || row.status}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-[#7c8fac] text-xs">{timeAgo(row.last_seen_at)}</td>
+                <td className="px-4 py-3 text-[var(--muted)] text-xs">{timeAgo(row.last_seen_at)}</td>
               </tr>
             ))}
           </tbody>
@@ -284,19 +292,26 @@ export default function ErrorsPage() {
       {selected && (
         <div className="fixed inset-0 bg-black/50 z-40 flex justify-end" onClick={() => setSelected(null)}>
           <div
-            className="bg-[#202936] border-l border-[#333f55] w-full max-w-2xl h-full overflow-y-auto p-6"
+            className="bg-[var(--bg)] border-l border-[var(--border)] w-full max-w-2xl h-full overflow-y-auto p-6"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between mb-4">
               <div>
+                <div className="flex items-center gap-2 mb-1">
+                  {selected.display_no != null && (
+                    <span className="font-mono text-xs font-semibold text-[var(--primary)] bg-[var(--primary)]/15 px-2 py-0.5 rounded">
+                      ERR-{selected.display_no}
+                    </span>
+                  )}
+                </div>
                 <h2 className="text-lg font-bold text-white">
                   {PLATFORM_ICONS[selected.platform]} {selected.error_type || 'Error'}
                 </h2>
-                <p className="text-xs text-[#7c8fac] mt-1 font-mono">{selected.fingerprint.slice(0, 16)}…</p>
+                <p className="text-xs text-[var(--muted)] mt-1 font-mono">{selected.fingerprint.slice(0, 16)}…</p>
               </div>
               <button
                 onClick={() => setSelected(null)}
-                className="text-[#7c8fac] hover:text-white text-2xl leading-none"
+                className="text-[var(--muted)] hover:text-white text-2xl leading-none"
               >&times;</button>
             </div>
 
@@ -311,53 +326,63 @@ export default function ErrorsPage() {
 
             {selected.message && (
               <Block label="Message">
-                <pre className="whitespace-pre-wrap text-sm text-[#eaeff4]">{selected.message}</pre>
+                <pre className="whitespace-pre-wrap text-sm text-[var(--text)]">{selected.message}</pre>
               </Block>
             )}
 
             {selected.stack_trace && (
               <Block label="Stack trace">
-                <pre className="whitespace-pre-wrap text-xs text-[#eaeff4] font-mono overflow-x-auto">{selected.stack_trace}</pre>
+                <pre className="whitespace-pre-wrap text-xs text-[var(--text)] font-mono overflow-x-auto">{selected.stack_trace}</pre>
               </Block>
             )}
 
             {selected.context && (
               <Block label="Context">
-                <pre className="whitespace-pre-wrap text-xs text-[#eaeff4] font-mono overflow-x-auto">{JSON.stringify(selected.context, null, 2)}</pre>
+                <pre className="whitespace-pre-wrap text-xs text-[var(--text)] font-mono overflow-x-auto">{JSON.stringify(selected.context, null, 2)}</pre>
               </Block>
             )}
 
             {selected.ai_fix_proposal && (
               <Block label="AI fix proposal">
-                <pre className="whitespace-pre-wrap text-sm text-[#eaeff4]">{selected.ai_fix_proposal}</pre>
+                <pre className="whitespace-pre-wrap text-sm text-[var(--text)]">{selected.ai_fix_proposal}</pre>
               </Block>
             )}
 
-            <div className="mt-4 pt-4 border-t border-[#333f55]">
+            <div className="mt-4 pt-4 border-t border-[var(--border)]">
               <button
                 onClick={() => suggestFix(selected.id)}
                 disabled={suggesting}
-                className="w-full rounded-md bg-[#5d87ff] hover:bg-[#3b6cff] disabled:opacity-50 text-white text-sm font-medium px-4 py-2 transition-colors"
+                className="w-full rounded-md bg-[var(--primary)] hover:bg-[#3b6cff] disabled:opacity-50 text-white text-sm font-medium px-4 py-2 transition-colors"
               >
                 {suggesting ? '🧠 Asking AI…' : selected.ai_fix_proposal ? '🧠 Re-ask AI for new proposal' : '🧠 Suggest fix with AI'}
               </button>
-              <p className="text-xs text-[#7c8fac] mt-2">
+              <p className="text-xs text-[var(--muted)] mt-2">
                 Sends the error type, message, stack trace, and context to the configured AI provider. Sets status to FIX PROPOSED.
               </p>
             </div>
 
-            <div className="mt-6 pt-4 border-t border-[#333f55]">
-              <p className="text-xs text-[#7c8fac] uppercase tracking-wider mb-2">Mark status</p>
+            <div className="mt-6 pt-4 border-t border-[var(--border)]">
+              <p className="text-xs text-[var(--muted)] uppercase tracking-wider mb-2">Mark status</p>
               <div className="flex flex-wrap gap-2">
                 {Object.entries(STATUS_LABELS).map(([k, v]) => (
                   <button
                     key={k}
                     disabled={selected.status === Number(k)}
                     onClick={() => setStatus(selected.id, Number(k))}
-                    className="text-xs font-medium px-3 py-1 rounded-full border border-[#333f55] hover:bg-[#5d87ff]/20 disabled:opacity-30"
+                    className="text-xs font-medium px-3 py-1 rounded-full border border-[var(--border)] hover:bg-[var(--primary)]/20 disabled:opacity-30"
                   >{v}</button>
                 ))}
               </div>
+            </div>
+
+            <div className="mt-6 pt-4 border-t border-[var(--border)]">
+              <button
+                onClick={() => deleteError(selected.id)}
+                disabled={deleting}
+                className="w-full rounded-md bg-[var(--danger)] hover:bg-[#e57254] disabled:opacity-50 text-white text-sm font-medium px-4 py-2 transition-colors"
+              >
+                {deleting ? 'Deleting…' : '🗑 Delete error permanently'}
+              </button>
             </div>
           </div>
         </div>
@@ -372,9 +397,9 @@ export default function ErrorsPage() {
 
 function Stat({ label, value }: { label: string; value: any }) {
   return (
-    <div className="bg-[#2a3547] border border-[#333f55] rounded p-3">
-      <div className="text-xs text-[#7c8fac] uppercase tracking-wider">{label}</div>
-      <div className="text-sm text-[#eaeff4] mt-1">{value}</div>
+    <div className="bg-[var(--card)] border border-[var(--border)] rounded p-3">
+      <div className="text-xs text-[var(--muted)] uppercase tracking-wider">{label}</div>
+      <div className="text-sm text-[var(--text)] mt-1">{value}</div>
     </div>
   );
 }
@@ -382,8 +407,8 @@ function Stat({ label, value }: { label: string; value: any }) {
 function Block({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="mb-4">
-      <div className="text-xs text-[#7c8fac] uppercase tracking-wider mb-1">{label}</div>
-      <div className="bg-[#2a3547] border border-[#333f55] rounded p-3 max-h-72 overflow-auto">{children}</div>
+      <div className="text-xs text-[var(--muted)] uppercase tracking-wider mb-1">{label}</div>
+      <div className="bg-[var(--card)] border border-[var(--border)] rounded p-3 max-h-72 overflow-auto">{children}</div>
     </div>
   );
 }

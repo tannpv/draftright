@@ -28,7 +28,7 @@ export default function LoginPage() {
     <div
       style={{
         minHeight: '100vh',
-        background: '#202936',
+        background: 'var(--bg)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -53,8 +53,8 @@ export default function LoginPage() {
 
       <div
         style={{
-          background: '#2a3547',
-          border: '1px solid #333f55',
+          background: 'var(--card)',
+          border: '1px solid var(--border)',
           borderRadius: 7,
           width: '100%',
           maxWidth: 420,
@@ -70,7 +70,7 @@ export default function LoginPage() {
               width: 52,
               height: 52,
               borderRadius: 12,
-              background: 'linear-gradient(135deg, #5d87ff, #49beff)',
+              background: 'linear-gradient(135deg, var(--primary), var(--secondary))',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -82,14 +82,14 @@ export default function LoginPage() {
               <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
             </svg>
           </div>
-          <h1 style={{ color: '#eaeff4', fontSize: 22, fontWeight: 700, margin: '0 0 4px' }}>Admin Portal</h1>
-          <p style={{ color: '#7c8fac', fontSize: 13, margin: 0 }}>Sign in to DraftRight administration</p>
+          <h1 style={{ color: 'var(--text)', fontSize: 22, fontWeight: 700, margin: '0 0 4px' }}>Admin Portal</h1>
+          <p style={{ color: 'var(--muted)', fontSize: 13, margin: 0 }}>Sign in to DraftRight administration</p>
         </div>
 
         <form onSubmit={handleSubmit}>
           {/* Email */}
           <div style={{ marginBottom: 16 }}>
-            <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>
+            <label style={{ display: 'block', color: 'var(--text)', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>
               Email Address
             </label>
             <input
@@ -105,7 +105,7 @@ export default function LoginPage() {
 
           {/* Password */}
           <div style={{ marginBottom: 20 }}>
-            <label style={{ display: 'block', color: '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>
+            <label style={{ display: 'block', color: 'var(--text)', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>
               Password
             </label>
             <input

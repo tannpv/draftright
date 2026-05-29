@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:draftright_mobile/models/tone.dart';
+import 'package:draftright_mobile/services/api_client.dart';
 import 'package:draftright_mobile/services/auth_service.dart';
 import 'package:draftright_mobile/services/logger_service.dart';
 
@@ -133,6 +134,7 @@ class BackendClient {
   final AuthService _auth;
   final String Function() _getBaseUrl;
   final http.Client _http;
+  late final ApiClient _api = ApiClient(baseUrl: '', client: _http, defaultTimeout: _requestTimeout);
 
   BackendClient({
     required AuthService auth,
@@ -141,6 +143,20 @@ class BackendClient {
   })  : _auth = auth,
         _getBaseUrl = getBaseUrl,
         _http = httpClient ?? http.Client();
+
+  /// Run an authed call, refreshing the token + retrying once on 401.
+  Future<Map<String, dynamic>> _authed(Future<Map<String, dynamic>> Function(String token) call) async {
+    _api.baseUrl = _baseUrl;
+    final token = await _auth.getAccessToken();
+    try {
+      return await call(token);
+    } on ApiException catch (e) {
+      if (e.statusCode == 401 && await _auth.tryRefresh()) {
+        return await call(await _auth.getAccessToken());
+      }
+      rethrow;
+    }
+  }
 
   /// Returns the base URL with trailing slashes removed.
   String get _baseUrl {
@@ -216,8 +232,6 @@ class BackendClient {
     String? targetLanguage,
   }) async {
     DRLogger.log('Rewrite request: tone=${tone.name}', category: 'API');
-    final token = await _auth.getAccessToken();
-    final uri = Uri.parse('$_baseUrl/rewrite');
 
     final body = <String, dynamic>{
       'text': text.length > _maxInputChars ? text.substring(0, _maxInputChars) : text,
@@ -227,24 +241,13 @@ class BackendClient {
       body['target_language'] = targetLanguage;
     }
 
-    http.Response response = await _post(uri, body, token);
-
-    // Auto-refresh on 401
-    if (response.statusCode == 401) {
-      final refreshed = await _auth.tryRefresh();
-      if (refreshed) {
-        final newToken = await _auth.getAccessToken();
-        response = await _post(uri, body, newToken);
-      }
-    }
-
-    if (response.statusCode >= 400) {
-      final e = 'HTTP ${response.statusCode}: ${response.body}';
+    final Map<String, dynamic> data;
+    try {
+      data = await _authed((t) => _api.postJson('/rewrite', body: body, token: t));
+    } catch (e) {
       DRLogger.error('Rewrite error: $e', category: 'API');
-      throw Exception(e);
+      rethrow;
     }
-
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
 
     // Grammar check returns { grammar: { score, issues } } instead of { rewritten_text }
     if (tone == Tone.grammarCheck && data.containsKey('grammar')) {
@@ -269,47 +272,7 @@ class BackendClient {
   }
 
   Future<SubscriptionInfo> getSubscription() async {
-    final token = await _auth.getAccessToken();
-    final uri = Uri.parse('$_baseUrl/subscription');
-
-    var response = await _http.get(
-      uri,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-    ).timeout(_requestTimeout);
-
-    if (response.statusCode == 401) {
-      final refreshed = await _auth.tryRefresh();
-      if (refreshed) {
-        final newToken = await _auth.getAccessToken();
-        response = await _http.get(
-          uri,
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer $newToken',
-          },
-        ).timeout(_requestTimeout);
-      }
-    }
-
-    if (response.statusCode >= 400) {
-      throw Exception('HTTP ${response.statusCode}: ${response.body}');
-    }
-
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final data = await _authed((t) => _api.getJson('/subscription', token: t));
     return SubscriptionInfo.fromJson(data);
-  }
-
-  Future<http.Response> _post(Uri uri, Map<String, dynamic> body, String token) {
-    return _http.post(
-      uri,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-      body: jsonEncode(body),
-    ).timeout(_requestTimeout);
   }
 }

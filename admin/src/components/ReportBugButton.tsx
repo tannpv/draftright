@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect, ChangeEvent, FormEvent } from 'react';
 import Toast from './Toast';
 import { getAdminEmail } from '../auth';
+import { API_URL } from '../api';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 const APP_VERSION = (import.meta.env.VITE_APP_VERSION as string | undefined) || 'admin-portal-2.0.0';
 const MAX_FILE_BYTES = 5 * 1024 * 1024; // 5 MB
 const MIN_DESC_LEN = 10;
@@ -235,9 +235,9 @@ export default function ReportBugButton() {
           gap: 8,
           padding: '10px 16px',
           borderRadius: 999,
-          border: '1px solid #333f55',
-          background: '#2a3547',
-          color: '#eaeff4',
+          border: '1px solid var(--border)',
+          background: 'var(--card)',
+          color: 'var(--text)',
           fontSize: 13,
           fontWeight: 600,
           fontFamily: 'inherit',
@@ -246,12 +246,12 @@ export default function ReportBugButton() {
           transition: 'all 0.15s',
         }}
         onMouseEnter={(e) => {
-          (e.currentTarget as HTMLButtonElement).style.background = '#333f55';
-          (e.currentTarget as HTMLButtonElement).style.borderColor = '#5d87ff';
+          (e.currentTarget as HTMLButtonElement).style.background = 'var(--border)';
+          (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--primary)';
         }}
         onMouseLeave={(e) => {
-          (e.currentTarget as HTMLButtonElement).style.background = '#2a3547';
-          (e.currentTarget as HTMLButtonElement).style.borderColor = '#333f55';
+          (e.currentTarget as HTMLButtonElement).style.background = 'var(--card)';
+          (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)';
         }}
       >
         <span style={{ fontSize: 15, lineHeight: 1 }} aria-hidden="true">🐛</span>
@@ -288,8 +288,8 @@ export default function ReportBugButton() {
             onSubmit={handleSubmit}
             style={{
               position: 'relative',
-              background: '#2a3547',
-              border: '1px solid #333f55',
+              background: 'var(--card)',
+              border: '1px solid var(--border)',
               borderRadius: 7,
               width: '100%',
               maxWidth: 540,
@@ -304,14 +304,14 @@ export default function ReportBugButton() {
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 padding: '18px 22px',
-                borderBottom: '1px solid #333f55',
+                borderBottom: '1px solid var(--border)',
               }}
             >
               <div>
-                <h2 style={{ color: '#eaeff4', fontSize: 16, fontWeight: 600, margin: 0 }}>
+                <h2 style={{ color: 'var(--text)', fontSize: 16, fontWeight: 600, margin: 0 }}>
                   Report a bug
                 </h2>
-                <p style={{ color: '#7c8fac', fontSize: 12, margin: '4px 0 0' }}>
+                <p style={{ color: 'var(--muted)', fontSize: 12, margin: '4px 0 0' }}>
                   Help us improve DraftRight by sharing what went wrong.
                 </p>
               </div>
@@ -322,7 +322,7 @@ export default function ReportBugButton() {
                 style={{
                   background: 'transparent',
                   border: 'none',
-                  color: '#7c8fac',
+                  color: 'var(--muted)',
                   cursor: submitting ? 'not-allowed' : 'pointer',
                   fontSize: 22,
                   lineHeight: 1,
@@ -341,13 +341,13 @@ export default function ReportBugButton() {
                   htmlFor="bug-description"
                   style={{
                     display: 'block',
-                    color: '#eaeff4',
+                    color: 'var(--text)',
                     fontSize: 13,
                     fontWeight: 600,
                     marginBottom: 6,
                   }}
                 >
-                  What happened? <span style={{ color: '#fa896b' }}>*</span>
+                  What happened? <span style={{ color: 'var(--danger)' }}>*</span>
                 </label>
                 <textarea
                   id="bug-description"
@@ -361,9 +361,9 @@ export default function ReportBugButton() {
                   style={{
                     width: '100%',
                     boxSizing: 'border-box',
-                    background: '#202936',
-                    color: '#eaeff4',
-                    border: '1px solid #333f55',
+                    background: 'var(--bg)',
+                    color: 'var(--text)',
+                    border: '1px solid var(--border)',
                     borderRadius: 6,
                     padding: '10px 12px',
                     fontSize: 13,
@@ -372,10 +372,10 @@ export default function ReportBugButton() {
                     minHeight: 100,
                     outline: 'none',
                   }}
-                  onFocus={(e) => { e.currentTarget.style.borderColor = '#5d87ff'; }}
-                  onBlur={(e) => { e.currentTarget.style.borderColor = '#333f55'; }}
+                  onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--primary)'; }}
+                  onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; }}
                 />
-                <p style={{ color: '#7c8fac', fontSize: 11, margin: '6px 0 0' }}>
+                <p style={{ color: 'var(--muted)', fontSize: 11, margin: '6px 0 0' }}>
                   Minimum {MIN_DESC_LEN} characters.
                 </p>
               </div>
@@ -385,13 +385,13 @@ export default function ReportBugButton() {
                 <label
                   style={{
                     display: 'block',
-                    color: '#eaeff4',
+                    color: 'var(--text)',
                     fontSize: 13,
                     fontWeight: 600,
                     marginBottom: 6,
                   }}
                 >
-                  Attach screenshot <span style={{ color: '#7c8fac', fontWeight: 400 }}>(optional)</span>
+                  Attach screenshot <span style={{ color: 'var(--muted)', fontWeight: 400 }}>(optional)</span>
                 </label>
 
                 {!previewUrl ? (
@@ -402,8 +402,8 @@ export default function ReportBugButton() {
                     onDrop={handleDrop}
                     onClick={() => !submitting && fileInputRef.current?.click()}
                     style={{
-                      border: `2px dashed ${isDragging ? '#5d87ff' : '#333f55'}`,
-                      background: isDragging ? 'rgba(93,135,255,0.06)' : '#202936',
+                      border: `2px dashed ${isDragging ? 'var(--primary)' : 'var(--border)'}`,
+                      background: isDragging ? 'rgba(93,135,255,0.06)' : 'var(--bg)',
                       borderRadius: 8,
                       padding: '20px 16px',
                       textAlign: 'center',
@@ -411,10 +411,10 @@ export default function ReportBugButton() {
                       transition: 'all 0.15s',
                     }}
                   >
-                    <div style={{ color: isDragging ? '#5d87ff' : '#eaeff4', fontSize: 13, fontWeight: 500, marginBottom: 4 }}>
+                    <div style={{ color: isDragging ? 'var(--primary)' : 'var(--text)', fontSize: 13, fontWeight: 500, marginBottom: 4 }}>
                       {isDragging ? 'Drop image here' : '🖼️  Drag & drop, paste (⌘V), or click to browse'}
                     </div>
-                    <div style={{ color: '#7c8fac', fontSize: 11 }}>
+                    <div style={{ color: 'var(--muted)', fontSize: 11 }}>
                       PNG or JPEG, max 5 MB
                     </div>
                   </div>
@@ -427,12 +427,12 @@ export default function ReportBugButton() {
                         maxWidth: '100%',
                         maxHeight: 240,
                         borderRadius: 8,
-                        border: '1px solid #333f55',
+                        border: '1px solid var(--border)',
                         display: 'block',
                       }}
                     />
                     <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 8 }}>
-                      <span style={{ color: '#7c8fac', fontSize: 11 }}>
+                      <span style={{ color: 'var(--muted)', fontSize: 11 }}>
                         {file ? `${file.name} · ${(file.size / 1024).toFixed(1)} KB` : ''}
                       </span>
                       <button
@@ -446,7 +446,7 @@ export default function ReportBugButton() {
                           marginLeft: 'auto',
                           background: 'transparent',
                           border: 'none',
-                          color: '#fa896b',
+                          color: 'var(--danger)',
                           fontSize: 12,
                           cursor: submitting ? 'not-allowed' : 'pointer',
                           padding: 0,
@@ -478,7 +478,7 @@ export default function ReportBugButton() {
                     border: '1px solid rgba(250,137,107,0.4)',
                     borderRadius: 6,
                     padding: '8px 12px',
-                    color: '#fa896b',
+                    color: 'var(--danger)',
                     fontSize: 12,
                   }}
                 >
@@ -494,7 +494,7 @@ export default function ReportBugButton() {
                 justifyContent: 'flex-end',
                 gap: 10,
                 padding: '14px 22px',
-                borderTop: '1px solid #333f55',
+                borderTop: '1px solid var(--border)',
               }}
             >
               <button
@@ -504,9 +504,9 @@ export default function ReportBugButton() {
                 style={{
                   padding: '8px 16px',
                   borderRadius: 6,
-                  border: '1px solid #333f55',
+                  border: '1px solid var(--border)',
                   background: 'transparent',
-                  color: '#eaeff4',
+                  color: 'var(--text)',
                   fontSize: 13,
                   fontWeight: 500,
                   fontFamily: 'inherit',
@@ -522,7 +522,7 @@ export default function ReportBugButton() {
                   padding: '8px 18px',
                   borderRadius: 6,
                   border: 'none',
-                  background: submitting || description.trim().length < MIN_DESC_LEN ? 'rgba(93,135,255,0.5)' : '#5d87ff',
+                  background: submitting || description.trim().length < MIN_DESC_LEN ? 'rgba(93,135,255,0.5)' : 'var(--primary)',
                   color: '#fff',
                   fontSize: 13,
                   fontWeight: 600,

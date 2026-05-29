@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import DataTable from '../components/DataTable';
 import Modal from '../components/Modal';
 import Toast from '../components/Toast';
-import { apiFetch } from '../api';
+import { apiFetch, SEARCH_DEBOUNCE_MS } from '../api';
 
 interface AdminUser {
   id: string;
@@ -72,7 +72,7 @@ export default function AdminUsersPage() {
   }, [fetchUsers]);
 
   useEffect(() => {
-    const t = setTimeout(() => { setSearch(searchInput); setPage(1); }, 300);
+    const t = setTimeout(() => { setSearch(searchInput); setPage(1); }, SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(t);
   }, [searchInput]);
 
@@ -161,7 +161,7 @@ export default function AdminUsersPage() {
       key: 'name',
       sortKey: 'name',
       render: (row: AdminUser) => (
-        <span style={{ color: '#eaeff4', fontWeight: 600 }}>{row.name}</span>
+        <span style={{ color: 'var(--text)', fontWeight: 600 }}>{row.name}</span>
       ),
     },
     {
@@ -169,7 +169,7 @@ export default function AdminUsersPage() {
       key: 'email',
       sortKey: 'email',
       render: (row: AdminUser) => (
-        <span style={{ color: '#7c8fac' }}>{row.email}</span>
+        <span style={{ color: 'var(--muted)' }}>{row.email}</span>
       ),
     },
     {
@@ -187,7 +187,7 @@ export default function AdminUsersPage() {
               fontSize: 12,
               fontWeight: 600,
               background: isSuperAdmin ? 'rgba(255,174,31,0.15)' : 'rgba(93,135,255,0.15)',
-              color: isSuperAdmin ? '#ffae1f' : '#5d87ff',
+              color: isSuperAdmin ? 'var(--warning)' : 'var(--primary)',
             }}
           >
             {isSuperAdmin ? 'Super Admin' : 'Admin'}
@@ -208,7 +208,7 @@ export default function AdminUsersPage() {
             fontSize: 12,
             fontWeight: 600,
             background: row.is_active ? 'rgba(19,222,185,0.15)' : 'rgba(124,143,172,0.15)',
-            color: row.is_active ? '#13deb9' : '#7c8fac',
+            color: row.is_active ? 'var(--success)' : 'var(--muted)',
           }}
         >
           {row.is_active ? 'Active' : 'Inactive'}
@@ -220,7 +220,7 @@ export default function AdminUsersPage() {
       key: 'created_at',
       sortKey: 'created_at',
       render: (row: AdminUser) => (
-        <span style={{ color: '#7c8fac', fontSize: 13 }}>
+        <span style={{ color: 'var(--muted)', fontSize: 13 }}>
           {new Date(row.created_at).toLocaleDateString()}
         </span>
       ),
@@ -237,9 +237,9 @@ export default function AdminUsersPage() {
               borderRadius: 6,
               fontSize: 12,
               fontWeight: 600,
-              border: '1px solid #333f55',
+              border: '1px solid var(--border)',
               background: 'transparent',
-              color: '#5d87ff',
+              color: 'var(--primary)',
               cursor: 'pointer',
               fontFamily: 'inherit',
               transition: 'all 0.15s',
@@ -256,9 +256,9 @@ export default function AdminUsersPage() {
               borderRadius: 6,
               fontSize: 12,
               fontWeight: 600,
-              border: '1px solid #333f55',
+              border: '1px solid var(--border)',
               background: 'transparent',
-              color: row.is_active ? '#fa896b' : '#13deb9',
+              color: row.is_active ? 'var(--danger)' : 'var(--success)',
               cursor: 'pointer',
               fontFamily: 'inherit',
               transition: 'all 0.15s',
@@ -280,9 +280,9 @@ export default function AdminUsersPage() {
     width: '100%',
     padding: '9px 14px',
     borderRadius: 7,
-    border: '1px solid #333f55',
-    background: '#202936',
-    color: '#eaeff4',
+    border: '1px solid var(--border)',
+    background: 'var(--bg)',
+    color: 'var(--text)',
     fontSize: 14,
     fontFamily: 'inherit',
     outline: 'none',
@@ -291,7 +291,7 @@ export default function AdminUsersPage() {
 
   const labelStyle: React.CSSProperties = {
     display: 'block',
-    color: '#7c8fac',
+    color: 'var(--muted)',
     fontSize: 12,
     fontWeight: 600,
     marginBottom: 6,
@@ -304,8 +304,8 @@ export default function AdminUsersPage() {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>
-          <h1 style={{ color: '#eaeff4', fontSize: 22, fontWeight: 600, margin: 0 }}>Admin Users</h1>
-          <p style={{ color: '#7c8fac', fontSize: 13, margin: '4px 0 0' }}>
+          <h1 style={{ color: 'var(--text)', fontSize: 22, fontWeight: 600, margin: 0 }}>Admin Users</h1>
+          <p style={{ color: 'var(--muted)', fontSize: 13, margin: '4px 0 0' }}>
             Manage portal administrator accounts
           </p>
         </div>
@@ -317,7 +317,7 @@ export default function AdminUsersPage() {
             fontSize: 13,
             fontWeight: 600,
             border: 'none',
-            background: '#5d87ff',
+            background: 'var(--primary)',
             color: '#fff',
             cursor: 'pointer',
             fontFamily: 'inherit',
@@ -338,7 +338,7 @@ export default function AdminUsersPage() {
             borderRadius: 7,
             background: 'rgba(250,137,107,0.1)',
             border: '1px solid rgba(250,137,107,0.3)',
-            color: '#fa896b',
+            color: 'var(--danger)',
             fontSize: 13,
             marginBottom: 16,
           }}
@@ -357,13 +357,13 @@ export default function AdminUsersPage() {
           style={{
             flex: '1 1 280px', maxWidth: 360,
             padding: '8px 14px 8px 36px',
-            borderRadius: 7, border: '1px solid #333f55', background: '#202936',
-            color: '#eaeff4', fontSize: 13, fontFamily: 'inherit', outline: 'none',
+            borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg)',
+            color: 'var(--text)', fontSize: 13, fontFamily: 'inherit', outline: 'none',
             backgroundImage: "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%237c8fac' stroke-width='2'><circle cx='11' cy='11' r='8'/><path d='M21 21l-4.35-4.35'/></svg>\")",
             backgroundRepeat: 'no-repeat', backgroundPosition: '12px center',
           }}
         />
-        <div style={{ display: 'flex', gap: 4, padding: 4, background: '#202936', border: '1px solid #333f55', borderRadius: 7 }}>
+        <div style={{ display: 'flex', gap: 4, padding: 4, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 7 }}>
           {(['all','active','inactive'] as const).map((s) => (
             <button
               key={s}
@@ -373,7 +373,7 @@ export default function AdminUsersPage() {
                 padding: '6px 14px', borderRadius: 5, fontSize: 12, fontWeight: 600,
                 border: 'none', cursor: 'pointer', fontFamily: 'inherit',
                 background: statusFilter === s ? 'rgba(93,135,255,0.15)' : 'transparent',
-                color: statusFilter === s ? '#5d87ff' : '#7c8fac',
+                color: statusFilter === s ? 'var(--primary)' : 'var(--muted)',
                 textTransform: 'capitalize',
               }}
             >
@@ -381,7 +381,7 @@ export default function AdminUsersPage() {
             </button>
           ))}
         </div>
-        <span style={{ marginLeft: 'auto', color: '#7c8fac', fontSize: 12 }}>
+        <span style={{ marginLeft: 'auto', color: 'var(--muted)', fontSize: 12 }}>
           {total > 0 ? `${total} ${total === 1 ? 'admin' : 'admins'}` : ''}
         </span>
       </div>
@@ -417,9 +417,9 @@ export default function AdminUsersPage() {
                   borderRadius: 7,
                   fontSize: 13,
                   fontWeight: 600,
-                  border: '1px solid #333f55',
+                  border: '1px solid var(--border)',
                   background: 'transparent',
-                  color: '#7c8fac',
+                  color: 'var(--muted)',
                   cursor: 'pointer',
                   fontFamily: 'inherit',
                 }}
@@ -435,7 +435,7 @@ export default function AdminUsersPage() {
                   fontSize: 13,
                   fontWeight: 600,
                   border: 'none',
-                  background: saving ? '#3a5bbf' : '#5d87ff',
+                  background: saving ? '#3a5bbf' : 'var(--primary)',
                   color: '#fff',
                   cursor: saving ? 'not-allowed' : 'pointer',
                   fontFamily: 'inherit',
@@ -504,10 +504,10 @@ export default function AdminUsersPage() {
                 type="checkbox"
                 checked={form.is_active}
                 onChange={(e) => setForm({ ...form, is_active: e.target.checked })}
-                style={{ width: 16, height: 16, accentColor: '#5d87ff', cursor: 'pointer' }}
+                style={{ width: 16, height: 16, accentColor: 'var(--primary)', cursor: 'pointer' }}
                 id="admin-active-check"
               />
-              <label htmlFor="admin-active-check" style={{ color: '#eaeff4', fontSize: 14, cursor: 'pointer' }}>
+              <label htmlFor="admin-active-check" style={{ color: 'var(--text)', fontSize: 14, cursor: 'pointer' }}>
                 Active
               </label>
             </div>

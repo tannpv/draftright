@@ -16,6 +16,7 @@ import 'package:draftright_mobile/screens/playground_screen.dart';
 import 'package:draftright_mobile/screens/share_rewrite_screen.dart';
 import 'package:draftright_mobile/services/share_service.dart';
 import 'package:draftright_mobile/services/error_reporter.dart';
+import 'package:draftright_mobile/widgets/error_notice_overlay.dart';
 
 // Desktop imports — only compiled on desktop platforms
 import 'package:draftright_mobile/desktop/desktop_app.dart'
@@ -67,6 +68,12 @@ class _BootstrapApp extends StatelessWidget {
             seedColor: Colors.blue, brightness: Brightness.dark),
         useMaterial3: true,
       ),
+      // Intentionally NO ErrorNoticeOverlay here. The splash phase has no
+      // Scaffold (and crucially no MultiProvider — AuthService isn't bound
+      // yet), so a REPORT tap from the overlay would crash with
+      // ProviderNotFoundException. Bootstrap errors still auto-submit to
+      // /errors via ErrorReporter; the overlay is only wired into the inner
+      // MaterialApp once Provider scope is up.
       home: const _Bootstrap(),
     );
   }
@@ -134,8 +141,18 @@ class _BootstrapState extends State<_Bootstrap> {
       });
 
       auth.addListener(() async {
-        final token = await auth.getAccessToken();
-        ErrorReporter.setBearerToken(token);
+        // getAccessToken() throws "Not logged in" when no token is present
+        // (expected state after logout). Swallow that locally — letting the
+        // throw escape the listener turned every notifyListeners() into an
+        // unhandled microtask exception, which PlatformDispatcher.onError
+        // funnelled back into ErrorReporter on a hot path. Catch it and just
+        // null the bearer; sign-in will refill it on success.
+        try {
+          final token = await auth.getAccessToken();
+          ErrorReporter.setBearerToken(token);
+        } catch (_) {
+          ErrorReporter.setBearerToken(null);
+        }
       });
 
       // Wire crash reporting now that we know the backend URL. Synchronous
@@ -247,6 +264,8 @@ class DraftRightApp extends StatelessWidget {
               seedColor: Colors.blue, brightness: Brightness.dark),
           useMaterial3: true,
         ),
+        builder: (ctx, child) =>
+            ErrorNoticeOverlay(child: child ?? const SizedBox()),
         home: const HomeScreen(),
       ),
     );

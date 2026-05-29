@@ -1,0 +1,18 @@
+// TEMPLATE — committed to git as the contract for GoogleOAuthConfig.cs.
+//
+// The real GoogleOAuthConfig.cs (with the live secret) is GITIGNORED and
+// produced by:
+//   - local dev: copy this file to GoogleOAuthConfig.cs and replace REPLACE_ME
+//   - CI (build-windows.yml): a step writes the file using the
+//     GOOGLE_OAUTH_CLIENT_SECRET_WINDOWS repository secret.
+//
+// Note: Google's Desktop-type OAuth client_secret is publicly distributed with
+// every installed copy of the app and is not security-critical (per Google's
+// own docs); PKCE is the actual proof-of-possession. Keeping it out of git is a
+// hygiene + secret-scanning policy choice, not a confidentiality requirement.
+namespace DraftRightWindows.Services;
+
+internal static partial class GoogleOAuthConfig
+{
+    public const string ClientSecret = "REPLACE_ME";
+}
