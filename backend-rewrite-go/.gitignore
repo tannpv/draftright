@@ -25,3 +25,6 @@ coverage.txt
 # Local env (Task 2+)
 .env
 .env.local
+
+# Stray binaries from `go build ./...` (no -o flag emits to cwd)
+/server
