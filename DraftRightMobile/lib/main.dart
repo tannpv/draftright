@@ -68,10 +68,12 @@ class _BootstrapApp extends StatelessWidget {
             seedColor: Colors.blue, brightness: Brightness.dark),
         useMaterial3: true,
       ),
-      // Catch + surface auto-captured errors during bootstrap too — Onboarding
-      // and Login lack their own ScaffoldMessenger.
-      builder: (ctx, child) =>
-          ErrorNoticeOverlay(child: child ?? const SizedBox()),
+      // Intentionally NO ErrorNoticeOverlay here. The splash phase has no
+      // Scaffold (and crucially no MultiProvider — AuthService isn't bound
+      // yet), so a REPORT tap from the overlay would crash with
+      // ProviderNotFoundException. Bootstrap errors still auto-submit to
+      // /errors via ErrorReporter; the overlay is only wired into the inner
+      // MaterialApp once Provider scope is up.
       home: const _Bootstrap(),
     );
   }
