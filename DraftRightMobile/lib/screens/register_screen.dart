@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:draftright_mobile/services/auth_service.dart';
 import 'package:draftright_mobile/widgets/social_login_buttons.dart';
 import 'package:draftright_mobile/widgets/anonymous_bug_report_button.dart';
+import 'package:draftright_mobile/services/error_reporter.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -48,10 +49,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
       );
       // AuthService notifies listeners → main.dart rebuilds to HomeScreen
       if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
-    } catch (e) {
+    } catch (e, stack) {
       setState(() {
         _error = e.toString().replaceFirst('Exception: ', '');
       });
+      // Auto-submit (severity 'warning' — banner above already shows the user
+      // the message; this is for triage). See login_screen.dart for rationale.
+      ErrorReporter.reportHandled(
+        e,
+        stack: stack,
+        severity: 'warning',
+        context: {'flow': 'register'},
+      );
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

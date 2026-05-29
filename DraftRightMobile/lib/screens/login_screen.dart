@@ -4,6 +4,7 @@ import 'package:draftright_mobile/services/auth_service.dart';
 import 'package:draftright_mobile/screens/register_screen.dart';
 import 'package:draftright_mobile/widgets/social_login_buttons.dart';
 import 'package:draftright_mobile/widgets/anonymous_bug_report_button.dart';
+import 'package:draftright_mobile/services/error_reporter.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -42,10 +43,20 @@ class _LoginScreenState extends State<LoginScreen> {
         _passwordController.text,
       );
       // AuthService notifies listeners → main.dart rebuilds to HomeScreen
-    } catch (e) {
+    } catch (e, stack) {
       setState(() {
         _error = e.toString().replaceFirst('Exception: ', '');
       });
+      // Auto-submit to /errors for triage. Severity 'warning' because most
+      // failures here are expected ("Invalid credentials") — anomalies stand
+      // out by frequency, not severity. The on-screen banner above still
+      // shows the user-friendly message so this fires silently in the BG.
+      ErrorReporter.reportHandled(
+        e,
+        stack: stack,
+        severity: 'warning',
+        context: {'flow': 'login'},
+      );
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

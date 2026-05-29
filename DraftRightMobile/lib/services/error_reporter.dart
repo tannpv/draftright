@@ -182,17 +182,20 @@ class ErrorReporter {
     _persistQueue(); // fire-and-forget
     _scheduleFlush();
 
-    // Surface the error to any subscribed UI overlay. Background auto-submit
-    // (above) still runs unconditionally — this is purely for visibility so
-    // the user sees that something failed and can decide whether to attach
-    // extra context via "Report this".
-    lastError.value = CapturedError(
-      errorType: errorType,
-      message: message,
-      stack: stack,
-      severity: severity,
-      at: DateTime.now(),
-    );
+    // Surface only severities the user couldn't already see — anything routed
+    // through reportHandled with severity='warning' is a known/handled failure
+    // whose caller already shows its own UI (banner, snackbar). Raising the
+    // overlay too would double-notify. Auto-captured 'error'/'fatal' are the
+    // unexpected ones the user needs to be told about.
+    if (severity == 'error' || severity == 'fatal') {
+      lastError.value = CapturedError(
+        errorType: errorType,
+        message: message,
+        stack: stack,
+        severity: severity,
+        at: DateTime.now(),
+      );
+    }
   }
 
   static String _detectPlatform() {
