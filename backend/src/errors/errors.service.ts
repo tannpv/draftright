@@ -109,6 +109,18 @@ export class ErrorsService {
     return this.repo.findOne({ where: { id } });
   }
 
+  /**
+   * Admin-only hard delete. We don't soft-delete here because the admin "trash"
+   * view doesn't exist yet — adding a `deleted_at` column would be unused
+   * baggage. Cascade-irrelevant: error_reports has no child FKs.
+   * Idempotent: deleting an already-gone id resolves cleanly so a double-click
+   * on the admin button isn't an error.
+   */
+  async deleteOne(id: string): Promise<{ id: string; deleted: boolean }> {
+    const result = await this.repo.delete({ id });
+    return { id, deleted: (result.affected ?? 0) > 0 };
+  }
+
   async setStatus(id: string, status: number, resolvedBy?: string): Promise<ErrorReport> {
     const row = await this.repo.findOne({ where: { id } });
     if (!row) throw new BadRequestException('not found');

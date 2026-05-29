@@ -111,6 +111,25 @@ export default function ErrorsPage() {
     }
   };
 
+  const [deleting, setDeleting] = useState(false);
+  const deleteError = async (id: string) => {
+    // Hard-delete confirmation. Errors are auto-captured noise more often
+    // than real signal, so admins frequently sweep them; one confirm is
+    // enough to prevent the slip but doesn't get in the way.
+    if (!window.confirm('Delete this error report permanently? This cannot be undone.')) return;
+    setDeleting(true);
+    try {
+      await apiFetch(`/admin/errors/${id}`, { method: 'DELETE' });
+      setToast({ msg: 'Error deleted', type: 'success' });
+      if (selected?.id === id) setSelected(null);
+      await load();
+    } catch (e: any) {
+      setToast({ msg: e.message || 'Delete failed', type: 'error' });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const [suggesting, setSuggesting] = useState(false);
   const [runningCron, setRunningCron] = useState(false);
   const runAiCron = async () => {
@@ -342,6 +361,16 @@ export default function ErrorsPage() {
                   >{v}</button>
                 ))}
               </div>
+            </div>
+
+            <div className="mt-6 pt-4 border-t border-[var(--border)]">
+              <button
+                onClick={() => deleteError(selected.id)}
+                disabled={deleting}
+                className="w-full rounded-md bg-[var(--danger)] hover:bg-[#e57254] disabled:opacity-50 text-white text-sm font-medium px-4 py-2 transition-colors"
+              >
+                {deleting ? 'Deleting…' : '🗑 Delete error permanently'}
+              </button>
             </div>
           </div>
         </div>

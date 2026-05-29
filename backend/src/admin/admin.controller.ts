@@ -268,6 +268,11 @@ export class AdminController {
     return this.errorsService.setStatus(id, body.status, body.resolved_by);
   }
 
+  @Delete('errors/:id')
+  async deleteErrorReport(@Param('id') id: string) {
+    return this.errorsService.deleteOne(id);
+  }
+
   @Post('errors/:id/suggest-fix')
   async suggestFix(@Param('id') id: string) {
     return this.errorsService.suggestFix(id);
