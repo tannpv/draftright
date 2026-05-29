@@ -15,10 +15,14 @@ import 'package:draftright_mobile/services/bug_report_service.dart';
 /// can see what screen the user was on when they reported.
 /// [endpointOverride] redirects the submission target — production by
 /// default; integration tests point it at a local stub server.
+/// [initialDescription] pre-fills the description field — used when the
+/// sheet is opened from an auto-captured error notice so the user doesn't
+/// have to retype what just happened.
 Future<void> showReportBugSheet(
   BuildContext context, {
   String? currentRoute,
   String? endpointOverride,
+  String? initialDescription,
 }) async {
   if (Platform.isIOS) {
     await showCupertinoModalPopup<void>(
@@ -26,6 +30,7 @@ Future<void> showReportBugSheet(
       builder: (ctx) => _ReportBugSheet(
         currentRoute: currentRoute,
         endpointOverride: endpointOverride,
+        initialDescription: initialDescription,
       ),
     );
   } else {
@@ -39,6 +44,7 @@ Future<void> showReportBugSheet(
       builder: (ctx) => _ReportBugSheet(
         currentRoute: currentRoute,
         endpointOverride: endpointOverride,
+        initialDescription: initialDescription,
       ),
     );
   }
@@ -47,14 +53,20 @@ Future<void> showReportBugSheet(
 class _ReportBugSheet extends StatefulWidget {
   final String? currentRoute;
   final String? endpointOverride;
-  const _ReportBugSheet({this.currentRoute, this.endpointOverride});
+  final String? initialDescription;
+  const _ReportBugSheet({
+    this.currentRoute,
+    this.endpointOverride,
+    this.initialDescription,
+  });
 
   @override
   State<_ReportBugSheet> createState() => _ReportBugSheetState();
 }
 
 class _ReportBugSheetState extends State<_ReportBugSheet> {
-  final _descriptionController = TextEditingController();
+  late final TextEditingController _descriptionController =
+      TextEditingController(text: widget.initialDescription ?? '');
   final _emailController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   final _picker = ImagePicker();

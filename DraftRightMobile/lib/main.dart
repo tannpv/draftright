@@ -16,6 +16,7 @@ import 'package:draftright_mobile/screens/playground_screen.dart';
 import 'package:draftright_mobile/screens/share_rewrite_screen.dart';
 import 'package:draftright_mobile/services/share_service.dart';
 import 'package:draftright_mobile/services/error_reporter.dart';
+import 'package:draftright_mobile/widgets/error_notice_overlay.dart';
 
 // Desktop imports — only compiled on desktop platforms
 import 'package:draftright_mobile/desktop/desktop_app.dart'
@@ -67,6 +68,10 @@ class _BootstrapApp extends StatelessWidget {
             seedColor: Colors.blue, brightness: Brightness.dark),
         useMaterial3: true,
       ),
+      // Catch + surface auto-captured errors during bootstrap too — Onboarding
+      // and Login lack their own ScaffoldMessenger.
+      builder: (ctx, child) =>
+          ErrorNoticeOverlay(child: child ?? const SizedBox()),
       home: const _Bootstrap(),
     );
   }
@@ -247,6 +252,8 @@ class DraftRightApp extends StatelessWidget {
               seedColor: Colors.blue, brightness: Brightness.dark),
           useMaterial3: true,
         ),
+        builder: (ctx, child) =>
+            ErrorNoticeOverlay(child: child ?? const SizedBox()),
         home: const HomeScreen(),
       ),
     );

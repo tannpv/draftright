@@ -7,6 +7,33 @@ import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+/// One captured error, surfaced to the UI for an on-screen notice. The
+/// reporter publishes the latest of these via [ErrorReporter.lastError] so
+/// any widget can react (banner, snackbar, dev overlay) without depending
+/// on the full backend submission pipeline.
+class CapturedError {
+  final String errorType;
+  final String message;
+  final String? stack;
+  final String severity;
+  final DateTime at;
+  const CapturedError({
+    required this.errorType,
+    required this.message,
+    this.stack,
+    this.severity = 'error',
+    required this.at,
+  });
+
+  /// Short single-line preview suitable for a snackbar / banner.
+  String get shortLine {
+    final firstLine = message.split('\n').first.trim();
+    return firstLine.length > 140
+        ? '${firstLine.substring(0, 137)}…'
+        : firstLine;
+  }
+}
+
 /// Reports unhandled errors and exceptions to the DraftRight backend's
 /// /errors endpoint. Wrap your `runApp(...)` call in
 /// `ErrorReporter.run(() => runApp(...), backendUrl: ...)` and crashes
@@ -22,6 +49,13 @@ class ErrorReporter {
   static final _queue = <Map<String, dynamic>>[];
   static const _persistKey = 'draftright.error_reporter.queue';
   static bool _flushScheduled = false;
+
+  /// Latest captured error, or null if none yet. UI widgets can subscribe to
+  /// this to show an on-screen notice ("something went wrong: …") without
+  /// having to wrap every call site in try/catch. Cleared by calling
+  /// `lastError.value = null` after the user dismisses the banner.
+  static final ValueNotifier<CapturedError?> lastError =
+      ValueNotifier<CapturedError?>(null);
 
   /// Install crash handlers + record the backend URL / bearer token.
   ///
@@ -147,6 +181,18 @@ class ErrorReporter {
     if (_queue.length > 100) _queue.removeAt(0); // bound queue
     _persistQueue(); // fire-and-forget
     _scheduleFlush();
+
+    // Surface the error to any subscribed UI overlay. Background auto-submit
+    // (above) still runs unconditionally — this is purely for visibility so
+    // the user sees that something failed and can decide whether to attach
+    // extra context via "Report this".
+    lastError.value = CapturedError(
+      errorType: errorType,
+      message: message,
+      stack: stack,
+      severity: severity,
+      at: DateTime.now(),
+    );
   }
 
   static String _detectPlatform() {
