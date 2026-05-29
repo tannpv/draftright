@@ -12,7 +12,12 @@ export class CreateBugReportDto {
   @IsOptional() @IsString() @MaxLength(50)
   app_version?: string;
 
-  @IsOptional() @IsString() @MaxLength(100)
+  // Cap matches the DB column. Android's Platform.operatingSystemVersion
+  // includes the full kernel build string (often >150 chars on Xiaomi /
+  // Samsung), so the previous @MaxLength(100) silently 400'd every Android
+  // bug report. The service still slices to 100 before writing to the row,
+  // so this widened cap is just a permissive ingress.
+  @IsOptional() @IsString() @MaxLength(255)
   os_info?: string;
 
   @IsOptional() @IsString() @MaxLength(255)

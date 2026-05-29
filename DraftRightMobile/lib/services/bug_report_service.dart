@@ -113,6 +113,15 @@ class BugReportService {
     }
   }
 
+  /// Max chars sent to the backend — matches the bug-report DTO's
+  /// @MaxLength(100). Android's Platform.operatingSystemVersion includes the
+  /// full kernel release string (e.g. "5.10.198-android13-…-SMP-PREEMPT…"),
+  /// which routinely exceeds 100 chars on Xiaomi/Samsung devices. Sending a
+  /// longer value made the backend reject the whole submission with HTTP 400
+  /// and the user got no record on the admin portal. Truncating here keeps
+  /// the report flowing.
+  static const int _maxOsInfoChars = 100;
+
   static String _osInfo() {
     try {
       final name = Platform.isIOS
@@ -120,7 +129,10 @@ class BugReportService {
           : Platform.isAndroid
               ? 'Android'
               : Platform.operatingSystem;
-      return '$name ${Platform.operatingSystemVersion}';
+      final raw = '$name ${Platform.operatingSystemVersion}';
+      return raw.length > _maxOsInfoChars
+          ? raw.substring(0, _maxOsInfoChars)
+          : raw;
     } catch (_) {
       return 'unknown';
     }

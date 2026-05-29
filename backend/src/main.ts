@@ -1,15 +1,30 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { BadRequestException, Logger, ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { rawBody: true });
 
+  // Validation rejections used to fail silently in container logs — clients
+  // see HTTP 400 and the user sees "submit failed" with no record on the
+  // server side. Log the offending fields so the next time an Android
+  // os_info-style overflow happens, ops can spot it in the access log.
+  const validationLogger = new Logger('Validation');
   app.useGlobalPipes(new ValidationPipe({
     whitelist: true,
     forbidNonWhitelisted: true,
     transform: true,
+    exceptionFactory: (errors) => {
+      const summary = errors.map(e => {
+        const constraints = Object.values(e.constraints ?? {}).join(', ');
+        return `${e.property}: ${constraints}`;
+      }).join('; ');
+      validationLogger.warn(`Validation failed → ${summary}`);
+      return new BadRequestException(
+        errors.flatMap(e => Object.values(e.constraints ?? {})),
+      );
+    },
   }));
 
   app.enableCors();
