@@ -60,6 +60,19 @@ internal static class SettingsFormBuilder
 
     // ── Helpers ──────────────────────────────────────────────
 
+    /// <summary>
+    /// Permissive email check used to short-circuit obviously-invalid input
+    /// before the API call. Backend validation is still authoritative — this
+    /// just spares the user a 400 round-trip + stack-trace popup.
+    /// </summary>
+    private static bool IsValidEmail(string s)
+    {
+        if (string.IsNullOrWhiteSpace(s)) return false;
+        var at = s.IndexOf('@');
+        if (at <= 0 || at == s.Length - 1) return false;
+        return s.IndexOf('.', at) > at;
+    }
+
     private static void SetFormIcon(WinForms.Form form)
     {
         var exePath = Environment.ProcessPath;
@@ -651,11 +664,33 @@ internal static class SettingsFormBuilder
             signInBtn.Click += async (_, _) =>
             {
                 setStatus("", ErrorRed);
+
+                // Client-side validation BEFORE hitting /auth/login so the
+                // backend's 400 ("email must be an email") doesn't bubble up
+                // as a raw ApiException stack trace (BUG-18 / BUG-19).
+                var email = emailBox.Text.Trim();
+                var password = passBox.Text;
+                if (string.IsNullOrEmpty(email))
+                {
+                    setStatus("Please enter your email.", ErrorRed);
+                    return;
+                }
+                if (!IsValidEmail(email))
+                {
+                    setStatus("Please enter a valid email address.", ErrorRed);
+                    return;
+                }
+                if (string.IsNullOrEmpty(password))
+                {
+                    setStatus("Please enter your password.", ErrorRed);
+                    return;
+                }
+
                 signInBtn.Enabled = false;
                 try
                 {
                     App.Api.SetBaseUrl(App.Settings.BackendUrl ?? "");
-                    var result = await App.Api.LoginAsync(emailBox.Text.Trim(), passBox.Text);
+                    var result = await App.Api.LoginAsync(email, password);
                     if (!string.IsNullOrEmpty(result.AccessToken))
                     {
                         App.Auth.SaveTokens(result.AccessToken, result.RefreshToken, result.User?.Email);
@@ -668,9 +703,17 @@ internal static class SettingsFormBuilder
                         setStatus("Login failed.", ErrorRed);
                     }
                 }
+                catch (ApiException apiEx)
+                {
+                    // Show the parsed server message ("Invalid credentials",
+                    // "email must be an email", etc.) — NOT the full stack
+                    // trace, which is what users were seeing before.
+                    setStatus(apiEx.ServerMessage ?? apiEx.Message, ErrorRed);
+                    DRLogger.Error($"Login API error: {apiEx}", DRLogger.Category.AUTH);
+                }
                 catch (Exception ex)
                 {
-                    setStatus(ex.ToString(), ErrorRed);
+                    setStatus("Something went wrong. Please try again.", ErrorRed);
                     DRLogger.Error($"Login error: {ex}", DRLogger.Category.AUTH);
                 }
                 finally
@@ -710,6 +753,11 @@ internal static class SettingsFormBuilder
                     {
                         setStatus("Google sign-in failed.", ErrorRed);
                     }
+                }
+                catch (ApiException apiEx)
+                {
+                    setStatus(apiEx.ServerMessage ?? apiEx.Message, ErrorRed);
+                    DRLogger.Error($"Google sign-in API error: {apiEx}", DRLogger.Category.AUTH);
                 }
                 catch (Exception ex)
                 {

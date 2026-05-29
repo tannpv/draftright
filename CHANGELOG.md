@@ -23,6 +23,11 @@ A Windows-only line under `### Windows` will never appear in the macOS
 If a version needs the user to *do* something after updating, say so
 explicitly under an **Action needed:** line inside the relevant sub-section.
 
+## 2.3.15 — 2026-05-29
+### Windows
+- Sign-in now validates your email + password before sending — empty fields and obvious typos surface as friendly inline messages instead of triggering a server round-trip.
+- Login errors show the server's actual reason ("Invalid credentials", "email must be an email", etc.) instead of the raw stack trace some users were seeing.
+
 ## 2.3.14 — 2026-05-28
 ### Windows
 - When DraftRight is installed from the Microsoft Store, updates now go through the Store automatically. The "Update available" badge on the tray icon still works — clicking it asks the Store to download and install the new version immediately instead of waiting for the Store's own schedule.
