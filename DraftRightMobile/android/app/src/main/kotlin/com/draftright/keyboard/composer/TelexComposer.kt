@@ -96,6 +96,50 @@ class TelexComposer : Composer {
             if (last.lowercaseChar() == low) {
                 return buffer.dropLast(1) + caseMap(replacement, incoming.isUpperCase() || last.isUpperCase())
             }
+
+            // Lookback through up to MAX_TRAILING_CONS trailing consonants — lets
+            // users type the modifier after the trailing consonant cluster, e.g.
+            // "nguyen" + e → "nguyên" (skip the trailing 'n'). Same shape covers
+            // the cancel case for re-typing.
+            val targetIdx = findLastVowelThroughConsonants(buffer)
+            if (targetIdx != null) {
+                val targetChar = buffer[targetIdx]
+                val targetLow = targetChar.lowercaseChar()
+                if (targetLow == replacement) {
+                    return buffer.substring(0, targetIdx) +
+                        caseMap(low, targetChar.isUpperCase()) +
+                        buffer.substring(targetIdx + 1) +
+                        incoming
+                }
+                if (targetLow == low) {
+                    return buffer.substring(0, targetIdx) +
+                        caseMap(replacement, incoming.isUpperCase() || targetChar.isUpperCase()) +
+                        buffer.substring(targetIdx + 1)
+                }
+            }
+            return null
+        }
+
+        /**
+         * Maximum trailing-consonant count the e/a/o/w modifier rules will scan
+         * past when looking for their target vowel. 2 covers every Vietnamese
+         * coda (ng, nh, ch, etc.) without crossing into the next syllable.
+         */
+        private const val MAX_TRAILING_CONS = 2
+
+        /**
+         * Scan from the end of [buffer] backwards; return the index of the last
+         * vowel-like char, but only if at most [MAX_TRAILING_CONS] consonants
+         * precede it. Used by tryCombine to support modifiers typed AFTER the
+         * syllable's trailing consonants (e.g. "nguyen" + e, "truong" + w).
+         */
+        private fun findLastVowelThroughConsonants(buffer: String): Int? {
+            var cons = 0
+            for (i in buffer.indices.reversed()) {
+                if (TelexState.isVowelLike(buffer[i])) return i
+                cons++
+                if (cons > MAX_TRAILING_CONS) return null
+            }
             return null
         }
 
@@ -157,13 +201,40 @@ class TelexComposer : Composer {
                 }
             }
             val last = buffer.last()
-            val replacement = when (last.lowercaseChar()) {
+            val singleReplacement = when (last.lowercaseChar()) {
+                'a' -> 'ă'
+                'o' -> 'ơ'
+                'u' -> 'ư'
+                else -> null
+            }
+            if (singleReplacement != null) {
+                return buffer.dropLast(1) + caseMap(singleReplacement, last.isUpperCase() || wIsUpper)
+            }
+
+            // Lookback through trailing consonants — lets users type 'w' after
+            // the syllable's coda, e.g. "truong" + w → "trương" (then "trướn-g"
+            // with subsequent tone). Same cluster rules as the immediate case:
+            // a "uo" pair behind the consonants becomes "ươ"; a single base
+            // vowel takes horn/breve.
+            val vowelIdx = findLastVowelThroughConsonants(buffer) ?: return null
+            val vowelChar = buffer[vowelIdx]
+            if (vowelIdx >= 1) {
+                val before = buffer[vowelIdx - 1]
+                if (before.lowercaseChar() == 'u' && vowelChar.lowercaseChar() == 'o') {
+                    val u2 = caseMap('ư', before.isUpperCase() || wIsUpper)
+                    val o2 = caseMap('ơ', vowelChar.isUpperCase() || wIsUpper)
+                    return buffer.substring(0, vowelIdx - 1) + u2 + o2 + buffer.substring(vowelIdx + 1)
+                }
+            }
+            val lookbackReplacement = when (vowelChar.lowercaseChar()) {
                 'a' -> 'ă'
                 'o' -> 'ơ'
                 'u' -> 'ư'
                 else -> return null
             }
-            return buffer.dropLast(1) + caseMap(replacement, last.isUpperCase() || wIsUpper)
+            return buffer.substring(0, vowelIdx) +
+                caseMap(lookbackReplacement, vowelChar.isUpperCase() || wIsUpper) +
+                buffer.substring(vowelIdx + 1)
         }
 
         private fun applyTone(buffer: String, toneChar: Char): String {
@@ -208,6 +279,26 @@ class TelexComposer : Composer {
                     val withPromoted = buffer.substring(0, start + 1) +
                         promotedChar + buffer.substring(start + 2)
                     return applyToneAt(withPromoted, start + 1, toneChar)
+                }
+            }
+
+            // Auto-promote 3-vowel clusters that take tone on the LAST vowel
+            // (uye + trailing consonant → uyê: e.g. "nguyen" + x → "nguyễn").
+            // Distinct from the mid-promote group above so each promotion rule
+            // stays explicit instead of being woven into the picker logic.
+            if (clusterLen == 3 && hasTrailingConsonant && !TelexState.isSpecialVowel(buffer[endInclusive])) {
+                val first = buffer[start].lowercaseChar()
+                val mid = buffer[start + 1].lowercaseChar()
+                val last = buffer[endInclusive].lowercaseChar()
+                val promoted: Char? = when {
+                    first == 'u' && mid == 'y' && last == 'e' -> 'ê'
+                    else -> null
+                }
+                if (promoted != null) {
+                    val promotedChar = caseMap(promoted, buffer[endInclusive].isUpperCase())
+                    val withPromoted = buffer.substring(0, endInclusive) +
+                        promotedChar + buffer.substring(endInclusive + 1)
+                    return applyToneAt(withPromoted, endInclusive, toneChar)
                 }
             }
 
