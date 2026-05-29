@@ -120,14 +120,24 @@ class _ReportBugSheetState extends State<_ReportBugSheet> {
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
 
-    final auth = context.read<AuthService>();
-    final isLoggedIn = auth.isLoggedIn;
+    // The sheet may be opened from a context that's above MultiProvider
+    // (e.g. the auto-error overlay's snackbar action wires a root-navigator
+    // route, which sits above the AuthService Provider). Fall back to an
+    // anonymous submit if Provider isn't reachable — better than crashing
+    // the only escape hatch users have for reporting that exact crash.
+    AuthService? auth;
+    try {
+      auth = context.read<AuthService>();
+    } catch (_) {
+      auth = null;
+    }
+    final isLoggedIn = auth?.isLoggedIn ?? false;
 
     final result = await BugReportService.submitBugReport(
       description: _descriptionController.text.trim(),
       screenshot: _screenshot,
       userEmail: isLoggedIn ? null : _emailController.text.trim(),
-      authToken: isLoggedIn ? auth.accessToken : null,
+      authToken: isLoggedIn ? auth!.accessToken : null,
       context: {
         if (widget.currentRoute != null) 'route': widget.currentRoute,
         'platform': Platform.isIOS ? 'ios' : 'android',
@@ -159,8 +169,17 @@ class _ReportBugSheetState extends State<_ReportBugSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final auth = context.watch<AuthService>();
-    final isLoggedIn = auth.isLoggedIn;
+    // Same Provider fallback as _submit — when the sheet is launched from
+    // an error-notice snackbar above MultiProvider, AuthService isn't in
+    // scope. Render the anonymous (email-required) variant rather than
+    // crashing the dialog.
+    AuthService? auth;
+    try {
+      auth = context.watch<AuthService>();
+    } catch (_) {
+      auth = null;
+    }
+    final isLoggedIn = auth?.isLoggedIn ?? false;
     final viewInsets = MediaQuery.of(context).viewInsets;
     final isIOS = Platform.isIOS;
 
