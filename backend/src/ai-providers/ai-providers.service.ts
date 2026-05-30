@@ -1,14 +1,16 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { AiProvider, AiProviderType } from './entities/ai-provider.entity';
+import { AiProvider } from './entities/ai-provider.entity';
 import { ListQuery, ListResult, applyListQuery } from '../common/list-query';
+import { ProviderStrategyRegistry } from './strategies/provider-strategy.registry';
 
 @Injectable()
 export class AiProvidersService {
   constructor(
     @InjectRepository(AiProvider)
     private readonly providersRepo: Repository<AiProvider>,
+    private readonly strategyRegistry: ProviderStrategyRegistry,
   ) {}
 
   async findAll(): Promise<AiProvider[]> {
@@ -78,122 +80,22 @@ export class AiProvidersService {
     await this.providersRepo.update(id, { is_active: false, is_default: false });
   }
 
-  // Retry policy for upstream 429s (Ollama "too many concurrent
-  // requests", OpenAI rate limits, Anthropic 429). Three attempts with
-  // 400ms / 800ms backoff masks brief contention without making the
-  // user wait forever.
-  private static readonly MAX_429_RETRIES = 3;
-  private static readonly RETRY_BACKOFF_MS = 400;
-
-  async callProvider(provider: AiProvider, systemPrompt: string, userText: string, attempt = 1): Promise<{ text: string; responseTimeMs: number }> {
+  /**
+   * Dispatches the rewrite request to whichever provider strategy
+   * claims the config. Wire-level concerns (request body shape, auth
+   * headers, transient 429 retry, response decoding) all live inside
+   * the strategy classes — this method stays a thin router.
+   *
+   * Adding a new upstream API surface = new strategy file + one entry
+   * in the registry factory. Zero edits here.
+   */
+  async callProvider(
+    provider: AiProvider,
+    systemPrompt: string,
+    userText: string,
+  ): Promise<{ text: string; responseTimeMs: number }> {
     const startTime = Date.now();
-
-    if (provider.type === AiProviderType.ANTHROPIC) {
-      return this.callAnthropic(provider, systemPrompt, userText, startTime);
-    }
-
-    // For smaller local models (Ollama), embed instructions in user message
-    const isLocal = provider.type === AiProviderType.OLLAMA;
-    const messages = isLocal
-      ? [
-          { role: 'system', content: 'You are a writing assistant. If the user provides existing text, rewrite it as instructed. If the user provides a request or instruction, generate the requested content. You ONLY output the result text. Never answer questions about yourself, never explain your process, never add commentary. CRITICAL: You must reply in the SAME LANGUAGE as the input text. If the input is Vietnamese, reply in Vietnamese. If French, reply in French. Never switch to English unless the input is in English.' },
-          { role: 'user', content: `${systemPrompt}\n\nIMPORTANT: Your response MUST be in the same language as the text below.\n\nUser input:\n"${userText}"\n\nOutput:` },
-        ]
-      : [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userText },
-        ];
-
-    const isGpt5 = typeof provider.model === 'string' && provider.model.startsWith('gpt-5');
-
-    const body: Record<string, unknown> = {
-      model: provider.model,
-      messages,
-    };
-
-    // gpt-5 family are reasoning models with two hard constraints:
-    //
-    //   1. temperature MUST be omitted (or set to its only allowed
-    //      value, 1). Sending custom temps → 400
-    //      "Unsupported value: 'temperature' does not support 0.3
-    //      with this model." Observed 2026-05-30 with gpt-5-nano.
-    //
-    //   2. reasoning_effort=minimal disables the hidden "reasoning
-    //      tokens" the model otherwise spends before its visible
-    //      output. Without this, a 10-token prompt routinely
-    //      consumed ~448 reasoning tokens → 6.3 s wall-clock for
-    //      shallow rewriting. With minimal → ~1 s.
-    //
-    // Non-gpt-5 providers (gpt-4o, openai-compat, ollama, etc.) keep
-    // the existing temperature pathway since they honour it.
-    if (isGpt5) {
-      body.reasoning_effort = 'minimal';
-    } else {
-      body.temperature = Number(provider.temperature);
-    }
-
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (provider.api_key) {
-      headers['Authorization'] = `Bearer ${provider.api_key}`;
-    }
-
-    const response = await fetch(provider.endpoint_url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-    });
-
-    // Transient-load retry. Ollama returns 429 + "too many concurrent
-    // requests" when OLLAMA_NUM_PARALLEL is exceeded. OpenAI/compat
-    // also use 429 for rate limits. Brief exponential backoff gives
-    // queued requests room to finish before we surface failure.
-    if (response.status === 429 && attempt < AiProvidersService.MAX_429_RETRIES) {
-      const wait = AiProvidersService.RETRY_BACKOFF_MS * attempt;
-      await new Promise(resolve => setTimeout(resolve, wait));
-      return this.callProvider(provider, systemPrompt, userText, attempt + 1);
-    }
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`AI provider error (${response.status}): ${errorText}`);
-    }
-
-    const json = await response.json();
-    const text = json.choices?.[0]?.message?.content?.trim() || '';
-    const responseTimeMs = Date.now() - startTime;
-
-    return { text, responseTimeMs };
-  }
-
-  private async callAnthropic(provider: AiProvider, systemPrompt: string, userText: string, startTime: number): Promise<{ text: string; responseTimeMs: number }> {
-    const body = {
-      model: provider.model,
-      max_tokens: 1024,
-      system: systemPrompt,
-      messages: [
-        { role: 'user', content: userText },
-      ],
-    };
-
-    const response = await fetch(provider.endpoint_url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': provider.api_key,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify(body),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Anthropic API error (${response.status}): ${errorText}`);
-    }
-
-    const json = await response.json();
-    const text = json.content?.[0]?.text?.trim() || '';
-    const responseTimeMs = Date.now() - startTime;
-
-    return { text, responseTimeMs };
+    const strategy = this.strategyRegistry.pick(provider);
+    return strategy.call(provider, systemPrompt, userText, startTime);
   }
 }
