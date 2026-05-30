@@ -1,10 +1,12 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
+import { ConfigModule } from '@nestjs/config';
 import { RequestIdMiddleware } from './common/request-id.middleware';
 import { MetricsModule } from './common/metrics/metrics.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { databaseConfig } from './config/database.config';
+import { validateEnv } from './config/env.schema';
 import { HealthModule } from './health/health.module';
 import { UsersModule } from './users/users.module';
 import { PlansModule } from './plans/plans.module';
@@ -24,6 +26,14 @@ import { ExtractionModule } from './extraction/extraction.module';
 
 @Module({
   imports: [
+    // Typed, validated env config. Boot fails fast (with every offending
+    // field listed) when an env var is missing or malformed. Standard
+    // S14 in docs/architecture-standards.md.
+    ConfigModule.forRoot({
+      isGlobal: true,
+      cache: true,
+      validate: validateEnv,
+    }),
     TypeOrmModule.forRoot(databaseConfig()),
     // Global per-IP rate limit, applied via APP_GUARD below. The anon endpoints
     // (/bug-reports, /feedback, /errors) further tighten this with @Throttle()
