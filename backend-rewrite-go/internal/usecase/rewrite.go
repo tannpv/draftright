@@ -9,6 +9,7 @@ package usecase
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"strings"
 	"time"
@@ -24,6 +25,9 @@ type RewriteDeps struct {
 	Users     domain.UserRepo
 	Provider  domain.AiProvider
 	RateLimit domain.RateLimiter
+	// Metrics is the telemetry sink. Defaults to a no-op if nil so
+	// the use case never panics on an unwired field.
+	Metrics domain.Metrics
 	// Now() is injectable so tests can pin the clock + assert exact
 	// response_time_ms on the usage log row. Production wires
 	// time.Now.
@@ -57,11 +61,19 @@ func Rewrite(
 	if log == nil {
 		log = nopLogger()
 	}
+	metrics := deps.Metrics
+	if metrics == nil {
+		metrics = noopMetrics{}
+	}
+
+	preflightStart := now()
+	providerName := deps.Provider.Name()
 
 	// 1. Cheap pre-check: per-minute Redis token bucket. Returns
 	//    ErrRateLimited fast — saves the DB round-trip when a runaway
 	//    client is hammering us.
 	if err := deps.RateLimit.Check(ctx, userID); err != nil {
+		metrics.ObserveRewrite(outcomeFromErr(err), req.Tone(), providerName, now().Sub(preflightStart))
 		return nil, nil, err
 	}
 
@@ -69,12 +81,14 @@ func Rewrite(
 	//    FindUserWithPlan query.
 	user, err := deps.Users.Find(ctx, userID)
 	if err != nil {
+		metrics.ObserveRewrite(outcomeFromErr(err), req.Tone(), providerName, now().Sub(preflightStart))
 		return nil, nil, err
 	}
 
 	// 3. Daily quota check. NestJS does the same comparison; keep the
 	//    "0 = unlimited" convention in lockstep (domain.Plan).
 	if err := user.CheckQuota(); err != nil {
+		metrics.ObserveRewrite(outcomeFromErr(err), req.Tone(), providerName, now().Sub(preflightStart))
 		return nil, nil, err
 	}
 
@@ -92,13 +106,32 @@ func Rewrite(
 		defer close(outTokens)
 		defer close(outErrs)
 
-		startedAt := now()
+		// Anchor both the metric duration AND the usage log
+		// ResponseTimeMs on preflightStart. Preflight (Redis + DB
+		// round-trip) is ~1-5 ms in practice — conflating into one
+		// "request duration" simplifies the clock interface (single
+		// `now` call site for the entire pipeline) and keeps metric +
+		// log values comparable.
+		startedAt := preflightStart
 		var output strings.Builder
+		var tokenCount int
 		streamFailed := false
+
+		// recordOutcome MUST be called on every terminal path
+		// (success, mid-stream error, ctx cancel) — guarantees the
+		// metric is bumped exactly once per request lifecycle.
+		recordOutcome := func(outcome domain.RewriteOutcome) {
+			dur := now().Sub(preflightStart)
+			metrics.ObserveRewrite(outcome, req.Tone(), providerName, dur)
+			if tokenCount > 0 {
+				metrics.AddTokensStreamed(providerName, tokenCount)
+			}
+		}
 
 		for {
 			select {
 			case <-ctx.Done():
+				recordOutcome(domain.OutcomeClientGone)
 				outErrs <- ctx.Err()
 				return
 
@@ -112,6 +145,7 @@ func Rewrite(
 					//      usage for a failed call.
 					//   3. Clean finish — log usage.
 					if ctx.Err() != nil {
+						recordOutcome(domain.OutcomeClientGone)
 						outErrs <- ctx.Err()
 						return
 					}
@@ -119,6 +153,7 @@ func Rewrite(
 					case lateErr, ok := <-provErrs:
 						if ok && lateErr != nil {
 							streamFailed = true
+							recordOutcome(domain.OutcomeProviderFailed)
 							outErrs <- lateErr
 							return
 						}
@@ -140,9 +175,10 @@ func Rewrite(
 							// so ops can audit.
 							log.Warn("usage log write failed",
 								"user_id", userID.String(),
-								"provider", deps.Provider.Name(),
+								"provider", providerName,
 								"err", err.Error())
 						}
+						recordOutcome(domain.OutcomeOK)
 					}
 					return
 				}
@@ -150,9 +186,11 @@ func Rewrite(
 				// disconnected client doesn't wedge us on a full
 				// outbound channel.
 				output.WriteString(tok)
+				tokenCount++
 				select {
 				case outTokens <- tok:
 				case <-ctx.Done():
+					recordOutcome(domain.OutcomeClientGone)
 					outErrs <- ctx.Err()
 					return
 				}
@@ -167,6 +205,7 @@ func Rewrite(
 				}
 				if provErr != nil {
 					streamFailed = true
+					recordOutcome(domain.OutcomeProviderFailed)
 					outErrs <- provErr
 					return
 				}
@@ -186,3 +225,38 @@ func nopLogger() *slog.Logger {
 type devNull struct{}
 
 func (devNull) Write(p []byte) (int, error) { return len(p), nil }
+
+// noopMetrics is the in-package fallback when deps.Metrics is nil.
+// Test code can swap a real implementation; production wires
+// platform/metrics.Prometheus.
+type noopMetrics struct{}
+
+func (noopMetrics) ObserveRewrite(_ domain.RewriteOutcome, _ domain.Tone, _ string, _ time.Duration) {
+}
+func (noopMetrics) AddTokensStreamed(_ string, _ int) {}
+
+// outcomeFromErr maps a use-case error to the bounded outcome label
+// set. Single place owns the mapping so the metric cardinality stays
+// stable (Rule #1).
+func outcomeFromErr(err error) domain.RewriteOutcome {
+	switch {
+	case err == nil:
+		return domain.OutcomeOK
+	case errors.Is(err, domain.ErrRateLimited):
+		return domain.OutcomeRateLimited
+	case errors.Is(err, domain.ErrQuotaExceeded):
+		return domain.OutcomeQuotaExceeded
+	case errors.Is(err, domain.ErrUserNotFound):
+		return domain.OutcomeUserNotFound
+	case errors.Is(err, domain.ErrInvalidInput):
+		return domain.OutcomeInvalidInput
+	case errors.Is(err, domain.ErrProviderUnavailable),
+		errors.Is(err, domain.ErrProviderFailed):
+		return domain.OutcomeProviderFailed
+	case errors.Is(err, context.Canceled),
+		errors.Is(err, context.DeadlineExceeded):
+		return domain.OutcomeClientGone
+	default:
+		return domain.OutcomeInternal
+	}
+}

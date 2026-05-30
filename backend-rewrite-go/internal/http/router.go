@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/tannpv/draftright-rewrite/internal/platform/auth"
 )
@@ -22,37 +23,61 @@ type Router struct {
 	Log      *slog.Logger
 	Verifier *auth.Verifier
 	Rewrite  *RewriteHandler
+
+	// MetricsHandler, when non-nil, exposes /metrics. Production
+	// passes the Prometheus handler; tests + dev can leave nil.
+	MetricsHandler http.Handler
+
+	// EnableTracing wraps the whole mux with otelhttp middleware so
+	// every request becomes a span. No-op when the global tracer
+	// provider is the default noop (i.e. tracing.Setup returned
+	// without an endpoint).
+	EnableTracing bool
 }
 
 // Build returns the wired http.Handler. Middleware order matters:
 //
-//  1. RequestID  → every downstream log line gets a correlation id.
-//  2. RealIP     → puts the client IP into r.RemoteAddr behind a proxy.
-//  3. Recoverer  → catches panics; without it, a panic in any handler
-//                  takes the whole process down.
-//  4. structuredLogger → one access-log line per request.
-//  5. RequireAuth → scoped to authenticated routes only.
+//  1. RequestID         every downstream log line gets a correlation id.
+//  2. RealIP            puts the client IP into r.RemoteAddr behind a proxy.
+//  3. Recoverer         catches panics; without it, a panic in any handler
+//                       takes the whole process down.
+//  4. withRequestLogger attaches a request-scoped slog (with request_id)
+//                       to the context for handlers to pick up.
+//  5. structuredLogger  one access-log line per request.
+//  6. RequireAuth       scoped to authenticated routes only.
 //
-// Public routes (health) mount BEFORE the auth-gated subrouter so a
-// probe can hit them without a JWT.
+// Public routes (health, metrics) mount BEFORE the auth-gated
+// subrouter so probes can hit them without a JWT.
 func (r *Router) Build() http.Handler {
+	if r.Log == nil {
+		r.Log = slog.Default()
+	}
 	mux := chi.NewRouter()
 
 	mux.Use(middleware.RequestID)
 	mux.Use(middleware.RealIP)
 	mux.Use(middleware.Recoverer)
+	mux.Use(withRequestLogger(r.Log))
 	mux.Use(structuredLogger(r.Log))
 
 	mux.Get("/health", handleHealth)
 
-	// Authenticated subrouter — RequireAuth applies once for all routes
-	// mounted here, so future endpoints (/v1/history, /v1/usage, …)
-	// inherit auth without re-listing it (Rule #1 — reusable).
+	if r.MetricsHandler != nil {
+		// Don't run /metrics through structuredLogger / auth — Prom
+		// scrapes would flood the log + auth would block them.
+		mux.Method(http.MethodGet, "/metrics", r.MetricsHandler)
+	}
+
 	mux.Group(func(api chi.Router) {
 		api.Use(RequireAuth(r.Verifier, r.Log))
 		api.Post("/v1/rewrite", r.Rewrite.ServeHTTP)
 	})
 
+	if r.EnableTracing {
+		// otelhttp creates one span per request. Mounted at the
+		// outermost layer so the span covers the full pipeline.
+		return otelhttp.NewHandler(mux, "rewrite-go")
+	}
 	return mux
 }
 
@@ -86,4 +111,3 @@ func structuredLogger(log *slog.Logger) func(http.Handler) http.Handler {
 		})
 	}
 }
-

@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -57,6 +58,20 @@ type Config struct {
 	// App environment label (development | staging | production).
 	// Drives a few startup checks + the log output format choice.
 	AppEnv string
+
+	// MetricsEnabled gates the /metrics Prometheus endpoint. Default
+	// off — exposing it on a public listener leaks timing+cardinality
+	// info, so production wires a separate internal listener (TBD)
+	// or fronts it with auth.
+	MetricsEnabled bool
+
+	// OtelEndpoint is OTEL_EXPORTER_OTLP_ENDPOINT (host:port). Empty
+	// disables tracing entirely — global TracerProvider stays noop.
+	OtelEndpoint string
+
+	// OtelSampleRatio is the head-based sample rate for traces.
+	// 1.0 = all, 0.1 = 10%. Default 1.0 to make dev visible.
+	OtelSampleRatio float64
 }
 
 // Load reads env vars into a Config and validates required fields.
@@ -74,6 +89,10 @@ func Load() (*Config, error) {
 		OllamaURL:    os.Getenv("OLLAMA_URL"),
 		AIProviders:  os.Getenv("AI_PROVIDERS"),
 		AppEnv:       envOr("APP_ENV", "development"),
+
+		MetricsEnabled:  envBool("METRICS_ENABLED", false),
+		OtelEndpoint:    os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
+		OtelSampleRatio: envFloat("OTEL_SAMPLE_RATIO", 1.0),
 	}
 	if err := c.validate(); err != nil {
 		return nil, err
@@ -111,6 +130,37 @@ func envOr(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// envBool parses a boolean env var. "1", "true", "yes", "on" (case-
+// insensitive) → true; everything else (including unset) → fallback.
+// Centralised so feature flags read consistently across the codebase.
+func envBool(key string, fallback bool) bool {
+	v := strings.ToLower(strings.TrimSpace(os.Getenv(key)))
+	if v == "" {
+		return fallback
+	}
+	switch v {
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
+	default:
+		return fallback
+	}
+}
+
+// envFloat parses a float64 env var; returns fallback on parse error.
+func envFloat(key string, fallback float64) float64 {
+	v := strings.TrimSpace(os.Getenv(key))
+	if v == "" {
+		return fallback
+	}
+	f, err := strconv.ParseFloat(v, 64)
+	if err != nil {
+		return fallback
+	}
+	return f
 }
 
 func validLogLevel(s string) bool {

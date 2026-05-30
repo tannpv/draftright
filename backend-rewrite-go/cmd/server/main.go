@@ -36,6 +36,8 @@ import (
 	"github.com/tannpv/draftright-rewrite/internal/platform/auth"
 	"github.com/tannpv/draftright-rewrite/internal/platform/config"
 	platformdb "github.com/tannpv/draftright-rewrite/internal/platform/db"
+	"github.com/tannpv/draftright-rewrite/internal/platform/metrics"
+	"github.com/tannpv/draftright-rewrite/internal/platform/tracing"
 	"github.com/tannpv/draftright-rewrite/internal/usecase"
 )
 
@@ -63,7 +65,39 @@ func main() {
 	log := newLogger(cfg.LogLevel)
 	log.Info("boot", "app_env", cfg.AppEnv, "listen", cfg.Listen)
 
-	deps, cleanup, err := composeDeps(context.Background(), cfg, log)
+	// Tracing first: install global tracer provider so any spans
+	// started during dep wiring get reported. Noop when endpoint
+	// empty.
+	shutdownTracer, err := tracing.Setup(context.Background(), tracing.Config{
+		Endpoint:    cfg.OtelEndpoint,
+		ServiceName: "rewrite-go",
+		SampleRatio: cfg.OtelSampleRatio,
+	})
+	if err != nil {
+		log.Error("tracing setup failed", "err", err.Error())
+		os.Exit(1)
+	}
+	if cfg.OtelEndpoint != "" {
+		log.Info("observability", "tracing", "otlp-http", "endpoint", cfg.OtelEndpoint)
+	}
+
+	// Metrics: build the Prometheus sink (or noop) BEFORE composeDeps
+	// so the use case picks it up via RewriteDeps.Metrics.
+	var (
+		metricsSink   domain.Metrics
+		metricsHTTP   http.Handler
+	)
+	if cfg.MetricsEnabled {
+		prom := metrics.NewPrometheus()
+		metricsSink = prom
+		metricsHTTP = prom.Handler()
+		log.Info("observability", "metrics", "prometheus", "path", "/metrics")
+	} else {
+		metricsSink = metrics.NewNoop()
+		log.Info("observability", "metrics", "noop (METRICS_ENABLED unset)")
+	}
+
+	deps, cleanup, err := composeDeps(context.Background(), cfg, log, metricsSink)
 	if err != nil {
 		log.Error("dependency wiring failed", "err", err.Error())
 		os.Exit(1)
@@ -71,8 +105,10 @@ func main() {
 	defer cleanup()
 
 	router := (&internalhttp.Router{
-		Log:      log,
-		Verifier: auth.NewVerifier(cfg.JWTSecret),
+		Log:            log,
+		Verifier:       auth.NewVerifier(cfg.JWTSecret),
+		MetricsHandler: metricsHTTP,
+		EnableTracing:  cfg.OtelEndpoint != "",
 		Rewrite: &internalhttp.RewriteHandler{
 			Deps: deps,
 			Log:  log,
@@ -106,6 +142,9 @@ func main() {
 		log.Error("graceful shutdown failed", "err", err.Error())
 		os.Exit(1)
 	}
+	if err := shutdownTracer(ctx); err != nil {
+		log.Warn("tracer shutdown error", "err", err.Error())
+	}
 	log.Info("shutdown complete")
 }
 
@@ -116,7 +155,7 @@ func main() {
 //
 // Returns (deps, cleanup, err). Caller MUST invoke cleanup before exit
 // even on the happy path — owns the Postgres pool + Redis client.
-func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger) (usecase.RewriteDeps, func(), error) {
+func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m domain.Metrics) (usecase.RewriteDeps, func(), error) {
 	var cleanups []func()
 	cleanup := func() {
 		for i := len(cleanups) - 1; i >= 0; i-- {
@@ -164,6 +203,7 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger) (use
 		Users:     users,
 		Provider:  provider,
 		RateLimit: limiter,
+		Metrics:   m,
 		Now:       time.Now,
 		Log:       log,
 	}, cleanup, nil
