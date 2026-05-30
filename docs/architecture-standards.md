@@ -280,14 +280,25 @@ When adding a new provider:
 | Layer | Coverage |
 |---|---|
 | Unit | Pure functions + in-memory fakes |
-| Integration | Real Postgres + Redis (testcontainers) — pending |
+| Integration | Real Postgres + Redis containers (testcontainers) |
 | Smoke | Real deploy, hits live endpoints, asserts shapes |
 
 Today:
 
 - Go: unit + smoke (`scripts/smoke.sh`, `scripts/post-deploy-smoke.sh`).
-- NestJS: unit + smoke (same shared script).
-- Integration: pending across both.
+- NestJS: unit + integration + smoke.
+- Integration entry point: `npm run test:integration` from
+  `backend/`. Suite lives under `backend/test/integration/`, named
+  `*.int-spec.ts`. `globalSetup` boots one Postgres + one Redis
+  container per Jest run (`@testcontainers/postgresql`,
+  `@testcontainers/redis`) and publishes their connection URLs onto
+  `process.env`. Each `.int-spec.ts` boots a NestJS TestingModule
+  that picks the env up via the same `ConfigService` path production
+  uses, so a schema typo or invalid env value fails the same way at
+  test time and at boot.
+  `maxWorkers: 1` so the container set is shared across tests
+  instead of forked. 2-minute test timeout absorbs first-time image
+  pulls on a cold Docker cache.
 
 ### S26. `-race -count=10` on Go test runs
 
