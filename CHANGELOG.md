@@ -23,6 +23,10 @@ A Windows-only line under `### Windows` will never appear in the macOS
 If a version needs the user to *do* something after updating, say so
 explicitly under an **Action needed:** line inside the relevant sub-section.
 
+## 2.3.18 — 2026-05-30
+### macOS
+- Internal: test release used to verify the auto-detection of new releases shipped in 2.3.17. No user-facing changes.
+
 ## 2.3.17 — 2026-05-30
 ### macOS
 - The menu-bar red "update available" dot now appears automatically when a new release is published — no need to open Settings to trigger the check. The app polls every hour in the background.
