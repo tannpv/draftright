@@ -23,6 +23,10 @@ A Windows-only line under `### Windows` will never appear in the macOS
 If a version needs the user to *do* something after updating, say so
 explicitly under an **Action needed:** line inside the relevant sub-section.
 
+## 2.3.16 — 2026-05-30
+### macOS
+- Rewrites no longer fail with "Request timed out" when the upstream AI provider takes longer than 60 s. The internal request ceiling was bumped from 60 s to 180 s, with a 30 s idle-gap watchdog that still fails fast on a dead network.
+
 ## 2.3.15 — 2026-05-29
 ### Windows
 - Sign-in now validates your email + password before sending — empty fields and obvious typos surface as friendly inline messages instead of triggering a server round-trip.
