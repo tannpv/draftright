@@ -66,7 +66,14 @@ export class AiProvidersService {
     await this.providersRepo.update(id, { is_active: false, is_default: false });
   }
 
-  async callProvider(provider: AiProvider, systemPrompt: string, userText: string): Promise<{ text: string; responseTimeMs: number }> {
+  // Retry policy for upstream 429s (Ollama "too many concurrent
+  // requests", OpenAI rate limits, Anthropic 429). Three attempts with
+  // 400ms / 800ms backoff masks brief contention without making the
+  // user wait forever.
+  private static readonly MAX_429_RETRIES = 3;
+  private static readonly RETRY_BACKOFF_MS = 400;
+
+  async callProvider(provider: AiProvider, systemPrompt: string, userText: string, attempt = 1): Promise<{ text: string; responseTimeMs: number }> {
     const startTime = Date.now();
 
     if (provider.type === AiProviderType.ANTHROPIC) {
@@ -101,6 +108,16 @@ export class AiProvidersService {
       headers,
       body: JSON.stringify(body),
     });
+
+    // Transient-load retry. Ollama returns 429 + "too many concurrent
+    // requests" when OLLAMA_NUM_PARALLEL is exceeded. OpenAI/compat
+    // also use 429 for rate limits. Brief exponential backoff gives
+    // queued requests room to finish before we surface failure.
+    if (response.status === 429 && attempt < AiProvidersService.MAX_429_RETRIES) {
+      const wait = AiProvidersService.RETRY_BACKOFF_MS * attempt;
+      await new Promise(resolve => setTimeout(resolve, wait));
+      return this.callProvider(provider, systemPrompt, userText, attempt + 1);
+    }
 
     if (!response.ok) {
       const errorText = await response.text();
