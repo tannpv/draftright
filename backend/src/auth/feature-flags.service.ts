@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { createHash } from 'crypto';
+import { EnvSchema } from '../config/env.schema';
 
 /**
  * Server-controlled feature flag computation for per-user gradual
@@ -21,13 +23,15 @@ import { createHash } from 'crypto';
  */
 @Injectable()
 export class FeatureFlagsService {
-  private static readonly RAMP_ENV = 'GO_BACKEND_RAMP_PERCENT';
+  // Strongly-typed ConfigService — `cfg.get('GO_BACKEND_RAMP_PERCENT')`
+  // returns `number`, not `string | undefined`, because env.schema.ts
+  // already coerced + validated at boot. Standard S14.
+  constructor(private readonly cfg: ConfigService<EnvSchema, true>) {}
 
   /**
    * True when the user is in the Go-backend cohort.
-   * Ramp percent is clamped to [0, 100]; values outside that range
-   * fall back to 0 (closed) so a typo never accidentally opens the
-   * flag for everyone.
+   * Ramp percent is clamped to [0, 100] at the schema layer; values
+   * outside that range never reach this method.
    */
   useGoBackend(userId: string): boolean {
     const ramp = this.rampPercent();
@@ -50,13 +54,11 @@ export class FeatureFlagsService {
   }
 
   /**
-   * Current ramp percent, sanitised. Negative / NaN / >100 → 0.
+   * Current ramp percent. Zod schema already coerced + bounded the
+   * raw env value to a finite int in [0, 100] at boot, so no
+   * defensive sanitisation here — the typed config IS the contract.
    */
   rampPercent(): number {
-    const raw = process.env[FeatureFlagsService.RAMP_ENV];
-    const n = Number(raw);
-    if (!Number.isFinite(n)) return 0;
-    if (n < 0 || n > 100) return 0;
-    return Math.floor(n);
+    return this.cfg.get('GO_BACKEND_RAMP_PERCENT', { infer: true });
   }
 }
