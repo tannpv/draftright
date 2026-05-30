@@ -1,0 +1,191 @@
+import { Injectable } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { createHmac, timingSafeEqual } from 'crypto';
+import {
+  CheckoutResult,
+  WebhookAction,
+  CreateCheckoutOptions,
+} from './payment-strategy.interface';
+import { BasePaymentStrategy } from './base-payment.strategy';
+import { Payment } from '../entities/payment.entity';
+import { AppSettings } from '../../admin/entities/app-settings.entity';
+import { websiteUrl } from '../../common/app-config';
+
+/**
+ * Lemon Squeezy strategy — credit-card payments via a Merchant of Record.
+ *
+ * Why MoR: the business operates from Vietnam, where Stripe isn't available and
+ * a local card-acquiring contract needs a registered company. Lemon Squeezy
+ * sells the subscription on our behalf (handles global Visa/MC + sales tax) and
+ * pays out to a personal or company VN bank, so we can accept cards today.
+ *
+ * Flow:
+ *  - createCheckout → POST /v1/checkouts → hosted checkout URL. We stash our
+ *    `reference_code` in checkout `custom` data; LS echoes it back on every
+ *    webhook under `meta.custom_data.reference_code`, which is how we re-find
+ *    the pending Payment.
+ *  - verifyWebhook → HMAC-SHA256 (hex) of the RAW body using the signing secret
+ *    must match the `X-Signature` header, then dispatch on `meta.event_name`.
+ *
+ * Credentials live in AppSettings (admin-editable, no redeploy to rotate).
+ *
+ * KNOWN LIMITATION (fast-follow): only first-payment activation is wired.
+ * Renewals (`subscription_payment_success` on later cycles) and
+ * cancel/expire are acknowledged but not yet acted on — see verifyWebhook.
+ */
+@Injectable()
+export class LemonSqueezyStrategy extends BasePaymentStrategy {
+  private static readonly API = 'https://api.lemonsqueezy.com/v1';
+
+  constructor(
+    @InjectRepository(AppSettings) settingsRepo: Repository<AppSettings>,
+  ) {
+    super(settingsRepo);
+  }
+
+  private async getCredentials(): Promise<{
+    apiKey: string;
+    storeId: string;
+    webhookSecret: string;
+    variantMonthly: string;
+    variantYearly: string;
+  }> {
+    const s = await this.getSettings();
+    return {
+      apiKey: s?.lemonsqueezy_api_key || process.env.LEMONSQUEEZY_API_KEY || '',
+      storeId: s?.lemonsqueezy_store_id || process.env.LEMONSQUEEZY_STORE_ID || '',
+      webhookSecret:
+        s?.lemonsqueezy_webhook_secret || process.env.LEMONSQUEEZY_WEBHOOK_SECRET || '',
+      variantMonthly: s?.lemonsqueezy_variant_monthly || '',
+      variantYearly: s?.lemonsqueezy_variant_yearly || '',
+    };
+  }
+
+  async createCheckout(payment: Payment, options?: CreateCheckoutOptions): Promise<CheckoutResult> {
+    const { apiKey, storeId, variantMonthly, variantYearly } = await this.getCredentials();
+    if (!apiKey || !storeId) {
+      throw new Error('Lemon Squeezy is not configured. Set the API key + store ID in admin Settings → Payment.');
+    }
+
+    const plan: any = (payment as any).plan;
+    if (!plan) {
+      throw new Error('Lemon Squeezy checkout requires payment.plan to be eagerly loaded.');
+    }
+
+    const isYearly = (plan.billing_period || 'monthly') === 'yearly';
+    const variantId = isYearly ? variantYearly : variantMonthly;
+    if (!variantId) {
+      throw new Error(
+        `No Lemon Squeezy variant configured for ${isYearly ? 'yearly' : 'monthly'} billing. Set lemonsqueezy_variant_${isYearly ? 'yearly' : 'monthly'} in admin Settings → Payment.`,
+      );
+    }
+
+    const body = {
+      data: {
+        type: 'checkouts',
+        attributes: {
+          checkout_data: {
+            email: options?.user_email,
+            // Echoed back verbatim on every webhook under meta.custom_data.
+            custom: { reference_code: payment.reference_code },
+          },
+          product_options: {
+            redirect_url:
+              options?.success_url || `${websiteUrl()}/payment/success?ref=${payment.reference_code}`,
+          },
+        },
+        relationships: {
+          store: { data: { type: 'stores', id: String(storeId) } },
+          variant: { data: { type: 'variants', id: String(variantId) } },
+        },
+      },
+    };
+
+    const res = await fetch(`${LemonSqueezyStrategy.API}/checkouts`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/vnd.api+json',
+        'Content-Type': 'application/vnd.api+json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      this.logger.error(`Lemon Squeezy checkout failed: ${res.status} ${text.slice(0, 500)}`);
+      throw new Error(`Lemon Squeezy checkout failed (${res.status})`);
+    }
+
+    const json: any = await res.json();
+    const url = json?.data?.attributes?.url;
+    if (!url) throw new Error('Lemon Squeezy checkout returned no URL');
+
+    return { payment, redirect_url: url };
+  }
+
+  async verifyWebhook(payload: any, headers: any): Promise<WebhookAction> {
+    const { webhookSecret } = await this.getCredentials();
+    if (!webhookSecret) {
+      this.logger.warn('Lemon Squeezy webhook called but signing secret is unset.');
+      return { type: 'ignored' };
+    }
+
+    // The controller passes the RAW request body (Buffer) so the signature is
+    // computed over the exact bytes LS signed. A parsed/re-serialized object
+    // would not match.
+    const raw: Buffer = Buffer.isBuffer(payload)
+      ? payload
+      : Buffer.from(typeof payload === 'string' ? payload : JSON.stringify(payload));
+
+    const sigHeader = (headers['x-signature'] || headers['X-Signature'] || '').toString();
+    const expected = createHmac('sha256', webhookSecret).update(raw).digest('hex');
+    if (!this.signatureMatches(expected, sigHeader)) {
+      this.logger.error('Lemon Squeezy webhook signature mismatch — rejected.');
+      return { type: 'ignored' };
+    }
+
+    let event: any;
+    try {
+      event = JSON.parse(raw.toString('utf8'));
+    } catch {
+      this.logger.error('Lemon Squeezy webhook body is not valid JSON.');
+      return { type: 'ignored' };
+    }
+
+    const name = event?.meta?.event_name;
+    const referenceCode = event?.meta?.custom_data?.reference_code;
+    this.logger.log(`Lemon Squeezy webhook: ${name} (ref=${referenceCode || 'none'})`);
+
+    switch (name) {
+      case 'subscription_payment_success':
+      case 'subscription_created':
+        // First successful charge → activate. completePayment is idempotent
+        // (acts only on a PENDING payment), so renewal events safely no-op for
+        // now. TODO(fast-follow): extend expiry on renewals + handle cancel.
+        if (!referenceCode) {
+          this.logger.warn('Lemon Squeezy payment_success without reference_code — cannot match payment.');
+          return { type: 'ignored' };
+        }
+        return { type: 'payment_completed', reference_code: referenceCode };
+
+      // Acknowledged but not yet acted on (subscription lapses at expires_at).
+      case 'subscription_cancelled':
+      case 'subscription_expired':
+      case 'subscription_updated':
+      default:
+        return { type: 'ignored' };
+    }
+  }
+
+  /** Constant-time hex signature compare; never throws on length mismatch. */
+  private signatureMatches(expectedHex: string, actualHex: string): boolean {
+    if (!actualHex || expectedHex.length !== actualHex.length) return false;
+    try {
+      return timingSafeEqual(Buffer.from(expectedHex, 'hex'), Buffer.from(actualHex, 'hex'));
+    } catch {
+      return false;
+    }
+  }
+}

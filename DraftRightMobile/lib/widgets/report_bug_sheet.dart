@@ -15,10 +15,14 @@ import 'package:draftright_mobile/services/bug_report_service.dart';
 /// can see what screen the user was on when they reported.
 /// [endpointOverride] redirects the submission target — production by
 /// default; integration tests point it at a local stub server.
+/// [initialDescription] pre-fills the description field — used when the
+/// sheet is opened from an auto-captured error notice so the user doesn't
+/// have to retype what just happened.
 Future<void> showReportBugSheet(
   BuildContext context, {
   String? currentRoute,
   String? endpointOverride,
+  String? initialDescription,
 }) async {
   if (Platform.isIOS) {
     await showCupertinoModalPopup<void>(
@@ -26,6 +30,7 @@ Future<void> showReportBugSheet(
       builder: (ctx) => _ReportBugSheet(
         currentRoute: currentRoute,
         endpointOverride: endpointOverride,
+        initialDescription: initialDescription,
       ),
     );
   } else {
@@ -39,6 +44,7 @@ Future<void> showReportBugSheet(
       builder: (ctx) => _ReportBugSheet(
         currentRoute: currentRoute,
         endpointOverride: endpointOverride,
+        initialDescription: initialDescription,
       ),
     );
   }
@@ -47,14 +53,20 @@ Future<void> showReportBugSheet(
 class _ReportBugSheet extends StatefulWidget {
   final String? currentRoute;
   final String? endpointOverride;
-  const _ReportBugSheet({this.currentRoute, this.endpointOverride});
+  final String? initialDescription;
+  const _ReportBugSheet({
+    this.currentRoute,
+    this.endpointOverride,
+    this.initialDescription,
+  });
 
   @override
   State<_ReportBugSheet> createState() => _ReportBugSheetState();
 }
 
 class _ReportBugSheetState extends State<_ReportBugSheet> {
-  final _descriptionController = TextEditingController();
+  late final TextEditingController _descriptionController =
+      TextEditingController(text: widget.initialDescription ?? '');
   final _emailController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   final _picker = ImagePicker();
@@ -108,14 +120,24 @@ class _ReportBugSheetState extends State<_ReportBugSheet> {
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
 
-    final auth = context.read<AuthService>();
-    final isLoggedIn = auth.isLoggedIn;
+    // The sheet may be opened from a context that's above MultiProvider
+    // (e.g. the auto-error overlay's snackbar action wires a root-navigator
+    // route, which sits above the AuthService Provider). Fall back to an
+    // anonymous submit if Provider isn't reachable — better than crashing
+    // the only escape hatch users have for reporting that exact crash.
+    AuthService? auth;
+    try {
+      auth = context.read<AuthService>();
+    } catch (_) {
+      auth = null;
+    }
+    final isLoggedIn = auth?.isLoggedIn ?? false;
 
-    final ok = await BugReportService.submitBugReport(
+    final result = await BugReportService.submitBugReport(
       description: _descriptionController.text.trim(),
       screenshot: _screenshot,
       userEmail: isLoggedIn ? null : _emailController.text.trim(),
-      authToken: isLoggedIn ? auth.accessToken : null,
+      authToken: isLoggedIn ? auth!.accessToken : null,
       context: {
         if (widget.currentRoute != null) 'route': widget.currentRoute,
         'platform': Platform.isIOS ? 'ios' : 'android',
@@ -126,17 +148,20 @@ class _ReportBugSheetState extends State<_ReportBugSheet> {
     if (!mounted) return;
     setState(() => _submitting = false);
 
-    if (ok) {
+    if (result.ok) {
       navigator.pop();
       messenger.showSnackBar(
         const SnackBar(content: Text('Thanks! We\'ll look into it.')),
       );
     } else {
+      // Surface the server's explanation (e.g. "only PNG or JPEG screenshots
+      // are accepted") instead of a generic failure so the user can
+      // self-correct — no more silent fails.
       messenger.showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Could not submit bug report. Check your connection and try again.',
-          ),
+        SnackBar(
+          content: Text(result.errorMessage
+              ?? 'Could not submit bug report. Check your connection and try again.'),
+          duration: const Duration(seconds: 6),
         ),
       );
     }
@@ -144,8 +169,17 @@ class _ReportBugSheetState extends State<_ReportBugSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final auth = context.watch<AuthService>();
-    final isLoggedIn = auth.isLoggedIn;
+    // Same Provider fallback as _submit — when the sheet is launched from
+    // an error-notice snackbar above MultiProvider, AuthService isn't in
+    // scope. Render the anonymous (email-required) variant rather than
+    // crashing the dialog.
+    AuthService? auth;
+    try {
+      auth = context.watch<AuthService>();
+    } catch (_) {
+      auth = null;
+    }
+    final isLoggedIn = auth?.isLoggedIn ?? false;
     final viewInsets = MediaQuery.of(context).viewInsets;
     final isIOS = Platform.isIOS;
 

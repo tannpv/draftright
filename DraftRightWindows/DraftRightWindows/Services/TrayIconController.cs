@@ -20,7 +20,7 @@ namespace DraftRightWindows.Services;
 /// </summary>
 internal sealed class TrayIconController : IDisposable
 {
-    private readonly UpdateService _updateService;
+    private readonly IUpdateService _updateService;
     private readonly Action _onOpenSettings;
     private readonly Action _onSignOut;
     private readonly Action _onQuit;
@@ -39,7 +39,7 @@ internal sealed class TrayIconController : IDisposable
     private bool _updateBadgeShown;
 
     public TrayIconController(
-        UpdateService updateService,
+        IUpdateService updateService,
         Action onOpenSettings,
         Action onSignOut,
         Action onQuit)

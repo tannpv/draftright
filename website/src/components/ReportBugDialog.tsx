@@ -11,6 +11,8 @@ export default function ReportBugDialog() {
   const [description, setDescription] = useState('');
   const [email, setEmail] = useState('');
   const [file, setFile] = useState<File | null>(null);
+  // Honeypot — see the hidden <input name="website"> below.
+  const [website, setWebsite] = useState('');
   const [fileError, setFileError] = useState<string | null>(null);
   const [sendState, setSendState] = useState<SendState>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -81,6 +83,10 @@ export default function ReportBugDialog() {
     setSendState('sending');
     try {
       const fd = new FormData();
+      // Honeypot — humans never see/edit this field, so a non-empty value is
+      // a reliable bot signal. The backend silently drops the submission
+      // without inserting a row.
+      fd.append('website', website);
       fd.append('description', description.trim());
       fd.append('source', 'marketing-site');
       fd.append('user_email', email.trim().toLowerCase());
@@ -173,6 +179,25 @@ export default function ReportBugDialog() {
               </div>
             ) : (
               <form onSubmit={onSubmit} className="p-6 sm:p-8">
+                {/*
+                  Honeypot: rendered off-screen with aria-hidden + autocomplete="off"
+                  so screen readers + real users never interact with it, but
+                  scrapers + form-fillers see it as a standard "website" field
+                  and fill it. Filled value → backend silently drops the submission.
+                */}
+                <div aria-hidden="true" style={{ position: 'absolute', left: '-10000px', top: 'auto', width: '1px', height: '1px', overflow: 'hidden' }}>
+                  <label>
+                    Website
+                    <input
+                      type="text"
+                      name="website"
+                      tabIndex={-1}
+                      autoComplete="off"
+                      value={website}
+                      onChange={(e) => setWebsite(e.target.value)}
+                    />
+                  </label>
+                </div>
                 <div className="mb-5">
                   <h2 id="report-bug-title" className="text-xl font-semibold text-white">
                     Report a bug

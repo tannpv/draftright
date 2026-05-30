@@ -139,6 +139,38 @@ export class AdminController {
    *   ?status=open      'open' = not resolved (status<4 for errors, status not in {resolved, wont_fix} for bugs)
    *   ?limit=50         default 50, max 100
    */
+  /**
+   * Lightweight counts for the admin top-bar inbox badge — kept separate
+   * from /inbox (which paginates rows) so it can be polled every 60 s
+   * without dragging the full payload.
+   *
+   * Returns counts of items in their initial "new" state, broken down by
+   * type so the UI can render per-source badges if desired.
+   */
+  @Get('inbox/counts')
+  async inboxCounts() {
+    const [bugs, features, errors] = await Promise.all([
+      this.bugReportsService.findAllPaginated({
+        page: 1, limit: 1, status: 'new' as any, kind: 'bug',
+        sort_by: 'created_at', sort_order: 'DESC',
+      } as any),
+      this.bugReportsService.findAllPaginated({
+        page: 1, limit: 1, status: 'new' as any, kind: 'feature',
+        sort_by: 'created_at', sort_order: 'DESC',
+      } as any),
+      this.errorsService.list({ status: 0, limit: 1, offset: 0 }),
+    ]);
+    const new_bugs = (bugs as any).total ?? 0;
+    const new_features = (features as any).total ?? 0;
+    const new_errors = (errors as any).total ?? 0;
+    return {
+      new_bugs,
+      new_features,
+      new_errors,
+      total: new_bugs + new_features + new_errors,
+    };
+  }
+
   @Get('inbox')
   async listInbox(
     @Query('kind') kind?: string,
@@ -266,6 +298,11 @@ export class AdminController {
       throw new BadRequestException('status required');
     }
     return this.errorsService.setStatus(id, body.status, body.resolved_by);
+  }
+
+  @Delete('errors/:id')
+  async deleteErrorReport(@Param('id') id: string) {
+    return this.errorsService.deleteOne(id);
   }
 
   @Post('errors/:id/suggest-fix')

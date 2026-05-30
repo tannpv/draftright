@@ -6,6 +6,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PaymentService } from './payment.service';
 import { CreateCheckoutDto } from './dto/create-checkout.dto';
+import { PaymentMethod } from './entities/payment.entity';
 
 @ApiTags('payment')
 @Controller('payment')
@@ -64,21 +65,29 @@ export class PaymentController {
 
   @Post('webhook/stripe')
   async stripeWebhook(@Req() req: RawBodyRequest<Request>) {
-    return this.paymentService.handleWebhook('stripe', req.rawBody, req.headers);
+    return this.paymentService.handleWebhook(PaymentMethod.STRIPE, req.rawBody, req.headers);
   }
 
   @Post('webhook/vietqr')
   async vietqrWebhook(@Body() body: any, @Req() req: Request) {
-    return this.paymentService.handleWebhook('vietqr', body, req.headers);
+    return this.paymentService.handleWebhook(PaymentMethod.VIETQR, body, req.headers);
   }
 
+  // Casso + SePay both feed into the VIETQR strategy (same statement-line
+  // schema). Route names are kept for legacy webhook URLs already registered
+  // with each provider; the strategy dispatch is the canonical key.
   @Post('webhook/casso')
   async cassoWebhook(@Body() body: any, @Req() req: Request) {
-    return this.paymentService.handleWebhook('vietqr', body, req.headers);
+    return this.paymentService.handleWebhook(PaymentMethod.VIETQR, body, req.headers);
   }
 
   @Post('webhook/sepay')
   async sepayWebhook(@Body() body: any, @Req() req: Request) {
-    return this.paymentService.handleWebhook('vietqr', body, req.headers);
+    return this.paymentService.handleWebhook(PaymentMethod.VIETQR, body, req.headers);
+  }
+
+  @Post('webhook/lemonsqueezy')
+  async lemonSqueezyWebhook(@Req() req: RawBodyRequest<Request>) {
+    return this.paymentService.handleWebhook(PaymentMethod.LEMONSQUEEZY, req.rawBody, req.headers);
   }
 }

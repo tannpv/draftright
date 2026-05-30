@@ -1,8 +1,10 @@
-import { Controller, Post, Body, Req } from '@nestjs/common';
+import { Controller, Post, Body, Req, Logger } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { Request } from 'express';
 import { ErrorsService } from './errors.service';
 import { CreateErrorReportDto } from './dto/create-error-report.dto';
+import { formatDisplayNumber } from '../common/display-number';
 import * as jwt from 'jsonwebtoken';
 
 /**
@@ -14,11 +16,23 @@ import * as jwt from 'jsonwebtoken';
 @ApiTags('errors')
 @Controller('errors')
 export class ErrorsController {
+  private readonly logger = new Logger(ErrorsController.name);
   constructor(private readonly errors: ErrorsService) {}
 
+  // Crash reports are noisier than bug reports (an app crashlooping can fire
+  // many in a row), so the cap is higher: 30/min, 300/hour per IP.
+  @Throttle({
+    minute: { limit: 30, ttl: 60_000 },
+    hour:   { limit: 300, ttl: 3_600_000 },
+  })
   @Post()
   @ApiOperation({ summary: 'Submit an error/crash report from a client' })
   async create(@Body() dto: CreateErrorReportDto, @Req() req: Request) {
+    // Honeypot — see CreateBugReportDto.website.
+    if (dto.website && dto.website.trim().length > 0) {
+      this.logger.warn(`Honeypot triggered (IP=${req.ip}, platform=${dto.platform}) — dropping submission`);
+      return { ok: true, id: null, fingerprint: null, count: 0, first_seen_at: null };
+    }
     let userId: string | null = null;
     const authHeader = req.headers['authorization'];
     if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
@@ -37,6 +51,7 @@ export class ErrorsController {
     return {
       ok: true,
       id: row.id,
+      ref: formatDisplayNumber('error', row.display_no),
       fingerprint: row.fingerprint,
       count: row.count,
       first_seen_at: row.first_seen_at,

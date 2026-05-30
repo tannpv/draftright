@@ -49,20 +49,6 @@ class _FloatingBubbleTile extends StatelessWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  late TextEditingController _backendUrlController;
-
-  @override
-  void initState() {
-    super.initState();
-    final settings = context.read<SettingsService>();
-    _backendUrlController = TextEditingController(text: settings.backendUrl);
-  }
-
-  @override
-  void dispose() {
-    _backendUrlController.dispose();
-    super.dispose();
-  }
 
   Future<void> _setBubble(SettingsService settings, bool enable) async {
     final messenger = ScaffoldMessenger.of(context);
@@ -215,23 +201,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ],
 
-              const SizedBox(height: 24),
-              const Text('Server', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _backendUrlController,
-                decoration: const InputDecoration(
-                  labelText: 'Backend URL',
-                  helperText: 'Leave default unless self-hosting',
-                  border: OutlineInputBorder(),
-                ),
-                onChanged: (value) {
-                  if (value.isNotEmpty) {
-                    settings.setBackendUrl(value);
-                    context.read<AuthService>().setBaseUrl(value);
-                  }
-                },
-              ),
+              // Backend URL is no longer user-editable — production users always
+              // point at api.draftright.info; developers self-hosting can override
+              // at build time with `--dart-define=DRAFTRIGHT_BACKEND_URL=...`.
 
               const SizedBox(height: 24),
               const Text('Translation', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),

@@ -8,6 +8,7 @@ import { toneStyle, type Tone } from '../lib/status';
 
 interface ErrorReport {
   id: string;
+  display_no: number | null;
   platform: string;
   app_version: string | null;
   severity: string;
@@ -111,6 +112,25 @@ export default function ErrorsPage() {
     }
   };
 
+  const [deleting, setDeleting] = useState(false);
+  const deleteError = async (id: string) => {
+    // Hard-delete confirmation. Errors are auto-captured noise more often
+    // than real signal, so admins frequently sweep them; one confirm is
+    // enough to prevent the slip but doesn't get in the way.
+    if (!window.confirm('Delete this error report permanently? This cannot be undone.')) return;
+    setDeleting(true);
+    try {
+      await apiFetch(`/admin/errors/${id}`, { method: 'DELETE' });
+      setToast({ msg: 'Error deleted', type: 'success' });
+      if (selected?.id === id) setSelected(null);
+      await load();
+    } catch (e: any) {
+      setToast({ msg: e.message || 'Delete failed', type: 'error' });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const [suggesting, setSuggesting] = useState(false);
   const [runningCron, setRunningCron] = useState(false);
   const runAiCron = async () => {
@@ -211,6 +231,7 @@ export default function ErrorsPage() {
         <table className="w-full text-sm">
           <thead className="bg-[var(--bg)] text-[var(--muted)] text-xs uppercase tracking-wider">
             <tr>
+              <th className="px-4 py-3 text-left">Ref</th>
               <th className="px-4 py-3 text-left">Platform</th>
               <th className="px-4 py-3 text-left">Type / Message</th>
               <th className="px-4 py-3 text-left">Severity</th>
@@ -221,10 +242,10 @@ export default function ErrorsPage() {
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={6} className="text-center text-[var(--muted)] py-12">Loading…</td></tr>
+              <tr><td colSpan={7} className="text-center text-[var(--muted)] py-12">Loading…</td></tr>
             )}
             {!loading && items.length === 0 && (
-              <tr><td colSpan={6} className="text-center text-[var(--muted)] py-12">No errors collected yet. Either things are going great, or no clients have reported in.</td></tr>
+              <tr><td colSpan={7} className="text-center text-[var(--muted)] py-12">No errors collected yet. Either things are going great, or no clients have reported in.</td></tr>
             )}
             {items.map((row) => (
               <tr
@@ -232,6 +253,9 @@ export default function ErrorsPage() {
                 onClick={() => setSelected(row)}
                 className="border-t border-[var(--border)] hover:bg-[var(--bg)] cursor-pointer"
               >
+                <td className="px-4 py-3 font-mono text-xs font-semibold text-[var(--primary)] whitespace-nowrap">
+                  {row.display_no != null ? `ERR-${row.display_no}` : '—'}
+                </td>
                 <td className="px-4 py-3 text-[var(--text)]">
                   {PLATFORM_ICONS[row.platform] || '?'} {row.platform}
                   <div className="text-xs text-[var(--muted)]">{row.app_version || ''}</div>
@@ -273,6 +297,13 @@ export default function ErrorsPage() {
           >
             <div className="flex items-start justify-between mb-4">
               <div>
+                <div className="flex items-center gap-2 mb-1">
+                  {selected.display_no != null && (
+                    <span className="font-mono text-xs font-semibold text-[var(--primary)] bg-[var(--primary)]/15 px-2 py-0.5 rounded">
+                      ERR-{selected.display_no}
+                    </span>
+                  )}
+                </div>
                 <h2 className="text-lg font-bold text-white">
                   {PLATFORM_ICONS[selected.platform]} {selected.error_type || 'Error'}
                 </h2>
@@ -342,6 +373,16 @@ export default function ErrorsPage() {
                   >{v}</button>
                 ))}
               </div>
+            </div>
+
+            <div className="mt-6 pt-4 border-t border-[var(--border)]">
+              <button
+                onClick={() => deleteError(selected.id)}
+                disabled={deleting}
+                className="w-full rounded-md bg-[var(--danger)] hover:bg-[#e57254] disabled:opacity-50 text-white text-sm font-medium px-4 py-2 transition-colors"
+              >
+                {deleting ? 'Deleting…' : '🗑 Delete error permanently'}
+              </button>
             </div>
           </div>
         </div>

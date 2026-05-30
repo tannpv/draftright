@@ -9,11 +9,6 @@ struct GeneralSettingsTab: View {
                 Toggle("Launch at Login", isOn: $appModel.launchAtLogin)
             }
 
-            Section(header: Text("Backend Server")) {
-                TextField("Backend URL", text: $appModel.backendUrl)
-                    .help("Leave default unless self-hosting")
-            }
-
             Section(header: Text("Updates")) {
                 HStack {
                     Text("Version")

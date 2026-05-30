@@ -32,9 +32,14 @@ export class CreateFeedbackDto {
   @IsOptional() @IsString() @MaxLength(50)
   app_version?: string;
 
-  @IsOptional() @IsString() @MaxLength(100)
+  // See create-bug-report.dto for the rationale on widening from 100 → 255.
+  @IsOptional() @IsString() @MaxLength(255)
   os_info?: string;
 
   @IsOptional() @IsString() @MaxLength(255)
   user_email?: string;
+
+  /** Honeypot — see CreateBugReportDto.website. */
+  @IsOptional() @IsString() @MaxLength(255)
+  website?: string;
 }

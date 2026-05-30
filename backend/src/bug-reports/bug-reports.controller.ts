@@ -1,16 +1,29 @@
 import {
   Controller, Post, Body, Req, UploadedFile, UseInterceptors,
-  BadRequestException, HttpCode,
+  BadRequestException, HttpCode, Logger,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiConsumes } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { Request } from 'express';
 import { BugReportsService } from './bug-reports.service';
 import { CreateBugReportDto } from './dto/create-bug-report.dto';
 import { decodeOptionalUserId } from './jwt-user';
+import { formatDisplayNumber } from '../common/display-number';
 
 const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
-const ALLOWED_MIMES = ['image/png', 'image/jpeg', 'image/jpg'];
+// Accept every modern phone-camera / screenshot format. Samsung + Pixel
+// galleries hand back HEIC/HEIF; Pixel screenshots are PNG; iOS share-sheet
+// can deliver WebP; older Androids hand back GIF for short screen recordings.
+// Anything narrower silently 400s the submission for users with default
+// camera settings (real failure mode observed 2026-05-29 on Galaxy A52).
+const ALLOWED_MIMES = [
+  'image/png',
+  'image/jpeg', 'image/jpg',
+  'image/webp',
+  'image/heic', 'image/heif',
+  'image/gif',
+];
 
 /**
  * Public endpoint that any client (admin portal, marketing site, web
@@ -22,8 +35,17 @@ const ALLOWED_MIMES = ['image/png', 'image/jpeg', 'image/jpg'];
 @ApiTags('bug-reports')
 @Controller('bug-reports')
 export class BugReportsController {
+  private readonly logger = new Logger(BugReportsController.name);
   constructor(private readonly bugReports: BugReportsService) {}
 
+  // Anonymous endpoint → much tighter throttle than the global default.
+  // 5 reports / minute / IP and 30 / hour / IP stops scripted form spam
+  // while leaving plenty of headroom for legitimate users banging out a
+  // run of reports during a bad session.
+  @Throttle({
+    minute: { limit: 5, ttl: 60_000 },
+    hour:   { limit: 30, ttl: 3_600_000 },
+  })
   @Post()
   @HttpCode(201)
   @ApiOperation({ summary: 'Submit a user-reported bug from any client' })
@@ -45,6 +67,14 @@ export class BugReportsController {
     @UploadedFile() file: any,
     @Req() req: Request,
   ) {
+    // Honeypot: clients leave the `website` field empty; bots that scrape the
+    // form fill every field they see. A filled honeypot quietly succeeds (so
+    // the bot has no signal to retry with) but no row is written.
+    if (dto.website && dto.website.trim().length > 0) {
+      this.logger.warn(`Honeypot triggered (IP=${req.ip}, source=${dto.source}) — dropping submission`);
+      return { id: null, status: 'received' };
+    }
+
     const userId = decodeOptionalUserId(req);
 
     const row = await this.bugReports.create(
@@ -59,6 +89,13 @@ export class BugReportsController {
         : undefined,
       userId,
     );
-    return { id: row.id, message: 'Bug report received. Thanks!' };
+    const ref = formatDisplayNumber('bug', row.display_no);
+    return {
+      id: row.id,
+      ref,
+      message: ref
+        ? `Bug report received. Thanks! Reference: ${ref}`
+        : 'Bug report received. Thanks!',
+    };
   }
 }

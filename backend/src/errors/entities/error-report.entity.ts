@@ -25,6 +25,15 @@ export class ErrorReport {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  /**
+   * Short human-readable number — surfaces as "ERR-203" in the admin UI
+   * and in user-facing confirmations. Auto-assigned by the
+   * error_reports_display_no_seq sequence; migration:
+   * backend/sql/2026-05-29-display-numbers.sql.
+   */
+  @Column({ type: 'bigint', name: 'display_no', generated: 'increment' })
+  display_no: number;
+
   @Column({ type: 'varchar', length: 20 })
   platform: string;       // 'ios' | 'android' | 'macos' | 'windows' | 'linux' | 'web'
 

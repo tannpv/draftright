@@ -125,14 +125,11 @@ class SettingsWindow(Adw.PreferencesWindow):
         )
         self.add(prefs_page)
 
-        # --- Connection group ---
-        conn_group = Adw.PreferencesGroup(title="Connection")
-        prefs_page.add(conn_group)
-
-        self._url_row = Adw.EntryRow(title="Backend URL")
-        self._url_row.set_text(self._get_setting("backend-url", "https://api.draftright.info"))
-        self._url_row.connect("changed", self._on_url_changed)
-        conn_group.add(self._url_row)
+        # Backend URL is no longer user-editable from the Settings UI — the
+        # default ("https://api.draftright.info") is the only value production
+        # users ever need. Developers self-hosting can override at launch with
+        # the DRAFTRIGHT_BACKEND_URL environment variable (handled in
+        # services/settings_service.py at startup).
 
         # --- Behavior group ---
         behavior_group = Adw.PreferencesGroup(title="Behavior")
@@ -385,10 +382,6 @@ class SettingsWindow(Adw.PreferencesWindow):
         """Sign the user out and refresh the UI."""
         self.app.sign_out()
         self._refresh_account_ui()
-
-    def _on_url_changed(self, row):
-        """Persist the backend URL change."""
-        self._save_setting("backend-url", row.get_text().strip())
 
     def _on_lang_changed(self, row, _pspec):
         """Persist the translate language change."""

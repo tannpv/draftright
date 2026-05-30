@@ -27,7 +27,11 @@ public class App : Application
     private TrayIconController? _tray;
     public static BackendStatus CurrentStatus { get; private set; } = BackendStatus.Offline;
     private DateTime _lastAutoRecovery = DateTime.MinValue;
-    public static UpdateService? UpdateService { get; private set; }
+    /// <summary>The chosen update backend — either <see cref="UpdateService"/>
+    /// (HTTP polling, for sideload .exe installs) or
+    /// <see cref="StoreUpdateService"/> (Microsoft Store API, for MSIX installs).
+    /// Picked once at OnLaunched based on <c>Package.Current.SignatureKind</c>.</summary>
+    public static IUpdateService? UpdateService { get; private set; }
 
     /// <summary>True after the backend has explicitly rejected our refresh
     /// token (HTTP 401/403). Cleared on successful re-login. Mirrors the
@@ -278,7 +282,23 @@ public class App : Application
         var currentVersion = asmVer.EndsWith(".0") ? asmVer.Substring(0, asmVer.Length - 2) : asmVer;
         DRLogger.Log($"UpdateService current version: {currentVersion} (assembly {asmVer})",
             DRLogger.Category.APP);
-        UpdateService = new UpdateService(currentVersion, Settings.BackendUrl);
+        // Store-installed (MSIX): updates come from Microsoft Store via the
+        // Windows.Services.Store API. Sideload (.exe installer): updates come
+        // from draftright.info via the HTTP poller. Detection is via
+        // Package.Current.SignatureKind — wrapped in IsStoreInstall() because
+        // non-packaged builds throw on Package.Current access.
+        if (StoreUpdateService.IsStoreInstall())
+        {
+            DRLogger.Log("Update backend: Microsoft Store (MSIX install detected)",
+                DRLogger.Category.APP);
+            UpdateService = new StoreUpdateService(currentVersion);
+        }
+        else
+        {
+            DRLogger.Log("Update backend: HTTP (sideload install)",
+                DRLogger.Category.APP);
+            UpdateService = new UpdateService(currentVersion, Settings.BackendUrl);
+        }
 
         _tray = new TrayIconController(
             UpdateService,
@@ -320,7 +340,7 @@ public class App : Application
             // Fresh install (no prior version) or not an upgrade → nothing to show.
             var svc = UpdateService;
             if (svc is null || string.IsNullOrEmpty(lastSeen)
-                || !UpdateService.IsNewerForTest(currentVersion, lastSeen))
+                || !Services.UpdateService.IsNewerForTest(currentVersion, lastSeen))
                 return;
 
             DRLogger.Log($"Post-update: detected upgrade {lastSeen} -> {currentVersion}, fetching What's New", DRLogger.Category.APP);

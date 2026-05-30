@@ -60,6 +60,19 @@ internal static class SettingsFormBuilder
 
     // ── Helpers ──────────────────────────────────────────────
 
+    /// <summary>
+    /// Permissive email check used to short-circuit obviously-invalid input
+    /// before the API call. Backend validation is still authoritative — this
+    /// just spares the user a 400 round-trip + stack-trace popup.
+    /// </summary>
+    private static bool IsValidEmail(string s)
+    {
+        if (string.IsNullOrWhiteSpace(s)) return false;
+        var at = s.IndexOf('@');
+        if (at <= 0 || at == s.Length - 1) return false;
+        return s.IndexOf('.', at) > at;
+    }
+
     private static void SetFormIcon(WinForms.Form form)
     {
         var exePath = Environment.ProcessPath;
@@ -188,19 +201,9 @@ internal static class SettingsFormBuilder
         var tab = MakeTab("General");
         int y = 16;
 
-        // Backend Server section
-        tab.Controls.Add(MakeSectionHeader("Backend Server", y));
-        y += 30;
-        tab.Controls.Add(MakeFieldLabel("Backend URL", y));
-        y += 18;
-        var urlBox = MakeTextBox(y, App.Settings.BackendUrl ?? "");
-        urlBox.TextChanged += (_, _) =>
-        {
-            App.Settings.BackendUrl = urlBox.Text.Trim();
-            App.Settings.Save();
-        };
-        tab.Controls.Add(urlBox);
-        y += 44;
+        // Backend URL is no longer user-editable from the Settings UI — see
+        // Constants.DefaultBackendUrl + AppSettings (env var / settings file
+        // override path for self-hosting developers).
 
         // General section
         tab.Controls.Add(MakeSectionHeader("General", y));
@@ -661,11 +664,33 @@ internal static class SettingsFormBuilder
             signInBtn.Click += async (_, _) =>
             {
                 setStatus("", ErrorRed);
+
+                // Client-side validation BEFORE hitting /auth/login so the
+                // backend's 400 ("email must be an email") doesn't bubble up
+                // as a raw ApiException stack trace (BUG-18 / BUG-19).
+                var email = emailBox.Text.Trim();
+                var password = passBox.Text;
+                if (string.IsNullOrEmpty(email))
+                {
+                    setStatus("Please enter your email.", ErrorRed);
+                    return;
+                }
+                if (!IsValidEmail(email))
+                {
+                    setStatus("Please enter a valid email address.", ErrorRed);
+                    return;
+                }
+                if (string.IsNullOrEmpty(password))
+                {
+                    setStatus("Please enter your password.", ErrorRed);
+                    return;
+                }
+
                 signInBtn.Enabled = false;
                 try
                 {
                     App.Api.SetBaseUrl(App.Settings.BackendUrl ?? "");
-                    var result = await App.Api.LoginAsync(emailBox.Text.Trim(), passBox.Text);
+                    var result = await App.Api.LoginAsync(email, password);
                     if (!string.IsNullOrEmpty(result.AccessToken))
                     {
                         App.Auth.SaveTokens(result.AccessToken, result.RefreshToken, result.User?.Email);
@@ -678,9 +703,17 @@ internal static class SettingsFormBuilder
                         setStatus("Login failed.", ErrorRed);
                     }
                 }
+                catch (ApiException apiEx)
+                {
+                    // Show the parsed server message ("Invalid credentials",
+                    // "email must be an email", etc.) — NOT the full stack
+                    // trace, which is what users were seeing before.
+                    setStatus(apiEx.ServerMessage ?? apiEx.Message, ErrorRed);
+                    DRLogger.Error($"Login API error: {apiEx}", DRLogger.Category.AUTH);
+                }
                 catch (Exception ex)
                 {
-                    setStatus(ex.ToString(), ErrorRed);
+                    setStatus("Something went wrong. Please try again.", ErrorRed);
                     DRLogger.Error($"Login error: {ex}", DRLogger.Category.AUTH);
                 }
                 finally
@@ -690,6 +723,66 @@ internal static class SettingsFormBuilder
                 }
             };
             tab.Controls.Add(signInBtn);
+
+            // "Continue with Google" — single button covers BOTH sign-in and
+            // sign-up: the backend's /auth/social endpoint creates the user
+            // on first call and signs in existing users on every call after,
+            // so a separate Register screen isn't needed on Windows.
+            // Public Desktop OAuth client + PKCE in
+            // GoogleOAuth.AuthenticateAsync exchanges the id_token at
+            // /auth/social for a DraftRight session, exactly like the
+            // iOS/Android/macOS clients.
+            var googleBtn = MakeSecondaryButton("Continue with Google", 16, y + 44, 448);
+            googleBtn.Click += async (_, _) =>
+            {
+                setStatus("", ErrorRed);
+                googleBtn.Enabled = false;
+                signInBtn.Enabled = false;
+                try
+                {
+                    App.Api.SetBaseUrl(App.Settings.BackendUrl ?? "");
+                    var idToken = await GoogleOAuth.AuthenticateAsync();
+                    var result = await App.Api.SocialLoginAsync("google", idToken);
+                    if (!string.IsNullOrEmpty(result.AccessToken))
+                    {
+                        App.Auth.SaveTokens(result.AccessToken, result.RefreshToken, result.User?.Email);
+                        App.Api.SetToken(result.AccessToken);
+                        PopulateAccountTab(tab);
+                    }
+                    else
+                    {
+                        setStatus("Google sign-in failed.", ErrorRed);
+                    }
+                }
+                catch (ApiException apiEx)
+                {
+                    setStatus(apiEx.ServerMessage ?? apiEx.Message, ErrorRed);
+                    DRLogger.Error($"Google sign-in API error: {apiEx}", DRLogger.Category.AUTH);
+                }
+                catch (Exception ex)
+                {
+                    setStatus(ex.Message, ErrorRed);
+                    DRLogger.Error($"Google sign-in error: {ex}", DRLogger.Category.AUTH);
+                }
+                finally
+                {
+                    try { googleBtn.Enabled = true; signInBtn.Enabled = true; }
+                    catch (ObjectDisposedException) { }
+                }
+            };
+            tab.Controls.Add(googleBtn);
+
+            // Communicates that the Google button is also the sign-up path,
+            // since there's no separate Register screen on Windows.
+            var googleHint = new WinForms.Label
+            {
+                Text = "New to DraftRight? Use \"Continue with Google\" to create your account in seconds.",
+                Font = new Font("Segoe UI", 8.5f),
+                ForeColor = TextMuted,
+                Location = new Point(16, y + 80),
+                AutoSize = true,
+            };
+            tab.Controls.Add(googleHint);
         }
     }
 

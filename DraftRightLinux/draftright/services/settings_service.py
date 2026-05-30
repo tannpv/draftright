@@ -86,6 +86,12 @@ class SettingsService:
 
     @property
     def backend_url(self) -> str:
+        # Dev/self-host override: DRAFTRIGHT_BACKEND_URL env var wins over the
+        # persisted file value. UI no longer exposes this field, so this is
+        # the only way to point a release build at a non-prod backend.
+        env = os.environ.get("DRAFTRIGHT_BACKEND_URL", "").strip()
+        if env:
+            return env
         return str(self._data.get("backend_url", _DEFAULTS["backend_url"]))
 
     @backend_url.setter
