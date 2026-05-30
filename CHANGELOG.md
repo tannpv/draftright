@@ -23,6 +23,10 @@ A Windows-only line under `### Windows` will never appear in the macOS
 If a version needs the user to *do* something after updating, say so
 explicitly under an **Action needed:** line inside the relevant sub-section.
 
+## 2.3.21 — 2026-05-30
+### macOS
+- Internal: server-controlled rollout now decides which `/rewrite` backend the macOS app talks to (NestJS or the new Go service). Default routing is unchanged; rollout is staged via the server-side `GO_BACKEND_RAMP_PERCENT` knob.
+
 ## 2.3.20 — 2026-05-30
 ### macOS
 - Internal: test release used to verify the menu-bar badge fix shipped in 2.3.19. No user-facing changes.

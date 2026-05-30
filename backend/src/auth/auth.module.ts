@@ -14,6 +14,7 @@ import { ExtensionToken } from './extension-token.entity';
 import { ExtensionTokenService } from './extension-token.service';
 import { ExtensionTokenController } from './extension-token.controller';
 import { RewriteAuthGuard } from './rewrite-auth.guard';
+import { FeatureFlagsService } from './feature-flags.service';
 import { AppSettings } from '../admin/entities/app-settings.entity';
 
 @Module({
@@ -33,6 +34,7 @@ import { AppSettings } from '../admin/entities/app-settings.entity';
     JwtAuthGuard,
     ExtensionTokenService,
     RewriteAuthGuard,
+    FeatureFlagsService,
   ],
   exports: [
     AuthService,
@@ -40,6 +42,7 @@ import { AppSettings } from '../admin/entities/app-settings.entity';
     JwtAuthGuard,
     ExtensionTokenService,
     RewriteAuthGuard,
+    FeatureFlagsService,
   ],
 })
 export class AuthModule {}

@@ -67,6 +67,7 @@ final class ServiceProvider: NSObject {
                             text: text, tone: newTone,
                             accessToken: self.appModel.accessToken,
                             backendUrl: self.appModel.backendUrl,
+                            backend: self.appModel.effectiveBackend,
                             targetLanguage: self.appModel.translateLanguage,
                             refreshToken: self.appModel.refreshToken,
                             onTokensRefreshed: { newAccess, newRefresh in
@@ -103,6 +104,7 @@ final class ServiceProvider: NSObject {
                     text: text, tone: tone,
                     accessToken: appModel.accessToken,
                     backendUrl: appModel.backendUrl,
+                    backend: appModel.effectiveBackend,
                     targetLanguage: appModel.translateLanguage,
                     refreshToken: appModel.refreshToken,
                     onTokensRefreshed: { [weak self] newAccess, newRefresh in
