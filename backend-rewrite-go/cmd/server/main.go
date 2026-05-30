@@ -244,19 +244,19 @@ func buildProviderChain(cfg *config.Config, log *slog.Logger) domain.AiProvider 
 				log.Warn("chain: skipping provider, missing credential", "provider", name, "env", "OPENAI_API_KEY")
 				continue
 			}
-			providers = append(providers, openai.New(uuid.New(), cfg.OpenAIKey))
+			providers = append(providers, openai.New(resolveProviderID(cfg.OpenAIProviderID, log, "openai"), cfg.OpenAIKey))
 		case "anthropic":
 			if cfg.AnthropicKey == "" {
 				log.Warn("chain: skipping provider, missing credential", "provider", name, "env", "ANTHROPIC_API_KEY")
 				continue
 			}
-			providers = append(providers, anthropic.New(uuid.New(), cfg.AnthropicKey))
+			providers = append(providers, anthropic.New(resolveProviderID(cfg.AnthropicProviderID, log, "anthropic"), cfg.AnthropicKey))
 		case "ollama":
 			if cfg.OllamaURL == "" {
 				log.Warn("chain: skipping provider, missing endpoint", "provider", name, "env", "OLLAMA_URL")
 				continue
 			}
-			providers = append(providers, ollama.New(uuid.New(), ollama.WithEndpoint(cfg.OllamaURL)))
+			providers = append(providers, ollama.New(resolveProviderID(cfg.OllamaProviderID, log, "ollama"), ollama.WithEndpoint(cfg.OllamaURL)))
 		default:
 			log.Warn("chain: unknown provider name; ignoring", "provider", name)
 			continue
@@ -273,6 +273,35 @@ func buildProviderChain(cfg *config.Config, log *slog.Logger) domain.AiProvider 
 	chainName := "chain:" + strings.Join(picked, ">")
 	log.Info("adapter selected", "port", "ai_provider", "impl", chainName)
 	return chain.New(chainName, providers, chain.WithLogger(log))
+}
+
+// resolveProviderID parses an env-supplied ai_providers.id (UUID
+// string) and falls back to a freshly minted UUID when the env var
+// is unset OR malformed.  Pinning the ID lets the Go service write
+// usage_logs.ai_provider_id rows that satisfy the existing FK
+// constraint against ai_providers — so NestJS + Go served calls
+// share one provider row for analytics joins.
+//
+// One helper for every provider type so the resolve-or-mint policy
+// lives in a single place (Rule #1 — extendable: adding a new
+// provider = call the same helper).
+func resolveProviderID(raw string, log *slog.Logger, name string) uuid.UUID {
+	if raw == "" {
+		minted := uuid.New()
+		log.Info("provider id minted (env unset; usage_logs FK may fail)",
+			"provider", name, "id", minted.String())
+		return minted
+	}
+	parsed, err := uuid.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		minted := uuid.New()
+		log.Warn("provider id env malformed; falling back to mint",
+			"provider", name, "env_val", raw, "err", err.Error(),
+			"id", minted.String())
+		return minted
+	}
+	log.Info("provider id pinned from env", "provider", name, "id", parsed.String())
+	return parsed
 }
 
 // newLogger returns a JSON-output slog suitable for production log

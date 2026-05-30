@@ -42,6 +42,19 @@ type Config struct {
 	OpenAIKey    string
 	AnthropicKey string
 
+	// OpenAIProviderID lets the operator pin the openai adapter's
+	// ai_providers.id to a row that already exists in Postgres,
+	// instead of letting the adapter mint a fresh uuid.New() on
+	// every restart. With this set the Go service can write
+	// usage_logs.ai_provider_id rows that satisfy the existing FK
+	// constraint against ai_providers — i.e. analytics queries
+	// joining usage_logs ↔ ai_providers see the Go-served rewrites
+	// alongside the NestJS-served ones under the same provider row.
+	// Empty = mint a fresh UUID (dev / no-FK use case).
+	OpenAIProviderID    string
+	AnthropicProviderID string
+	OllamaProviderID    string
+
 	// OllamaURL points at a local or proxied Ollama server. Empty
 	// disables the Ollama adapter; "http://localhost:11434" is the
 	// canonical local dev value.
@@ -84,11 +97,14 @@ func Load() (*Config, error) {
 		JWTSecret:    os.Getenv("JWT_SECRET"),
 		DatabaseURL:  os.Getenv("DATABASE_URL"),
 		RedisURL:     os.Getenv("REDIS_URL"),
-		OpenAIKey:    os.Getenv("OPENAI_API_KEY"),
-		AnthropicKey: os.Getenv("ANTHROPIC_API_KEY"),
-		OllamaURL:    os.Getenv("OLLAMA_URL"),
-		AIProviders:  os.Getenv("AI_PROVIDERS"),
-		AppEnv:       envOr("APP_ENV", "development"),
+		OpenAIKey:           os.Getenv("OPENAI_API_KEY"),
+		AnthropicKey:        os.Getenv("ANTHROPIC_API_KEY"),
+		OpenAIProviderID:    os.Getenv("OPENAI_PROVIDER_ID"),
+		AnthropicProviderID: os.Getenv("ANTHROPIC_PROVIDER_ID"),
+		OllamaProviderID:    os.Getenv("OLLAMA_PROVIDER_ID"),
+		OllamaURL:           os.Getenv("OLLAMA_URL"),
+		AIProviders:         os.Getenv("AI_PROVIDERS"),
+		AppEnv:              envOr("APP_ENV", "development"),
 
 		MetricsEnabled:  envBool("METRICS_ENABLED", false),
 		OtelEndpoint:    os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
