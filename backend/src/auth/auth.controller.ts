@@ -4,6 +4,7 @@ import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
+import { FeatureFlagsService } from './feature-flags.service';
 import { UsersService } from '../users/users.service';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { UsageService } from '../usage/usage.service';
@@ -16,6 +17,7 @@ export class AuthController {
     private readonly usersService: UsersService,
     private readonly subscriptionsService: SubscriptionsService,
     private readonly usageService: UsageService,
+    private readonly featureFlags: FeatureFlagsService,
   ) {}
 
   @Post('register')
@@ -65,7 +67,19 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Get('me')
   async me(@Request() req: any) {
-    return { id: req.user.id, email: req.user.email, role: req.user.role };
+    // `flags` is the server-controlled rollout state for the calling
+    // user. Clients poll this on login + on periodic refresh + react
+    // to it without a rebuild — operations bump GO_BACKEND_RAMP_PERCENT
+    // and the next /auth/me round-trip picks it up.  See
+    // FeatureFlagsService for the bucket algorithm.
+    return {
+      id: req.user.id,
+      email: req.user.email,
+      role: req.user.role,
+      flags: {
+        use_go_backend: this.featureFlags.useGoBackend(req.user.id),
+      },
+    };
   }
 
   // Permanent, in-app account deletion (App Store Guideline 5.1.1(v)).
