@@ -1,6 +1,7 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { RequestIdMiddleware } from './common/request-id.middleware';
+import { MetricsModule } from './common/metrics/metrics.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { databaseConfig } from './config/database.config';
@@ -49,6 +50,7 @@ import { ExtractionModule } from './extraction/extraction.module';
     ErrorsModule,
     BugReportsModule,
     ExtractionModule,
+    MetricsModule,
   ],
   providers: [
     // Global guard so ThrottlerModule's limits apply to every controller
