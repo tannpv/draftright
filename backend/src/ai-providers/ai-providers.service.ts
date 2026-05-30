@@ -104,21 +104,32 @@ export class AiProvidersService {
           { role: 'user', content: userText },
         ];
 
+    const isGpt5 = typeof provider.model === 'string' && provider.model.startsWith('gpt-5');
+
     const body: Record<string, unknown> = {
       model: provider.model,
-      temperature: Number(provider.temperature),
       messages,
     };
 
-    // gpt-5 family are reasoning models — they spend hidden
-    // "reasoning tokens" before emitting the visible answer. For
-    // shallow rewriting tasks (DraftRight's entire use case) the
-    // reasoning is wasted: it inflates latency (6 s vs 1.5 s) and
-    // billing (~448 reasoning tokens per call observed on
-    // gpt-5-nano). reasoning_effort=minimal disables the bulk of
-    // it.  Other models silently ignore the field.
-    if (typeof provider.model === 'string' && provider.model.startsWith('gpt-5')) {
+    // gpt-5 family are reasoning models with two hard constraints:
+    //
+    //   1. temperature MUST be omitted (or set to its only allowed
+    //      value, 1). Sending custom temps → 400
+    //      "Unsupported value: 'temperature' does not support 0.3
+    //      with this model." Observed 2026-05-30 with gpt-5-nano.
+    //
+    //   2. reasoning_effort=minimal disables the hidden "reasoning
+    //      tokens" the model otherwise spends before its visible
+    //      output. Without this, a 10-token prompt routinely
+    //      consumed ~448 reasoning tokens → 6.3 s wall-clock for
+    //      shallow rewriting. With minimal → ~1 s.
+    //
+    // Non-gpt-5 providers (gpt-4o, openai-compat, ollama, etc.) keep
+    // the existing temperature pathway since they honour it.
+    if (isGpt5) {
       body.reasoning_effort = 'minimal';
+    } else {
+      body.temperature = Number(provider.temperature);
     }
 
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
