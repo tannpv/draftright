@@ -23,6 +23,10 @@ A Windows-only line under `### Windows` will never appear in the macOS
 If a version needs the user to *do* something after updating, say so
 explicitly under an **Action needed:** line inside the relevant sub-section.
 
+## 2.3.17 — 2026-05-30
+### macOS
+- The menu-bar red "update available" dot now appears automatically when a new release is published — no need to open Settings to trigger the check. The app polls every hour in the background.
+
 ## 2.3.16 — 2026-05-30
 ### macOS
 - Rewrites no longer fail with "Request timed out" when the upstream AI provider takes longer than 60 s. The internal request ceiling was bumped from 60 s to 180 s, with a 30 s idle-gap watchdog that still fails fast on a dead network.

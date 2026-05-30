@@ -197,6 +197,18 @@ final class AppModel: ObservableObject {
                 await self?.updateService?.checkIfNeeded()
             }
         }
+        // Repeating background poll so the menu-bar "update available" red
+        // dot can appear DURING a long-running session — not only after a
+        // restart. UpdateService.checkIfNeeded() is internally idempotent
+        // and throttles itself; the timer just acts as a heartbeat.
+        // Every hour is well below the 24h throttle yet catches a freshly
+        // published release within ~60 min of upload.
+        let updatePollTimer = Timer.publish(every: 3600, on: .main, in: .common).autoconnect()
+        updatePollTimer
+            .sink { [weak self] _ in
+                Task { @MainActor in await self?.updateService?.checkIfNeeded() }
+            }
+            .store(in: &cancellables)
 
         // Post-update "What's New": if the running version changed since the
         // last launch, show the release notes once. Record the version now so
