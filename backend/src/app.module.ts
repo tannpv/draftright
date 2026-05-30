@@ -1,5 +1,6 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
+import { RequestIdMiddleware } from './common/request-id.middleware';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { databaseConfig } from './config/database.config';
@@ -56,4 +57,18 @@ import { ExtractionModule } from './extraction/extraction.module';
     { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  /**
+   * Plumb the request-id middleware over every route so:
+   *   - downstream handlers can read `req.requestId` for log enrichment,
+   *   - the global exception filter stamps it onto error envelopes,
+   *   - clients see `X-Request-Id` on every response for support tickets.
+   *
+   * Caddy forwards any incoming X-Request-Id verbatim; when present,
+   * the middleware honours it so the id stays consistent across the
+   * edge → backend → Go service chain.
+   */
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(RequestIdMiddleware).forRoutes('*');
+  }
+}

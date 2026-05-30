@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { BadRequestException, Logger, ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import { AllExceptionsFilter } from './common/all-exceptions.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { rawBody: true });
@@ -26,6 +27,11 @@ async function bootstrap() {
       );
     },
   }));
+
+  // Single global filter converts every thrown error to the canonical
+  // { error, code, request_id } envelope.  Mirrors the Go /rewrite
+  // service shape so clients write one decoder.
+  app.useGlobalFilters(new AllExceptionsFilter());
 
   app.enableCors();
 
