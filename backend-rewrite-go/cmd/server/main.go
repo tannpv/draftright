@@ -270,6 +270,16 @@ func buildProviderChain(cfg *config.Config, log *slog.Logger) domain.AiProvider 
 			[]string{"[", "stub", " ", "rewrite", "]"})
 	}
 
+	// Single-provider config doesn't need the failover wrapper — and
+	// shouldn't have one, because chain.Provider exposes its own
+	// uuid.New() id which would NOT match the operator-pinned
+	// PROVIDER_ID, causing usage_logs FK violations.  Return the lone
+	// provider unwrapped so its pinned id reaches usage_logs unmodified.
+	if len(providers) == 1 {
+		log.Info("adapter selected", "port", "ai_provider", "impl", picked[0])
+		return providers[0]
+	}
+
 	chainName := "chain:" + strings.Join(picked, ">")
 	log.Info("adapter selected", "port", "ai_provider", "impl", chainName)
 	return chain.New(chainName, providers, chain.WithLogger(log))
