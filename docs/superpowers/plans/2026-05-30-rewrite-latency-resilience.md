@@ -57,24 +57,49 @@ config.timeoutIntervalForResource = 180 // total ceiling
 **Effect:** 99% of cloud bursts ride through. UX restored.
 **Status:** in-flight.
 
-### Phase 2 — Paid Ollama Cloud tier ($20/mo, planned)
+### Phase 2 — Switch default provider to OpenAI gpt-5-nano (decided, ~5 min)
 
-Free tier shares one global queue across every Ollama Cloud user.
-Paid tier gives dedicated concurrency + no burst queueing.
+User chose this over Ollama Cloud Pro after costing both. At current
+volume (32 calls/day) → **$0.04/mo**. At 1M users → **$1.8k/mo**, of
+which a public rewriteCache (text + tone keyed) cuts ~50% → **$900/mo**
+at full scale.
 
-**Steps when ready:**
-1. Visit https://ollama.com/billing, upgrade.
-2. Verify new key has higher concurrency (probe `/v1/chat/completions`
-   3× in parallel; expect all <5 s).
-3. Update `OPENAI_API_KEY` in NestJS `.env` on VPS.
-4. Restart backend.
-5. Sample `usage_logs.response_time_ms` for 24 h to confirm max <10 s.
+Pricing verified 2026-05-30: gpt-5-nano = $0.05/M input + $0.40/M
+output (vs gpt-4o-mini $0.15/$0.60, vs Anthropic Haiku $1/$5).
 
-**When to do:** within 7 days of Phase 1 ship. Avoids next bursty
-window catching users with a 30-180 s wait.
+**Why this beats Ollama Cloud Pro:**
+- Pro is $20/mo flat, caps at 50× Free volume → blown at ~10k DAU.
+- gpt-5-nano scales linearly + costs ~$0 at our current scale + has
+  no shared global queue.
+- 1.7s typical latency vs Ollama Cloud's 1-120s variance.
 
-**Cost:** $20/mo, scales to ~$50/mo if usage grows. Cheap vs the
-support cost of "yesterday worked" tickets.
+**Steps:**
+1. Get OpenAI key from https://platform.openai.com/api-keys.
+2. Top up $5 prepaid (`/settings/organization/billing`).
+3. Admin portal → AI Providers → Add row:
+   - name: `OpenAI Nano`
+   - type: `openai`
+   - endpoint_url: `https://api.openai.com/v1/chat/completions`
+   - model: `gpt-5-nano`
+   - api_key: paste `sk-…`
+   - temperature: `0.5`
+   - is_active: true, is_default: false (first)
+4. Smoke-test the row via admin "Test" button or a dev rewrite call.
+5. Flip is_default to true once smoke passes — the existing
+   `update()` logic in AiProvidersService demotes the old default
+   atomically.
+6. Sample `usage_logs.response_time_ms` for 24 h; expect max < 5 s,
+   avg < 2 s.
+
+**Rollback:** one SQL — flip `is_default` back to the old row.
+Documented in the saved plan + memory.
+
+**Cost evolution:**
+- Today: $0.04/mo
+- 1k users:  $9/mo
+- 10k users: $89/mo
+- 100k users: $893/mo (~50% with public cache)
+- 1M users: $1,785/mo (~$900/mo with cache)
 
 ### Phase 3 — Streaming via Go service (root cure, planned)
 
