@@ -1,0 +1,31 @@
+# sqlc compiles queries against the NestJS-owned schema at build time.
+#
+# How it works:
+#   1. schema points at the prod schema dump (read-only mirror).
+#      Refresh via: scripts/dump-prod-schema.sh
+#      Re-run `sqlc generate` after any NestJS migration touches a
+#      table we read here.
+#   2. queries point at our hand-written SQL — sqlc parses each, checks
+#      column types against the schema, and emits a typed Go function
+#      per query. A typo'd column name or wrong placeholder type =
+#      sqlc build fail.
+#   3. Generated Go lives under internal/adapter/pg/sqlc/. Committed to
+#      the repo so consumers don't need sqlc installed to build. CI
+#      gate (scripts/sqlc-check.sh) re-runs generate + fails if the
+#      diff is non-empty (catches schema drift early).
+version: "2"
+sql:
+  - schema: "internal/platform/db/schema.sql"
+    queries: "internal/adapter/pg/queries.sql"
+    engine: "postgresql"
+    gen:
+      go:
+        package: "sqlc"
+        out: "internal/adapter/pg/sqlc"
+        sql_package: "pgx/v5"
+        emit_json_tags: true
+        emit_db_tags: true
+        emit_prepared_queries: false
+        emit_interface: true
+        emit_empty_slices: true
+        emit_pointers_for_null_types: true
