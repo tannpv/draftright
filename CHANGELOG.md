@@ -23,6 +23,10 @@ A Windows-only line under `### Windows` will never appear in the macOS
 If a version needs the user to *do* something after updating, say so
 explicitly under an **Action needed:** line inside the relevant sub-section.
 
+## 2.3.20 — 2026-05-30
+### macOS
+- Internal: test release used to verify the menu-bar badge fix shipped in 2.3.19. No user-facing changes.
+
 ## 2.3.19 — 2026-05-30
 ### macOS
 - Fixed the "update available" red dot that only appeared on the menu-bar icon after opening Settings — it now shows automatically the moment a new release is detected, with no clicks required.
