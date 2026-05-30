@@ -56,7 +56,18 @@ final class BackendClient {
 
     init() {
         let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 60
+        // Idle-gap timeout: connection killed if no bytes received
+        // within this window. 30s catches dead TCP / wedged proxies
+        // without punishing a real-but-slow upstream.
+        config.timeoutIntervalForRequest = 30
+        // Total ceiling. NestJS /rewrite waits synchronously for the
+        // upstream LLM; Ollama Cloud free tier can burst to 60-120s
+        // under shared-queue pressure (logged real-world max: 124s).
+        // 180s covers ~99% of valid responses; bad network still
+        // surfaces a timeout (just not at 60s, where the user used
+        // to see "Request timed out" while the backend was still
+        // producing a correct answer).
+        config.timeoutIntervalForResource = 180
         self.session = URLSession(configuration: config)
     }
 
