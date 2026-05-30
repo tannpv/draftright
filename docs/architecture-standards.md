@@ -181,7 +181,14 @@ Not yet implemented in code; documented as the target rotation flow.
 
 - Go: `internal/platform/config.Load()` returns `(*Config, error)`.
   Required env vars enumerated; service refuses to start without them.
-- NestJS: `@nestjs/config` with a Zod schema (pending).
+- NestJS: `@nestjs/config` with a Zod schema at
+  `backend/src/config/env.schema.ts`. `ConfigModule.forRoot({ validate:
+  validateEnv })` rejects boot if any required field is missing or
+  malformed; one error message lists every offending field at once.
+  Consumers inject `ConfigService<EnvSchema, true>` for strongly-typed
+  access — `cfg.get('JWT_SECRET')` returns `string`, not
+  `string | undefined`. Direct `process.env.*` reads outside
+  `env.schema.ts` are a code-review red flag.
 
 ### S15. `.env` files never in git
 
