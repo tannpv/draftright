@@ -241,6 +241,7 @@ struct DraftRightApp: App {
                             tone: tone,
                             accessToken: appModel.accessToken,
                             backendUrl: appModel.backendUrl,
+                            backend: appModel.effectiveBackend,
                             targetLanguage: appModel.translateLanguage,
                             refreshToken: appModel.refreshToken,
                             onTokensRefreshed: { newAccess, newRefresh in
@@ -286,6 +287,7 @@ struct DraftRightApp: App {
                     tone: tone,
                     accessToken: appModel.accessToken,
                     backendUrl: appModel.backendUrl,
+                    backend: appModel.effectiveBackend,
                     targetLanguage: appModel.translateLanguage
                 )
                 DRLogger.log("One-Click rewrite OK, replacing selection via clipboard paste", category: .app)
