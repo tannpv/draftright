@@ -18,6 +18,52 @@ struct BackendRewriteResponse: Codable {
     let daily_limit: Int?
 }
 
+/// Subset of GET /auth/me we care about right now. Adding more flags
+/// in the future = one extra Codable property; the rest of the
+/// AuthFlags decode survives unknown server-side fields.
+struct AuthMeFlags: Codable {
+    let use_go_backend: Bool?
+}
+struct AuthMeResponse: Codable {
+    let id: String
+    let email: String
+    let role: String
+    let flags: AuthMeFlags?
+}
+
+/// Identifies which backend the client chose for an outbound /rewrite
+/// call.  Server-side observability (Caddy access log + Prom counter)
+/// uses the matching X-DraftRight-Backend header to verify routing
+/// matches the cohort assignment computed in /auth/me.
+///
+/// Adding a third backend later (e.g. dedicated grpc / regional) =
+/// one new case + one new `path` mapping + one new env-override
+/// keyword. No scattered conditionals in callers (Rule #1 — open
+/// for extension, closed for modification).
+enum RewriteBackend: String, CaseIterable {
+    case nestjs
+    case go
+
+    /// HTTP path on the API host that serves this backend.
+    var path: String {
+        switch self {
+        case .nestjs: return "/rewrite"
+        case .go:     return "/v1/rewrite"
+        }
+    }
+
+    /// Parses an env-override string (the DRAFTRIGHT_FORCE_BACKEND
+    /// QA escape hatch). Case-insensitive, whitespace-tolerant.
+    /// Returns nil when the value doesn't name a known backend so
+    /// the caller can fall back to the server-decided default.
+    static func fromOverride(_ raw: String?) -> RewriteBackend? {
+        guard let raw, !raw.isEmpty else { return nil }
+        return RewriteBackend(
+            rawValue: raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        )
+    }
+}
+
 enum BackendClientError: LocalizedError {
     case notLoggedIn
     case invalidURL
@@ -76,18 +122,19 @@ final class BackendClient {
         tone: Tone,
         accessToken: String,
         backendUrl: String,
+        backend: RewriteBackend = .nestjs,
         targetLanguage: String = "English",
         refreshToken: String = "",
         onTokensRefreshed: ((String, String) -> Void)? = nil
     ) async throws -> String {
-        DRLogger.log("rewrite request: tone=\(tone.apiValue) textLen=\(text.count) url=\(backendUrl)", category: .api)
+        DRLogger.log("rewrite request: backend=\(backend.rawValue) tone=\(tone.apiValue) textLen=\(text.count) url=\(backendUrl)", category: .api)
         guard !accessToken.isEmpty else {
             DRLogger.error("rewrite FAILED: not logged in", category: .api)
             throw BackendClientError.notLoggedIn
         }
 
         let base = backendUrl.strippingTrailingSlash
-        guard let url = URL(string: "\(base)/rewrite") else {
+        guard let url = URL(string: "\(base)\(backend.path)") else {
             DRLogger.error("rewrite FAILED: invalid URL", category: .api)
             throw BackendClientError.invalidURL
         }
@@ -103,6 +150,9 @@ final class BackendClient {
         request.httpMethod = "POST"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         request.addValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        // Observability: server-side log + Prom counter on this header
+        // checks routing matches the cohort assignment in /auth/me.
+        request.addValue(backend.rawValue, forHTTPHeaderField: "X-DraftRight-Backend")
         request.httpBody = try JSONEncoder().encode(body)
 
         var (data, response): (Data, URLResponse)
@@ -148,9 +198,27 @@ final class BackendClient {
             return jsonString
         }
 
-        let decoded = try JSONDecoder().decode(BackendRewriteResponse.self, from: data)
-        DRLogger.log("rewrite SUCCESS: HTTP \(httpStatus) resultLen=\(decoded.rewritten_text.count)", category: .api)
-        return decoded.rewritten_text.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Decode the rewrite payload. NestJS uses {"rewritten_text":"..."}
+        // (legacy shape); the Go service returns {"text":"...","service":"rewrite-go"}.
+        // Branch on the backend that was called so both shapes are accepted
+        // transparently — clients don't need separate code paths.
+        let rewrittenText: String
+        switch backend {
+        case .nestjs:
+            let decoded = try JSONDecoder().decode(BackendRewriteResponse.self, from: data)
+            rewrittenText = decoded.rewritten_text
+        case .go:
+            let decoded = try JSONDecoder().decode(GoRewriteResponse.self, from: data)
+            rewrittenText = decoded.text
+        }
+        DRLogger.log("rewrite SUCCESS: HTTP \(httpStatus) backend=\(backend.rawValue) resultLen=\(rewrittenText.count)", category: .api)
+        return rewrittenText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Go service /v1/rewrite JSON response shape (non-SSE path).
+    private struct GoRewriteResponse: Codable {
+        let text: String
+        let service: String?
     }
 
     /// Result of a refresh attempt. Distinguishes a server-rejected token (401)
@@ -201,6 +269,32 @@ final class BackendClient {
         } catch {
             DRLogger.warn("refreshTokens TRANSIENT: \(error.localizedDescription) — keeping tokens", category: .auth)
             return .transient
+        }
+    }
+
+    /// Fetch GET /auth/me with the supplied access token. Returns the
+    /// parsed body on 200, nil on any other status / parse failure /
+    /// network error. Used by AppModel to refresh the server-controlled
+    /// feature flags (currently flags.use_go_backend) so the next
+    /// rewrite call can route to the correct backend.
+    func fetchAuthMe(backendUrl: String, accessToken: String) async -> AuthMeResponse? {
+        let base = backendUrl.strippingTrailingSlash
+        guard !accessToken.isEmpty,
+              let url = URL(string: "\(base)/auth/me") else {
+            return nil
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 5
+        request.addValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        do {
+            let (data, response) = try await session.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                return nil
+            }
+            return try? JSONDecoder().decode(AuthMeResponse.self, from: data)
+        } catch {
+            return nil
         }
     }
 

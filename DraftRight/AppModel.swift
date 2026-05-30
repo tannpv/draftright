@@ -105,6 +105,27 @@ final class AppModel: ObservableObject {
     /// Mirrors `updateService.updateStaged` — true once the new DMG is
     /// pre-downloaded and "install" is instant.
     @Published var updateStaged: Bool = false
+
+    /// Server-controlled rollout flag — true when /auth/me put this user
+    /// in the Go-backend cohort.  Defaults false so anything before a
+    /// successful /auth/me refresh routes to the safe (NestJS) path.
+    /// Updated on every health-check tick (~30 s).  Use
+    /// `effectiveBackend` instead of reading this directly; that
+    /// property layers the QA env override on top.
+    @Published private(set) var useGoBackend: Bool = false
+
+    /// Where rewrite traffic actually goes — single source of truth
+    /// for the routing decision (Rule #1).  Resolution order:
+    ///   1. DRAFTRIGHT_FORCE_BACKEND env var (QA escape hatch).
+    ///   2. Server cohort from /auth/me.
+    ///   3. Default = .nestjs (safe fallback when offline or pre-login).
+    var effectiveBackend: RewriteBackend {
+        if let override = RewriteBackend.fromOverride(ProcessInfo.processInfo.environment["DRAFTRIGHT_FORCE_BACKEND"]) {
+            return override
+        }
+        return useGoBackend ? .go : .nestjs
+    }
+
     var cancellables = Set<AnyCancellable>()
 
     private let defaults = UserDefaults.standard
@@ -359,6 +380,14 @@ final class AppModel: ObservableObject {
             isLoggedIn = false
         }
 
+        // Refresh server-controlled feature flags while we already hold a
+        // valid token. One round-trip per health cycle = at most one
+        // /auth/me hit every 30 s, which is negligible load and keeps the
+        // useGoBackend cohort in sync with whatever ops just dialed up.
+        if status == .connected && !accessToken.isEmpty {
+            await refreshFeatureFlags()
+        }
+
         // Auto-recovery: if offline and targeting localhost, try to start the backend
         if status == .offline && backendUrl.contains("localhost") {
             attemptAutoRecovery()
@@ -396,6 +425,21 @@ final class AppModel: ObservableObject {
             try? process.run()
             process.waitUntilExit()
             DRLogger.log("Auto-recovery: start-server.sh exited with code \(process.terminationStatus)", category: .app)
+        }
+    }
+
+    /// Polls /auth/me and applies any flag changes (currently just
+    /// `flags.use_go_backend`). Silent on network failure — the next
+    /// health tick re-tries. Idempotent: re-running with the same
+    /// server state produces zero @Published churn.
+    private func refreshFeatureFlags() async {
+        guard let me = await healthClient.fetchAuthMe(backendUrl: backendUrl, accessToken: accessToken) else {
+            return
+        }
+        let next = me.flags?.use_go_backend ?? false
+        if useGoBackend != next {
+            DRLogger.log("feature flag: use_go_backend \(useGoBackend) → \(next) (server cohort changed)", category: .api)
+            useGoBackend = next
         }
     }
 }
