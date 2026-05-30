@@ -55,7 +55,12 @@ final class UpdateService: ObservableObject {
     private let currentVersion: String
     private let backendUrl: String
     private var lastCheck: Date = .distantPast
-    private let checkInterval: TimeInterval = 86400 // 24 hours
+    // 1 hour. The AppModel background heartbeat fires hourly; without
+    // this, the 24h throttle would silently swallow 23 of 24 firings,
+    // meaning the menu-bar badge can lag a newly published release by
+    // up to a day. /updates/latest is a 2 KB GET — hourly polling has
+    // negligible cost.
+    private let checkInterval: TimeInterval = 3600 // 1 hour
 
     /// Newest release applicable to this Mac (strictly newer + non-empty
     /// URL), or nil if up to date / not yet checked. Drives the menu-bar
