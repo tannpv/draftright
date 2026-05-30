@@ -3,7 +3,7 @@
 # resulting binary is reproducible (same source = same checksum) and
 # stripped of debug symbols (smaller image, marginally faster cold-start).
 
-FROM golang:1.22-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 # Disable cgo so the final binary is fully static and runs on
 # distroless static (no glibc, no musl). This is the standard pattern
