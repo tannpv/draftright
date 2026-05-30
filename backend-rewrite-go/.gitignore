@@ -1,0 +1,30 @@
+# Build output
+bin/
+/out/
+
+# Local override (per-dev compose tweaks)
+docker-compose.override.yml
+
+# Editor / OS clutter
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*~
+
+# Coverage + test cache
+*.out
+coverage.html
+coverage.txt
+
+# sqlc-generated query metadata (Task 3 will commit this dir explicitly;
+# kept here so a fresh clone doesn't try to commit the placeholder)
+# (uncomment when sqlc lands)
+# !/internal/adapter/pg/sqlc/
+
+# Local env (Task 2+)
+.env
+.env.local
+
+# Stray binaries from `go build ./...` (no -o flag emits to cwd)
+/server
