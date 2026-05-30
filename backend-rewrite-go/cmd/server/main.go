@@ -1,16 +1,18 @@
 // Package main is the composition root for the DraftRight /rewrite Go
-// microservice. Per clean architecture, this is the ONLY place where
-// concrete adapters get wired into use cases. Everything else stays
-// pluggable behind the ports in internal/domain.
+// microservice. Per clean architecture this is the ONLY place where
+// concrete adapters get wired into use cases. Every other package
+// stays free of "if env == prod / if env == dev" branching.
 //
-// Task 2 state: HTTP server with /health (public) + /rewrite (JWT-protected).
-// Real rewrite pipeline (SSE + provider call + quota) lands in Task 7.
+// Task 7 state: chi router + SSE handler wired. Adapters fall back to
+// in-memory implementations when DATABASE_URL / REDIS_URL / OPENAI_API_KEY
+// are empty — gives a zero-config dev loop while preserving production
+// fidelity once the env is populated.
 package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -18,65 +20,77 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
+
+	"github.com/tannpv/draftright-rewrite/internal/adapter/memory"
+	"github.com/tannpv/draftright-rewrite/internal/adapter/openai"
+	"github.com/tannpv/draftright-rewrite/internal/adapter/pg"
+	"github.com/tannpv/draftright-rewrite/internal/adapter/redislimit"
+	"github.com/tannpv/draftright-rewrite/internal/domain"
 	internalhttp "github.com/tannpv/draftright-rewrite/internal/http"
-	authpkg "github.com/tannpv/draftright-rewrite/internal/platform/auth"
+	"github.com/tannpv/draftright-rewrite/internal/platform/auth"
 	"github.com/tannpv/draftright-rewrite/internal/platform/config"
+	platformdb "github.com/tannpv/draftright-rewrite/internal/platform/db"
+	"github.com/tannpv/draftright-rewrite/internal/usecase"
 )
 
 const (
-	// Generous deadlines for Tasks 2-6; tightened in Task 7 once SSE
-	// streaming is wired (write deadline becomes per-request).
+	// Read deadline is short — request bodies are small JSON. Write
+	// deadline is generous to accommodate SSE streams whose total
+	// duration depends on the upstream provider (model tokens/sec).
 	readTimeout  = 10 * time.Second
-	writeTimeout = 60 * time.Second
+	writeTimeout = 5 * time.Minute
 	idleTimeout  = 120 * time.Second
-	// Graceful shutdown window — long enough for in-flight SSE streams
-	// (Task 7) to finish a token, short enough that prod redeploys
-	// don't drag.
-	shutdownTimeout = 15 * time.Second
+
+	// Graceful shutdown — long enough for in-flight SSE streams to
+	// finish a final token, short enough that prod redeploys don't
+	// drag.
+	shutdownTimeout = 30 * time.Second
 )
 
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
-		// We can't use slog here yet — logger needs the level from
-		// config. Fall back to stderr + exit 1 with a clear message
-		// so a misconfigured deploy fails loudly.
 		_, _ = os.Stderr.WriteString("FATAL: " + err.Error() + "\n")
 		os.Exit(2)
 	}
 
 	log := newLogger(cfg.LogLevel)
-	verifier := authpkg.NewVerifier(cfg.JWTSecret)
+	log.Info("boot", "app_env", cfg.AppEnv, "listen", cfg.Listen)
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/health", handleHealth)
-	// /rewrite now requires a valid JWT. RequireAuth wraps the
-	// stub handler so a real handler in Task 7 plugs in without
-	// touching the wiring.
-	mux.Handle("/rewrite", internalhttp.RequireAuth(verifier, log)(http.HandlerFunc(handleRewriteStub)))
+	deps, cleanup, err := composeDeps(context.Background(), cfg, log)
+	if err != nil {
+		log.Error("dependency wiring failed", "err", err.Error())
+		os.Exit(1)
+	}
+	defer cleanup()
+
+	router := (&internalhttp.Router{
+		Log:      log,
+		Verifier: auth.NewVerifier(cfg.JWTSecret),
+		Rewrite: &internalhttp.RewriteHandler{
+			Deps: deps,
+			Log:  log,
+		},
+	}).Build()
 
 	srv := &http.Server{
 		Addr:         cfg.Listen,
-		Handler:      withRequestLogging(log, mux),
+		Handler:      router,
 		ReadTimeout:  readTimeout,
 		WriteTimeout: writeTimeout,
 		IdleTimeout:  idleTimeout,
 	}
 
-	// Run the server on a goroutine so the main goroutine can listen
-	// for signals + drive graceful shutdown. Without this split,
-	// SIGTERM would either be ignored or kill in-flight requests
-	// mid-stream.
 	go func() {
 		log.Info("listening", "addr", cfg.Listen, "env", cfg.AppEnv)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Error("server crashed", "err", err)
+			log.Error("server crashed", "err", err.Error())
 			os.Exit(1)
 		}
 	}()
 
-	// Wait for SIGINT / SIGTERM. Docker stops containers with SIGTERM;
-	// Ctrl-C from a dev terminal sends SIGINT. Catch both.
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	<-sigs
@@ -85,17 +99,85 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil {
-		log.Error("graceful shutdown failed", "err", err)
+		log.Error("graceful shutdown failed", "err", err.Error())
 		os.Exit(1)
 	}
 	log.Info("shutdown complete")
 }
 
-// newLogger returns a JSON-output slog suitable for prod log aggregation
-// (Loki/CloudWatch/etc.) Level threshold parsed from config.LogLevel.
+// composeDeps picks real or in-memory adapters based on which env vars
+// are populated. The decision lives here so the use case + handler
+// stay unaware of which mode they're running in (Rule #1 — open/closed:
+// add a new adapter, edit only this function).
 //
-// Kept in main.go for Task 2 simplicity; moves to
-// internal/platform/logger/ once a second consumer exists.
+// Returns (deps, cleanup, err). Caller MUST invoke cleanup before exit
+// even on the happy path — owns the Postgres pool + Redis client.
+func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger) (usecase.RewriteDeps, func(), error) {
+	var cleanups []func()
+	cleanup := func() {
+		for i := len(cleanups) - 1; i >= 0; i-- {
+			cleanups[i]()
+		}
+	}
+
+	// --- UserRepo --------------------------------------------------
+	var users domain.UserRepo
+	if cfg.DatabaseURL != "" {
+		pool, err := platformdb.NewPool(ctx, cfg.DatabaseURL)
+		if err != nil {
+			cleanup()
+			return usecase.RewriteDeps{}, nil, fmt.Errorf("postgres pool: %w", err)
+		}
+		cleanups = append(cleanups, pool.Close)
+		users = pg.NewUserRepo(pool)
+		log.Info("adapter selected", "port", "users", "impl", "postgres")
+	} else {
+		users = memory.NewUserRepo(nil)
+		log.Warn("adapter selected", "port", "users", "impl", "memory (DATABASE_URL unset — dev fallback)")
+	}
+
+	// --- RateLimiter -----------------------------------------------
+	var limiter domain.RateLimiter
+	if cfg.RedisURL != "" {
+		opts, err := redis.ParseURL(cfg.RedisURL)
+		if err != nil {
+			cleanup()
+			return usecase.RewriteDeps{}, nil, fmt.Errorf("parse REDIS_URL: %w", err)
+		}
+		client := redis.NewClient(opts)
+		cleanups = append(cleanups, func() { _ = client.Close() })
+		limiter = redislimit.New(client)
+		log.Info("adapter selected", "port", "rate_limiter", "impl", "redis")
+	} else {
+		limiter = memory.NewRateLimiter()
+		log.Warn("adapter selected", "port", "rate_limiter", "impl", "memory (REDIS_URL unset — dev fallback)")
+	}
+
+	// --- AiProvider ------------------------------------------------
+	var provider domain.AiProvider
+	if cfg.OpenAIKey != "" {
+		provider = openai.New(uuid.New(), cfg.OpenAIKey)
+		log.Info("adapter selected", "port", "ai_provider", "impl", "openai")
+	} else {
+		// Memory provider streams a canned response so a smoke test
+		// without API keys still produces something visible.
+		provider = memory.NewProvider("memory-stub",
+			[]string{"[", "stub", " ", "rewrite", "]"})
+		log.Warn("adapter selected", "port", "ai_provider", "impl", "memory (OPENAI_API_KEY unset — dev fallback)")
+	}
+
+	return usecase.RewriteDeps{
+		Users:     users,
+		Provider:  provider,
+		RateLimit: limiter,
+		Now:       time.Now,
+		Log:       log,
+	}, cleanup, nil
+}
+
+// newLogger returns a JSON-output slog suitable for production log
+// aggregation (Loki / CloudWatch / etc.). Level threshold parsed from
+// config.LogLevel.
 func newLogger(levelStr string) *slog.Logger {
 	level := slog.LevelInfo
 	switch levelStr {
@@ -107,76 +189,4 @@ func newLogger(levelStr string) *slog.Logger {
 		level = slog.LevelError
 	}
 	return slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
-}
-
-// withRequestLogging wraps the handler with one structured log line per
-// request. Replaced by the chi middleware chain in Task 7 (adds
-// correlation-id, recover-on-panic, and Prometheus metrics).
-func withRequestLogging(log *slog.Logger, next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-		rec := &statusRecorder{ResponseWriter: w, status: 200}
-		next.ServeHTTP(rec, r)
-		log.Info("http",
-			"method", r.Method,
-			"path", r.URL.Path,
-			"status", rec.status,
-			"duration_ms", time.Since(start).Milliseconds(),
-			"remote", r.RemoteAddr,
-		)
-	})
-}
-
-// statusRecorder captures the response status code so the logging
-// middleware can record it.
-type statusRecorder struct {
-	http.ResponseWriter
-	status int
-}
-
-func (s *statusRecorder) WriteHeader(code int) {
-	s.status = code
-	s.ResponseWriter.WriteHeader(code)
-}
-
-// handleHealth is the kubelet/Docker-healthcheck probe target.
-// Returns 200 unconditionally for Task 2; will check Postgres + Redis
-// + AI-provider reachability in a future task.
-func handleHealth(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{
-		"status":  "ok",
-		"service": "rewrite-go",
-	})
-}
-
-// handleRewriteStub returns the verified user id from the JWT, proving
-// the auth middleware works end-to-end. Real SSE pipeline lands in Task 7.
-func handleRewriteStub(w http.ResponseWriter, r *http.Request) {
-	claims, ok := internalhttp.ClaimsFromContext(r.Context())
-	if !ok {
-		// Middleware misconfigured — route wrapped at registration
-		// time, so this branch only fires on a programmer error.
-		writeJSON(w, http.StatusInternalServerError, map[string]string{
-			"error": "auth middleware missing",
-		})
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]string{
-		"text":    "Hello from Go!",
-		"tone":    "placeholder",
-		"service": "rewrite-go",
-		"user_id": claims.UserID(),
-		"role":    claims.Role,
-		"note":    "Task 2 — JWT verified. Real SSE pipeline lands in Task 7.",
-	})
-}
-
-// writeJSON encodes a value as JSON with the correct headers.
-// Centralised so future handlers don't repeat the boilerplate (Rule #1).
-func writeJSON(w http.ResponseWriter, status int, body any) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(status)
-	if err := json.NewEncoder(w).Encode(body); err != nil {
-		slog.Error("write json failed", "err", err)
-	}
 }
