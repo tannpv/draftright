@@ -42,6 +42,45 @@ services:
       - "6379:6379"
     restart: unless-stopped
 
+  # Go /rewrite microservice (Task 10). Shares Postgres + Redis with
+  # the NestJS backend; same JWT_SECRET so tokens are mutually valid.
+  # Caddy routes /v1/rewrite → :3001 (this service); everything else
+  # still hits :3000 (NestJS). See backend-rewrite-go/docs/deploy.md
+  # for the operator runbook + Caddy snippet.
+  rewrite-go:
+    build: ./backend-rewrite-go
+    container_name: dr-rewrite-go
+    ports:
+      - "3001:3001"
+    environment:
+      - LISTEN_ADDR=:3001
+      - LOG_LEVEL=info
+      - APP_ENV=production
+      - JWT_SECRET=${JWT_SECRET}
+      - DATABASE_URL=postgresql://draftright:password@postgres:5432/draftright
+      - REDIS_URL=redis://redis:6379
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OLLAMA_URL=${OLLAMA_URL:-}
+      - AI_PROVIDERS=${AI_PROVIDERS:-openai}
+      - METRICS_ENABLED=${METRICS_ENABLED:-true}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      - OTEL_SAMPLE_RATIO=${OTEL_SAMPLE_RATIO:-1.0}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    # /metrics is exposed on the same listener; restrict access at
+    # the reverse proxy (Caddy) — never publish it to the public web.
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:3001/health || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+
   website:
     build: ./website
     ports:
