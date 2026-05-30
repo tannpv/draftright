@@ -162,8 +162,12 @@ Not yet implemented in code; documented as the target rotation flow.
 
 - Prometheus text format.
 - Route accessible only from internal CIDR or behind auth at Caddy.
-- Go service: already wired via `internal/platform/metrics`.
-- NestJS: pending (review item 6).
+- Go service: wired via `internal/platform/metrics`.
+- NestJS: wired via `@willsoto/nestjs-prometheus` →
+  `backend/src/common/metrics/`. Same series names as Go
+  (`draftright_rewrite_requests_total`,
+  `draftright_rewrite_duration_seconds`) so a single Grafana panel
+  joins both backends.
 
 ### S13. Structured JSON logs
 

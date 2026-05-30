@@ -5,6 +5,10 @@ import { AiProvidersService } from '../ai-providers/ai-providers.service';
 import { RewriteCacheService } from './rewrite-cache.service';
 import { RewriteLogService } from './rewrite-log.service';
 import { AiProvider } from '../ai-providers/entities/ai-provider.entity';
+import {
+  RewriteMetricsService,
+  REWRITE_OUTCOMES,
+} from '../common/metrics/rewrite-metrics.service';
 
 // --- Prompt Registry ---
 
@@ -59,6 +63,7 @@ export class RewriteService {
     private readonly aiProvidersService: AiProvidersService,
     private readonly rewriteCache: RewriteCacheService,
     private readonly rewriteLogService: RewriteLogService,
+    private readonly metrics: RewriteMetricsService,
   ) {}
 
   // --- Core: single method that calls AI and logs ---
@@ -94,18 +99,37 @@ export class RewriteService {
   // --- Authenticated rewrite (full features: cache, usage, batch) ---
 
   async rewrite(userId: string, text: string, tone: string, targetLanguage?: string, sourceLanguage?: string) {
+    // Single timing anchor so every terminal path records the same
+    // duration metric (cache hit vs miss vs reject all comparable).
+    const startedAt = Date.now();
+
     // Check cache first
     const cached = await this.rewriteCache.get(userId, text, tone);
     if (cached) {
       const sub = await this.subscriptionsService.findActiveByUserId(userId);
       const dailyLimit = sub?.plan?.daily_limit ?? 0;
       const usageToday = await this.usageService.countTodayByUser(userId);
+      this.metrics.observe({
+        outcome: REWRITE_OUTCOMES.ok,
+        tone,
+        provider: 'cache',
+        durationMs: Date.now() - startedAt,
+      });
       return { rewritten_text: cached, usage_today: usageToday, daily_limit: dailyLimit };
     }
 
     // Check subscription & limits
     const sub = await this.subscriptionsService.findActiveByUserId(userId);
     if (!sub || !sub.plan) {
+      // No usable subscription/plan for this user. Mapped to
+      // user_not_found so cross-service Grafana joins (NestJS +
+      // Go) stay on the same enumerated outcome set.
+      this.metrics.observe({
+        outcome: REWRITE_OUTCOMES.userNotFound,
+        tone,
+        provider: 'n/a',
+        durationMs: Date.now() - startedAt,
+      });
       throw new HttpException({ error: 'No active subscription', usage_today: 0, daily_limit: 0 }, 403);
     }
 
@@ -113,13 +137,36 @@ export class RewriteService {
     const usageToday = await this.usageService.countTodayByUser(userId);
 
     if (dailyLimit !== -1 && usageToday >= dailyLimit) {
+      this.metrics.observe({
+        outcome: REWRITE_OUTCOMES.quotaExceeded,
+        tone,
+        provider: 'n/a',
+        durationMs: Date.now() - startedAt,
+      });
       throw new HttpException({
         error: 'Daily limit reached', usage_today: usageToday, daily_limit: dailyLimit,
       }, 429);
     }
 
-    // Call AI
-    const result = await this.callAI(text, tone, targetLanguage, sourceLanguage);
+    // Call AI — wrap so provider failures land in a typed metric.
+    let result: RewriteResult;
+    try {
+      result = await this.callAI(text, tone, targetLanguage, sourceLanguage);
+    } catch (err) {
+      this.metrics.observe({
+        outcome: REWRITE_OUTCOMES.providerFailed,
+        tone,
+        provider: 'unknown',
+        durationMs: Date.now() - startedAt,
+      });
+      throw err;
+    }
+    this.metrics.observe({
+      outcome: REWRITE_OUTCOMES.ok,
+      tone,
+      provider: result.provider.name,
+      durationMs: Date.now() - startedAt,
+    });
 
     // Log usage
     await this.usageService.log({
