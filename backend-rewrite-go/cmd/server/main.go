@@ -17,13 +17,17 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 
+	"github.com/tannpv/draftright-rewrite/internal/adapter/anthropic"
+	"github.com/tannpv/draftright-rewrite/internal/adapter/chain"
 	"github.com/tannpv/draftright-rewrite/internal/adapter/memory"
+	"github.com/tannpv/draftright-rewrite/internal/adapter/ollama"
 	"github.com/tannpv/draftright-rewrite/internal/adapter/openai"
 	"github.com/tannpv/draftright-rewrite/internal/adapter/pg"
 	"github.com/tannpv/draftright-rewrite/internal/adapter/redislimit"
@@ -154,17 +158,7 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger) (use
 	}
 
 	// --- AiProvider ------------------------------------------------
-	var provider domain.AiProvider
-	if cfg.OpenAIKey != "" {
-		provider = openai.New(uuid.New(), cfg.OpenAIKey)
-		log.Info("adapter selected", "port", "ai_provider", "impl", "openai")
-	} else {
-		// Memory provider streams a canned response so a smoke test
-		// without API keys still produces something visible.
-		provider = memory.NewProvider("memory-stub",
-			[]string{"[", "stub", " ", "rewrite", "]"})
-		log.Warn("adapter selected", "port", "ai_provider", "impl", "memory (OPENAI_API_KEY unset — dev fallback)")
-	}
+	provider := buildProviderChain(cfg, log)
 
 	return usecase.RewriteDeps{
 		Users:     users,
@@ -173,6 +167,72 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger) (use
 		Now:       time.Now,
 		Log:       log,
 	}, cleanup, nil
+}
+
+// buildProviderChain reads cfg.AIProviders (comma-separated priority
+// list) and assembles a chain.Provider. Filtering rules:
+//
+//   - "openai"    requires OpenAIKey;    skipped + warned otherwise.
+//   - "anthropic" requires AnthropicKey; skipped + warned otherwise.
+//   - "ollama"    requires OllamaURL;    skipped + warned otherwise.
+//   - empty list (or all entries filtered) → memory stub fallback so
+//     the dev binary still produces visible output.
+//
+// Unknown tokens are warned then ignored — a typo in the env doesn't
+// crash boot, but it's visible in logs.
+//
+// Why an env-driven list + chain wrapper (vs hardcoded chain):
+// operators want to flip the priority order without a rebuild
+// (incident response: "OpenAI is down, push Anthropic to head").
+func buildProviderChain(cfg *config.Config, log *slog.Logger) domain.AiProvider {
+	raw := strings.TrimSpace(cfg.AIProviders)
+	if raw == "" {
+		log.Warn("adapter selected", "port", "ai_provider", "impl", "memory (AI_PROVIDERS unset — dev fallback)")
+		return memory.NewProvider("memory-stub",
+			[]string{"[", "stub", " ", "rewrite", "]"})
+	}
+
+	var providers []domain.AiProvider
+	var picked []string
+	for _, name := range strings.Split(raw, ",") {
+		name = strings.ToLower(strings.TrimSpace(name))
+		switch name {
+		case "":
+			continue
+		case "openai":
+			if cfg.OpenAIKey == "" {
+				log.Warn("chain: skipping provider, missing credential", "provider", name, "env", "OPENAI_API_KEY")
+				continue
+			}
+			providers = append(providers, openai.New(uuid.New(), cfg.OpenAIKey))
+		case "anthropic":
+			if cfg.AnthropicKey == "" {
+				log.Warn("chain: skipping provider, missing credential", "provider", name, "env", "ANTHROPIC_API_KEY")
+				continue
+			}
+			providers = append(providers, anthropic.New(uuid.New(), cfg.AnthropicKey))
+		case "ollama":
+			if cfg.OllamaURL == "" {
+				log.Warn("chain: skipping provider, missing endpoint", "provider", name, "env", "OLLAMA_URL")
+				continue
+			}
+			providers = append(providers, ollama.New(uuid.New(), ollama.WithEndpoint(cfg.OllamaURL)))
+		default:
+			log.Warn("chain: unknown provider name; ignoring", "provider", name)
+			continue
+		}
+		picked = append(picked, name)
+	}
+
+	if len(providers) == 0 {
+		log.Warn("adapter selected", "port", "ai_provider", "impl", "memory (no usable entries in AI_PROVIDERS — dev fallback)")
+		return memory.NewProvider("memory-stub",
+			[]string{"[", "stub", " ", "rewrite", "]"})
+	}
+
+	chainName := "chain:" + strings.Join(picked, ">")
+	log.Info("adapter selected", "port", "ai_provider", "impl", chainName)
+	return chain.New(chainName, providers, chain.WithLogger(log))
 }
 
 // newLogger returns a JSON-output slog suitable for production log

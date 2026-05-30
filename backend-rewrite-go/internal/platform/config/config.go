@@ -41,6 +41,19 @@ type Config struct {
 	OpenAIKey    string
 	AnthropicKey string
 
+	// OllamaURL points at a local or proxied Ollama server. Empty
+	// disables the Ollama adapter; "http://localhost:11434" is the
+	// canonical local dev value.
+	OllamaURL string
+
+	// AIProviders is an ordered, comma-separated provider priority
+	// list — used by the failover chain in composeDeps. Example:
+	//   AI_PROVIDERS=openai,anthropic,ollama
+	// Unknown entries + entries whose credentials are missing get
+	// filtered out at wiring time with a warning. Empty string =
+	// "use the memory stub" (dev convenience).
+	AIProviders string
+
 	// App environment label (development | staging | production).
 	// Drives a few startup checks + the log output format choice.
 	AppEnv string
@@ -58,6 +71,8 @@ func Load() (*Config, error) {
 		RedisURL:     os.Getenv("REDIS_URL"),
 		OpenAIKey:    os.Getenv("OPENAI_API_KEY"),
 		AnthropicKey: os.Getenv("ANTHROPIC_API_KEY"),
+		OllamaURL:    os.Getenv("OLLAMA_URL"),
+		AIProviders:  os.Getenv("AI_PROVIDERS"),
 		AppEnv:       envOr("APP_ENV", "development"),
 	}
 	if err := c.validate(); err != nil {
