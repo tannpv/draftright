@@ -45,6 +45,18 @@ export class AiProvidersService {
   }
 
   async create(data: Partial<AiProvider>): Promise<AiProvider> {
+    // Single-default invariant: at most one row may have is_default=true.
+    // update() already enforces this; mirror the demotion here so the
+    // "create a new provider with Default ✓" admin flow can't end up
+    // with two defaults (bug report 1332824a, 2026-05-30).
+    if (data.is_default) {
+      await this.providersRepo
+        .createQueryBuilder()
+        .update()
+        .set({ is_default: false })
+        .where('is_default = :val', { val: true })
+        .execute();
+    }
     const provider = this.providersRepo.create(data);
     return this.providersRepo.save(provider);
   }
@@ -85,11 +97,22 @@ export class AiProvidersService {
           { role: 'user', content: userText },
         ];
 
-    const body = {
+    const body: Record<string, unknown> = {
       model: provider.model,
       temperature: Number(provider.temperature),
       messages,
     };
+
+    // gpt-5 family are reasoning models — they spend hidden
+    // "reasoning tokens" before emitting the visible answer. For
+    // shallow rewriting tasks (DraftRight's entire use case) the
+    // reasoning is wasted: it inflates latency (6 s vs 1.5 s) and
+    // billing (~448 reasoning tokens per call observed on
+    // gpt-5-nano). reasoning_effort=minimal disables the bulk of
+    // it.  Other models silently ignore the field.
+    if (typeof provider.model === 'string' && provider.model.startsWith('gpt-5')) {
+      body.reasoning_effort = 'minimal';
+    }
 
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (provider.api_key) {
