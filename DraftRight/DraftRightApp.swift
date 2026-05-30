@@ -76,14 +76,46 @@ struct DraftRightApp: App {
             }
             .keyboardShortcut("q", modifiers: .command)
         } label: {
-            // Composited NSImage (status tint + optional red "update
-            // available" badge) — SwiftUI Image overlays don't survive the
-            // menu bar's template flattening, so we draw it ourselves.
-            // See MenuBarIcon / Windows TrayIconBadge for parity.
+            // SwiftUI's MenuBarExtra label closure does NOT participate in
+            // the parent Scene's view-graph observation — referencing
+            // appModel.availableUpdate here directly is captured ONCE at
+            // first render and never re-evaluated when @Published changes,
+            // so the red "update available" dot only appeared after the
+            // menu was opened (which forces a re-render of both content
+            // AND label).  Wrapping in a tiny @ObservedObject View struct
+            // restores normal SwiftUI observation: any change to appModel
+            // invalidates MenuBarLabel and the label redraws — badge
+            // appears the moment availableUpdate transitions to non-nil
+            // (e.g. when the hourly UpdateService poll lands a new release).
+            MenuBarLabel(appModel: appModel)
+        }
+    }
+
+    // MARK: - MenuBarLabel
+    //
+    // Extracted into its own View so the @ObservedObject wiring makes
+    // SwiftUI invalidate the label on every appModel change — the
+    // MenuBarExtra label closure on its own does NOT (see comment in
+    // body above).  The status tint + update badge are both computed
+    // inside body so a tone-color change OR an update arrival both
+    // re-render in real time.
+    private struct MenuBarLabel: View {
+        @ObservedObject var appModel: AppModel
+
+        var body: some View {
             Image(nsImage: MenuBarIcon.image(
                 symbolName: "pencil.and.outline",
-                tint: statusNSColor,
+                tint: statusNSColor(for: appModel.backendStatus),
                 showsBadge: appModel.availableUpdate != nil))
+        }
+
+        private func statusNSColor(for status: BackendStatus) -> NSColor {
+            switch status {
+            case .connected: return .systemGreen
+            case .notLoggedIn: return .systemYellow
+            case .offline: return .systemRed
+            case .wrongServer: return .systemPurple
+            }
         }
     }
 
