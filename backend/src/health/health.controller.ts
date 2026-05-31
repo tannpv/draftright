@@ -10,10 +10,11 @@ import { AppSettings } from '../admin/entities/app-settings.entity';
 // External monitors (Caddy probe, container healthcheck, uptime
 // services) hit /health every 10-30 s.  At the default per-IP limit
 // (200/min) a single sustained monitor would lock other consumers
-// out of /health.  Skip the throttler for liveness probes — the
-// endpoint is internally cached and DB-tolerant, so flooding it is
-// safe (also a perf-test prerequisite, 2026-05-31).
-@SkipThrottle()
+// out of /health.  Skip every named throttler tier — the schema
+// declares three (short / medium / long), and bare @SkipThrottle()
+// only skips the unnamed default.  The endpoint is internally
+// cached and DB-tolerant, so flooding it is safe.
+@SkipThrottle({ short: true, medium: true, long: true })
 export class HealthController {
   // Clients poll /health every ~30s for liveness, so cache the log level
   // briefly to keep the endpoint a near-zero-cost read. An admin change in
