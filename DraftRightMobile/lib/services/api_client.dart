@@ -27,8 +27,10 @@ class ApiClient {
   final http.Client _client;
   final Duration defaultTimeout;
 
-  Future<Map<String, dynamic>> getJson(String path, {String? token, Duration? timeout}) =>
-      _send('GET', path, token: token, timeout: timeout);
+  Future<Map<String, dynamic>> getJson(String path, {String? token, Duration? timeout}) async {
+    final raw = await getAny(path, token: token, timeout: timeout);
+    return raw is Map<String, dynamic> ? raw : <String, dynamic>{'data': raw};
+  }
 
   Future<Map<String, dynamic>> postJson(String path, {Object? body, String? token, Duration? timeout}) =>
       _send('POST', path, body: body, token: token, timeout: timeout);
@@ -36,7 +38,20 @@ class ApiClient {
   Future<Map<String, dynamic>> deleteJson(String path, {String? token, Duration? timeout}) =>
       _send('DELETE', path, token: token, timeout: timeout);
 
+  /// GET that returns whatever shape the server emits — Map, List, scalar.
+  /// Use for endpoints whose root response isn't a JSON object
+  /// (e.g. `/plans` returns a List). Callers cast as needed.
+  Future<dynamic> getAny(String path, {String? token, Duration? timeout}) async {
+    return _sendAny('GET', path, token: token, timeout: timeout);
+  }
+
   Future<Map<String, dynamic>> _send(String method, String path, {Object? body, String? token, Duration? timeout}) async {
+    final raw = await _sendAny(method, path, body: body, token: token, timeout: timeout);
+    if (raw is Map<String, dynamic>) return raw;
+    return <String, dynamic>{'data': raw};
+  }
+
+  Future<dynamic> _sendAny(String method, String path, {Object? body, String? token, Duration? timeout}) async {
     final uri = Uri.parse('$baseUrl$path');
     final headers = <String, String>{
       'Content-Type': 'application/json',
@@ -59,8 +74,7 @@ class ApiClient {
       throw ApiException(resp.statusCode, _parseError(resp.body, resp.statusCode));
     }
     if (resp.body.isEmpty) return <String, dynamic>{};
-    final decoded = jsonDecode(resp.body);
-    return decoded is Map<String, dynamic> ? decoded : <String, dynamic>{'data': decoded};
+    return jsonDecode(resp.body);
   }
 
   /// Pulls a useful message out of a NestJS-style error body
