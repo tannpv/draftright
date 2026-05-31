@@ -10,6 +10,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, GLib, Gtk
 
 from draftright.models.tone import Tone
+from draftright.ui.subscription_page import SubscriptionPage
 from draftright.ui.suggest_feature_dialog import open_suggest_feature_dialog
 
 # Languages available for translation
@@ -47,8 +48,16 @@ class SettingsWindow(Adw.PreferencesWindow):
         self.set_modal(True)
 
         self._build_account_page()
+        self._build_subscription_page()
         self._build_preferences_page()
         self._refresh_account_ui()
+
+    def _build_subscription_page(self):
+        """Inserts the Subscription tab between Account and Preferences."""
+        self._subscription_page = SubscriptionPage(
+            self.app, self.app.api_client
+        )
+        self.add(self._subscription_page)
 
     # ------------------------------------------------------------------
     # Account page
