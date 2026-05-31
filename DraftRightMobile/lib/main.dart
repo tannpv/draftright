@@ -14,6 +14,8 @@ import 'package:draftright_mobile/screens/onboarding_screen.dart';
 import 'package:draftright_mobile/screens/settings_screen.dart';
 import 'package:draftright_mobile/screens/playground_screen.dart';
 import 'package:draftright_mobile/screens/share_rewrite_screen.dart';
+import 'package:draftright_mobile/screens/subscription_screen.dart';
+import 'package:draftright_mobile/services/deep_link_service.dart';
 import 'package:draftright_mobile/services/share_service.dart';
 import 'package:draftright_mobile/services/error_reporter.dart';
 import 'package:draftright_mobile/widgets/error_notice_overlay.dart';
@@ -288,6 +290,7 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _checkOnboarding();
     _wireShareIntake();
+    _wireDeepLinks();
     // Defer until the tree (and a Navigator) is mounted.
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkWhatsNew());
   }
@@ -352,6 +355,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     ShareService.setHandler();
+    DeepLinkService.setHandler(onLink: null);
     super.dispose();
   }
 
@@ -413,6 +417,43 @@ class _HomeScreenState extends State<HomeScreen> {
       nav.push(MaterialPageRoute(
         builder: (_) => ShareRewriteScreen(sharedText: text),
       ));
+    });
+  }
+
+  /// Drain any deep link the app was launched with and subscribe to
+  /// fresh ones while alive.  Today the only event we handle is
+  /// [PaymentReturnEvent] (Lemon Squeezy redirect after checkout) —
+  /// route to the Subscription screen and let its
+  /// `AppLifecycleState.resumed` listener refresh `/subscription`.
+  Future<void> _wireDeepLinks() async {
+    final initial = await DeepLinkService.getInitialEvent();
+    if (initial is PaymentReturnEvent && mounted) {
+      _openSubscriptionFromDeepLink(initial);
+    }
+    DeepLinkService.setHandler(onLink: (event) {
+      if (event is PaymentReturnEvent && mounted) {
+        _openSubscriptionFromDeepLink(event);
+      }
+    });
+  }
+
+  void _openSubscriptionFromDeepLink(PaymentReturnEvent e) {
+    // Defer one frame so the Navigator is mounted on cold-start.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final nav = Navigator.of(context, rootNavigator: true);
+      // Don't stack duplicate Subscription routes if the user is
+      // already on it (e.g. they kicked off checkout, returned via
+      // universal link, paid, returned again).
+      nav.popUntil((r) => r.isFirst);
+      nav.push(MaterialPageRoute(builder: (_) => const SubscriptionScreen()));
+      if (!e.success) {
+        // User cancelled — surface a quiet hint instead of nothing.
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Checkout cancelled. You can pick a different method.'),
+          duration: Duration(seconds: 3),
+        ));
+      }
     });
   }
 

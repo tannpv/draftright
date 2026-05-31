@@ -1,0 +1,24 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["Y8NWQK9BZJ.com.draftright.draftrightMobile.v2"],
+        "components": [
+          {
+            "/": "/payment/success",
+            "comment": "Open the app on successful checkout"
+          },
+          {
+            "/": "/payment/success?*",
+            "?": { "ref": "?*" },
+            "comment": "Same with the reference_code query"
+          },
+          {
+            "/": "/payment/cancel",
+            "comment": "Open the app when the user cancels checkout"
+          }
+        ]
+      }
+    ]
+  }
+}
