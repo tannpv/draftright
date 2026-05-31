@@ -10,6 +10,7 @@ import { UsageModule } from '../usage/usage.module';
 import { AiProvidersModule } from '../ai-providers/ai-providers.module';
 import { AuthModule } from '../auth/auth.module';
 import { MetricsModule } from '../common/metrics/metrics.module';
+import { RedisModule } from '../common/redis/redis.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { MetricsModule } from '../common/metrics/metrics.module';
     AiProvidersModule,
     AuthModule,
     MetricsModule,
+    RedisModule,
   ],
   controllers: [RewriteController],
   providers: [RewriteService, RewriteCacheService, RewriteLogService],
