@@ -1,21 +1,14 @@
-import { ConfigService } from '@nestjs/config';
 import { FeatureFlagsService } from './feature-flags.service';
+import { makeConfigStub } from '../../test/helpers/config-stub';
 
 /**
- * A minimal stand-in for ConfigService that returns the value of a
- * single env-keyed slot. Keeps the test focused on FeatureFlagsService
- * logic without spinning up @nestjs/testing.
+ * Typed ConfigService stub keeps the unit test honest: missing keys
+ * fail loudly instead of returning undefined.
  */
 function makeService(ramp: number): FeatureFlagsService {
-  // Sat-`any` because the strict<true> ConfigService overload requires
-  // the full inferred env shape — we only need one key here.
-  const fakeCfg: any = {
-    get<T>(key: string): T {
-      if (key === 'GO_BACKEND_RAMP_PERCENT') return ramp as unknown as T;
-      throw new Error(`unexpected key: ${key}`);
-    },
-  };
-  return new FeatureFlagsService(fakeCfg);
+  return new FeatureFlagsService(
+    makeConfigStub({ GO_BACKEND_RAMP_PERCENT: ramp }),
+  );
 }
 
 describe('FeatureFlagsService', () => {
