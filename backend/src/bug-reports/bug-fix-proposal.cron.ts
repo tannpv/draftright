@@ -1,6 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { BugReportsService } from './bug-reports.service';
+import { EnvSchema } from '../config/env.schema';
 
 /**
  * Hourly cron that asks the configured AI provider to propose triage
@@ -19,12 +21,17 @@ import { BugReportsService } from './bug-reports.service';
 export class BugFixProposalCron {
   private readonly logger = new Logger(BugFixProposalCron.name);
 
-  constructor(private readonly bugs: BugReportsService) {}
+  constructor(
+    private readonly bugs: BugReportsService,
+    private readonly cfg: ConfigService<EnvSchema, true>,
+  ) {}
 
   @Cron(CronExpression.EVERY_HOUR)
   async run(): Promise<void> {
-    if (process.env.DISABLE_FIX_PROPOSAL_CRON === '1') {
-      this.logger.debug('BugFixProposalCron skipped (DISABLE_FIX_PROPOSAL_CRON=1)');
+    // Standard S14 — env reads go through typed ConfigService.
+    const disabled = this.cfg.get('DISABLE_FIX_PROPOSAL_CRON', { infer: true });
+    if (disabled === '1' || disabled === 'true') {
+      this.logger.debug('BugFixProposalCron skipped (DISABLE_FIX_PROPOSAL_CRON set)');
       return;
     }
 
