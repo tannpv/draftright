@@ -2,8 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:draftright_mobile/services/payment/checkout_result.dart';
 import 'package:draftright_mobile/services/payment/payment_method.dart';
+import 'package:draftright_mobile/services/payment/payment_status.dart';
 import 'package:draftright_mobile/services/payment/widgets/bank_transfer_sheet.dart';
 import 'package:draftright_mobile/services/payment/widgets/qr_payment_sheet.dart';
+
+/// Callback supplied to async-confirmation handlers so they can ask
+/// the PaymentService to poll `/payment/status/:ref`.  Decoupling
+/// handlers from PaymentService keeps them trivially testable.
+typedef PaymentStatusWatcher = Stream<PaymentStatusUpdate> Function(String referenceCode);
 
 /// Post-checkout UX for one [PaymentMethodKind].  Implementations own
 /// everything that happens after the backend has issued a checkout —
@@ -53,10 +59,12 @@ class RedirectPaymentHandler implements PaymentHandler {
   }
 }
 
-/// Shows the VietQR bottom-sheet.  Server-side webhook auto-confirms
-/// the payment; no client polling required (SubscriptionScreen
-/// refreshes on app resume).
+/// Shows the VietQR bottom-sheet with a foreground status poller so
+/// the user sees "Confirmed ✓" the moment the SePay webhook lands.
 class QrPaymentHandler implements PaymentHandler {
+  final PaymentStatusWatcher? watcher;
+  QrPaymentHandler({this.watcher});
+
   @override
   PaymentMethodKind get kind => PaymentMethodKind.vietqr;
 
@@ -67,16 +75,21 @@ class QrPaymentHandler implements PaymentHandler {
         'QrPaymentHandler.handle expected QrCheckout but got ${result.runtimeType}',
       );
     }
+    final statusStream = watcher?.call(result.referenceCode);
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (_) => QrPaymentSheet(checkout: result),
+      builder: (_) => QrPaymentSheet(checkout: result, statusStream: statusStream),
     );
   }
 }
 
-/// Shows the bank-transfer bottom-sheet with copyable fields.
+/// Shows the bank-transfer bottom-sheet with copyable fields and a
+/// foreground status poller.
 class BankTransferPaymentHandler implements PaymentHandler {
+  final PaymentStatusWatcher? watcher;
+  BankTransferPaymentHandler({this.watcher});
+
   @override
   PaymentMethodKind get kind => PaymentMethodKind.bankTransfer;
 
@@ -87,10 +100,11 @@ class BankTransferPaymentHandler implements PaymentHandler {
         'BankTransferPaymentHandler.handle expected BankTransferCheckout but got ${result.runtimeType}',
       );
     }
+    final statusStream = watcher?.call(result.referenceCode);
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (_) => BankTransferSheet(checkout: result),
+      builder: (_) => BankTransferSheet(checkout: result, statusStream: statusStream),
     );
   }
 }
