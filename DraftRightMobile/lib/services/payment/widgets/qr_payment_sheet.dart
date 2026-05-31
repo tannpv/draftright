@@ -1,18 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:draftright_mobile/services/payment/checkout_result.dart';
+import 'package:draftright_mobile/services/payment/payment_status.dart';
+import 'package:draftright_mobile/services/payment/widgets/payment_status_banner.dart';
 
 /// Bottom-sheet shown for VietQR checkout.  Renders the QR image and
 /// (when the backend includes them) the manual-transfer fallback
 /// fields so users on PCs / phones without a camera can still pay.
 ///
-/// Auto-confirmation happens server-side via the SePay webhook; this
-/// widget doesn't need to call the backend itself.  The
-/// SubscriptionScreen's `AppLifecycleState.resumed` listener picks up
-/// the new plan when the user comes back.
+/// When [statusStream] is provided the sheet also shows a live status
+/// banner; when the SePay webhook activates the payment the banner
+/// turns green and the sheet auto-dismisses.
 class QrPaymentSheet extends StatelessWidget {
   final QrCheckout checkout;
-  const QrPaymentSheet({super.key, required this.checkout});
+  final Stream<PaymentStatusUpdate>? statusStream;
+  const QrPaymentSheet({super.key, required this.checkout, this.statusStream});
 
   @override
   Widget build(BuildContext context) {
@@ -36,6 +38,8 @@ class QrPaymentSheet extends StatelessWidget {
               'Scan to pay',
               style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
             ),
+            const SizedBox(height: 12),
+            PaymentStatusBanner(stream: statusStream),
             const SizedBox(height: 8),
             Text(
               'Open your banking app and scan this QR code. '
