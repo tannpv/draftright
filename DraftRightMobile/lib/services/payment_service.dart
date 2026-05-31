@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:draftright_mobile/services/backend_client.dart';
 import 'package:draftright_mobile/services/logger_service.dart';
 import 'package:draftright_mobile/services/payment/payment_handler.dart';
@@ -115,6 +116,26 @@ class PaymentService {
       referenceCode: referenceCode,
       status: PaymentStatus.expired,
     );
+  }
+
+  /// Open the Lemon Squeezy Customer Portal in an in-app browser so
+  /// the user can cancel, change plan, or update their card.  The
+  /// backend mints a one-shot URL per request; we open it in the
+  /// same SFSafariViewController / Chrome Custom Tab used for
+  /// checkout to keep the UX consistent.
+  ///
+  /// Throws if the user has no LS subscription, the backend isn't
+  /// configured, or the browser refuses to launch.  Callers should
+  /// surface the error in a SnackBar.
+  Future<void> openCustomerPortal() async {
+    final url = await backend.getCustomerPortalUrl();
+    final launched = await launchUrl(
+      Uri.parse(url),
+      mode: LaunchMode.inAppBrowserView,
+    );
+    if (!launched) {
+      throw Exception('Could not open the customer portal');
+    }
   }
 
   /// Fetch the public plan catalog and return the Pro-tier plan id
