@@ -1,66 +1,92 @@
+import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter/material.dart';
 import 'package:draftright_mobile/services/backend_client.dart';
 import 'package:draftright_mobile/services/logger_service.dart';
+import 'package:draftright_mobile/services/payment/payment_handler.dart';
+import 'package:draftright_mobile/services/payment/payment_method.dart';
 
-/// Coordinates the "Upgrade to Pro" flow.
+/// Orchestrates upgrade-to-Pro across every payment method the backend
+/// advertises.
 ///
-/// Pattern (intentionally minimal):
-///   1. Fetch /plans, pick the first Pro-tier plan (paid, monthly).
-///   2. POST /payment/checkout with the plan id + method=lemonsqueezy.
-///   3. Launch the returned URL in `LaunchMode.inAppBrowserView`, which
-///      maps to SFSafariViewController on iOS and Chrome Custom Tab on
-///      Android — both share OS browser cookies + support Apple Pay /
-///      Google Pay automatically. No webview embedded.
-///
-/// The caller (SubscriptionScreen) is responsible for refreshing
-/// subscription state when the user returns to the app — the
-/// payment service has no opinion on that; webhook activation may
-/// land before OR after the user comes back.
+/// **Why a service + handler map instead of a switch:**
+///   - Mirrors backend strategy pattern (one strategy per method).
+///   - UI calls one method (`upgradeWith`) — never branches on method
+///     itself.
+///   - Adding Momo, NFC, or PayPal = create `MomoHandler`, drop into
+///     the map.  No edits anywhere else.
+///   - Handlers are injectable so widget tests stub them.
 class PaymentService {
   final BackendClient backend;
+  final Map<PaymentMethodKind, PaymentHandler> _handlers;
 
-  PaymentService(this.backend);
+  PaymentService(
+    this.backend, {
+    Map<PaymentMethodKind, PaymentHandler>? handlers,
+  }) : _handlers = handlers ?? _defaultHandlers();
 
-  /// Returns the hosted-checkout URL for upgrading the current user to
-  /// Pro via Lemon Squeezy.  Throws on any backend error so the caller
-  /// can surface a SnackBar.
-  Future<String> createProCheckoutUrl() async {
-    final plans = await backend.listPlans();
-    final pro = _pickProPlan(plans);
-    if (pro == null) {
-      throw Exception('Could not find a Pro plan in the catalog');
-    }
-    final planId = (pro['id'] ?? '').toString();
-    if (planId.isEmpty) {
-      throw Exception('Pro plan row is missing an id');
-    }
-    return backend.createCheckout(planId: planId);
+  /// Default handler wiring — one entry per [PaymentMethodKind] this
+  /// client understands.  Tests can pass [handlers] to override.
+  static Map<PaymentMethodKind, PaymentHandler> _defaultHandlers() => {
+        PaymentMethodKind.lemonsqueezy: const RedirectPaymentHandler(PaymentMethodKind.lemonsqueezy),
+        PaymentMethodKind.stripe:       const RedirectPaymentHandler(PaymentMethodKind.stripe),
+        PaymentMethodKind.paypal:       const RedirectPaymentHandler(PaymentMethodKind.paypal),
+        PaymentMethodKind.vietqr:       QrPaymentHandler(),
+        PaymentMethodKind.bankTransfer: BankTransferPaymentHandler(),
+      };
+
+  /// Backend-enabled methods filtered for platform-policy reasons.
+  ///
+  /// Apple App Store Guideline 3.1.1 forbids charging for digital
+  /// goods through non-IAP rails INSIDE the iOS app.  Lemon Squeezy
+  /// (Merchant-of-Record) and external-browser launches are accepted;
+  /// direct Stripe checkout is not, so we drop it on iOS.  Android +
+  /// other platforms show everything the backend enables.
+  Future<List<PaymentMethodKind>> listAvailableMethods() async {
+    final raw = await backend.listPaymentMethods();
+    return raw.where(_isAllowedOnThisPlatform).toList();
   }
 
-  /// Launches the Pro upgrade flow.  Returns true when the OS reported
-  /// the launch succeeded (browser opened); false otherwise so the UI
-  /// can fall back to a "visit draftright.info" message.
-  Future<bool> launchUpgrade() async {
-    try {
-      final url = await createProCheckoutUrl();
-      final uri = Uri.parse(url);
-      // inAppBrowserView = SFSafariViewController on iOS, Chrome
-      // Custom Tab on Android. Both inherit OS browser cookies, both
-      // render Apple Pay (iOS) / Google Pay (Android) automatically.
-      // Apple's review classifies this as "external browser" so the
-      // 3.1.1 IAP rule doesn't bite.
-      final launched = await launchUrl(
-        uri,
-        mode: LaunchMode.inAppBrowserView,
-      );
-      DRLogger.log('Upgrade checkout launched: $launched', category: 'PaymentService');
-      return launched;
-    } catch (e, st) {
-      DRLogger.error('Upgrade launch failed: $e', category: 'PaymentService');
-      if (kDebugMode) debugPrint(st.toString());
-      rethrow;
+  bool _isAllowedOnThisPlatform(PaymentMethodKind kind) {
+    if (kind == PaymentMethodKind.stripe && _isIos) return false;
+    return true;
+  }
+
+  bool get _isIos {
+    if (kIsWeb) return false;
+    try { return Platform.isIOS; } catch (_) { return false; }
+  }
+
+  /// Run the full upgrade flow for [method]: create the checkout
+  /// server-side, then dispatch to the handler registered for that
+  /// kind.  Throws on any backend / handler error; UI surfaces a
+  /// SnackBar.
+  Future<void> upgradeWith({
+    required BuildContext context,
+    required String planId,
+    required PaymentMethodKind method,
+  }) async {
+    final handler = _handlers[method];
+    if (handler == null) {
+      throw Exception('No handler registered for $method on this platform');
     }
+    final result = await backend.createCheckout(planId: planId, method: method);
+    if (!context.mounted) return;
+    DRLogger.log('Checkout created: method=$method ref=${result.referenceCode}',
+        category: 'PaymentService');
+    await handler.handle(context, result);
+  }
+
+  /// Fetch the public plan catalog and return the Pro-tier plan id
+  /// the upgrade button should target.  Single source of truth so the
+  /// UI doesn't carry plan-picking logic.
+  Future<String> resolveProPlanId() async {
+    final plans = await backend.listPlans();
+    final pro = _pickProPlan(plans);
+    if (pro == null) throw Exception('Could not find a Pro plan in the catalog');
+    final planId = (pro['id'] ?? '').toString();
+    if (planId.isEmpty) throw Exception('Pro plan row is missing an id');
+    return planId;
   }
 
   /// Pick the first plan that looks like the paid Pro tier:

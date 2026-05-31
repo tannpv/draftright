@@ -4,6 +4,8 @@ import 'package:draftright_mobile/models/tone.dart';
 import 'package:draftright_mobile/services/api_client.dart';
 import 'package:draftright_mobile/services/auth_service.dart';
 import 'package:draftright_mobile/services/logger_service.dart';
+import 'package:draftright_mobile/services/payment/checkout_result.dart';
+import 'package:draftright_mobile/services/payment/payment_method.dart';
 
 class GrammarIssue {
   final String type;
@@ -279,37 +281,55 @@ class BackendClient {
   /// Fetch the public plan catalog. Returns raw rows so the caller can
   /// pick whichever plan (Pro monthly, Pro yearly, etc.) it wants
   /// without leaking the plan id list back to the UI layer.
+  ///
+  /// Endpoint is unauthenticated → pass no token to the shared
+  /// ApiClient. Routes through the same client every other call uses
+  /// so timeouts, error envelope decoding, and request-id propagation
+  /// stay consistent.
   Future<List<Map<String, dynamic>>> listPlans() async {
-    // /plans is unauthenticated; pass no token.
-    final rawUri = Uri.parse('${_api.baseUrl}/plans');
-    final resp = await http.get(rawUri).timeout(_api.defaultTimeout);
-    if (resp.statusCode >= 400) {
-      throw Exception('Failed to load plans (HTTP ${resp.statusCode})');
-    }
-    final body = jsonDecode(resp.body);
-    if (body is List) {
-      return body.cast<Map<String, dynamic>>();
+    _api.baseUrl = _baseUrl;
+    final raw = await _api.getAny('/plans');
+    if (raw is List) {
+      return raw.cast<Map<String, dynamic>>();
     }
     return const [];
   }
 
-  /// POST /payment/checkout for the given (plan_id, method). Returns the
-  /// hosted-checkout `redirect_url` for the strategy that handled it.
-  /// Mobile clients launch it in SFSafariViewController / Chrome Custom
-  /// Tab (LaunchMode.inAppBrowserView in url_launcher).
-  Future<String> createCheckout({
+  /// Backend-advertised list of currently enabled payment methods —
+  /// the `GET /payment/methods` envelope is `{methods: [string]}`.
+  /// Wire strings unknown to this client are filtered out so older
+  /// builds keep working when the backend adds a new strategy.
+  Future<List<PaymentMethodKind>> listPaymentMethods() async {
+    _api.baseUrl = _baseUrl;
+    final data = await _api.getJson('/payment/methods');
+    final raw = (data['methods'] as List?) ?? const [];
+    return raw
+        .map((m) => PaymentMethodKind.fromWire(m.toString()))
+        .whereType<PaymentMethodKind>()
+        .toList();
+  }
+
+  /// POST /payment/checkout — returns a typed [CheckoutResult]
+  /// (redirect URL, QR image, or bank-info block, depending on the
+  /// strategy on the backend).
+  Future<CheckoutResult> createCheckout({
     required String planId,
-    String method = 'lemonsqueezy',
+    required PaymentMethodKind method,
   }) async {
     final data = await _authed((t) => _api.postJson(
           '/payment/checkout',
-          body: {'plan_id': planId, 'method': method},
+          body: {'plan_id': planId, 'method': method.wireName},
           token: t,
         ));
-    final url = data['redirect_url'] as String?;
-    if (url == null || url.isEmpty) {
-      throw Exception('Backend did not return a checkout URL');
-    }
-    return url;
+    return CheckoutResult.fromJson(data);
+  }
+
+  /// Poll `/payment/status/:ref` for async confirmation.  Used by the
+  /// VietQR / bank-transfer flows where the user pays out-of-band and
+  /// the SePay / statement-line webhook activates the subscription.
+  /// Returns the raw status envelope; caller checks `status == 'completed'`.
+  Future<Map<String, dynamic>> getPaymentStatus(String referenceCode) async {
+    _api.baseUrl = _baseUrl;
+    return _api.getJson('/payment/status/$referenceCode');
   }
 }

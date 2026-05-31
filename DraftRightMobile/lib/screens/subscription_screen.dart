@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:draftright_mobile/services/auth_service.dart';
 import 'package:draftright_mobile/services/backend_client.dart';
 import 'package:draftright_mobile/services/payment_service.dart';
+import 'package:draftright_mobile/services/payment/payment_method.dart';
 import 'package:draftright_mobile/services/settings_service.dart';
 
 class SubscriptionScreen extends StatefulWidget {
@@ -14,32 +15,46 @@ class SubscriptionScreen extends StatefulWidget {
 
 class _SubscriptionScreenState extends State<SubscriptionScreen>
     with WidgetsBindingObserver {
+  // Services constructed once in initState so we don't churn HTTP
+  // clients on every rebuild.  PaymentService wraps BackendClient
+  // and owns the handler map.
+  late final BackendClient _backend;
+  late final PaymentService _payments;
+
   SubscriptionInfo? _info;
   bool _isLoading = true;
   String? _error;
-  // True while the upgrade URL is being fetched + the browser is
-  // opening. Disables the Upgrade button so double-taps can't fire
-  // two checkout sessions.
-  bool _upgrading = false;
+
+  /// Methods the user can pick from. Null = not yet loaded.
+  List<PaymentMethodKind>? _methods;
+  Object? _methodsError;
+
+  // True while a checkout is being created + the handler is opening
+  // its UI.  Disables the buttons so double-taps don't spawn two
+  // payment intents.
+  bool _starting = false;
+  PaymentMethodKind? _startingKind;
 
   @override
   void initState() {
     super.initState();
+    final auth = context.read<AuthService>();
+    final settings = context.read<SettingsService>();
+    _backend = BackendClient(
+      auth: auth,
+      getBaseUrl: () => settings.backendUrl,
+    );
+    _payments = PaymentService(_backend);
+
     // Refresh subscription on app resume — covers the
-    // external-browser-checkout return path:
-    //   1. User taps "Upgrade" → browser opens Lemon Squeezy hosted
-    //      checkout.
-    //   2. User pays; LS fires the webhook to our backend; backend
-    //      activates the subscription.
-    //   3. User comes back to the app (manually for now; deep-link
-    //      Universal Link / App Link is a follow-up).
-    //   4. AppLifecycleState.resumed fires → we re-fetch /subscription.
-    //
-    // If the webhook hasn't landed yet (lag of a second or two), the
-    // user can still pull-to-refresh; the AppBar refresh button also
-    // calls _load.
+    // external-browser return path:
+    //   1. User taps a method → handler opens browser / sheet.
+    //   2. Payment completes; backend webhook activates the plan.
+    //   3. User returns to the app.
+    //   4. AppLifecycleState.resumed → re-fetch /subscription.
     WidgetsBinding.instance.addObserver(this);
     _load();
+    _loadMethods();
   }
 
   @override
@@ -61,21 +76,34 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
       _error = null;
     });
     try {
-      final auth = context.read<AuthService>();
-      final settings = context.read<SettingsService>();
-      final client = BackendClient(
-        auth: auth,
-        getBaseUrl: () => settings.backendUrl,
-      );
-      final info = await client.getSubscription();
+      final info = await _backend.getSubscription();
+      if (!mounted) return;
       setState(() {
         _info = info;
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = e.toString().replaceFirst('Exception: ', '');
         _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _loadMethods() async {
+    try {
+      final methods = await _payments.listAvailableMethods();
+      if (!mounted) return;
+      setState(() {
+        _methods = methods;
+        _methodsError = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _methods = const [];
+        _methodsError = e;
       });
     }
   }
@@ -186,67 +214,164 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
         ),
         if (info.isFree) ...[
           const SizedBox(height: 32),
-          // "Upgrade" CTA. Wording is deliberately "Continue to website"
-          // rather than "Buy" / "Subscribe" — Apple's App Store
-          // reviewers nitpick the verb on link-out buttons even with
-          // the External Link Account entitlement.
-          FilledButton.icon(
-            onPressed: _upgrading ? null : _onUpgradeTap,
-            icon: _upgrading
-                ? const SizedBox(
-                    width: 16, height: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                  )
-                : const Icon(Icons.open_in_new),
-            label: Text(_upgrading ? 'Opening checkout…' : 'Continue to website to upgrade'),
-            style: FilledButton.styleFrom(
-              minimumSize: const Size.fromHeight(48),
-            ),
-          ),
-          const SizedBox(height: 12),
           Text(
-            'Opens a secure checkout on draftright.info. '
-            'Apple Pay / Google Pay / card all accepted. '
-            'You will return here after paying.',
-            style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+            'Upgrade to Pro',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
           ),
+          const SizedBox(height: 8),
+          Text(
+            'Pick a payment method. Your plan activates automatically once payment completes.',
+            style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+          ),
+          const SizedBox(height: 16),
+          ..._buildPaymentMethodTiles(),
         ],
       ],
     );
   }
 
-  Future<void> _onUpgradeTap() async {
-    if (_upgrading) return;
-    setState(() => _upgrading = true);
-    try {
-      final auth = context.read<AuthService>();
-      final settings = context.read<SettingsService>();
-      final backend = BackendClient(
-        auth: auth,
-        getBaseUrl: () => settings.backendUrl,
-      );
-      final payment = PaymentService(backend);
-      final launched = await payment.launchUpgrade();
-      if (!mounted) return;
-      if (!launched) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Could not open checkout. Visit draftright.info in your browser.',
-            ),
+  List<Widget> _buildPaymentMethodTiles() {
+    if (_methods == null) {
+      return [
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 16),
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      ];
+    }
+    if (_methodsError != null && (_methods?.isEmpty ?? true)) {
+      return [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: Column(
+            children: [
+              Text('Could not load payment methods.',
+                  style: TextStyle(color: Colors.red.shade700)),
+              const SizedBox(height: 8),
+              TextButton(onPressed: _loadMethods, child: const Text('Retry')),
+            ],
           ),
-        );
-      }
+        ),
+      ];
+    }
+    if (_methods!.isEmpty) {
+      return [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: Text('No payment methods are enabled yet. Please check back later.',
+              style: TextStyle(color: Colors.grey.shade700)),
+        ),
+      ];
+    }
+    return _methods!
+        .map((kind) => _PaymentMethodTile(
+              descriptor: PaymentMethodDescriptor.forKind(kind),
+              loading: _starting && _startingKind == kind,
+              disabled: _starting,
+              onTap: () => _onMethodTap(kind),
+            ))
+        .toList();
+  }
+
+  Future<void> _onMethodTap(PaymentMethodKind kind) async {
+    if (_starting) return;
+    setState(() {
+      _starting = true;
+      _startingKind = kind;
+    });
+    try {
+      final planId = await _payments.resolveProPlanId();
+      if (!mounted) return;
+      await _payments.upgradeWith(
+        context: context,
+        planId: planId,
+        method: kind,
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
       );
     } finally {
-      if (mounted) setState(() => _upgrading = false);
+      if (mounted) {
+        setState(() {
+          _starting = false;
+          _startingKind = null;
+        });
+      }
+    }
+  }
+}
+
+class _PaymentMethodTile extends StatelessWidget {
+  final PaymentMethodDescriptor? descriptor;
+  final bool loading;
+  final bool disabled;
+  final VoidCallback onTap;
+
+  const _PaymentMethodTile({
+    required this.descriptor,
+    required this.loading,
+    required this.disabled,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (descriptor == null) return const SizedBox.shrink();
+    final d = descriptor!;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Material(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: disabled ? null : onTap,
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey.shade200),
+            ),
+            child: Row(
+              children: [
+                Icon(_iconFor(d.kind), size: 28, color: Colors.blue),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(d.displayName,
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                      const SizedBox(height: 2),
+                      Text(d.description,
+                          style: TextStyle(color: Colors.grey.shade700, fontSize: 12)),
+                    ],
+                  ),
+                ),
+                if (loading)
+                  const SizedBox(
+                    width: 18, height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                else
+                  const Icon(Icons.chevron_right, color: Colors.grey),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  IconData _iconFor(PaymentMethodKind kind) {
+    switch (kind) {
+      case PaymentMethodKind.lemonsqueezy: return Icons.credit_card;
+      case PaymentMethodKind.stripe:       return Icons.credit_card;
+      case PaymentMethodKind.paypal:       return Icons.account_balance_wallet;
+      case PaymentMethodKind.vietqr:       return Icons.qr_code_2;
+      case PaymentMethodKind.bankTransfer: return Icons.account_balance;
     }
   }
 }
