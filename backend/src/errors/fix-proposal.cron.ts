@@ -1,9 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
 import { ErrorReport } from './entities/error-report.entity';
 import { ErrorsService } from './errors.service';
+import { EnvSchema } from '../config/env.schema';
 
 /**
  * Hourly cron that asks the configured AI provider to propose fixes
@@ -27,12 +29,15 @@ export class FixProposalCron {
     @InjectRepository(ErrorReport)
     private readonly repo: Repository<ErrorReport>,
     private readonly errors: ErrorsService,
+    private readonly cfg: ConfigService<EnvSchema, true>,
   ) {}
 
   @Cron(CronExpression.EVERY_HOUR)
   async run(): Promise<void> {
-    if (process.env.DISABLE_FIX_PROPOSAL_CRON === '1') {
-      this.logger.debug('FixProposalCron skipped (DISABLE_FIX_PROPOSAL_CRON=1)');
+    // Standard S14 — env reads go through the typed ConfigService.
+    const disabled = this.cfg.get('DISABLE_FIX_PROPOSAL_CRON', { infer: true });
+    if (disabled === '1' || disabled === 'true') {
+      this.logger.debug('FixProposalCron skipped (DISABLE_FIX_PROPOSAL_CRON set)');
       return;
     }
 
