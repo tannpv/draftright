@@ -275,4 +275,41 @@ class BackendClient {
     final data = await _authed((t) => _api.getJson('/subscription', token: t));
     return SubscriptionInfo.fromJson(data);
   }
+
+  /// Fetch the public plan catalog. Returns raw rows so the caller can
+  /// pick whichever plan (Pro monthly, Pro yearly, etc.) it wants
+  /// without leaking the plan id list back to the UI layer.
+  Future<List<Map<String, dynamic>>> listPlans() async {
+    // /plans is unauthenticated; pass no token.
+    final rawUri = Uri.parse('${_api.baseUrl}/plans');
+    final resp = await http.get(rawUri).timeout(_api.defaultTimeout);
+    if (resp.statusCode >= 400) {
+      throw Exception('Failed to load plans (HTTP ${resp.statusCode})');
+    }
+    final body = jsonDecode(resp.body);
+    if (body is List) {
+      return body.cast<Map<String, dynamic>>();
+    }
+    return const [];
+  }
+
+  /// POST /payment/checkout for the given (plan_id, method). Returns the
+  /// hosted-checkout `redirect_url` for the strategy that handled it.
+  /// Mobile clients launch it in SFSafariViewController / Chrome Custom
+  /// Tab (LaunchMode.inAppBrowserView in url_launcher).
+  Future<String> createCheckout({
+    required String planId,
+    String method = 'lemonsqueezy',
+  }) async {
+    final data = await _authed((t) => _api.postJson(
+          '/payment/checkout',
+          body: {'plan_id': planId, 'method': method},
+          token: t,
+        ));
+    final url = data['redirect_url'] as String?;
+    if (url == null || url.isEmpty) {
+      throw Exception('Backend did not return a checkout URL');
+    }
+    return url;
+  }
 }
