@@ -332,4 +332,19 @@ class BackendClient {
     _api.baseUrl = _baseUrl;
     return _api.getJson('/payment/status/$referenceCode');
   }
+
+  /// One-shot URL to the Lemon Squeezy Customer Portal — lets the
+  /// user cancel, change plan, update card.  Backend resolves it via
+  /// the LS API; mobile just opens the returned URL in an in-app
+  /// browser.  Throws if the active subscription isn't LS-sourced
+  /// (Stripe / VietQR have their own management flows; not wired
+  /// here yet).
+  Future<String> getCustomerPortalUrl() async {
+    final data = await _authed((t) => _api.getJson('/lemonsqueezy/portal', token: t));
+    final url = data['url'] as String?;
+    if (url == null || url.isEmpty) {
+      throw Exception('Backend did not return a portal URL');
+    }
+    return url;
+  }
 }
