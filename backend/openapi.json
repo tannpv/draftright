@@ -1,10 +1,9 @@
 {
   "openapi": "3.0.0",
   "paths": {
-    "/health": {
+    "/admin/admin-users": {
       "get": {
-        "operationId": "HealthController_getHealth",
-        "summary": "Health check with app identity",
+        "operationId": "AdminController_listAdminUsers",
         "parameters": [],
         "responses": {
           "200": {
@@ -12,242 +11,7 @@
           }
         },
         "tags": [
-          "health"
-        ]
-      }
-    },
-    "/plans": {
-      "get": {
-        "operationId": "PlansController_list",
-        "summary": "List active subscription plans (public)",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "plans"
-        ]
-      }
-    },
-    "/subscription": {
-      "get": {
-        "operationId": "SubscriptionsController_getMySubscription",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "subscription"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/subscription/verify-receipt": {
-      "post": {
-        "operationId": "SubscriptionsController_verifyReceipt",
-        "parameters": [],
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "subscription"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/auth/register": {
-      "post": {
-        "operationId": "AuthController_register",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RegisterDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "auth"
-        ]
-      }
-    },
-    "/auth/login": {
-      "post": {
-        "operationId": "AuthController_login",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/LoginDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "auth"
-        ]
-      }
-    },
-    "/auth/refresh": {
-      "post": {
-        "operationId": "AuthController_refresh",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "auth"
-        ]
-      }
-    },
-    "/auth/verify-email": {
-      "post": {
-        "operationId": "AuthController_verifyEmail",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "auth"
-        ]
-      }
-    },
-    "/auth/resend-verification": {
-      "post": {
-        "operationId": "AuthController_resendVerification",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "auth"
-        ]
-      }
-    },
-    "/auth/social": {
-      "post": {
-        "operationId": "AuthController_socialLogin",
-        "parameters": [],
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "auth"
-        ]
-      }
-    },
-    "/auth/change-password": {
-      "post": {
-        "operationId": "AuthController_changePassword",
-        "parameters": [],
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "auth"
-        ]
-      }
-    },
-    "/auth/me": {
-      "get": {
-        "operationId": "AuthController_me",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "auth"
-        ]
-      }
-    },
-    "/auth/account": {
-      "delete": {
-        "operationId": "AuthController_deleteAccount",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "auth"
-        ]
-      },
-      "get": {
-        "operationId": "AuthController_account",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "auth"
-        ]
-      }
-    },
-    "/auth/extension-tokens": {
-      "post": {
-        "operationId": "ExtensionTokenController_mint",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/MintExtensionTokenDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "auth"
+          "admin"
         ],
         "security": [
           {
@@ -255,16 +19,16 @@
           }
         ]
       },
-      "get": {
-        "operationId": "ExtensionTokenController_list",
+      "post": {
+        "operationId": "AdminController_createAdminUser",
         "parameters": [],
         "responses": {
-          "200": {
+          "201": {
             "description": ""
           }
         },
         "tags": [
-          "auth"
+          "admin"
         ],
         "security": [
           {
@@ -273,9 +37,9 @@
         ]
       }
     },
-    "/auth/extension-tokens/{id}": {
-      "delete": {
-        "operationId": "ExtensionTokenController_revoke",
+    "/admin/admin-users/{id}": {
+      "patch": {
+        "operationId": "AdminController_updateAdminUser",
         "parameters": [
           {
             "name": "id",
@@ -287,12 +51,38 @@
           }
         ],
         "responses": {
-          "204": {
+          "200": {
             "description": ""
           }
         },
         "tags": [
-          "auth"
+          "admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "AdminController_deleteAdminUser",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin"
         ],
         "security": [
           {
@@ -301,27 +91,34 @@
         ]
       }
     },
-    "/rewrite": {
-      "post": {
-        "operationId": "RewriteController_rewrite",
+    "/admin/ai-providers": {
+      "get": {
+        "operationId": "AdminController_listProviders",
         "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RewriteDto"
-              }
-            }
+        "responses": {
+          "200": {
+            "description": ""
           }
         },
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "post": {
+        "operationId": "AdminController_createProvider",
+        "parameters": [],
         "responses": {
           "201": {
             "description": ""
           }
         },
         "tags": [
-          "rewrite"
+          "admin"
         ],
         "security": [
           {
@@ -330,27 +127,165 @@
         ]
       }
     },
-    "/rewrite/trial": {
-      "post": {
-        "operationId": "RewriteController_trialRewrite",
+    "/admin/ai-providers/paginated": {
+      "get": {
+        "operationId": "AdminController_listProvidersPaginated",
         "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RewriteDto"
-              }
-            }
+        "responses": {
+          "200": {
+            "description": ""
           }
         },
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/admin/ai-providers/{id}": {
+      "patch": {
+        "operationId": "AdminController_updateProvider",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "AdminController_deleteProvider",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/admin/ai-providers/{id}/test": {
+      "post": {
+        "operationId": "AdminController_testProvider",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "201": {
             "description": ""
           }
         },
         "tags": [
-          "rewrite"
+          "admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/admin/analytics": {
+      "get": {
+        "operationId": "AdminController_getAnalytics",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/admin/auth/change-password": {
+      "post": {
+        "operationId": "AdminAuthController_changePassword",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin-auth"
+        ]
+      }
+    },
+    "/admin/auth/login": {
+      "post": {
+        "operationId": "AdminAuthController_login",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin-auth"
+        ]
+      }
+    },
+    "/admin/auth/me": {
+      "get": {
+        "operationId": "AdminAuthController_getProfile",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin-auth"
         ]
       }
     },
@@ -453,34 +388,6 @@
         ]
       }
     },
-    "/admin/bug-reports/{id}/screenshot": {
-      "get": {
-        "operationId": "AdminController_getBugReportScreenshot",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "admin"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
     "/admin/bug-reports/{id}/fix-proposal": {
       "post": {
         "operationId": "AdminController_suggestBugFix",
@@ -509,132 +416,9 @@
         ]
       }
     },
-    "/admin/inbox/counts": {
+    "/admin/bug-reports/{id}/screenshot": {
       "get": {
-        "operationId": "AdminController_inboxCounts",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "admin"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/admin/inbox": {
-      "get": {
-        "operationId": "AdminController_listInbox",
-        "parameters": [
-          {
-            "name": "kind",
-            "required": true,
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "status",
-            "required": true,
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "limit",
-            "required": true,
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "admin"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/admin/errors": {
-      "get": {
-        "operationId": "AdminController_listErrors",
-        "parameters": [
-          {
-            "name": "platform",
-            "required": true,
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "status",
-            "required": true,
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "severity",
-            "required": true,
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "limit",
-            "required": true,
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "offset",
-            "required": true,
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "admin"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/admin/errors/{id}": {
-      "get": {
-        "operationId": "AdminController_getError",
+        "operationId": "AdminController_getBugReportScreenshot",
         "parameters": [
           {
             "name": "id",
@@ -647,196 +431,6 @@
         ],
         "responses": {
           "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "admin"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      },
-      "patch": {
-        "operationId": "AdminController_updateErrorStatus",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "admin"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      },
-      "delete": {
-        "operationId": "AdminController_deleteErrorReport",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "admin"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/admin/errors/{id}/suggest-fix": {
-      "post": {
-        "operationId": "AdminController_suggestFix",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "admin"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/admin/errors/run-ai-cron": {
-      "post": {
-        "operationId": "AdminController_runFixProposalCron",
-        "parameters": [],
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "admin"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/admin/releases": {
-      "get": {
-        "operationId": "AdminController_listReleases",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "admin"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      },
-      "post": {
-        "operationId": "AdminController_upsertRelease",
-        "parameters": [],
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "admin"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/admin/releases/{platform}/{channel}": {
-      "delete": {
-        "operationId": "AdminController_deleteRelease",
-        "parameters": [
-          {
-            "name": "platform",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "channel",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "admin"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/admin/release-policies": {
-      "post": {
-        "operationId": "AdminController_upsertPolicy",
-        "parameters": [],
-        "responses": {
-          "201": {
             "description": ""
           }
         },
@@ -970,6 +564,580 @@
         ]
       }
     },
+    "/admin/errors": {
+      "get": {
+        "operationId": "AdminController_listErrors",
+        "parameters": [
+          {
+            "name": "platform",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "severity",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/admin/errors/run-ai-cron": {
+      "post": {
+        "operationId": "AdminController_runFixProposalCron",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/admin/errors/{id}": {
+      "get": {
+        "operationId": "AdminController_getError",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "AdminController_updateErrorStatus",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "AdminController_deleteErrorReport",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/admin/errors/{id}/suggest-fix": {
+      "post": {
+        "operationId": "AdminController_suggestFix",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/admin/inbox": {
+      "get": {
+        "operationId": "AdminController_listInbox",
+        "parameters": [
+          {
+            "name": "kind",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/admin/inbox/counts": {
+      "get": {
+        "operationId": "AdminController_inboxCounts",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/admin/payments": {
+      "get": {
+        "operationId": "AdminController_listPayments",
+        "parameters": [
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "search",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort_by",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort_order",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/admin/payments/stats": {
+      "get": {
+        "operationId": "AdminController_paymentStats",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/admin/payments/{id}/confirm": {
+      "post": {
+        "operationId": "AdminController_confirmPayment",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/admin/payments/{id}/refund": {
+      "post": {
+        "operationId": "AdminController_refundPayment",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/admin/plans": {
+      "get": {
+        "operationId": "AdminController_listPlans",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "post": {
+        "operationId": "AdminController_createPlan",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/admin/plans/{id}": {
+      "patch": {
+        "operationId": "AdminController_updatePlan",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "AdminController_deletePlan",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/admin/release-policies": {
+      "post": {
+        "operationId": "AdminController_upsertPolicy",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/admin/releases": {
+      "get": {
+        "operationId": "AdminController_listReleases",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "post": {
+        "operationId": "AdminController_upsertRelease",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/admin/releases/{platform}/{channel}": {
+      "delete": {
+        "operationId": "AdminController_deleteRelease",
+        "parameters": [
+          {
+            "name": "platform",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "channel",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/admin/settings": {
       "get": {
         "operationId": "AdminController_getSettings",
@@ -1029,6 +1197,181 @@
       "get": {
         "operationId": "AdminController_getStats",
         "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/admin/subscriptions/grant": {
+      "post": {
+        "operationId": "AdminController_grantSubscription",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GrantSubscriptionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/admin/training-data": {
+      "get": {
+        "operationId": "AdminController_listTrainingData",
+        "parameters": [
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/admin/training-data/export": {
+      "get": {
+        "operationId": "AdminController_exportTrainingData",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/admin/training-data/stats": {
+      "get": {
+        "operationId": "AdminController_trainingDataStats",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/admin/training-data/{id}": {
+      "patch": {
+        "operationId": "AdminController_reviewTrainingData",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/admin/transactions": {
+      "get": {
+        "operationId": "AdminController_listTransactions",
+        "parameters": [
+          {
+            "name": "search",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": ""
@@ -1176,99 +1519,9 @@
         ]
       }
     },
-    "/admin/plans": {
-      "get": {
-        "operationId": "AdminController_listPlans",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "admin"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      },
-      "post": {
-        "operationId": "AdminController_createPlan",
-        "parameters": [],
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "admin"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/admin/plans/{id}": {
-      "patch": {
-        "operationId": "AdminController_updatePlan",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "admin"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      },
+    "/auth/account": {
       "delete": {
-        "operationId": "AdminController_deletePlan",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "admin"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/admin/ai-providers/paginated": {
-      "get": {
-        "operationId": "AdminController_listProvidersPaginated",
+        "operationId": "AuthController_deleteAccount",
         "parameters": [],
         "responses": {
           "200": {
@@ -1276,35 +1529,25 @@
           }
         },
         "tags": [
-          "admin"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/admin/ai-providers": {
-      "get": {
-        "operationId": "AdminController_listProviders",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "admin"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
+          "auth"
         ]
       },
+      "get": {
+        "operationId": "AuthController_account",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/change-password": {
       "post": {
-        "operationId": "AdminController_createProvider",
+        "operationId": "AuthController_changePassword",
         "parameters": [],
         "responses": {
           "201": {
@@ -1312,107 +1555,94 @@
           }
         },
         "tags": [
-          "admin"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
+          "auth"
         ]
       }
     },
-    "/admin/ai-providers/{id}": {
-      "patch": {
-        "operationId": "AdminController_updateProvider",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "admin"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      },
-      "delete": {
-        "operationId": "AdminController_deleteProvider",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "admin"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/admin/ai-providers/{id}/test": {
+    "/auth/extension-tokens": {
       "post": {
-        "operationId": "AdminController_testProvider",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "admin"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/admin/subscriptions/grant": {
-      "post": {
-        "operationId": "AdminController_grantSubscription",
+        "operationId": "ExtensionTokenController_mint",
         "parameters": [],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/GrantSubscriptionDto"
+                "$ref": "#/components/schemas/MintExtensionTokenDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "auth"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "get": {
+        "operationId": "ExtensionTokenController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "auth"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/auth/extension-tokens/{id}": {
+      "delete": {
+        "operationId": "ExtensionTokenController_revoke",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "auth"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "operationId": "AuthController_login",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginDto"
               }
             }
           }
@@ -1423,18 +1653,13 @@
           }
         },
         "tags": [
-          "admin"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
+          "auth"
         ]
       }
     },
-    "/admin/analytics": {
+    "/auth/me": {
       "get": {
-        "operationId": "AdminController_getAnalytics",
+        "operationId": "AuthController_me",
         "parameters": [],
         "responses": {
           "200": {
@@ -1442,307 +1667,13 @@
           }
         },
         "tags": [
-          "admin"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
+          "auth"
         ]
       }
     },
-    "/admin/transactions": {
-      "get": {
-        "operationId": "AdminController_listTransactions",
-        "parameters": [
-          {
-            "name": "search",
-            "required": true,
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "page",
-            "required": true,
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "limit",
-            "required": true,
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "admin"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/admin/training-data/stats": {
-      "get": {
-        "operationId": "AdminController_trainingDataStats",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "admin"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/admin/training-data": {
-      "get": {
-        "operationId": "AdminController_listTrainingData",
-        "parameters": [
-          {
-            "name": "page",
-            "required": true,
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "limit",
-            "required": true,
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "admin"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/admin/training-data/{id}": {
-      "patch": {
-        "operationId": "AdminController_reviewTrainingData",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "admin"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/admin/training-data/export": {
-      "get": {
-        "operationId": "AdminController_exportTrainingData",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "admin"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/admin/payments/stats": {
-      "get": {
-        "operationId": "AdminController_paymentStats",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "admin"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/admin/payments": {
-      "get": {
-        "operationId": "AdminController_listPayments",
-        "parameters": [
-          {
-            "name": "page",
-            "required": true,
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "limit",
-            "required": true,
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "status",
-            "required": true,
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "search",
-            "required": true,
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "sort_by",
-            "required": true,
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "sort_order",
-            "required": true,
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "admin"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/admin/payments/{id}/confirm": {
+    "/auth/refresh": {
       "post": {
-        "operationId": "AdminController_confirmPayment",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "admin"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/admin/payments/{id}/refund": {
-      "post": {
-        "operationId": "AdminController_refundPayment",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "admin"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/admin/admin-users": {
-      "get": {
-        "operationId": "AdminController_listAdminUsers",
+        "operationId": "AuthController_refresh",
         "parameters": [],
         "responses": {
           "200": {
@@ -1750,152 +1681,20 @@
           }
         },
         "tags": [
-          "admin"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
+          "auth"
         ]
-      },
+      }
+    },
+    "/auth/register": {
       "post": {
-        "operationId": "AdminController_createAdminUser",
-        "parameters": [],
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "admin"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/admin/admin-users/{id}": {
-      "patch": {
-        "operationId": "AdminController_updateAdminUser",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "admin"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      },
-      "delete": {
-        "operationId": "AdminController_deleteAdminUser",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "admin"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/admin/auth/login": {
-      "post": {
-        "operationId": "AdminAuthController_login",
-        "parameters": [],
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "admin-auth"
-        ]
-      }
-    },
-    "/admin/auth/change-password": {
-      "post": {
-        "operationId": "AdminAuthController_changePassword",
-        "parameters": [],
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "admin-auth"
-        ]
-      }
-    },
-    "/admin/auth/me": {
-      "get": {
-        "operationId": "AdminAuthController_getProfile",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "admin-auth"
-        ]
-      }
-    },
-    "/payment/methods": {
-      "get": {
-        "operationId": "PaymentController_enabledMethods",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "payment"
-        ]
-      }
-    },
-    "/payment/checkout": {
-      "post": {
-        "operationId": "PaymentController_createCheckout",
+        "operationId": "AuthController_register",
         "parameters": [],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateCheckoutDto"
+                "$ref": "#/components/schemas/RegisterDto"
               }
             }
           }
@@ -1906,41 +1705,13 @@
           }
         },
         "tags": [
-          "payment"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
+          "auth"
         ]
       }
     },
-    "/payment/status/{ref}": {
-      "get": {
-        "operationId": "PaymentController_getStatus",
-        "parameters": [
-          {
-            "name": "ref",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "payment"
-        ]
-      }
-    },
-    "/payment/history": {
-      "get": {
-        "operationId": "PaymentController_getHistory",
+    "/auth/resend-verification": {
+      "post": {
+        "operationId": "AuthController_resendVerification",
         "parameters": [],
         "responses": {
           "200": {
@@ -1948,18 +1719,13 @@
           }
         },
         "tags": [
-          "payment"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
+          "auth"
         ]
       }
     },
-    "/payment/webhook/stripe": {
+    "/auth/social": {
       "post": {
-        "operationId": "PaymentController_stripeWebhook",
+        "operationId": "AuthController_socialLogin",
         "parameters": [],
         "responses": {
           "201": {
@@ -1967,106 +1733,46 @@
           }
         },
         "tags": [
-          "payment"
+          "auth"
         ]
       }
     },
-    "/payment/webhook/vietqr": {
+    "/auth/verify-email": {
       "post": {
-        "operationId": "PaymentController_vietqrWebhook",
+        "operationId": "AuthController_verifyEmail",
         "parameters": [],
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "payment"
-        ]
-      }
-    },
-    "/payment/webhook/casso": {
-      "post": {
-        "operationId": "PaymentController_cassoWebhook",
-        "parameters": [],
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "payment"
-        ]
-      }
-    },
-    "/payment/webhook/sepay": {
-      "post": {
-        "operationId": "PaymentController_sepayWebhook",
-        "parameters": [],
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "payment"
-        ]
-      }
-    },
-    "/payment/webhook/lemonsqueezy": {
-      "post": {
-        "operationId": "PaymentController_lemonSqueezyWebhook",
-        "parameters": [],
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "payment"
-        ]
-      }
-    },
-    "/updates/latest": {
-      "get": {
-        "operationId": "UpdatesController_getLatest",
-        "summary": "Get latest app version info per platform",
-        "parameters": [
-          {
-            "name": "channel",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "enum": [
-                "direct",
-                "store"
-              ],
-              "type": "string"
-            }
-          },
-          {
-            "name": "platform",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "enum": [
-                "mac",
-                "windows",
-                "linux",
-                "android",
-                "ios"
-              ],
-              "type": "string"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": ""
           }
         },
         "tags": [
-          "updates"
+          "auth"
+        ]
+      }
+    },
+    "/bug-reports": {
+      "post": {
+        "operationId": "BugReportsController_create",
+        "summary": "Submit a user-reported bug from any client",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBugReportDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "bug-reports"
         ]
       }
     },
@@ -2095,28 +1801,32 @@
         ]
       }
     },
-    "/bug-reports": {
+    "/extract": {
       "post": {
-        "operationId": "BugReportsController_create",
-        "summary": "Submit a user-reported bug from any client",
+        "operationId": "ExtractionController_extract",
         "parameters": [],
         "requestBody": {
           "required": true,
           "content": {
-            "multipart/form-data": {
+            "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateBugReportDto"
+                "$ref": "#/components/schemas/ExtractRequestDto"
               }
             }
           }
         },
         "responses": {
-          "201": {
+          "200": {
             "description": ""
           }
         },
         "tags": [
-          "bug-reports"
+          "extraction"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
         ]
       }
     },
@@ -2182,6 +1892,21 @@
         ]
       }
     },
+    "/health": {
+      "get": {
+        "operationId": "HealthController_getHealth",
+        "summary": "Health check with app identity",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "health"
+        ]
+      }
+    },
     "/lemonsqueezy/checkout": {
       "post": {
         "operationId": "LemonsqueezyController_createCheckout",
@@ -2224,35 +1949,6 @@
         ]
       }
     },
-    "/extract": {
-      "post": {
-        "operationId": "ExtractionController_extract",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ExtractRequestDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "extraction"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
     "/metrics": {
       "get": {
         "operationId": "PrometheusController_index",
@@ -2262,6 +1958,310 @@
             "description": ""
           }
         }
+      }
+    },
+    "/payment/checkout": {
+      "post": {
+        "operationId": "PaymentController_createCheckout",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCheckoutDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "payment"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/payment/history": {
+      "get": {
+        "operationId": "PaymentController_getHistory",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "payment"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/payment/methods": {
+      "get": {
+        "operationId": "PaymentController_enabledMethods",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "payment"
+        ]
+      }
+    },
+    "/payment/status/{ref}": {
+      "get": {
+        "operationId": "PaymentController_getStatus",
+        "parameters": [
+          {
+            "name": "ref",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "payment"
+        ]
+      }
+    },
+    "/payment/webhook/casso": {
+      "post": {
+        "operationId": "PaymentController_cassoWebhook",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "payment"
+        ]
+      }
+    },
+    "/payment/webhook/lemonsqueezy": {
+      "post": {
+        "operationId": "PaymentController_lemonSqueezyWebhook",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "payment"
+        ]
+      }
+    },
+    "/payment/webhook/sepay": {
+      "post": {
+        "operationId": "PaymentController_sepayWebhook",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "payment"
+        ]
+      }
+    },
+    "/payment/webhook/stripe": {
+      "post": {
+        "operationId": "PaymentController_stripeWebhook",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "payment"
+        ]
+      }
+    },
+    "/payment/webhook/vietqr": {
+      "post": {
+        "operationId": "PaymentController_vietqrWebhook",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "payment"
+        ]
+      }
+    },
+    "/plans": {
+      "get": {
+        "operationId": "PlansController_list",
+        "summary": "List active subscription plans (public)",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "plans"
+        ]
+      }
+    },
+    "/rewrite": {
+      "post": {
+        "operationId": "RewriteController_rewrite",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RewriteDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "rewrite"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/rewrite/trial": {
+      "post": {
+        "operationId": "RewriteController_trialRewrite",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RewriteDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "rewrite"
+        ]
+      }
+    },
+    "/subscription": {
+      "get": {
+        "operationId": "SubscriptionsController_getMySubscription",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "subscription"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/subscription/verify-receipt": {
+      "post": {
+        "operationId": "SubscriptionsController_verifyReceipt",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "subscription"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/updates/latest": {
+      "get": {
+        "operationId": "UpdatesController_getLatest",
+        "summary": "Get latest app version info per platform",
+        "parameters": [
+          {
+            "name": "channel",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "direct",
+                "store"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "platform",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "mac",
+                "windows",
+                "linux",
+                "android",
+                "ios"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "updates"
+        ]
       }
     }
   },
@@ -2282,26 +2282,69 @@
       }
     },
     "schemas": {
-      "RegisterDto": {
+      "CreateBugReportDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreateCheckoutDto": {
         "type": "object",
         "properties": {
-          "email": {
+          "plan_id": {
             "type": "string",
-            "example": "user@example.com"
+            "example": "plan-uuid-here"
           },
-          "password": {
+          "method": {
             "type": "string",
-            "example": "password123"
+            "example": "vietqr",
+            "enum": [
+              "stripe",
+              "vietqr",
+              "bank_transfer",
+              "lemonsqueezy"
+            ]
           },
-          "name": {
+          "success_url": {
             "type": "string",
-            "example": "John Doe"
+            "example": "https://draftright.app/payment/success"
+          },
+          "cancel_url": {
+            "type": "string",
+            "example": "https://draftright.app/payment/cancel"
           }
         },
         "required": [
-          "email",
-          "password",
-          "name"
+          "plan_id",
+          "method"
+        ]
+      },
+      "CreateErrorReportDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreateFeedbackDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "ExtractRequestDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "GrantSubscriptionDto": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string"
+          },
+          "plan_id": {
+            "type": "string"
+          },
+          "expires_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "plan_id"
         ]
       },
       "LoginDto": {
@@ -2324,6 +2367,28 @@
       "MintExtensionTokenDto": {
         "type": "object",
         "properties": {}
+      },
+      "RegisterDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "user@example.com"
+          },
+          "password": {
+            "type": "string",
+            "example": "password123"
+          },
+          "name": {
+            "type": "string",
+            "example": "John Doe"
+          }
+        },
+        "required": [
+          "email",
+          "password",
+          "name"
+        ]
       },
       "RewriteDto": {
         "type": "object",
@@ -2377,71 +2442,6 @@
             "type": "string"
           }
         }
-      },
-      "GrantSubscriptionDto": {
-        "type": "object",
-        "properties": {
-          "user_id": {
-            "type": "string"
-          },
-          "plan_id": {
-            "type": "string"
-          },
-          "expires_at": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "user_id",
-          "plan_id"
-        ]
-      },
-      "CreateCheckoutDto": {
-        "type": "object",
-        "properties": {
-          "plan_id": {
-            "type": "string",
-            "example": "plan-uuid-here"
-          },
-          "method": {
-            "type": "string",
-            "example": "vietqr",
-            "enum": [
-              "stripe",
-              "vietqr",
-              "bank_transfer",
-              "lemonsqueezy"
-            ]
-          },
-          "success_url": {
-            "type": "string",
-            "example": "https://draftright.app/payment/success"
-          },
-          "cancel_url": {
-            "type": "string",
-            "example": "https://draftright.app/payment/cancel"
-          }
-        },
-        "required": [
-          "plan_id",
-          "method"
-        ]
-      },
-      "CreateErrorReportDto": {
-        "type": "object",
-        "properties": {}
-      },
-      "CreateBugReportDto": {
-        "type": "object",
-        "properties": {}
-      },
-      "CreateFeedbackDto": {
-        "type": "object",
-        "properties": {}
-      },
-      "ExtractRequestDto": {
-        "type": "object",
-        "properties": {}
       }
     }
   }

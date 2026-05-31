@@ -26,17 +26,29 @@
  *
  * Architecture standard S13.
  */
+import { Logger } from '@nestjs/common';
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
 import { resourceFromAttributes } from '@opentelemetry/resources';
+import { TraceIdRatioBasedSampler, ParentBasedSampler } from '@opentelemetry/sdk-trace-base';
 import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic-conventions';
 
+const logger = new Logger('Tracing');
 const endpoint = (process.env.OTEL_EXPORTER_OTLP_ENDPOINT ?? '').trim();
 
 let sdk: NodeSDK | null = null;
 
 if (endpoint) {
+  // OTEL_SAMPLE_RATIO is parsed + clamped by env.schema.ts (Zod) at
+  // boot, but tracing.ts runs BEFORE NestJS's ConfigModule. Parse
+  // defensively here too — fall back to 1.0 (every span) if missing
+  // or malformed so the metric isn't silently lost.
+  const rawRatio = parseFloat(process.env.OTEL_SAMPLE_RATIO ?? '1');
+  const sampleRatio = Number.isFinite(rawRatio) && rawRatio >= 0 && rawRatio <= 1
+    ? rawRatio
+    : 1.0;
+
   sdk = new NodeSDK({
     resource: resourceFromAttributes({
       [ATTR_SERVICE_NAME]: 'draftright-backend',
@@ -44,6 +56,13 @@ if (endpoint) {
       'deployment.environment': process.env.NODE_ENV ?? 'development',
     }),
     traceExporter: new OTLPTraceExporter({ url: `${endpoint}/v1/traces` }),
+    // ParentBased honors upstream trace context (so a span from
+    // Caddy → NestJS → Go stays in one trace); root spans use the
+    // ratio sampler.  Same setup as the Go service in
+    // internal/platform/tracing/otel.go for cross-service parity.
+    sampler: new ParentBasedSampler({
+      root: new TraceIdRatioBasedSampler(sampleRatio),
+    }),
     // Auto-instrumentation covers http, express, typeorm, ioredis,
     // pg, and others out of the box. Specific instrumentation can be
     // added per-package later as needs surface.
@@ -52,13 +71,11 @@ if (endpoint) {
 
   try {
     sdk.start();
-    // eslint-disable-next-line no-console
-    console.log(`[tracing] OTel SDK started → ${endpoint}`);
+    logger.log(`OTel SDK started → ${endpoint} (sample ratio ${sampleRatio})`);
   } catch (err) {
     // Tracing is observability, not a hard dependency. A misconfigured
     // collector must NOT crash the backend.
-    // eslint-disable-next-line no-console
-    console.error('[tracing] failed to start OTel SDK; continuing without tracing:', err);
+    logger.error('failed to start OTel SDK; continuing without tracing', err as Error);
   }
 
   // Drain on shutdown so the last few spans actually leave the

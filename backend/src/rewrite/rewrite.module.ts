@@ -9,9 +9,17 @@ import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
 import { UsageModule } from '../usage/usage.module';
 import { AiProvidersModule } from '../ai-providers/ai-providers.module';
 import { AuthModule } from '../auth/auth.module';
+import { MetricsModule } from '../common/metrics/metrics.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([RewriteLog]), SubscriptionsModule, UsageModule, AiProvidersModule, AuthModule],
+  imports: [
+    TypeOrmModule.forFeature([RewriteLog]),
+    SubscriptionsModule,
+    UsageModule,
+    AiProvidersModule,
+    AuthModule,
+    MetricsModule,
+  ],
   controllers: [RewriteController],
   providers: [RewriteService, RewriteCacheService, RewriteLogService],
   exports: [RewriteLogService],

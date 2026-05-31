@@ -1,4 +1,4 @@
-import { Global, Module } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { PrometheusModule } from '@willsoto/nestjs-prometheus';
 import {
   RewriteMetricsService,
@@ -20,7 +20,14 @@ import {
  * Global so domain modules don't need to re-import. Mirrors the Go
  * service's metrics layer for cross-backend Grafana parity.
  */
-@Global()
+/**
+ * Not @Global() — explicit imports keep DI graph greppable.  Each
+ * consuming module (today: RewriteModule) lists MetricsModule in its
+ * imports + Prometheus's PrometheusController stays mounted by virtue
+ * of being inside this module's PrometheusModule.register() (the
+ * root AppModule imports MetricsModule, which transitively mounts the
+ * /metrics route).
+ */
 @Module({
   imports: [
     PrometheusModule.register({

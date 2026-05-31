@@ -1,11 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
-import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import * as request from 'supertest';
 import { AppModule } from '../../src/app.module';
 import { AllExceptionsFilter } from '../../src/common/all-exceptions.filter';
-import { Plan, BillingPeriod } from '../../src/plans/entities/plan.entity';
+import { seedFreePlan } from './seed-helpers';
 
 /**
  * Integration coverage for the registration → login → /auth/me loop.
@@ -39,26 +37,10 @@ describe('Auth register + login + /auth/me (integration)', () => {
     app.useGlobalFilters(new AllExceptionsFilter());
     await app.init();
 
-    // Register-path attaches a free subscription, which requires a
-    // Free plan row.  Seed a minimal one — production gets this via
-    // backend/src/seed.ts; integration tests roll their own so the
-    // suite is self-contained.
-    const plansRepo: Repository<Plan> =
-      app.get(getRepositoryToken(Plan));
-    const existing = await plansRepo.findOne({
-      where: { billing_period: BillingPeriod.NONE, is_active: true },
-    });
-    if (!existing) {
-      await plansRepo.save(
-        plansRepo.create({
-          name: 'Free',
-          price_cents: 0,
-          billing_period: BillingPeriod.NONE,
-          daily_limit: 100,
-          is_active: true,
-        }),
-      );
-    }
+    // Register-path attaches a free subscription, which requires
+    // a Free plan row in the DB.  Shared helper used by every
+    // integration suite that exercises register/login flows.
+    await seedFreePlan(app);
   });
 
   afterAll(async () => {

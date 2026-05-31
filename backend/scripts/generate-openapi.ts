@@ -71,8 +71,25 @@ async function main(): Promise<void> {
       .build();
     const document = SwaggerModule.createDocument(app as any, config);
 
+    // Stable key order so module-registration order can't cause
+    // spurious drift in the checked-in spec (S26b). Paths +
+    // components.schemas are the two big map-shaped sections; sort
+    // both alphabetically.
+    const stable = {
+      ...document,
+      paths: sortKeys(document.paths as Record<string, unknown>),
+      components: document.components
+        ? {
+            ...document.components,
+            schemas: document.components.schemas
+              ? sortKeys(document.components.schemas as Record<string, unknown>)
+              : document.components.schemas,
+          }
+        : document.components,
+    };
+
     const out = resolve(__dirname, '..', 'openapi.json');
-    writeFileSync(out, JSON.stringify(document, null, 2) + '\n', 'utf-8');
+    writeFileSync(out, JSON.stringify(stable, null, 2) + '\n', 'utf-8');
     // eslint-disable-next-line no-console
     console.log(`[openapi-gen] wrote ${out}`);
 
@@ -83,6 +100,12 @@ async function main(): Promise<void> {
 
   // ioredis retry loop keeps the event loop alive — bail explicitly.
   process.exit(0);
+}
+
+function sortKeys<T extends Record<string, unknown>>(obj: T): T {
+  return Object.keys(obj)
+    .sort()
+    .reduce((acc, k) => ({ ...acc, [k]: obj[k] }), {} as T);
 }
 
 main().catch(err => {
