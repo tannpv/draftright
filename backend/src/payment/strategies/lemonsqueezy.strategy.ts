@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { createHmac, timingSafeEqual } from 'crypto';
@@ -10,6 +11,7 @@ import {
 import { BasePaymentStrategy } from './base-payment.strategy';
 import { Payment } from '../entities/payment.entity';
 import { AppSettings } from '../../admin/entities/app-settings.entity';
+import { EnvSchema } from '../../config/env.schema';
 import { websiteUrl } from '../../common/app-config';
 
 /**
@@ -40,8 +42,9 @@ export class LemonSqueezyStrategy extends BasePaymentStrategy {
 
   constructor(
     @InjectRepository(AppSettings) settingsRepo: Repository<AppSettings>,
+    cfg: ConfigService<EnvSchema, true>,
   ) {
-    super(settingsRepo);
+    super(settingsRepo, cfg);
   }
 
   private async getCredentials(): Promise<{
@@ -52,11 +55,18 @@ export class LemonSqueezyStrategy extends BasePaymentStrategy {
     variantYearly: string;
   }> {
     const s = await this.getSettings();
+    // Schema declares LEMONSQUEEZY_STORE_ID as a number for boot
+    // validation, but the wire API wants a string — coerce here.
+    const storeIdEnv = this.cfg.get('LEMONSQUEEZY_STORE_ID', { infer: true });
     return {
-      apiKey: s?.lemonsqueezy_api_key || process.env.LEMONSQUEEZY_API_KEY || '',
-      storeId: s?.lemonsqueezy_store_id || process.env.LEMONSQUEEZY_STORE_ID || '',
-      webhookSecret:
-        s?.lemonsqueezy_webhook_secret || process.env.LEMONSQUEEZY_WEBHOOK_SECRET || '',
+      apiKey: this.resolveCredential(s?.lemonsqueezy_api_key, 'LEMONSQUEEZY_API_KEY'),
+      storeId:
+        (s?.lemonsqueezy_store_id ||
+          (storeIdEnv != null ? String(storeIdEnv) : '')) || '',
+      webhookSecret: this.resolveCredential(
+        s?.lemonsqueezy_webhook_secret,
+        'LEMONSQUEEZY_WEBHOOK_SECRET',
+      ),
       variantMonthly: s?.lemonsqueezy_variant_monthly || '',
       variantYearly: s?.lemonsqueezy_variant_yearly || '',
     };
