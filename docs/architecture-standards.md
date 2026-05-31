@@ -304,6 +304,23 @@ Today:
 
 Catches data races + tests are flake-free at 10× iterations.
 
+### S26b. OpenAPI spec is checked in + drift-detected
+
+- `backend/openapi.json` (50 KB at this writing) is generated from the
+  NestJS Swagger config and committed to the repo.
+- `npm run openapi:generate` — boots an ephemeral Postgres via
+  testcontainers, builds the AppModule, dumps Swagger's document to
+  disk, exits.
+- `npm run openapi:check` — regenerates + `git diff --exit-code`
+  fails the check when a controller / DTO / decorator change drifts
+  the wire shape. Designed to gate PRs in CI; intentional API
+  changes show up as a reviewable diff in `openapi.json`.
+- Adding a new endpoint = run `npm run openapi:generate` + commit
+  the updated spec alongside the controller change. No drift = no
+  surprise.
+- Clients (admin SPA, Flutter, Swift, Windows, Linux) regenerate
+  types from this file when they want updated bindings.
+
 ## 12. Naming + path conventions
 
 ### S27. Container naming
