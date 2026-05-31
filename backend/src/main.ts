@@ -5,9 +5,11 @@ import './tracing';
 
 import { NestFactory } from '@nestjs/core';
 import { BadRequestException, Logger, ValidationPipe } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/all-exceptions.filter';
+import { EnvSchema } from './config/env.schema';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { rawBody: true });
@@ -49,7 +51,10 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);
 
-  const port = process.env.PORT || 3000;
+  // Standard S14 — env reads go through the typed ConfigService.
+  // PORT is Zod-coerced to a positive int + has a default of 3000.
+  const cfg = app.get(ConfigService<EnvSchema, true>);
+  const port = cfg.get('PORT', { infer: true });
   await app.listen(port);
   console.log(`DraftRight API running on port ${port}`);
 }
