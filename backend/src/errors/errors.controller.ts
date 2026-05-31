@@ -1,8 +1,10 @@
 import { Controller, Post, Body, Req, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { Request } from 'express';
 import { ErrorsService } from './errors.service';
+import { EnvSchema } from '../config/env.schema';
 import { CreateErrorReportDto } from './dto/create-error-report.dto';
 import { formatDisplayNumber } from '../common/display-number';
 import * as jwt from 'jsonwebtoken';
@@ -17,7 +19,10 @@ import * as jwt from 'jsonwebtoken';
 @Controller('errors')
 export class ErrorsController {
   private readonly logger = new Logger(ErrorsController.name);
-  constructor(private readonly errors: ErrorsService) {}
+  constructor(
+    private readonly errors: ErrorsService,
+    private readonly cfg: ConfigService<EnvSchema, true>,
+  ) {}
 
   // Crash reports are noisier than bug reports (an app crashlooping can fire
   // many in a row), so the cap is higher: 30/min, 300/hour per IP.
@@ -40,7 +45,7 @@ export class ErrorsController {
       try {
         const decoded = jwt.verify(
           token,
-          process.env.JWT_SECRET || 'change_me',
+          this.cfg.get('JWT_SECRET', { infer: true }),
         ) as { sub?: string; user_id?: string };
         userId = decoded.sub || decoded.user_id || null;
       } catch {
