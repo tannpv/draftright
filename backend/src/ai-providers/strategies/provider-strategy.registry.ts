@@ -8,11 +8,11 @@ import { AnthropicStrategy } from './anthropic.strategy';
  * DI token under which the array of strategies is injected. Module
  * wires it with `{ provide: PROVIDER_STRATEGIES, useFactory: (a, b, ...) => [a, b, ...] }`.
  *
- * Why a token instead of @InjectAll: NestJS doesn't have @InjectAll;
- * the canonical idiom is a useFactory returning an array. One symbol
- * keeps the wiring discoverable + grep-able.
+ * Symbol-based (not a string literal) to make accidental collisions
+ * with another module that re-uses the same string impossible.
+ * NestJS resolves both shapes; symbols are the canonical recommendation.
  */
-export const PROVIDER_STRATEGIES = 'PROVIDER_STRATEGIES';
+export const PROVIDER_STRATEGIES = Symbol('PROVIDER_STRATEGIES');
 
 /**
  * Routes a provider config to the first strategy that claims it.
