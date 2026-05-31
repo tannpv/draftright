@@ -13,6 +13,15 @@ export class RewriteCacheService implements OnModuleDestroy {
       lazyConnect: true,
       maxRetriesPerRequest: 1,
     });
+    // ioredis emits a stream of `error` events on a dead connection.
+    // Without a listener, Node treats them as unhandled and prints
+    // `[ioredis] Unhandled error event: ...` (or worse — crashes
+    // tooling that boots AppModule without Redis, e.g. openapi:generate).
+    // Cache misses already degrade gracefully via the .catch on each
+    // op below; the listener here just swallows the noise.
+    this.redis.on('error', () => {
+      /* degrade silently; per-op .catch handles actual call paths */
+    });
     this.redis.connect().catch(() => {
       // Redis unavailable — degrade gracefully
     });
