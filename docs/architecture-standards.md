@@ -175,6 +175,23 @@ Not yet implemented in code; documented as the target rotation flow.
 - NestJS: default logger today; switch to Pino with `{ timestamp, level,
   msg, request_id, ... }` shape when central log aggregation lands.
 
+### S13b. Distributed tracing via OpenTelemetry (OTLP-HTTP)
+
+- Both backends ship spans over OTLP-HTTP. Single protocol → single
+  firewall hole → single debug story.
+- Go: `internal/platform/tracing/otel.go`. Env: `OTEL_EXPORTER_OTLP_
+  ENDPOINT`, `OTEL_SAMPLE_RATIO`.
+- NestJS: `backend/src/tracing.ts` — bootstrapped as the FIRST
+  `import` in `main.ts` so `@opentelemetry/auto-instrumentations-node`
+  patches http/express/typeorm/ioredis/pg at require time. Same env
+  vars.
+- Empty `OTEL_EXPORTER_OTLP_ENDPOINT` → noop, zero overhead. Set it
+  when an OTel collector / Tempo / Jaeger backend is reachable.
+- Collector deployment is operator scope: drop a `otel-collector`
+  container into `docker-compose.yml` (or wire to a managed
+  service) and point both backends at it. Tracing is observability
+  scaffolding; never gate the business logic on it.
+
 ## 7. Configuration
 
 ### S14. Typed, validated, fail-fast at boot

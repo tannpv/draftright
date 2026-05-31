@@ -1,3 +1,8 @@
+// MUST stay first — the OTel SDK patches http/express/typeorm at
+// require time, so any module imported before this line is invisible
+// to the tracer. No-op when OTEL_EXPORTER_OTLP_ENDPOINT is unset.
+import './tracing';
+
 import { NestFactory } from '@nestjs/core';
 import { BadRequestException, Logger, ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';

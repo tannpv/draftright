@@ -101,6 +101,15 @@ export const envSchema = z.object({
   DISABLE_FIX_PROPOSAL_CRON: z
     .enum(['true', 'false', '1', '0'])
     .optional(),
+
+  // --- Observability --------------------------------------------------
+  // OTel OTLP-HTTP collector endpoint, e.g.
+  //   OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector.internal:4318
+  // Empty → no SDK started, zero overhead.  Mirrors the Go service env
+  // so both backends accept the same value.
+  OTEL_EXPORTER_OTLP_ENDPOINT: z.string().optional(),
+  // Head-based sample rate for trace export. 1.0 = every request.
+  OTEL_SAMPLE_RATIO: z.coerce.number().min(0).max(1).default(1.0),
 });
 
 /**
