@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.draftright.draftright_mobile.v2",
+      "sha256_cert_fingerprints": [
+        "C9:28:F5:D1:87:21:C8:76:84:62:47:63:13:9B:64:A2:E9:80:97:C2:9B:3B:C9:DE:62:08:C5:F8:26:C8:15:5A"
+      ]
+    }
+  }
+]

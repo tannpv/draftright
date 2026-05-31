@@ -23,6 +23,10 @@ dependencies:
   window_manager: ^0.3.0
   screen_retriever: ^0.1.0
   image_picker: ^1.2.2
+  # Universal Link / App Link listener used by the payment-return
+  # flow (LS hosted-checkout redirects to https://draftright.info/
+  # payment/success?ref=...).  Stream-based API; mirrors share_service.
+  app_links: ^6.3.0
 
 dev_dependencies:
   flutter_test:
