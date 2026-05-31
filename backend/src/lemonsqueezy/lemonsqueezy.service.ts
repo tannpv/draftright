@@ -1,10 +1,12 @@
 import { Injectable, Logger, BadRequestException, InternalServerErrorException, UnauthorizedException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 import { UsersService } from '../users/users.service';
 import { PlansService } from '../plans/plans.service';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { StoreType } from '../subscriptions/entities/subscription.entity';
 import { LS_PERIOD_MS } from '../common/app-config';
+import { EnvSchema } from '../config/env.schema';
 
 const LEMONSQUEEZY_API_BASE = 'https://api.lemonsqueezy.com/v1';
 
@@ -16,13 +18,14 @@ export class LemonsqueezyService {
     private readonly usersService: UsersService,
     private readonly plansService: PlansService,
     private readonly subscriptionsService: SubscriptionsService,
+    private readonly cfg: ConfigService<EnvSchema, true>,
   ) {}
 
   /** Build a hosted-checkout URL for the given user. Pre-fills email and embeds user_id in custom data. */
   async createCheckoutUrl(userId: string): Promise<string> {
-    const apiKey = process.env.LEMONSQUEEZY_API_KEY;
-    const storeId = process.env.LEMONSQUEEZY_STORE_ID;
-    const variantId = process.env.LEMONSQUEEZY_PRO_VARIANT_ID;
+    const apiKey = this.cfg.get('LEMONSQUEEZY_API_KEY', { infer: true });
+    const storeId = this.cfg.get('LEMONSQUEEZY_STORE_ID', { infer: true });
+    const variantId = this.cfg.get('LEMONSQUEEZY_PRO_VARIANT_ID', { infer: true });
     if (!apiKey || !storeId || !variantId) {
       throw new InternalServerErrorException('Lemon Squeezy not configured');
     }
@@ -73,7 +76,7 @@ export class LemonsqueezyService {
 
   /** Build a Customer Portal URL for managing the existing subscription. */
   async createCustomerPortalUrl(userId: string): Promise<string> {
-    const apiKey = process.env.LEMONSQUEEZY_API_KEY;
+    const apiKey = this.cfg.get('LEMONSQUEEZY_API_KEY', { infer: true });
     if (!apiKey) throw new InternalServerErrorException('Lemon Squeezy not configured');
 
     const user = await this.usersService.findById(userId);
@@ -94,7 +97,7 @@ export class LemonsqueezyService {
 
   /** Verify HMAC SHA256 signature on raw webhook body. Throws UnauthorizedException on mismatch. */
   verifyWebhookSignature(rawBody: Buffer, signature: string | undefined): void {
-    const secret = process.env.LEMONSQUEEZY_WEBHOOK_SECRET;
+    const secret = this.cfg.get('LEMONSQUEEZY_WEBHOOK_SECRET', { infer: true });
     if (!secret) {
       throw new InternalServerErrorException('Webhook secret not configured');
     }

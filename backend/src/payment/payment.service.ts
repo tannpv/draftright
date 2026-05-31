@@ -12,10 +12,12 @@ import { LemonSqueezyStrategy } from './strategies/lemonsqueezy.strategy';
 import { PlansService } from '../plans/plans.service';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { User } from '../users/entities/user.entity';
+import { ConfigService } from '@nestjs/config';
 import { AppSettings } from '../admin/entities/app-settings.entity';
 import { generatePaymentReference } from './payment-reference';
 import { EmailService } from '../email/email.service';
 import { PAYMENT_PENDING_TTL_MS } from '../common/app-config';
+import { EnvSchema } from '../config/env.schema';
 
 @Injectable()
 export class PaymentService {
@@ -36,6 +38,7 @@ export class PaymentService {
     private readonly vietqrStrategy: VietQRStrategy,
     private readonly lemonSqueezyStrategy: LemonSqueezyStrategy,
     private readonly emailService: EmailService,
+    private readonly cfg: ConfigService<EnvSchema, true>,
   ) {
     // Use the PaymentMethod enum (entities/payment.entity.ts) as the keys —
     // the same enum the DB rows use, so adding a new method only requires one
@@ -58,7 +61,8 @@ export class PaymentService {
    */
   async getEnabledMethods(): Promise<string[]> {
     const settings = await this.settingsRepo.findOne({ where: {} });
-    const raw = (settings?.payment_methods_enabled || process.env.PAYMENT_ENABLED_METHODS || DEFAULT_PAYMENT_METHOD).toLowerCase();
+    const envMethods = this.cfg.get('PAYMENT_ENABLED_METHODS', { infer: true });
+    const raw = (settings?.payment_methods_enabled || envMethods || DEFAULT_PAYMENT_METHOD).toLowerCase();
     const set = new Set(raw.split(',').map((s) => s.trim()).filter(Boolean));
     if (set.has(PaymentMethod.VIETQR)) set.add(PaymentMethod.BANK_TRANSFER);
     return [...set];
@@ -386,7 +390,7 @@ export class PaymentService {
     }
 
     const settings = await this.settingsRepo.findOne({ where: {} });
-    const secretKey = settings?.stripe_secret_key || process.env.STRIPE_SECRET_KEY;
+    const secretKey = settings?.stripe_secret_key || this.cfg.get('STRIPE_SECRET_KEY', { infer: true });
     if (!secretKey) throw new BadRequestException('Stripe secret_key is not configured');
 
     const Stripe = (await import('stripe')).default;
