@@ -1,11 +1,19 @@
 import { Controller, Get } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AppSettings } from '../admin/entities/app-settings.entity';
 
 @ApiTags('health')
 @Controller('health')
+// External monitors (Caddy probe, container healthcheck, uptime
+// services) hit /health every 10-30 s.  At the default per-IP limit
+// (200/min) a single sustained monitor would lock other consumers
+// out of /health.  Skip the throttler for liveness probes — the
+// endpoint is internally cached and DB-tolerant, so flooding it is
+// safe (also a perf-test prerequisite, 2026-05-31).
+@SkipThrottle()
 export class HealthController {
   // Clients poll /health every ~30s for liveness, so cache the log level
   // briefly to keep the endpoint a near-zero-cost read. An admin change in
