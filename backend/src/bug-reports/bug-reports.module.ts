@@ -7,11 +7,12 @@ import { BugReport } from './entities/bug-report.entity';
 import { FeatureVote } from './entities/feature-vote.entity';
 import { AiProvidersModule } from '../ai-providers/ai-providers.module';
 import { BugFixProposalCron } from './bug-fix-proposal.cron';
+import { JwtUserService } from './jwt-user.service';
 
 @Module({
   imports: [TypeOrmModule.forFeature([BugReport, FeatureVote]), AiProvidersModule],
   controllers: [BugReportsController, FeedbackController],
-  providers: [BugReportsService, BugFixProposalCron],
+  providers: [BugReportsService, BugFixProposalCron, JwtUserService],
   exports: [BugReportsService],
 })
 export class BugReportsModule {}

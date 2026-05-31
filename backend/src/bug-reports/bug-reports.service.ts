@@ -1,4 +1,5 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { randomUUID } from 'crypto';
@@ -10,14 +11,7 @@ import { FeatureVote } from './entities/feature-vote.entity';
 import { CreateFeedbackDto, TARGET_PLATFORMS } from './dto/create-feedback.dto';
 import { applyListQuery, ListQuery } from '../common/list-query';
 import { AiProvidersService } from '../ai-providers/ai-providers.service';
-
-/**
- * Root directory for bug-report screenshots on disk.
- * In production this is bind-mounted into the backend container at the
- * same path. Override via `BUG_REPORTS_DIR` for local dev or tests.
- */
-const STORAGE_ROOT =
-  process.env.BUG_REPORTS_DIR || '/var/lib/draftright/bug-reports';
+import { EnvSchema } from '../config/env.schema';
 
 const ALLOWED_STATUSES = ['new', 'reviewing', 'fix_proposed', 'resolved', 'wont_fix'];
 
@@ -30,17 +24,28 @@ interface UploadedScreenshot {
 
 @Injectable()
 export class BugReportsService {
+  /**
+   * Root directory for bug-report screenshots on disk.  In production
+   * this is bind-mounted into the backend container at the same path.
+   * Override via `BUG_REPORTS_DIR` (Zod-validated env, default
+   * `/var/lib/draftright/bug-reports`).
+   */
+  private readonly storageRoot: string;
+
   constructor(
     @InjectRepository(BugReport)
     private readonly repo: Repository<BugReport>,
     @InjectRepository(FeatureVote)
     private readonly votes: Repository<FeatureVote>,
     private readonly aiProviders: AiProvidersService,
-  ) {}
+    cfg: ConfigService<EnvSchema, true>,
+  ) {
+    this.storageRoot = cfg.get('BUG_REPORTS_DIR', { infer: true });
+  }
 
   /**
    * Create a bug report row. If `file` is provided it's written to
-   * `STORAGE_ROOT/YYYY-MM-DD/<uuid>.<ext>` and the path/filename are
+   * `<storageRoot>/YYYY-MM-DD/<uuid>.<ext>` and the path/filename are
    * stamped on the row.
    */
   async create(
@@ -62,7 +67,7 @@ export class BugReportsService {
       const ext = this.extensionFor(file.mimetype);
       const id = randomUUID();
       const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-      const dir = path.join(STORAGE_ROOT, today);
+      const dir = path.join(this.storageRoot, today);
       await fs.mkdir(dir, { recursive: true });
       const filename = `${id}${ext}`;
       const fullPath = path.join(dir, filename);
