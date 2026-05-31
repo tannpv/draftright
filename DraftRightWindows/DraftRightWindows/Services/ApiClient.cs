@@ -151,6 +151,59 @@ public sealed class ApiClient : IDisposable
         return await GetAsync<SubscriptionResponse>("/subscription");
     }
 
+    // ── Payment ─────────────────────────────────────────────
+
+    public async Task<List<PaymentMethodKind>> ListPaymentMethodsAsync()
+    {
+        DRLogger.Log("ListPaymentMethodsAsync", DRLogger.Category.API);
+        var raw = await GetAsync<PaymentMethodsResponse>("/payment/methods", autoRefresh: false);
+        var kinds = new List<PaymentMethodKind>();
+        foreach (var s in raw.Methods)
+        {
+            var k = PaymentMethodKindExtensions.FromWire(s);
+            if (k.HasValue) kinds.Add(k.Value);
+        }
+        return kinds;
+    }
+
+    /// <summary>Public plan catalog — unauthenticated, returns a JSON array.</summary>
+    public async Task<List<PlanRow>> ListPlansAsync()
+    {
+        DRLogger.Log("ListPlansAsync", DRLogger.Category.API);
+        // /plans returns a List at the root, not an object; can't go
+        // through GetAsync<T> which assumes object root.
+        using var resp = await _http.GetAsync($"{_baseUrl}/plans");
+        resp.EnsureSuccessStatusCode();
+        var body = await resp.Content.ReadAsStringAsync();
+        return JsonSerializer.Deserialize<List<PlanRow>>(body, JsonOptions) ?? new();
+    }
+
+    public async Task<CheckoutResult> CreateCheckoutAsync(string planId, PaymentMethodKind method)
+    {
+        DRLogger.Log($"CreateCheckoutAsync plan={planId} method={method.WireName()}", DRLogger.Category.API);
+        var body = new { plan_id = planId, method = method.WireName() };
+        // Use the auto-refresh wrapper but keep the raw JSON in our hands
+        // because the response is a union shape; can't bind to one DTO.
+        var json = await PostRawJsonAsync("/payment/checkout", body);
+        using var doc = JsonDocument.Parse(json);
+        return CheckoutResult.FromJson(doc.RootElement);
+    }
+
+    public async Task<PaymentStatusUpdate> GetPaymentStatusAsync(string referenceCode)
+    {
+        var raw = await GetAsync<PaymentStatusResponse>(
+            $"/payment/status/{Uri.EscapeDataString(referenceCode)}",
+            autoRefresh: false);
+        return raw.ToUpdate();
+    }
+
+    public async Task<string> GetCustomerPortalUrlAsync()
+    {
+        DRLogger.Log("GetCustomerPortalUrlAsync", DRLogger.Category.API);
+        var resp = await GetAsync<CustomerPortalResponse>("/lemonsqueezy/portal");
+        return resp.Url;
+    }
+
     // ── Health Check ────────────────────────────────────────
 
     public async Task<BackendStatus> CheckHealthAsync()
@@ -277,6 +330,55 @@ public sealed class ApiClient : IDisposable
         return await SendWithAutoRefreshAsync<T>(
             () => _http.GetAsync($"{_baseUrl}{path}"),
             autoRefresh);
+    }
+
+    /// <summary>
+    /// POSTs a JSON payload and returns the raw response body as a
+    /// string.  Used for endpoints whose JSON shape is a discriminated
+    /// union and can't be bound to one DTO (e.g. /payment/checkout).
+    /// Still honors auto-refresh on 401.
+    /// </summary>
+    private async Task<string> PostRawJsonAsync(string path, object payload, bool autoRefresh = true)
+    {
+        var json = JsonSerializer.Serialize(payload, JsonOptions);
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        HttpResponseMessage response = await SendRawAsync();
+        try
+        {
+            if (autoRefresh
+                && response.StatusCode == System.Net.HttpStatusCode.Unauthorized
+                && OnUnauthorized != null)
+            {
+                response.Dispose();
+                var refreshed = await OnUnauthorized();
+                if (!refreshed)
+                {
+                    throw new ApiException(
+                        "API 401 Unauthorized: Session expired. Please sign in again.",
+                        System.Net.HttpStatusCode.Unauthorized);
+                }
+                sw.Restart();
+                response = await SendRawAsync();
+            }
+            var body = await response.Content.ReadAsStringAsync();
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new ApiException(
+                    $"API {(int)response.StatusCode} {response.ReasonPhrase}: {body}",
+                    response.StatusCode);
+            }
+            return body;
+        }
+        finally
+        {
+            response.Dispose();
+        }
+
+        Task<HttpResponseMessage> SendRawAsync()
+        {
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+            return _http.PostAsync($"{_baseUrl}{path}", content);
+        }
     }
 
     /// <summary>

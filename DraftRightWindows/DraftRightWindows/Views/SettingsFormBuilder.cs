@@ -52,6 +52,7 @@ internal static class SettingsFormBuilder
         tabControl.TabPages.Add(BuildRewriteTab());
         tabControl.TabPages.Add(BuildTriggerTab());
         tabControl.TabPages.Add(BuildAccountTab());
+        tabControl.TabPages.Add(BuildSubscriptionTab());
         tabControl.TabPages.Add(BuildAdvancedTab());
 
         form.Controls.Add(tabControl);
@@ -535,6 +536,20 @@ internal static class SettingsFormBuilder
     {
         var tab = MakeTab("Account");
         PopulateAccountTab(tab);
+        return tab;
+    }
+
+    /// <summary>
+    /// Hosts <see cref="SubscriptionTab"/> inside a Settings TabPage so
+    /// the user can manage their plan without leaving the Settings
+    /// window.  Logic lives in the UserControl; this method is just the
+    /// wiring.
+    /// </summary>
+    private static WinForms.TabPage BuildSubscriptionTab()
+    {
+        var tab = MakeTab("Subscription");
+        tab.Padding = new WinForms.Padding(0); // SubscriptionTab handles its own padding
+        tab.Controls.Add(new SubscriptionTab());
         return tab;
     }
 
