@@ -35,6 +35,10 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
   bool _starting = false;
   PaymentMethodKind? _startingKind;
 
+  // True while we're fetching the customer-portal URL and launching
+  // the browser.  Prevents double-tap.
+  bool _openingPortal = false;
+
   @override
   void initState() {
     super.initState();
@@ -225,6 +229,27 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
           ),
           const SizedBox(height: 16),
           ..._buildPaymentMethodTiles(),
+        ] else ...[
+          // Paid plan: show the Manage button so the user can cancel,
+          // change plan, or update card.  Opens the LS Customer
+          // Portal in the same in-app browser used for checkout.
+          const SizedBox(height: 32),
+          FilledButton.tonalIcon(
+            onPressed: _openingPortal ? null : _onManageTap,
+            icon: _openingPortal
+                ? const SizedBox(
+                    width: 16, height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.settings_outlined),
+            label: Text(_openingPortal ? 'Opening…' : 'Manage subscription'),
+            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Cancel, change plan, or update your payment method.',
+            style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+          ),
         ],
       ],
     );
@@ -271,6 +296,21 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
               onTap: () => _onMethodTap(kind),
             ))
         .toList();
+  }
+
+  Future<void> _onManageTap() async {
+    if (_openingPortal) return;
+    setState(() => _openingPortal = true);
+    try {
+      await _payments.openCustomerPortal();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      );
+    } finally {
+      if (mounted) setState(() => _openingPortal = false);
+    }
   }
 
   Future<void> _onMethodTap(PaymentMethodKind kind) async {
