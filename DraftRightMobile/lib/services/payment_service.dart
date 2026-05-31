@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -5,6 +6,7 @@ import 'package:draftright_mobile/services/backend_client.dart';
 import 'package:draftright_mobile/services/logger_service.dart';
 import 'package:draftright_mobile/services/payment/payment_handler.dart';
 import 'package:draftright_mobile/services/payment/payment_method.dart';
+import 'package:draftright_mobile/services/payment/payment_status.dart';
 
 /// Orchestrates upgrade-to-Pro across every payment method the backend
 /// advertises.
@@ -23,17 +25,19 @@ class PaymentService {
   PaymentService(
     this.backend, {
     Map<PaymentMethodKind, PaymentHandler>? handlers,
-  }) : _handlers = handlers ?? _defaultHandlers();
-
-  /// Default handler wiring — one entry per [PaymentMethodKind] this
-  /// client understands.  Tests can pass [handlers] to override.
-  static Map<PaymentMethodKind, PaymentHandler> _defaultHandlers() => {
-        PaymentMethodKind.lemonsqueezy: const RedirectPaymentHandler(PaymentMethodKind.lemonsqueezy),
-        PaymentMethodKind.stripe:       const RedirectPaymentHandler(PaymentMethodKind.stripe),
-        PaymentMethodKind.paypal:       const RedirectPaymentHandler(PaymentMethodKind.paypal),
-        PaymentMethodKind.vietqr:       QrPaymentHandler(),
-        PaymentMethodKind.bankTransfer: BankTransferPaymentHandler(),
-      };
+  }) : _handlers = {} {
+    // Default wiring: async-confirmation handlers receive
+    // `watchPayment` so they can show live status inside the sheet.
+    // Tests override by passing [handlers].
+    _handlers.addAll(handlers ??
+        {
+          PaymentMethodKind.lemonsqueezy: const RedirectPaymentHandler(PaymentMethodKind.lemonsqueezy),
+          PaymentMethodKind.stripe:       const RedirectPaymentHandler(PaymentMethodKind.stripe),
+          PaymentMethodKind.paypal:       const RedirectPaymentHandler(PaymentMethodKind.paypal),
+          PaymentMethodKind.vietqr:       QrPaymentHandler(watcher: watchPayment),
+          PaymentMethodKind.bankTransfer: BankTransferPaymentHandler(watcher: watchPayment),
+        });
+  }
 
   /// Backend-enabled methods filtered for platform-policy reasons.
   ///
@@ -75,6 +79,42 @@ class PaymentService {
     DRLogger.log('Checkout created: method=$method ref=${result.referenceCode}',
         category: 'PaymentService');
     await handler.handle(context, result);
+  }
+
+  /// Foreground poller for async-confirmation methods (VietQR,
+  /// bank-transfer).  Hits `/payment/status/:ref` every [interval]
+  /// until the status is terminal (completed / failed / expired /
+  /// refunded), [timeout] elapses, or the stream subscription is
+  /// cancelled (sheet dismissed).
+  ///
+  /// Yields a [PaymentStatusUpdate] for every poll — UI can render
+  /// "Waiting…" while pending and switch to "Confirmed ✓" once the
+  /// backend webhook lands.  Transient errors are logged but don't
+  /// terminate the stream; we just keep polling.
+  Stream<PaymentStatusUpdate> watchPayment(
+    String referenceCode, {
+    Duration interval = const Duration(seconds: 3),
+    Duration timeout = const Duration(minutes: 15),
+  }) async* {
+    final deadline = DateTime.now().add(timeout);
+    while (DateTime.now().isBefore(deadline)) {
+      try {
+        final raw = await backend.getPaymentStatus(referenceCode);
+        final update = PaymentStatusUpdate.fromJson(raw);
+        yield update;
+        if (update.status.isTerminal) return;
+      } catch (e) {
+        DRLogger.warn('Payment status poll failed for $referenceCode: $e',
+            category: 'PaymentService');
+      }
+      await Future<void>.delayed(interval);
+    }
+    // Deadline reached without a terminal status — emit a synthetic
+    // expired update so the UI can show "Took too long, try again".
+    yield PaymentStatusUpdate(
+      referenceCode: referenceCode,
+      status: PaymentStatus.expired,
+    );
   }
 
   /// Fetch the public plan catalog and return the Pro-tier plan id

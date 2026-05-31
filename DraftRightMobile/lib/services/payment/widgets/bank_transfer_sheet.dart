@@ -1,18 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:draftright_mobile/services/payment/checkout_result.dart';
+import 'package:draftright_mobile/services/payment/payment_status.dart';
+import 'package:draftright_mobile/services/payment/widgets/payment_status_banner.dart';
 
 /// Bottom-sheet shown for `bank_transfer` checkout.  Renders the
 /// account fields plus a copyable reference code.  The user transfers
 /// from their banking app manually; backend confirms when the
-/// statement-line webhook lands.
+/// statement-line webhook lands.  When [statusStream] is provided the
+/// sheet shows a live status banner and auto-closes on success.
 ///
 /// Visually distinct from [QrPaymentSheet] (no QR image) but reuses
 /// the same copy-row pattern.  Keep both screens in sync if the row
 /// design changes.
 class BankTransferSheet extends StatelessWidget {
   final BankTransferCheckout checkout;
-  const BankTransferSheet({super.key, required this.checkout});
+  final Stream<PaymentStatusUpdate>? statusStream;
+  const BankTransferSheet({super.key, required this.checkout, this.statusStream});
 
   @override
   Widget build(BuildContext context) {
@@ -39,6 +43,8 @@ class BankTransferSheet extends StatelessWidget {
               'Bank transfer',
               style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
             ),
+            const SizedBox(height: 12),
+            PaymentStatusBanner(stream: statusStream),
             const SizedBox(height: 8),
             Text(
               'Transfer this exact amount from any Vietnamese bank. '
