@@ -63,6 +63,22 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="text/plain" />
             </intent-filter>
+            <!-- App Link for payment-return.  When Lemon Squeezy
+                 redirects the in-app browser to draftright.info/payment/...
+                 after checkout, autoVerify=true tells Android to skip
+                 the disambiguation dialog and bring our app to the
+                 foreground.  Verified against assetlinks.json hosted at
+                 https://draftright.info/.well-known/assetlinks.json
+                 (must include both the upload-keystore SHA-256 AND the
+                 Play App Signing SHA-256 for Play Store builds). -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https"
+                      android:host="draftright.info"
+                      android:pathPrefix="/payment" />
+            </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
