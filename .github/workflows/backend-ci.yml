@@ -1,0 +1,103 @@
+name: Backend CI
+
+# Gates every PR + push touching backend/ with the architecture-
+# standards suite (tsc, unit, openapi-drift, integration).
+#
+# SECURITY:
+# Every templated `${{ ... }}` expression in this file references only
+# GitHub-controlled context (github.workflow, github.ref, env.*).
+# No commit message / PR title / issue body / branch name reaches a
+# `run:` step. No injection vector.
+# Reference: https://github.blog/security/vulnerability-research/how-to-catch-github-actions-workflow-injections-before-attackers-do/
+
+on:
+  push:
+    branches: [develop, main]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-ci.yml'
+  pull_request:
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-ci.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  NODE_VERSION: '20'
+  WORKDIR: backend
+
+jobs:
+  static:
+    name: tsc compile
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ env.WORKDIR }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: ${{ env.WORKDIR }}/package-lock.json
+      - run: npm ci
+      - run: npx tsc --noEmit
+
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    needs: static
+    defaults:
+      run:
+        working-directory: ${{ env.WORKDIR }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: ${{ env.WORKDIR }}/package-lock.json
+      - run: npm ci
+      - run: npm test -- --ci --maxWorkers=2
+
+  openapi-drift:
+    name: OpenAPI spec drift check (S26b)
+    runs-on: ubuntu-latest
+    needs: static
+    defaults:
+      run:
+        working-directory: ${{ env.WORKDIR }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: ${{ env.WORKDIR }}/package-lock.json
+      - run: npm ci
+      - name: openapi:check
+        run: npm run openapi:check
+
+  integration:
+    name: Integration tests (PG + Redis containers)
+    runs-on: ubuntu-latest
+    needs: static
+    defaults:
+      run:
+        working-directory: ${{ env.WORKDIR }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: ${{ env.WORKDIR }}/package-lock.json
+      - run: npm ci
+      - name: test:integration
+        run: npm run test:integration
+        env:
+          NODE_OPTIONS: --max-old-space-size=2048
