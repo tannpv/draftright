@@ -1,29 +1,42 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CheckoutResult, WebhookAction, CreateCheckoutOptions } from './payment-strategy.interface';
 import { BasePaymentStrategy } from './base-payment.strategy';
 import { Payment } from '../entities/payment.entity';
 import { AppSettings } from '../../admin/entities/app-settings.entity';
+import { EnvSchema } from '../../config/env.schema';
 import { extractPaymentReference } from '../payment-reference';
 
 @Injectable()
 export class VietQRStrategy extends BasePaymentStrategy {
   constructor(
     @InjectRepository(AppSettings) settingsRepo: Repository<AppSettings>,
+    cfg: ConfigService<EnvSchema, true>,
   ) {
-    super(settingsRepo);
+    super(settingsRepo, cfg);
   }
 
-  /** Read bank + provider credentials from AppSettings (admin portal), env fallback. */
+  /** Read bank + provider credentials from AppSettings (admin portal), typed-env fallback. */
   private async getCredentials() {
     const s = await this.getSettings();
     return {
-      bankId: s?.vietqr_bank_id || process.env.VIETQR_BANK_ID || 'MB',
-      accountNumber: s?.vietqr_account_number || process.env.VIETQR_ACCOUNT_NUMBER || '0000000000',
-      accountName: s?.vietqr_account_name || process.env.VIETQR_ACCOUNT_NAME || 'DRAFTRIGHT',
-      cassoApiKey: s?.casso_api_key || process.env.CASSO_API_KEY || '',
-      sepayApiKey: s?.sepay_api_key || process.env.SEPAY_API_KEY || '',
+      // VietQR display fields have sane local-dev defaults (MB bank,
+      // dummy account) so the strategy never crashes when nothing is
+      // configured.  Real prod values come from the admin portal.
+      bankId: this.resolveCredential(s?.vietqr_bank_id, 'VIETQR_BANK_ID') || 'MB',
+      accountNumber:
+        this.resolveCredential(s?.vietqr_account_number, 'VIETQR_ACCOUNT_NUMBER') ||
+        '0000000000',
+      accountName:
+        this.resolveCredential(s?.vietqr_account_name, 'VIETQR_ACCOUNT_NAME') ||
+        'DRAFTRIGHT',
+      // Webhook keys: empty when nothing configured.  The two
+      // providers (Casso / SePay) are mutually exclusive at the
+      // verifyWebhook layer.
+      cassoApiKey: this.resolveCredential(s?.casso_api_key, 'CASSO_API_KEY'),
+      sepayApiKey: this.resolveCredential(s?.sepay_api_key, 'SEPAY_API_KEY'),
     };
   }
 

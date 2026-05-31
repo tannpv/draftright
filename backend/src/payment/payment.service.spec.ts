@@ -26,8 +26,12 @@ describe('PaymentService — enabled methods', () => {
     jest.clearAllMocks();
     delete process.env.PAYMENT_ENABLED_METHODS;
     const lemonSqueezyStrategy = {} as any;
+    // ConfigService stub: returns undefined for any env key so the
+    // CSV ends up taking the DEFAULT_PAYMENT_METHOD path when no DB
+    // value is set. Specific tests override findOneSettings.
+    const cfg = { get: () => undefined } as any;
     svc = new PaymentService(
-      paymentRepo, userRepo, settingsRepo, plansService, subsService, stripeStrategy, vietqrStrategy, lemonSqueezyStrategy, emailService,
+      paymentRepo, userRepo, settingsRepo, plansService, subsService, stripeStrategy, vietqrStrategy, lemonSqueezyStrategy, emailService, cfg,
     );
   });
   afterAll(() => {

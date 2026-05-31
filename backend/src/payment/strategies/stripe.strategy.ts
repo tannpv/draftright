@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import {
@@ -9,6 +10,7 @@ import {
 import { BasePaymentStrategy } from './base-payment.strategy';
 import { Payment } from '../entities/payment.entity';
 import { AppSettings } from '../../admin/entities/app-settings.entity';
+import { EnvSchema } from '../../config/env.schema';
 import { websiteUrl } from '../../common/app-config';
 
 /**
@@ -28,19 +30,21 @@ import { websiteUrl } from '../../common/app-config';
 export class StripeStrategy extends BasePaymentStrategy {
   constructor(
     @InjectRepository(AppSettings) settingsRepo: Repository<AppSettings>,
+    cfg: ConfigService<EnvSchema, true>,
   ) {
-    super(settingsRepo);
+    super(settingsRepo, cfg);
   }
 
   /**
    * Pull credentials from AppSettings (set via admin portal). Falls back to env
-   * vars if DB value is empty — useful for first deploy + tests.
+   * vars (typed via ConfigService) if DB value is empty — useful for first
+   * deploy + tests.
    */
   private async getCredentials(): Promise<{ secretKey: string; webhookSecret: string }> {
     const settings = await this.getSettings();
     return {
-      secretKey: settings?.stripe_secret_key || process.env.STRIPE_SECRET_KEY || '',
-      webhookSecret: settings?.stripe_webhook_secret || process.env.STRIPE_WEBHOOK_SECRET || '',
+      secretKey: this.resolveCredential(settings?.stripe_secret_key, 'STRIPE_SECRET_KEY'),
+      webhookSecret: this.resolveCredential(settings?.stripe_webhook_secret, 'STRIPE_WEBHOOK_SECRET'),
     };
   }
 

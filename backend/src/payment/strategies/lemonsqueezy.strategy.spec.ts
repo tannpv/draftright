@@ -11,10 +11,15 @@ describe('LemonSqueezyStrategy.verifyWebhook', () => {
     findOne: jest.fn(async () => ({ lemonsqueezy_webhook_secret: SECRET })),
   } as any;
 
+  // Strategy now takes ConfigService for env-fallback credentials.
+  // Spec only exercises DB-resident secrets, so the stub returns ''
+  // for any env key — settingsRepo's signing secret is what gets used.
+  const cfg = { get: () => '' } as any;
+
   let strat: LemonSqueezyStrategy;
   beforeEach(() => {
     jest.clearAllMocks();
-    strat = new LemonSqueezyStrategy(settingsRepo);
+    strat = new LemonSqueezyStrategy(settingsRepo, cfg);
   });
 
   const sign = (raw: string) => createHmac('sha256', SECRET).update(raw).digest('hex');
