@@ -1,8 +1,10 @@
 import { Test } from '@nestjs/testing';
 import { UnauthorizedException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import * as jwt from 'jsonwebtoken';
 import { FeedbackController } from './feedback.controller';
 import { BugReportsService } from './bug-reports.service';
+import { JwtUserService } from './jwt-user.service';
 
 describe('FeedbackController', () => {
   let ctrl: FeedbackController;
@@ -16,12 +18,17 @@ describe('FeedbackController', () => {
   const reqWith = (token?: string) =>
     ({ headers: token ? { authorization: `Bearer ${token}` } : {} } as any);
 
-  beforeAll(() => { process.env.JWT_SECRET = SECRET; });
   beforeEach(async () => {
     jest.clearAllMocks();
     const mod = await Test.createTestingModule({
       controllers: [FeedbackController],
-      providers: [{ provide: BugReportsService, useValue: svc }],
+      providers: [
+        { provide: BugReportsService, useValue: svc },
+        // JwtUserService now owns the bearer-decode logic; inject
+        // a fake ConfigService that returns the test secret.
+        JwtUserService,
+        { provide: ConfigService, useValue: { get: () => SECRET } },
+      ],
     }).compile();
     ctrl = mod.get(FeedbackController);
   });

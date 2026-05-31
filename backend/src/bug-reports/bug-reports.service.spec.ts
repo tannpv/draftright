@@ -1,6 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { BugReportsService } from './bug-reports.service';
 import { BugReport } from './entities/bug-report.entity';
 import { FeatureVote } from './entities/feature-vote.entity';
@@ -48,6 +49,13 @@ describe('BugReportsService — feedback', () => {
         { provide: getRepositoryToken(BugReport), useValue: bugRepo },
         { provide: getRepositoryToken(FeatureVote), useValue: voteRepo },
         { provide: AiProvidersService, useValue: {} },
+        // Service now reads BUG_REPORTS_DIR via ConfigService (S14).
+        // Test doesn't write screenshots so the directory is unused;
+        // any string keeps the constructor happy.
+        {
+          provide: ConfigService,
+          useValue: { get: () => '/tmp/bug-reports-test' },
+        },
       ],
     }).compile();
     svc = mod.get(BugReportsService);

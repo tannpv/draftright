@@ -8,7 +8,7 @@ import { Throttle } from '@nestjs/throttler';
 import { Request } from 'express';
 import { BugReportsService } from './bug-reports.service';
 import { CreateBugReportDto } from './dto/create-bug-report.dto';
-import { decodeOptionalUserId } from './jwt-user';
+import { JwtUserService } from './jwt-user.service';
 import { formatDisplayNumber } from '../common/display-number';
 
 const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
@@ -36,7 +36,10 @@ const ALLOWED_MIMES = [
 @Controller('bug-reports')
 export class BugReportsController {
   private readonly logger = new Logger(BugReportsController.name);
-  constructor(private readonly bugReports: BugReportsService) {}
+  constructor(
+    private readonly bugReports: BugReportsService,
+    private readonly jwtUser: JwtUserService,
+  ) {}
 
   // Anonymous endpoint → much tighter throttle than the global default.
   // 5 reports / minute / IP and 30 / hour / IP stops scripted form spam
@@ -75,7 +78,7 @@ export class BugReportsController {
       return { id: null, status: 'received' };
     }
 
-    const userId = decodeOptionalUserId(req);
+    const userId = this.jwtUser.decodeOptional(req);
 
     const row = await this.bugReports.create(
       dto,
