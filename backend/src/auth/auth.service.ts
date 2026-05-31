@@ -1,4 +1,5 @@
 import { Injectable, UnauthorizedException, ConflictException, BadRequestException, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -10,6 +11,7 @@ import { EmailService } from '../email/email.service';
 import { AuthProvider } from '../users/entities/user.entity';
 import { AppSettings } from '../admin/entities/app-settings.entity';
 import { EMAIL_CODE_TTL_MS } from '../common/app-config';
+import { EnvSchema } from '../config/env.schema';
 
 @Injectable()
 export class AuthService {
@@ -23,6 +25,7 @@ export class AuthService {
     private readonly emailService: EmailService,
     @InjectRepository(AppSettings)
     private readonly settingsRepo: Repository<AppSettings>,
+    private readonly cfg: ConfigService<EnvSchema, true>,
   ) {}
 
   private async generateTokens(user: { id: string; email: string; role: string }) {
@@ -35,12 +38,12 @@ export class AuthService {
     const refreshDays = settings?.refresh_token_expiry_days ?? 90;
 
     const access_token = this.jwtService.sign(payload, {
-      secret: process.env.JWT_SECRET || 'dev-secret',
+      secret: this.cfg.get('JWT_SECRET', { infer: true }),
       expiresIn: `${accessMinutes}m`,
     });
 
     const refresh_token = this.jwtService.sign(payload, {
-      secret: process.env.JWT_REFRESH_SECRET || 'dev-refresh-secret',
+      secret: this.cfg.get('JWT_REFRESH_SECRET', { infer: true }),
       expiresIn: `${refreshDays}d`,
     });
 
@@ -134,7 +137,7 @@ export class AuthService {
   async refresh(refreshToken: string) {
     try {
       const payload = this.jwtService.verify(refreshToken, {
-        secret: process.env.JWT_REFRESH_SECRET || 'dev-refresh-secret',
+        secret: this.cfg.get('JWT_REFRESH_SECRET', { infer: true }),
       });
       const user = await this.usersService.findById(payload.sub);
       if (!user || !user.is_active) throw new UnauthorizedException();
