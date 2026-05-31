@@ -1,35 +1,22 @@
-import { Injectable, OnModuleDestroy } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import Redis from 'ioredis';
 import { createHash } from 'crypto';
+import { REDIS_CLIENT } from '../common/redis/redis.module';
 
 const CACHE_TTL = 300; // 5 minutes in seconds
 
+/**
+ * Per-user rewrite cache with batch-state flags + a generic
+ * rate-limit counter helper.  Backed by Redis via DI — never
+ * constructs its own client (S7 of the 2026-05-31 code review).
+ *
+ * Failure mode: every method swallows Redis exceptions and returns
+ * the "no cache hit" answer.  Cache outage degrades to direct AI
+ * calls; never blocks user-facing traffic.
+ */
 @Injectable()
-export class RewriteCacheService implements OnModuleDestroy {
-  private readonly redis: Redis;
-
-  constructor() {
-    this.redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
-      lazyConnect: true,
-      maxRetriesPerRequest: 1,
-    });
-    // ioredis emits a stream of `error` events on a dead connection.
-    // Without a listener, Node treats them as unhandled and prints
-    // `[ioredis] Unhandled error event: ...` (or worse — crashes
-    // tooling that boots AppModule without Redis, e.g. openapi:generate).
-    // Cache misses already degrade gracefully via the .catch on each
-    // op below; the listener here just swallows the noise.
-    this.redis.on('error', () => {
-      /* degrade silently; per-op .catch handles actual call paths */
-    });
-    this.redis.connect().catch(() => {
-      // Redis unavailable — degrade gracefully
-    });
-  }
-
-  onModuleDestroy() {
-    this.redis.disconnect();
-  }
+export class RewriteCacheService {
+  constructor(@Inject(REDIS_CLIENT) private readonly redis: Redis) {}
 
   async get(userId: string, text: string, tone: string): Promise<string | null> {
     try {
