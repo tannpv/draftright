@@ -138,6 +138,10 @@ public class SubscriptionPlan
 
     [JsonPropertyName("daily_limit")]
     public int DailyLimit { get; set; }
+
+    /// <summary>"none" for the free plan, "monthly" / "yearly" otherwise.</summary>
+    [JsonPropertyName("billing_period")]
+    public string BillingPeriod { get; set; } = "none";
 }
 
 public class SubscriptionResponse
