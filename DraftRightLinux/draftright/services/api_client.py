@@ -123,6 +123,66 @@ class APIClient:
         )
         return self._handle_response(resp)
 
+    # ------------------------------------------------------------------
+    # Payment
+    # ------------------------------------------------------------------
+
+    def list_payment_methods(self) -> list[str]:
+        """GET /payment/methods — returns the raw wire-name list."""
+        resp = requests.get(
+            self._url("/payment/methods"),
+            headers=self._headers(),
+            timeout=self.TIMEOUT,
+        )
+        body = self._handle_response(resp)
+        return list(body.get("methods", []))
+
+    def list_plans(self) -> list[dict]:
+        """GET /plans (unauthenticated) — returns raw plan rows."""
+        resp = requests.get(
+            self._url("/plans"),
+            headers=self._headers(),
+            timeout=self.TIMEOUT,
+        )
+        if not resp.ok:
+            raise APIError(f"[{resp.status_code}] {resp.reason}", status_code=resp.status_code)
+        return resp.json() or []
+
+    def create_checkout(self, plan_id: str, method: str) -> dict:
+        """POST /payment/checkout — returns the raw checkout envelope.
+
+        Caller wraps with :meth:`models.payment.CheckoutResult.from_json`.
+        """
+        resp = requests.post(
+            self._url("/payment/checkout"),
+            json={"plan_id": plan_id, "method": method},
+            headers=self._headers(auth=True),
+            timeout=self.TIMEOUT,
+        )
+        return self._handle_response(resp)
+
+    def get_payment_status(self, reference_code: str) -> dict:
+        """GET /payment/status/:ref — one status snapshot."""
+        resp = requests.get(
+            self._url(f"/payment/status/{reference_code}"),
+            headers=self._headers(),
+            timeout=self.TIMEOUT,
+        )
+        return self._handle_response(resp)
+
+    def get_customer_portal_url(self) -> str:
+        """GET /lemonsqueezy/portal — one-shot Customer Portal URL."""
+        resp = requests.get(
+            self._url("/lemonsqueezy/portal"),
+            headers=self._headers(auth=True),
+            timeout=self.TIMEOUT,
+        )
+        body = self._handle_response(resp)
+        url = body.get("url")
+        if not url:
+            raise APIError("Backend did not return a portal URL")
+        return str(url)
+
     def check_health(self) -> str:
         """GET /health then /auth/me — returns 'connected', 'not_logged_in', 'offline', or 'wrong_server'."""
         # Step 1: Check /health for app identity
