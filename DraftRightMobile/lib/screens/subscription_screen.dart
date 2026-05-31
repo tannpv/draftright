@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:draftright_mobile/services/auth_service.dart';
 import 'package:draftright_mobile/services/backend_client.dart';
+import 'package:draftright_mobile/services/payment_service.dart';
 import 'package:draftright_mobile/services/settings_service.dart';
 
 class SubscriptionScreen extends StatefulWidget {
@@ -11,15 +12,47 @@ class SubscriptionScreen extends StatefulWidget {
   State<SubscriptionScreen> createState() => _SubscriptionScreenState();
 }
 
-class _SubscriptionScreenState extends State<SubscriptionScreen> {
+class _SubscriptionScreenState extends State<SubscriptionScreen>
+    with WidgetsBindingObserver {
   SubscriptionInfo? _info;
   bool _isLoading = true;
   String? _error;
+  // True while the upgrade URL is being fetched + the browser is
+  // opening. Disables the Upgrade button so double-taps can't fire
+  // two checkout sessions.
+  bool _upgrading = false;
 
   @override
   void initState() {
     super.initState();
+    // Refresh subscription on app resume — covers the
+    // external-browser-checkout return path:
+    //   1. User taps "Upgrade" → browser opens Lemon Squeezy hosted
+    //      checkout.
+    //   2. User pays; LS fires the webhook to our backend; backend
+    //      activates the subscription.
+    //   3. User comes back to the app (manually for now; deep-link
+    //      Universal Link / App Link is a follow-up).
+    //   4. AppLifecycleState.resumed fires → we re-fetch /subscription.
+    //
+    // If the webhook hasn't landed yet (lag of a second or two), the
+    // user can still pull-to-refresh; the AppBar refresh button also
+    // calls _load.
+    WidgetsBinding.instance.addObserver(this);
     _load();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _load();
+    }
   }
 
   Future<void> _load() async {
@@ -152,14 +185,69 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
           ],
         ),
         if (info.isFree) ...[
-          const SizedBox(height: 24),
+          const SizedBox(height: 32),
+          // "Upgrade" CTA. Wording is deliberately "Continue to website"
+          // rather than "Buy" / "Subscribe" — Apple's App Store
+          // reviewers nitpick the verb on link-out buttons even with
+          // the External Link Account entitlement.
+          FilledButton.icon(
+            onPressed: _upgrading ? null : _onUpgradeTap,
+            icon: _upgrading
+                ? const SizedBox(
+                    width: 16, height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
+                : const Icon(Icons.open_in_new),
+            label: Text(_upgrading ? 'Opening checkout…' : 'Continue to website to upgrade'),
+            style: FilledButton.styleFrom(
+              minimumSize: const Size.fromHeight(48),
+            ),
+          ),
+          const SizedBox(height: 12),
           Text(
-            'Manage your plan at draftright.info',
+            'Opens a secure checkout on draftright.info. '
+            'Apple Pay / Google Pay / card all accepted. '
+            'You will return here after paying.',
             style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
           ),
         ],
       ],
     );
+  }
+
+  Future<void> _onUpgradeTap() async {
+    if (_upgrading) return;
+    setState(() => _upgrading = true);
+    try {
+      final auth = context.read<AuthService>();
+      final settings = context.read<SettingsService>();
+      final backend = BackendClient(
+        auth: auth,
+        getBaseUrl: () => settings.backendUrl,
+      );
+      final payment = PaymentService(backend);
+      final launched = await payment.launchUpgrade();
+      if (!mounted) return;
+      if (!launched) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Could not open checkout. Visit draftright.info in your browser.',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      );
+    } finally {
+      if (mounted) setState(() => _upgrading = false);
+    }
   }
 }
 
