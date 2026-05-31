@@ -64,6 +64,8 @@ export const envSchema = z.object({
   WEBSITE_URL: z.string().url().optional(),
 
   // --- Bug reports ----------------------------------------------------
+  // Filesystem root for screenshot uploads. Bind-mounted into the
+  // container at the same path in production.
   BUG_REPORTS_DIR: z.string().default('/var/lib/draftright/bug-reports'),
 
   // --- Email (Resend) -------------------------------------------------
