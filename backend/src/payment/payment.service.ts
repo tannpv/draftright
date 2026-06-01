@@ -253,6 +253,29 @@ export class PaymentService {
           where: { reference_code: action.reference_code, status: PaymentStatus.PENDING },
         });
         if (pending) {
+          // Defensive: re-resolve plan_id from the variant LS
+          // actually charged.  In normal flow (post `enabled_variants`
+          // lock) the variant matches what we picked, so this is a
+          // no-op.  But if a legacy checkout URL lets the user
+          // switch on the page, this corrects the plan_id BEFORE
+          // activation so the subscription expires_at reflects the
+          // billing period the user actually paid for.
+          if (action.lemonsqueezy_variant_id) {
+            const truePlanId = await this.resolvePlanIdFromLsVariant(
+              action.lemonsqueezy_variant_id,
+              pending.currency || 'USD',
+            );
+            if (truePlanId && truePlanId !== pending.plan_id) {
+              await this.paymentRepo.update(
+                { id: pending.id },
+                { plan_id: truePlanId },
+              );
+              this.logger.warn(
+                `LS variant switch detected: payment ${action.reference_code} ` +
+                  `pre-charge plan=${pending.plan_id} post-charge plan=${truePlanId}. Corrected.`,
+              );
+            }
+          }
           const completion = await this.completePayment(action.reference_code, 'completed');
           if (completion.success) {
             await this.subscriptionsService.stampStoreRef(
@@ -338,6 +361,38 @@ export class PaymentService {
    * Stripe `invoice.payment_succeeded` — extend the subscription's expires_at
    * to the new period end. Idempotent: setting same expiry twice is safe.
    */
+  /**
+   * Look up the local plan that matches the Lemon Squeezy variant
+   * the user actually paid for.  Used by the webhook handler to
+   * defensively correct payment.plan_id when LS charges a different
+   * variant from what we sent at checkout creation.
+   *
+   * Resolution:
+   *   1. Read app_settings.lemonsqueezy_variant_{monthly,yearly}
+   *   2. Match the inbound variant_id → derive billing_period
+   *   3. Find an active Pro plan with (billing_period + currency)
+   *
+   * Returns null if no match — caller keeps the original plan_id.
+   */
+  private async resolvePlanIdFromLsVariant(
+    lsVariantId: string,
+    currency: string,
+  ): Promise<string | null> {
+    const settings = await this.settingsRepo.findOne({ where: {} });
+    if (!settings) return null;
+    let billingPeriod: string | null = null;
+    if (settings.lemonsqueezy_variant_monthly &&
+        String(settings.lemonsqueezy_variant_monthly) === lsVariantId) {
+      billingPeriod = 'monthly';
+    } else if (settings.lemonsqueezy_variant_yearly &&
+               String(settings.lemonsqueezy_variant_yearly) === lsVariantId) {
+      billingPeriod = 'yearly';
+    }
+    if (!billingPeriod) return null;
+    const plan = await this.plansService.findFirstActive({ billing_period: billingPeriod, currency });
+    return plan?.id || null;
+  }
+
   private async handleSubscriptionRenewed(stripeSubId: string, periodEndUnixSec: number): Promise<void> {
     const expiresAt = new Date(periodEndUnixSec * 1000);
     const updated = await this.subscriptionsService.extendByStripeSubId(stripeSubId, expiresAt);

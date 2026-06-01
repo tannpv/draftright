@@ -20,6 +20,7 @@ from gi.repository import Adw, GLib, Gtk
 
 from draftright.models.payment import (
     BankTransferCheckout,
+    BillingPeriod,
     PaymentMethodDescriptor,
     PaymentMethodKind,
     QrCheckout,
@@ -48,6 +49,12 @@ class SubscriptionPage(Adw.PreferencesPage, PaymentSheetPresenter):
             self._payments = PaymentService(api_client)
         else:
             self._payments = None  # type: ignore[assignment]
+
+        # User-selected billing cadence for the upgrade button.
+        # Defaults to monthly (lower friction).  Threaded into
+        # PaymentService.resolve_pro_plan_id so the backend creates a
+        # checkout for the matching plan id.
+        self._billing_period: BillingPeriod = BillingPeriod.MONTHLY
 
         self._info_group = Adw.PreferencesGroup(title="Current plan")
         self.add(self._info_group)
@@ -131,8 +138,10 @@ class SubscriptionPage(Adw.PreferencesPage, PaymentSheetPresenter):
     def _render_method_picker(self, methods: list[PaymentMethodKind]) -> None:
         self._actions_group.set_title("Upgrade to Pro")
         self._actions_group.set_description(
-            "Pick a payment method.  Your plan activates automatically once payment completes."
+            "Pick a billing cadence, then a payment method.  Your plan activates automatically once payment completes."
         )
+
+        self._actions_group.add(self._build_billing_period_picker())
 
         if not methods:
             self._actions_group.add(Gtk.Label(
@@ -143,6 +152,40 @@ class SubscriptionPage(Adw.PreferencesPage, PaymentSheetPresenter):
 
         for kind in methods:
             self._actions_group.add(self._build_method_row(kind))
+
+    def _build_billing_period_picker(self) -> Gtk.Widget:
+        """Monthly / Yearly segmented control rendered above the
+        method rows.  GTK4 has no native segmented control; emulate
+        with a ``Gtk.Box`` of linked ``Gtk.ToggleButton``s — the
+        ``.linked`` style class joins them into one pill.
+        """
+        row = Adw.ActionRow(title="Billing cadence")
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        box.add_css_class("linked")
+        box.set_valign(Gtk.Align.CENTER)
+
+        anchor: Optional[Gtk.ToggleButton] = None
+        for period in BillingPeriod:
+            btn = Gtk.ToggleButton(label=period.display_name)
+            btn.set_active(period is self._billing_period)
+            if anchor is None:
+                anchor = btn
+            else:
+                btn.set_group(anchor)
+            btn.connect("toggled", self._on_billing_period_toggled, period)
+            box.append(btn)
+
+        row.add_suffix(box)
+        return row
+
+    def _on_billing_period_toggled(self, btn: Gtk.ToggleButton, period: BillingPeriod) -> None:
+        # Gtk.ToggleButton fires for both the deselected + selected
+        # button — only act on the now-active one.
+        if not btn.get_active():
+            return
+        if self._billing_period is period:
+            return
+        self._billing_period = period
 
     def _build_method_row(self, kind: PaymentMethodKind) -> Gtk.Widget:
         d = PaymentMethodDescriptor.for_kind(kind)
@@ -155,9 +198,19 @@ class SubscriptionPage(Adw.PreferencesPage, PaymentSheetPresenter):
         return row
 
     def _on_method_selected(self, kind: PaymentMethodKind) -> None:
+        # Snapshot the cadence on the UI thread so the worker doesn't
+        # race with a toggle change mid-flight.
+        period = self._billing_period
+
         def worker():
             try:
-                plan_id = self._payments.resolve_pro_plan_id()
+                # Pass method + cadence so the resolver picks a
+                # currency-compatible plan at the selected cadence.
+                # See [[project_cc_payment_lemonsqueezy]].
+                plan_id = self._payments.resolve_pro_plan_id(
+                    method=kind,
+                    billing_period=period,
+                )
                 self._payments.upgrade(kind, plan_id, self)
             except APIError as e:
                 GLib.idle_add(self._show_error, str(e))

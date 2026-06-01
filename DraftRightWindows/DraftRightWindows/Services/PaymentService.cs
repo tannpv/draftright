@@ -52,26 +52,61 @@ public sealed class PaymentService
         => Api.ListPaymentMethodsAsync();
 
     /// <summary>
-    /// Resolve the Pro-tier plan id from /plans.  Prefers monthly
-    /// over yearly when both exist.
+    /// Resolve the Pro-tier plan id from /plans for the requested
+    /// method + billing cadence.
+    ///
+    ///   - Currency-aware so VietQR doesn't pick a USD plan (the QR
+    ///     would bake "$4.99 đồng" — useless).
+    ///   - Cadence-aware so the Monthly / Yearly toggle on the
+    ///     Subscription tab charges the matching variant.
+    ///
+    /// Mirrors <c>resolveProPlanId</c> on Flutter / macOS.
     /// </summary>
-    public async Task<string> ResolveProPlanIdAsync()
+    public async Task<string> ResolveProPlanIdAsync(
+        PaymentMethodKind? method = null,
+        BillingPeriod? billingPeriod = null)
     {
         var plans = await Api.ListPlansAsync();
+        var currency = method.HasValue ? CurrencyFor(method.Value) : null;
         var paid = plans
             .Where(p => !string.IsNullOrEmpty(p.BillingPeriod)
                         && !string.Equals(p.BillingPeriod, "none", StringComparison.OrdinalIgnoreCase)
-                        && p.IsActive)
+                        && p.IsActive
+                        && (currency == null
+                            || string.Equals(p.Currency, currency, StringComparison.OrdinalIgnoreCase)))
             .ToList();
         if (paid.Count == 0)
-            throw new InvalidOperationException("Could not find a Pro plan in the catalog");
+            throw new InvalidOperationException(
+                currency != null
+                    ? $"Could not find a Pro plan in {currency} for {method}"
+                    : "Could not find a Pro plan in the catalog");
+        if (billingPeriod.HasValue)
+        {
+            var exact = paid.FirstOrDefault(p =>
+                BillingPeriodExtensions.FromWire(p.BillingPeriod) == billingPeriod.Value);
+            if (exact != null && !string.IsNullOrEmpty(exact.Id))
+                return exact.Id;
+        }
+        // No exact cadence match (or none requested) — fall back to
+        // monthly, then the first paid plan.
         var monthly = paid.FirstOrDefault(p =>
-            string.Equals(p.BillingPeriod, "monthly", StringComparison.OrdinalIgnoreCase))
+            BillingPeriodExtensions.FromWire(p.BillingPeriod) == BillingPeriod.Monthly)
             ?? paid[0];
         if (string.IsNullOrEmpty(monthly.Id))
             throw new InvalidOperationException("Pro plan row is missing an id");
         return monthly.Id;
     }
+
+    /// <summary>
+    /// Currency the strategy expects to charge the plan in.  VietQR +
+    /// bank-transfer settle in VND (Vietnamese-bank-only spec); all
+    /// others default to USD.  Mirrors <c>_currencyFor</c> on Flutter.
+    /// </summary>
+    public static string CurrencyFor(PaymentMethodKind method) => method switch
+    {
+        PaymentMethodKind.VietQr or PaymentMethodKind.BankTransfer => "VND",
+        _ => "USD",
+    };
 
     public async Task UpgradeAsync(PaymentMethodKind method, string planId, IPaymentSheetPresenter presenter)
     {
