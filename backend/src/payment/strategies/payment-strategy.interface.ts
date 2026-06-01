@@ -32,6 +32,7 @@ export type WebhookAction =
   // PaymentService.handleWebhook dispatches these to the generic
   // SubscriptionsService.*ByStoreRef helpers with StoreType.LEMONSQUEEZY.
   | { type: 'lemonsqueezy_payment_success'; reference_code: string; lemonsqueezy_subscription_id: string; lemonsqueezy_customer_id?: string; current_period_end: number /* unix sec */ }
+  | { type: 'lemonsqueezy_payment_failed';   lemonsqueezy_subscription_id: string }
   | { type: 'lemonsqueezy_subscription_canceled'; lemonsqueezy_subscription_id: string }
   | { type: 'lemonsqueezy_subscription_expired';  lemonsqueezy_subscription_id: string }
   | { type: 'ignored' };
