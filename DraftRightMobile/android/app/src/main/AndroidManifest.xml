@@ -64,19 +64,25 @@
                 <data android:mimeType="text/plain" />
             </intent-filter>
             <!-- App Link for payment-return.  When Lemon Squeezy
-                 redirects the in-app browser to draftright.info/payment/...
+                 redirects the in-app browser to <host>/payment/...
                  after checkout, autoVerify=true tells Android to skip
                  the disambiguation dialog and bring our app to the
                  foreground.  Verified against assetlinks.json hosted at
-                 https://draftright.info/.well-known/assetlinks.json
+                 https://<host>/.well-known/assetlinks.json
                  (must include both the upload-keystore SHA-256 AND the
-                 Play App Signing SHA-256 for Play Store builds). -->
+                 Play App Signing SHA-256 for Play Store builds).
+                 Both prod + dev hosts declared so the same APK serves
+                 either backend (user can swap Settings → Server →
+                 Backend URL between them without a rebuild). -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="https"
                       android:host="draftright.info"
+                      android:pathPrefix="/payment" />
+                <data android:scheme="https"
+                      android:host="dev.draftright.info"
                       android:pathPrefix="/payment" />
             </intent-filter>
         </activity>
