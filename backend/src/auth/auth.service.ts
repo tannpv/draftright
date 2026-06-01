@@ -4,6 +4,8 @@ import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
+import * as jwt from 'jsonwebtoken';
+import jwksClient from 'jwks-rsa';
 import { UsersService } from '../users/users.service';
 import { PlansService } from '../plans/plans.service';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
@@ -197,6 +199,7 @@ export class AuthService {
       case 'google': return AuthProvider.GOOGLE;
       case 'facebook': return AuthProvider.FACEBOOK;
       case 'tiktok': return AuthProvider.TIKTOK;
+      case 'apple': return AuthProvider.APPLE;
       default: throw new BadRequestException(`Unsupported provider: ${provider}`);
     }
   }
@@ -211,6 +214,8 @@ export class AuthService {
         return this.verifyGoogleToken(idToken);
       case AuthProvider.FACEBOOK:
         return this.verifyFacebookToken(idToken);
+      case AuthProvider.APPLE:
+        return this.verifyAppleToken(idToken, profile);
       case AuthProvider.TIKTOK:
         // TikTok doesn't have a simple ID token verification;
         // the Flutter SDK provides user info directly, so we trust the access token + profile
@@ -235,6 +240,74 @@ export class AuthService {
       email: data.email,
       name: data.name,
       avatar_url: data.picture,
+    };
+  }
+
+  /**
+   * Verify a Sign in with Apple identity token.
+   *
+   * Apple-signed JWT — header `kid` selects which of Apple's rotating
+   * public keys signed it.  Steps:
+   *   1. Decode header to read `kid`.
+   *   2. Fetch the matching public key from
+   *      https://appleid.apple.com/auth/keys (cached by jwks-rsa).
+   *   3. Verify signature (RS256), `iss === https://appleid.apple.com`,
+   *      and `aud` matches the bundle id Apple issued the token for.
+   *   4. Return `sub` as the stable social id; Apple omits email on
+   *      subsequent sign-ins so we fall back to the in-app
+   *      `profile.email` (which the mobile SDK collected on the first
+   *      consent and cached).  Name is similarly first-sign-in only.
+   *
+   * The accepted bundle IDs are configurable via APPLE_AUDIENCES env
+   * (comma-separated) so the same backend serves the iOS app, the
+   * macOS app, and a future web sign-in flow without code edits.
+   */
+  private async verifyAppleToken(
+    idToken: string,
+    profile: { name?: string; email?: string; avatar_url?: string },
+  ): Promise<{ socialId: string; email: string; name?: string; avatar_url?: string }> {
+    const decoded = jwt.decode(idToken, { complete: true });
+    if (!decoded || typeof decoded === 'string' || !decoded.header.kid) {
+      throw new UnauthorizedException('Invalid Apple token (no kid)');
+    }
+    const audiencesRaw = this.cfg.get('APPLE_AUDIENCES', { infer: true }) ||
+      'com.draftright.draftrightMobile.v2,com.draftright.app.v2';
+    const audiences = audiencesRaw.split(',').map(s => s.trim()).filter(Boolean);
+
+    const client = jwksClient({
+      jwksUri: 'https://appleid.apple.com/auth/keys',
+      cache: true,
+      cacheMaxAge: 24 * 60 * 60 * 1000,  // Apple rotates keys infrequently
+    });
+    const key = await client.getSigningKey(decoded.header.kid);
+    const publicKey = key.getPublicKey();
+
+    let payload: jwt.JwtPayload;
+    try {
+      // jsonwebtoken's typing requires audience to be a tuple [first, ...rest]
+      // — cast through unknown to satisfy the overload while keeping the
+      // runtime check against every entry in `audiences`.
+      payload = jwt.verify(idToken, publicKey, {
+        algorithms: ['RS256'],
+        issuer: 'https://appleid.apple.com',
+        audience: audiences as unknown as [string, ...string[]],
+      }) as jwt.JwtPayload;
+    } catch (e) {
+      this.logger.warn(`Apple token verification failed: ${(e as Error).message}`);
+      throw new UnauthorizedException('Invalid Apple token');
+    }
+    if (!payload.sub) {
+      throw new UnauthorizedException('Apple token missing sub claim');
+    }
+    // Apple includes `email` only on the very first sign-in; the
+    // mobile SDK caches it and we also receive it here as
+    // profile.email.  Prefer the token claim when present.
+    const email = (payload.email as string) || profile.email || '';
+    return {
+      socialId: payload.sub,
+      email,
+      name: profile.name,         // Apple only ships full name on first consent
+      avatar_url: profile.avatar_url,
     };
   }
 

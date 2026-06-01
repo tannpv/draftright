@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:draftright_mobile/services/api_client.dart';
@@ -125,6 +126,38 @@ class AuthService extends ChangeNotifier {
     // TikTok Login Kit requires native SDK integration.
     // For now, show a message that it's coming soon.
     throw Exception('TikTok sign-in coming soon');
+  }
+
+  /// Sign in with Apple — required on iOS/macOS by App Store
+  /// Guideline 4.8 (Login Services).  Apple's identity token is a
+  /// JWT signed with one of their rotating keys; the backend verifies
+  /// it against `https://appleid.apple.com/auth/keys`.
+  ///
+  /// Apple sends `givenName` / `familyName` / `email` ONLY on the
+  /// very first sign-in consent.  We pass them straight through so
+  /// the backend can populate the user row; subsequent sign-ins re-
+  /// use whatever was stored that first time.
+  Future<void> signInWithApple() async {
+    final credential = await SignInWithApple.getAppleIDCredential(
+      scopes: const [
+        AppleIDAuthorizationScopes.email,
+        AppleIDAuthorizationScopes.fullName,
+      ],
+    );
+    final idToken = credential.identityToken;
+    if (idToken == null) {
+      throw Exception('Failed to get Apple identity token');
+    }
+    final name = [credential.givenName, credential.familyName]
+        .where((s) => s != null && s.isNotEmpty)
+        .join(' ');
+    await _socialLogin(
+      'apple',
+      idToken,
+      name: name.isEmpty ? null : name,
+      email: credential.email,
+      avatarUrl: null,  // Apple doesn't provide a photo URL
+    );
   }
 
   Future<void> _socialLogin(String provider, String idToken, {String? name, String? email, String? avatarUrl}) async {
