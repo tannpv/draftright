@@ -115,8 +115,8 @@ class QrPaymentSheet extends StatelessWidget {
 /// on-screen QR via the bank's built-in scanner.
 class _OpenBankAppRow extends StatelessWidget {
   /// Caller can inject a custom registry for tests; default = VN.
-  // ignore: unused_element_parameter
   final BankAppRegistry? registry;
+  // ignore: unused_element_parameter
   const _OpenBankAppRow({this.registry});
 
   @override
@@ -205,10 +205,16 @@ class _BankAppTileState extends State<_BankAppTile> {
         case BankAppLaunchOutcome.appOpened:
           // App launched — user is in bank app now.  No UI feedback.
           break;
+        case BankAppLaunchOutcome.appNotInstalled:
+          // Don't auto-redirect to Play Store; ask first so users
+          // who legitimately have the app installed (via APK
+          // sideload, store-detection blind spots, etc.) aren't
+          // dragged into an unnecessary "update needed" flow.
+          await _promptInstall();
+          break;
         case BankAppLaunchOutcome.fallbackOpened:
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('${widget.launcher.displayName} not installed — opening Play Store.'),
-          ));
+          // Only reached when the user explicitly accepted the
+          // install prompt; nothing more to surface.
           break;
         case BankAppLaunchOutcome.failed:
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -219,6 +225,27 @@ class _BankAppTileState extends State<_BankAppTile> {
     } finally {
       if (mounted) setState(() => _launching = false);
     }
+  }
+
+  /// Show a SnackBar with an "Install" action so the Play Store
+  /// redirect is opt-in instead of automatic.
+  Future<void> _promptInstall() async {
+    final scaffold = ScaffoldMessenger.of(context);
+    final launcher = widget.launcher;
+    scaffold.showSnackBar(
+      SnackBar(
+        content: Text("${launcher.displayName} doesn't seem to be installed."),
+        action: launcher is AndroidPackageBankAppLauncher
+            ? SnackBarAction(
+                label: 'Install',
+                onPressed: () async {
+                  await launcher.openPlayStore();
+                },
+              )
+            : null,
+        duration: const Duration(seconds: 4),
+      ),
+    );
   }
 }
 

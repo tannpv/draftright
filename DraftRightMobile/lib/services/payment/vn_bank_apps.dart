@@ -1,13 +1,17 @@
+import 'package:android_intent_plus/android_intent.dart';
+import 'package:android_intent_plus/flag.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 /// Result of attempting to open a banking app.  UI surfaces these so
-/// the user knows what happened (app launched, app missing →
-/// Play Store opened, total failure).
+/// the user knows what happened.  Distinct outcomes keep error
+/// surfaces specific — "not installed" gets a different snackbar
+/// from "couldn't launch even though installed".
 enum BankAppLaunchOutcome {
   appOpened,
-  fallbackOpened, // Play Store / web fallback opened
+  appNotInstalled,  // package check returned false; nothing launched
+  fallbackOpened,   // user opted into Play Store install flow
   failed,
 }
 
@@ -48,24 +52,104 @@ abstract class BankAppLauncher {
   Future<BankAppLaunchOutcome> launch({BankAppLaunchContext? context});
 }
 
-/// Concrete launcher that tries `<scheme>://` first, falls back to
-/// Play Store at the package name.  Covers ~all VN banks today; if
-/// a bank ships a stable Universal Link or NAPAS QR intent later,
-/// drop in a different launcher implementation (no UI change).
-class UrlSchemeBankAppLauncher implements BankAppLauncher {
+/// Launches a bank app by **Android package name** using
+/// `Intent.ACTION_MAIN` + `category.LAUNCHER`.  Way more reliable
+/// than custom URL schemes (banks change/break those silently and
+/// `canLaunchUrl` returns false even when the app is installed,
+/// firing the Play Store fallback unnecessarily — observed for
+/// ACB ONE on 2026-06-01).
+///
+/// Falls back to a URL scheme attempt for older / un-mapped banks,
+/// then to a Play Store URL **only if explicitly requested** —
+/// returns `appNotInstalled` instead of redirecting blindly so the
+/// UI can show a "Install <bank>?" prompt rather than yanking the
+/// user out of context.
+class AndroidPackageBankAppLauncher implements BankAppLauncher {
   @override
   final String code;
   @override
   final String displayName;
 
-  /// e.g. `mbbank://`, `acbmobile://`.  Banks don't publish official
-  /// specs; values here are the most widely reported ones in VN
-  /// developer community.  When a scheme stops working swap it here
-  /// without touching call sites.
+  /// Stable Play Store package id.
+  final String androidPackage;
+
+  /// Best-effort URL scheme used as a secondary launch attempt for
+  /// banks where ACTION_MAIN isn't enough (e.g. they require a
+  /// scheme-specific deep link to reach an internal screen).  Empty
+  /// = no secondary attempt.
   final String urlScheme;
 
-  /// Play Store package id, used for the fallback when the scheme
-  /// resolves to no installed app.
+  const AndroidPackageBankAppLauncher({
+    required this.code,
+    required this.displayName,
+    required this.androidPackage,
+    this.urlScheme = '',
+  });
+
+  @override
+  Future<BankAppLaunchOutcome> launch({BankAppLaunchContext? context}) async {
+    // 1. Try launching the package directly via Android Intent.
+    //    Works iff the package is installed; doesn't depend on the
+    //    bank declaring a URL scheme.
+    try {
+      final intent = AndroidIntent(
+        action: 'android.intent.action.MAIN',
+        category: 'android.intent.category.LAUNCHER',
+        package: androidPackage,
+        flags: <int>[Flag.FLAG_ACTIVITY_NEW_TASK],
+      );
+      await intent.launch();
+      return BankAppLaunchOutcome.appOpened;
+    } catch (e) {
+      if (kDebugMode) debugPrint('AndroidPackageLauncher($code) intent miss: $e');
+    }
+    // 2. Try the URL scheme as a secondary best-effort.  Some banks
+    //    register a scheme but not a public launcher activity for
+    //    ACTION_MAIN.
+    if (urlScheme.isNotEmpty) {
+      try {
+        final uri = Uri.parse(urlScheme);
+        if (await canLaunchUrl(uri)) {
+          final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+          if (ok) return BankAppLaunchOutcome.appOpened;
+        }
+      } on PlatformException catch (_) {
+        // ignore — fall through
+      } catch (e) {
+        if (kDebugMode) debugPrint('AndroidPackageLauncher($code) scheme miss: $e');
+      }
+    }
+    // 3. Nothing launched.  Don't redirect to Play Store
+    //    automatically — return the typed outcome so the caller
+    //    can prompt the user instead.
+    return BankAppLaunchOutcome.appNotInstalled;
+  }
+
+  /// Open the Play Store page for this bank.  Called explicitly by
+  /// the UI when the user confirms they want to install — not in
+  /// the default `launch()` path.
+  Future<BankAppLaunchOutcome> openPlayStore() async {
+    try {
+      final ok = await launchUrl(
+        Uri.parse('https://play.google.com/store/apps/details?id=$androidPackage'),
+        mode: LaunchMode.externalApplication,
+      );
+      return ok ? BankAppLaunchOutcome.fallbackOpened : BankAppLaunchOutcome.failed;
+    } catch (e) {
+      if (kDebugMode) debugPrint('Play Store fallback($code) error: $e');
+      return BankAppLaunchOutcome.failed;
+    }
+  }
+}
+
+/// Legacy URL-scheme-only launcher.  Kept for tests + non-Android
+/// platforms; production code now uses [AndroidPackageBankAppLauncher].
+class UrlSchemeBankAppLauncher implements BankAppLauncher {
+  @override
+  final String code;
+  @override
+  final String displayName;
+  final String urlScheme;
   final String androidPackage;
 
   const UrlSchemeBankAppLauncher({
@@ -82,21 +166,11 @@ class UrlSchemeBankAppLauncher implements BankAppLauncher {
         Uri.parse(urlScheme),
         mode: LaunchMode.externalApplication,
       );
-      if (ok) return BankAppLaunchOutcome.appOpened;
+      return ok ? BankAppLaunchOutcome.appOpened : BankAppLaunchOutcome.appNotInstalled;
     } on PlatformException catch (_) {
-      // Some Android versions throw instead of returning false when
-      // no activity handles the scheme — fall through to Play Store.
+      return BankAppLaunchOutcome.appNotInstalled;
     } catch (e) {
       if (kDebugMode) debugPrint('UrlSchemeBankAppLauncher($code) error: $e');
-    }
-    try {
-      final ok = await launchUrl(
-        Uri.parse('https://play.google.com/store/apps/details?id=$androidPackage'),
-        mode: LaunchMode.externalApplication,
-      );
-      return ok ? BankAppLaunchOutcome.fallbackOpened : BankAppLaunchOutcome.failed;
-    } catch (e) {
-      if (kDebugMode) debugPrint('Play Store fallback($code) error: $e');
       return BankAppLaunchOutcome.failed;
     }
   }
@@ -113,47 +187,46 @@ class BankAppRegistry {
   /// popularity (informed guess; reorder freely).  Adding a bank =
   /// one row; UI iterates automatically.
   factory BankAppRegistry.forVietnam() => const BankAppRegistry([
-        UrlSchemeBankAppLauncher(
+        AndroidPackageBankAppLauncher(
           code: 'MB',
           displayName: 'MB Bank',
-          urlScheme: 'mbbank://',
           androidPackage: 'com.mbmobile',
+          urlScheme: 'mbbank://',
         ),
-        UrlSchemeBankAppLauncher(
+        AndroidPackageBankAppLauncher(
           code: 'ACB',
           displayName: 'ACB ONE',
-          urlScheme: 'acbmobile://',
           androidPackage: 'mobile.acb.com.vn',
         ),
-        UrlSchemeBankAppLauncher(
+        AndroidPackageBankAppLauncher(
           code: 'VCB',
           displayName: 'Vietcombank',
-          urlScheme: 'vcbdigibank://',
           androidPackage: 'com.VCB',
+          urlScheme: 'vcbdigibank://',
         ),
-        UrlSchemeBankAppLauncher(
+        AndroidPackageBankAppLauncher(
           code: 'AB',
           displayName: 'ABBank',
-          urlScheme: 'abbankezpay://',
           androidPackage: 'vn.com.abbank.mobilebanking',
+          urlScheme: 'abbankezpay://',
         ),
-        UrlSchemeBankAppLauncher(
+        AndroidPackageBankAppLauncher(
           code: 'TPB',
           displayName: 'TPBank',
-          urlScheme: 'tpb://',
           androidPackage: 'com.tpb.mb.gprsandroid',
+          urlScheme: 'tpb://',
         ),
-        UrlSchemeBankAppLauncher(
+        AndroidPackageBankAppLauncher(
           code: 'TCB',
           displayName: 'Techcombank',
-          urlScheme: 'techcombank://',
           androidPackage: 'vn.com.techcombank.bb.app',
+          urlScheme: 'techcombank://',
         ),
-        UrlSchemeBankAppLauncher(
+        AndroidPackageBankAppLauncher(
           code: 'VTB',
           displayName: 'VietinBank',
-          urlScheme: 'vietinbank://',
           androidPackage: 'com.vietinbank.ipay',
+          urlScheme: 'vietinbank://',
         ),
       ]);
 
