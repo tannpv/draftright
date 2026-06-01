@@ -43,8 +43,16 @@ export class VietQRStrategy extends BasePaymentStrategy {
   async createCheckout(payment: Payment, _options?: CreateCheckoutOptions): Promise<CheckoutResult> {
     const { bankId, accountNumber, accountName } = await this.getCredentials();
 
-    // Generate VietQR URL via img.vietqr.io (free, no API key needed)
-    const qrUrl = `https://img.vietqr.io/image/${bankId}-${accountNumber}-compact.jpg`
+    // Generate VietQR URL via img.vietqr.io (free, no API key needed).
+    // Template choice:
+    //   - `compact`  = QR + bank logo only.  Amount is embedded in the
+    //     scannable payload but NOT rendered as text on the image, so
+    //     users staring at the rendered image saw no "124,000 VND"
+    //     number and got confused (bug 2026-06-01).
+    //   - `compact2` = same QR + amount + addInfo overlaid as text.
+    //     Users can verify the amount visually before scanning, and
+    //     the scanned payload is identical to compact.
+    const qrUrl = `https://img.vietqr.io/image/${bankId}-${accountNumber}-compact2.jpg`
       + `?amount=${payment.amount}`
       + `&addInfo=${encodeURIComponent(payment.reference_code)}`
       + `&accountName=${encodeURIComponent(accountName)}`;
