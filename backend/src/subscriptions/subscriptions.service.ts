@@ -139,6 +139,19 @@ export class SubscriptionsService {
   }
 
   /**
+   * Lookup a subscription by `(store_type, store_transaction_id)`
+   * with the user + plan relations loaded — used by webhook handlers
+   * that need to email the affected user (e.g. payment-failed).
+   * Returns null when no matching row exists.
+   */
+  async findByStoreRef(storeType: StoreType, transactionId: string): Promise<Subscription | null> {
+    return this.subsRepo.findOne({
+      where: { store_type: storeType, store_transaction_id: transactionId },
+      relations: ['user', 'plan'],
+    });
+  }
+
+  /**
    * Mark a subscription expired immediately (used when the provider
    * reports the subscription has fully ended — e.g. after final
    * dunning retries failed).  Distinct from cancel: cancel keeps

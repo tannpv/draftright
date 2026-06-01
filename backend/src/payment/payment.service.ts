@@ -276,6 +276,36 @@ export class PaymentService {
         return { success: true, reference_code: action.reference_code };
       }
 
+      case 'lemonsqueezy_payment_failed': {
+        // LS dunning: a renewal charge failed.  Don't revoke access
+        // (that comes via `subscription_expired` after final retry).
+        // Email the user so they can update their card before then.
+        // Lookup the subscription by store_transaction_id → user →
+        // plan so the email carries the right context.
+        const sub = await this.subscriptionsService.findByStoreRef(
+          storeTypeForMethod(PaymentMethod.LEMONSQUEEZY),
+          action.lemonsqueezy_subscription_id,
+        );
+        if (!sub) {
+          this.logger.warn(`LS payment_failed for unknown sub ${action.lemonsqueezy_subscription_id} — skipped`);
+          return { success: true };
+        }
+        try {
+          const user = await this.userRepo.findOne({ where: { id: sub.user_id } });
+          if (user?.email && sub.plan) {
+            await this.emailService.sendPaymentFailed(
+              user.email,
+              user.name || user.email,
+              sub.plan.name,
+            );
+          }
+        } catch (err: any) {
+          this.logger.warn(`Failed to email LS payment_failed: ${err.message}`);
+        }
+        this.logger.log(`Notified user of LS payment failure on sub ${action.lemonsqueezy_subscription_id}`);
+        return { success: true };
+      }
+
       case 'lemonsqueezy_subscription_canceled': {
         const rows = await this.subscriptionsService.cancelByStoreRef(
           storeTypeForMethod(PaymentMethod.LEMONSQUEEZY),
