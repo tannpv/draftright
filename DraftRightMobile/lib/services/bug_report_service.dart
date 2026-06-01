@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import 'package:draftright_mobile/services/logger_service.dart';
@@ -97,8 +98,23 @@ class BugReportService {
             errorMessage: 'Screenshot is larger than 5 MB. Pick a smaller image.',
           );
         }
-        request.files
-            .add(await http.MultipartFile.fromPath('screenshot', screenshot.path));
+        // Always set an explicit image MIME.  Without this,
+        // http.MultipartFile.fromPath falls back to
+        // application/octet-stream when the file extension can't be
+        // resolved (image_picker on Android sometimes hands back
+        // cache paths with no extension), and the backend MIME
+        // filter rejects the submission with HTTP 400 "only
+        // PNG/JPEG screenshots are accepted" — exact 400 captured
+        // 2026-06-01 (BUG-7).  Sniff the first bytes so PNG +
+        // JPEG + WebP land on the right Content-Type; everything
+        // else falls through to JPEG since image_picker
+        // re-encodes most pickers to JPEG when imageQuality<100.
+        final contentType = await _detectImageMime(screenshot);
+        request.files.add(await http.MultipartFile.fromPath(
+          'screenshot',
+          screenshot.path,
+          contentType: contentType,
+        ));
       }
 
       final streamed =
@@ -165,6 +181,47 @@ class BugReportService {
   /// and the user got no record on the admin portal. Truncating here keeps
   /// the report flowing.
   static const int _maxOsInfoChars = 100;
+
+  /// Best-effort image MIME by magic-byte sniff.  Falls back to
+  /// image/jpeg (the most common image_picker output) so the upload
+  /// always carries an image Content-Type — never
+  /// application/octet-stream, which the backend rejects.
+  static Future<MediaType> _detectImageMime(File file) async {
+    try {
+      final raf = await file.open();
+      final header = await raf.read(12);
+      await raf.close();
+      if (header.length >= 8 &&
+          header[0] == 0x89 && header[1] == 0x50 &&
+          header[2] == 0x4E && header[3] == 0x47) {
+        return MediaType('image', 'png');
+      }
+      if (header.length >= 3 &&
+          header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF) {
+        return MediaType('image', 'jpeg');
+      }
+      if (header.length >= 12 &&
+          header[0] == 0x52 && header[1] == 0x49 &&
+          header[2] == 0x46 && header[3] == 0x46 &&
+          header[8] == 0x57 && header[9] == 0x45 &&
+          header[10] == 0x42 && header[11] == 0x50) {
+        return MediaType('image', 'webp');
+      }
+      if (header.length >= 12 &&
+          header[4] == 0x66 && header[5] == 0x74 &&
+          header[6] == 0x79 && header[7] == 0x70 &&
+          ((header[8] == 0x68 && header[9] == 0x65 && header[10] == 0x69 && header[11] == 0x63) ||
+           (header[8] == 0x68 && header[9] == 0x65 && header[10] == 0x69 && header[11] == 0x66))) {
+        return MediaType('image', 'heic');
+      }
+      if (header.length >= 6 &&
+          header[0] == 0x47 && header[1] == 0x49 &&
+          header[2] == 0x46 && header[3] == 0x38) {
+        return MediaType('image', 'gif');
+      }
+    } catch (_) {/* fall through */}
+    return MediaType('image', 'jpeg');
+  }
 
   static String _osInfo() {
     try {
