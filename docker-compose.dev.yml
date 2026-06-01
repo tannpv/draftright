@@ -89,5 +89,10 @@ services:
 
 # Reuse the existing prod `postgres` + `redis` services + their volume.
 # This compose file is intended to be brought up alongside the prod
-# stack (`docker-compose.yml`); Docker merges service definitions by
-# name.  If you bring this up STANDALONE, declare those services here.
+# compose; load BOTH at every invocation:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d backend-dev website-dev admin-dev
+#
+# Bringing it up with `-f docker-compose.dev.yml` ALONE fails with
+# "service depends on undefined service redis" because the depends_on
+# refs below resolve only when both files are in the project context.
