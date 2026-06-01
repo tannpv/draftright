@@ -115,45 +115,47 @@ class AndroidPackageBankAppLauncher implements BankAppLauncher {
 
   @override
   Future<BankAppLaunchOutcome> launch({BankAppLaunchContext? context}) async {
-    // 1. Try the per-bank deep link if both a builder + context
-    //    are provided.  This is the "prefill the transfer screen"
-    //    path — when it works, the user lands on the bank app's
-    //    transfer screen with account+amount+memo already typed in.
+    // 1. Try the per-bank deep link.  CRITICAL: scope the intent to
+    //    the bank's androidPackage so Android only fires the URL at
+    //    that one app — never at the default browser.  Without the
+    //    `package:` constraint, an `https://` deep link Android
+    //    can't match against any intent-filter happily falls through
+    //    to Chrome → user sees "This site can't be reached".
     if (deepLinkBuilder != null && context != null) {
       final url = deepLinkBuilder!(context);
       if (url != null && url.isNotEmpty) {
         try {
-          final uri = Uri.parse(url);
-          if (await canLaunchUrl(uri)) {
-            final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
-            if (ok) return BankAppLaunchOutcome.appOpened;
-          }
-        } on PlatformException catch (_) {
-          // fall through to non-prefilled launch
+          await AndroidIntent(
+            action: 'android.intent.action.VIEW',
+            data: url,
+            package: androidPackage,
+            flags: <int>[Flag.FLAG_ACTIVITY_NEW_TASK],
+          ).launch();
+          return BankAppLaunchOutcome.appOpened;
         } catch (e) {
           if (kDebugMode) {
             debugPrint('AndroidPackageLauncher($code) deepLink miss: $e');
           }
+          // fall through to home-screen launch
         }
       }
     }
-    // 2. No deep link or it failed — open the app's home screen via
-    //    Android Intent.  User has to navigate to the QR scanner /
-    //    transfer screen manually.
+    // 2. Open the app's home screen via Android Intent.  User
+    //    navigates to QR scanner / transfer screen manually.
     try {
-      final intent = AndroidIntent(
+      await AndroidIntent(
         action: 'android.intent.action.MAIN',
         category: 'android.intent.category.LAUNCHER',
         package: androidPackage,
         flags: <int>[Flag.FLAG_ACTIVITY_NEW_TASK],
-      );
-      await intent.launch();
+      ).launch();
       return BankAppLaunchOutcome.appOpened;
     } catch (e) {
       if (kDebugMode) debugPrint('AndroidPackageLauncher($code) intent miss: $e');
     }
-    // 3. Try the URL scheme as a tertiary best-effort.  Rare; some
-    //    banks register a scheme but not a public LAUNCHER activity.
+    // 3. Tertiary: bank-specific URL scheme (no `package:` scope
+    //    because some banks register a scheme without exposing a
+    //    public ACTION_MAIN activity).
     if (urlScheme.isNotEmpty) {
       try {
         final uri = Uri.parse(urlScheme);
