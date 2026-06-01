@@ -18,6 +18,12 @@ export enum StoreType {
   LEMONSQUEEZY = 'lemonsqueezy',
   /** Native Stripe subscription (web checkout). Distinct from Lemon Squeezy. */
   STRIPE = 'stripe',
+  /** VietQR scan-to-pay; settles via SePay webhook on the receiving VN bank. */
+  VIETQR = 'vietqr',
+  /** Manual bank transfer; settles via Casso / SePay statement-line match. */
+  BANK_TRANSFER = 'bank_transfer',
+  /** PayPal one-shot or recurring (future). */
+  PAYPAL = 'paypal',
 }
 
 @Entity('subscriptions')
