@@ -24,22 +24,26 @@ git fetch origin
 git checkout develop
 git pull --ff-only origin develop
 
-# Build the new images
-docker compose -f docker-compose.dev.yml build
+# IMPORTANT: dev compose references postgres + redis from the prod
+# compose, so EVERY docker compose invocation must load BOTH files
+# (-f docker-compose.yml -f docker-compose.dev.yml).  An alias keeps
+# the commands short:
+alias drc-dev='docker compose -f docker-compose.yml -f docker-compose.dev.yml'
 
-# Create the dev DB inside the running prod Postgres container.
-# `postgres-prod` is the container name in the existing compose
-# file — adjust if yours differs.
-docker exec -it $(docker compose ps -q postgres) \
+# Build the new dev images (backend-dev, website-dev, admin-dev)
+drc-dev build backend-dev website-dev admin-dev
+
+# Create the dev DB inside the running prod Postgres container
+docker exec -i $(docker compose ps -q postgres) \
     psql -U draftright -c 'CREATE DATABASE draftright_dev;'
 
 # Add the Caddy block + reload
-sudo cat deploy/Caddyfile.dev >> /etc/caddy/Caddyfile
+sudo bash -c 'cat /opt/draftright/deploy/Caddyfile.dev >> /etc/caddy/Caddyfile'
 sudo systemctl reload caddy
-sudo journalctl -u caddy -n 50   # confirm cert obtained for the two new hosts
+sudo journalctl -u caddy -n 50   # confirm certs for dev / api.dev / admin.dev
 
-# Bring up the dev services alongside prod
-docker compose --env-file .env.dev -f docker-compose.dev.yml up -d
+# Bring up only the dev services (prod stack stays running)
+drc-dev --env-file .env.dev up -d backend-dev website-dev admin-dev
 
 # Seed the dev DB (admin user, free plan, default AI provider)
 docker exec -it dr-backend-dev npx ts-node src/seed.ts
@@ -67,10 +71,13 @@ branch:
 ```bash
 cd /opt/draftright
 git pull --ff-only origin develop
-docker compose -f docker-compose.dev.yml build
-docker compose --env-file .env.dev -f docker-compose.dev.yml up -d
-docker compose ps                     # confirm `dr-backend-dev` is `running`
+drc-dev build backend-dev website-dev admin-dev
+drc-dev --env-file .env.dev up -d backend-dev website-dev admin-dev
+drc-dev ps                            # confirm dev services healthy
 docker logs dr-backend-dev --tail 50  # spot any boot errors
+
+# One-liner end-to-end check (smoke test)
+./scripts/smoke-test-dev.sh
 ```
 
 A wrapper script could go in `scripts/deploy-dev.sh` later — for now
