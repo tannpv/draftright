@@ -235,56 +235,65 @@ class BankAppRegistry {
   /// popularity (informed guess; reorder freely).  Adding a bank =
   /// one row; UI iterates automatically.
   factory BankAppRegistry.forVietnam() => const BankAppRegistry([
+        // No deepLinkBuilder for now — VN banks' transfer-screen
+        // deep-link schemes vary widely and aren't publicly
+        // documented.  Universal links (qr.vietqr.io) aren't
+        // registered as App Links by most bank apps either, so
+        // attempting one auto-redirects to the browser with "site
+        // can't be reached".  Until we have verified per-bank
+        // schemes, ship the reliable home-screen launch — user
+        // scans the on-screen QR via the bank's built-in scanner.
+        //
+        // To enable prefilled-transfer for a specific bank, add
+        // `deepLinkBuilder: _someBankLinkBuilder` here.  Tested
+        // schemes wanted, see follow-up issue.
         AndroidPackageBankAppLauncher(
           code: 'MB',
           displayName: 'MB Bank',
           androidPackage: 'com.mbmobile',
           urlScheme: 'mbbank://',
-          deepLinkBuilder: _vietqrUniversalLink,
         ),
         AndroidPackageBankAppLauncher(
           code: 'ACB',
           displayName: 'ACB ONE',
           androidPackage: 'mobile.acb.com.vn',
-          deepLinkBuilder: _vietqrUniversalLink,
         ),
         AndroidPackageBankAppLauncher(
           code: 'VCB',
           displayName: 'Vietcombank',
           androidPackage: 'com.VCB',
           urlScheme: 'vcbdigibank://',
-          deepLinkBuilder: _vietqrUniversalLink,
         ),
         AndroidPackageBankAppLauncher(
           code: 'AB',
           displayName: 'ABBank',
           androidPackage: 'vn.com.abbank.mobilebanking',
           urlScheme: 'abbankezpay://',
-          deepLinkBuilder: _vietqrUniversalLink,
         ),
         AndroidPackageBankAppLauncher(
           code: 'TPB',
           displayName: 'TPBank',
           androidPackage: 'com.tpb.mb.gprsandroid',
           urlScheme: 'tpb://',
-          deepLinkBuilder: _vietqrUniversalLink,
         ),
         AndroidPackageBankAppLauncher(
           code: 'TCB',
           displayName: 'Techcombank',
           androidPackage: 'vn.com.techcombank.bb.app',
           urlScheme: 'techcombank://',
-          deepLinkBuilder: _vietqrUniversalLink,
         ),
         AndroidPackageBankAppLauncher(
           code: 'VTB',
           displayName: 'VietinBank',
           androidPackage: 'com.vietinbank.ipay',
           urlScheme: 'vietinbank://',
-          deepLinkBuilder: _vietqrUniversalLink,
         ),
       ]);
 
+  // Kept for the day a VN bank actually registers an App Link for
+  // qr.vietqr.io — at which point flip the registry entry's
+  // `deepLinkBuilder` to this and the transfer screen prefills.
+  // ignore: unused_element
   /// VietQR-hosted universal link.  When a VN bank app has
   /// registered an Android intent-filter for the `vietqr.io`
   /// domain (most major ones do as of 2026) tapping this URL opens
