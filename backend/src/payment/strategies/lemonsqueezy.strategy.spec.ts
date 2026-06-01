@@ -23,39 +23,91 @@ describe('LemonSqueezyStrategy.verifyWebhook', () => {
   });
 
   const sign = (raw: string) => createHmac('sha256', SECRET).update(raw).digest('hex');
-  const event = (name: string, ref?: string) =>
-    JSON.stringify({ meta: { event_name: name, custom_data: ref ? { reference_code: ref } : {} } });
+  const event = (name: string, opts: {
+    ref?: string;
+    subId?: string;
+    renewsAt?: string;
+    customerId?: number;
+  } = {}) =>
+    JSON.stringify({
+      meta: {
+        event_name: name,
+        custom_data: opts.ref ? { reference_code: opts.ref } : {},
+      },
+      data: {
+        id: opts.subId ?? 'sub_TEST_1',
+        attributes: {
+          renews_at: opts.renewsAt ?? '2026-07-01T00:00:00.000Z',
+          customer_id: opts.customerId,
+        },
+      },
+    });
 
-  it('activates on subscription_payment_success with valid signature', async () => {
-    const raw = event('subscription_payment_success', 'DR-PRO-ABC');
+  it('emits lemonsqueezy_payment_success on a valid first-charge event', async () => {
+    const raw = event('subscription_payment_success', {
+      ref: 'DR-PRO-ABC',
+      subId: 'sub_123',
+      customerId: 999,
+    });
     const action = await strat.verifyWebhook(Buffer.from(raw), { 'x-signature': sign(raw) });
-    expect(action).toEqual({ type: 'payment_completed', reference_code: 'DR-PRO-ABC' });
+    expect(action).toEqual({
+      type: 'lemonsqueezy_payment_success',
+      reference_code: 'DR-PRO-ABC',
+      lemonsqueezy_subscription_id: 'sub_123',
+      lemonsqueezy_customer_id: '999',
+      current_period_end: Math.floor(new Date('2026-07-01T00:00:00.000Z').getTime() / 1000),
+    });
+  });
+
+  it('emits lemonsqueezy_subscription_canceled on cancel events', async () => {
+    const raw = event('subscription_cancelled', { ref: 'DR-PRO-ABC', subId: 'sub_999' });
+    const action = await strat.verifyWebhook(Buffer.from(raw), { 'x-signature': sign(raw) });
+    expect(action).toEqual({
+      type: 'lemonsqueezy_subscription_canceled',
+      lemonsqueezy_subscription_id: 'sub_999',
+    });
+  });
+
+  it('emits lemonsqueezy_subscription_expired on expired events', async () => {
+    const raw = event('subscription_expired', { ref: 'DR-PRO-ABC', subId: 'sub_999' });
+    const action = await strat.verifyWebhook(Buffer.from(raw), { 'x-signature': sign(raw) });
+    expect(action).toEqual({
+      type: 'lemonsqueezy_subscription_expired',
+      lemonsqueezy_subscription_id: 'sub_999',
+    });
   });
 
   it('rejects a forged/invalid signature', async () => {
-    const raw = event('subscription_payment_success', 'DR-PRO-ABC');
+    const raw = event('subscription_payment_success', { ref: 'DR-PRO-ABC', subId: 'sub_123' });
     const action = await strat.verifyWebhook(Buffer.from(raw), { 'x-signature': 'deadbeef' });
     expect(action).toEqual({ type: 'ignored' });
   });
 
   it('ignores when signing secret is unset', async () => {
     settingsRepo.findOne.mockResolvedValueOnce({ lemonsqueezy_webhook_secret: '' });
-    const raw = event('subscription_payment_success', 'DR-PRO-ABC');
+    const raw = event('subscription_payment_success', { ref: 'DR-PRO-ABC', subId: 'sub_123' });
     const action = await strat.verifyWebhook(Buffer.from(raw), { 'x-signature': sign(raw) });
     expect(action).toEqual({ type: 'ignored' });
   });
 
   it('ignores payment_success that lacks a reference_code', async () => {
-    const raw = event('subscription_payment_success');
+    const raw = event('subscription_payment_success', { subId: 'sub_123' });
     const action = await strat.verifyWebhook(Buffer.from(raw), { 'x-signature': sign(raw) });
     expect(action).toEqual({ type: 'ignored' });
   });
 
-  it('ignores cancel/expire/update events (lapse-at-expiry for now)', async () => {
-    for (const name of ['subscription_cancelled', 'subscription_expired', 'subscription_updated']) {
-      const raw = event(name, 'DR-PRO-ABC');
-      const action = await strat.verifyWebhook(Buffer.from(raw), { 'x-signature': sign(raw) });
-      expect(action).toEqual({ type: 'ignored' });
-    }
+  it('ignores payment_success that lacks data.id (subscription)', async () => {
+    const raw = JSON.stringify({
+      meta: { event_name: 'subscription_payment_success', custom_data: { reference_code: 'DR-PRO-ABC' } },
+      data: {}, // no id
+    });
+    const action = await strat.verifyWebhook(Buffer.from(raw), { 'x-signature': sign(raw) });
+    expect(action).toEqual({ type: 'ignored' });
+  });
+
+  it('ignores subscription_updated (no-op event)', async () => {
+    const raw = event('subscription_updated', { ref: 'DR-PRO-ABC', subId: 'sub_123' });
+    const action = await strat.verifyWebhook(Buffer.from(raw), { 'x-signature': sign(raw) });
+    expect(action).toEqual({ type: 'ignored' });
   });
 });

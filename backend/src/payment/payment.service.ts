@@ -231,6 +231,69 @@ export class PaymentService {
         await this.handleSubscriptionCanceled(action.stripe_subscription_id);
         return { success: true };
 
+      // Lemon Squeezy variants — same shape as Stripe but the
+      // subscription ID lives in a different field per the LS API.
+      // Handlers below delegate to the generic store-ref helpers in
+      // SubscriptionsService.
+      case 'lemonsqueezy_payment_success': {
+        // First-cycle activation OR renewal — both emit
+        // `subscription_payment_success`.  Path forks on whether a
+        // PENDING payment with this reference_code still exists:
+        //   - PENDING → first-cycle: complete payment + stamp store_ref
+        //   - non-pending → renewal: extend expires_at via store_ref
+        // Either way, also capture the LS customer_id for future
+        // portal lookups + checkout reuse.
+        if (action.lemonsqueezy_customer_id) {
+          const payment = await this.paymentRepo.findOne({ where: { reference_code: action.reference_code } });
+          if (payment?.user_id) {
+            await this.userRepo.update(payment.user_id, { lemonsqueezy_customer_id: action.lemonsqueezy_customer_id });
+          }
+        }
+        const pending = await this.paymentRepo.findOne({
+          where: { reference_code: action.reference_code, status: PaymentStatus.PENDING },
+        });
+        if (pending) {
+          const completion = await this.completePayment(action.reference_code, 'completed');
+          if (completion.success) {
+            await this.subscriptionsService.stampStoreRef(
+              action.reference_code,
+              storeTypeForMethod(PaymentMethod.LEMONSQUEEZY),
+              action.lemonsqueezy_subscription_id,
+            );
+          }
+          return completion;
+        }
+        // Renewal — extend expiry.
+        if (action.current_period_end > 0) {
+          const expiresAt = new Date(action.current_period_end * 1000);
+          const rows = await this.subscriptionsService.extendByStoreRef(
+            storeTypeForMethod(PaymentMethod.LEMONSQUEEZY),
+            action.lemonsqueezy_subscription_id,
+            expiresAt,
+          );
+          this.logger.log(`Renewed LS sub ${action.lemonsqueezy_subscription_id} → expires ${expiresAt.toISOString()} (rows=${rows})`);
+        }
+        return { success: true, reference_code: action.reference_code };
+      }
+
+      case 'lemonsqueezy_subscription_canceled': {
+        const rows = await this.subscriptionsService.cancelByStoreRef(
+          storeTypeForMethod(PaymentMethod.LEMONSQUEEZY),
+          action.lemonsqueezy_subscription_id,
+        );
+        this.logger.log(`Cancelled LS sub ${action.lemonsqueezy_subscription_id} (rows=${rows})`);
+        return { success: true };
+      }
+
+      case 'lemonsqueezy_subscription_expired': {
+        const rows = await this.subscriptionsService.expireByStoreRef(
+          storeTypeForMethod(PaymentMethod.LEMONSQUEEZY),
+          action.lemonsqueezy_subscription_id,
+        );
+        this.logger.log(`Expired LS sub ${action.lemonsqueezy_subscription_id} (rows=${rows})`);
+        return { success: true };
+      }
+
       case 'dispute_created':
         this.logger.warn(`Stripe dispute on charge ${action.stripe_charge_id}, amount ${action.amount}. Manual review required.`);
         return { success: true };
