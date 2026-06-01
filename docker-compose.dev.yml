@@ -1,0 +1,81 @@
+# Dev environment for `dev.draftright.info` + `api.dev.draftright.info`.
+#
+# Designed to run alongside the prod stack on the same VPS:
+#   - separate backend container on :3100 (vs prod :3000)
+#   - separate Postgres DB `draftright_dev` so test users / payments
+#     never touch prod tables (single Postgres instance, different DB name)
+#   - reuses the prod Redis instance via DB index 1 (separate keyspace)
+#   - separate website container on :4100 (vs prod :4000)
+#
+# Usage on the VPS (alongside the existing prod stack):
+#   git pull origin develop
+#   cp .env .env.dev   # adjust ADMIN_PASSWORD / WEBSITE_URL etc — see below
+#   docker compose --env-file .env.dev -f docker-compose.dev.yml up -d --build
+#
+# Bring down:
+#   docker compose --env-file .env.dev -f docker-compose.dev.yml down
+#
+# Caddy block lives at deploy/Caddyfile.dev (operator copies into the
+# active Caddyfile).
+#
+# Migrate / seed the dev DB once:
+#   docker exec -it dr-backend-dev sh -c 'psql -h postgres -U draftright -c "CREATE DATABASE draftright_dev;"'
+#   docker exec -it dr-backend-dev npx ts-node src/seed.ts
+#
+# Tear down DB data:
+#   docker exec -it postgres-prod psql -U draftright -c 'DROP DATABASE IF EXISTS draftright_dev;'
+
+services:
+  backend-dev:
+    build: ./backend
+    container_name: dr-backend-dev
+    ports:
+      - "3100:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      # Shared instance, separate logical DB.
+      - DATABASE_URL=postgresql://draftright:password@postgres:5432/draftright_dev
+      # Same Redis instance, separate keyspace via DB index 1.
+      - REDIS_URL=redis://redis:6379/1
+      - JWT_SECRET=${JWT_SECRET_DEV:-${JWT_SECRET}}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET_DEV:-${JWT_REFRESH_SECRET}}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ADMIN_EMAIL=${ADMIN_EMAIL}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - WEBSITE_URL=https://dev.draftright.info
+      - PORT=3000
+      # Strategy redirects (LS / Stripe success_url / cancel_url) use
+      # WEBSITE_URL above, so LS hosted-checkout sends users back to
+      # the dev website + the mobile Universal Link still resolves.
+      - LEMONSQUEEZY_API_KEY=${LEMONSQUEEZY_API_KEY_DEV:-}
+      - LEMONSQUEEZY_STORE_ID=${LEMONSQUEEZY_STORE_ID_DEV:-}
+      - LEMONSQUEEZY_PRO_VARIANT_ID=${LEMONSQUEEZY_PRO_VARIANT_ID_DEV:-}
+      - LEMONSQUEEZY_WEBHOOK_SECRET=${LEMONSQUEEZY_WEBHOOK_SECRET_DEV:-}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY_DEV:-}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET_DEV:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - default
+    restart: unless-stopped
+
+  website-dev:
+    build:
+      context: ./website
+      args:
+        # Astro reads PUBLIC_API_URL at build time; pointed at dev API
+        # so the AccountPage / Pricing islands talk to the right backend.
+        PUBLIC_API_URL: https://api.dev.draftright.info
+    container_name: dr-website-dev
+    ports:
+      - "4100:80"
+    restart: unless-stopped
+
+# Reuse the existing prod `postgres` + `redis` services + their volume.
+# This compose file is intended to be brought up alongside the prod
+# stack (`docker-compose.yml`); Docker merges service definitions by
+# name.  If you bring this up STANDALONE, declare those services here.
