@@ -166,6 +166,17 @@ class _BootstrapState extends State<_Bootstrap> {
         );
       } catch (_) {/* reporter must never block startup */}
 
+      // Keep ErrorReporter pointed at whichever backend the user is
+      // currently using.  Without this, auto-captured errors keep
+      // posting to the URL captured at boot — so swapping
+      // Settings → Server from prod to dev would leak dev crashes
+      // into the prod /errors stream until the app restarted.
+      settings.addListener(() {
+        try {
+          ErrorReporter.setBackendUrl(settings.backendUrl);
+        } catch (_) {/* reporter must never break a settings save */}
+      });
+
       if (!mounted) return;
       setState(() {
         _settings = settings;
