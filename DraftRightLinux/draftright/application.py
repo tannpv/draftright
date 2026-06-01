@@ -17,6 +17,9 @@ from draftright.__version__ import __version__
 from draftright.services.logger import setup_logging
 from draftright.services.update_service import UpdateService
 from draftright.services import error_reporter
+from draftright.services.api_client import APIClient
+from draftright.services.auth_service import AuthService
+from draftright.services.settings_service import SettingsService
 
 # Wire crash reporting as early as possible — sys.excepthook covers
 # anything that throws after this point.
@@ -54,6 +57,20 @@ class DraftRightApplication(Adw.Application):
         # Force dark color scheme
         style_manager = Adw.StyleManager.get_default()
         style_manager.set_color_scheme(Adw.ColorScheme.FORCE_DARK)
+
+        # Wire core services on first activate.  These were declared in
+        # __init__ but never instantiated — every consumer was guarding
+        # `if app.api_client is None` and falling back, which left the
+        # Subscription page permanently in "Not signed in" state.
+        # Lazy-init is idempotent on subsequent activates (e.g. when
+        # the user reopens via the tray) so the dock-style relaunch
+        # doesn't churn instances.
+        if self.settings_service is None:
+            self.settings_service = SettingsService()
+        if self.api_client is None:
+            self.api_client = APIClient(self.settings_service.backend_url)
+        if self.auth_service is None:
+            self.auth_service = AuthService(self.api_client)
 
         # Load CSS
         self._load_css()

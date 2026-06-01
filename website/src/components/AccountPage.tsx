@@ -96,7 +96,11 @@ export default function AccountPage() {
     if (!token) return;
     setActionLoading('manage');
     try {
-      const res = await fetch(`${API}/lemonsqueezy/portal`, {
+      // Unified endpoint — backend dispatches per the user's active
+      // subscription source (Lemon Squeezy / Stripe).  Replaces the
+      // LS-only /lemonsqueezy/portal route so Stripe-billed users
+      // can also Manage; VietQR / bank / admin-granted return 404.
+      const res = await fetch(`${API}/payment/portal`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
