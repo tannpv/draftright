@@ -5,6 +5,7 @@ import { Payment, PaymentMethod, PaymentStatus } from './entities/payment.entity
 // Default payment-method when nothing is configured. Single point of change.
 const DEFAULT_PAYMENT_METHOD = PaymentMethod.STRIPE;
 import { CheckoutResult, WebhookAction } from './strategies/payment-strategy.interface';
+import { storeTypeForMethod } from './store-type-mapping';
 import { BasePaymentStrategy } from './strategies/base-payment.strategy';
 import { StripeStrategy } from './strategies/stripe.strategy';
 import { VietQRStrategy } from './strategies/vietqr.strategy';
@@ -305,7 +306,12 @@ export class PaymentService {
       expiresAt.setMonth(expiresAt.getMonth() + 1);
     }
 
-    await this.subscriptionsService.grant(payment.user_id, payment.plan_id, expiresAt);
+    await this.subscriptionsService.grant(
+      payment.user_id,
+      payment.plan_id,
+      expiresAt,
+      storeTypeForMethod(payment.method),
+    );
 
     // Best-effort "subscription active" email — never block activation on it.
     try {
