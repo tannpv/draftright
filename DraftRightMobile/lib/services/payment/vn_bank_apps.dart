@@ -304,6 +304,7 @@ class BankAppRegistry {
   ///
   /// Format used by vietqr.io intent:
   ///   https://qr.vietqr.io/transfer?bank=<BIN>&account=<acct>&amount=<n>&memo=<m>
+  // ignore: unused_element
   static String? _vietqrUniversalLink(BankAppLaunchContext ctx) {
     final bin = ctx.receiverBankBin;
     final acct = ctx.receiverAccount;

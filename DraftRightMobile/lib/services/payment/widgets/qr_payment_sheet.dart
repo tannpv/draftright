@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:draftright_mobile/services/payment/checkout_result.dart';
 import 'package:draftright_mobile/services/payment/payment_status.dart';
-import 'package:draftright_mobile/services/payment/vn_bank_apps.dart';
 import 'package:draftright_mobile/services/payment/widgets/payment_status_banner.dart';
 
 /// Bottom-sheet shown for VietQR checkout.  Renders the QR image and
@@ -17,37 +16,6 @@ class QrPaymentSheet extends StatelessWidget {
   final Stream<PaymentStatusUpdate>? statusStream;
   const QrPaymentSheet({super.key, required this.checkout, this.statusStream});
 
-  /// Map bank-info fields to a [BankAppLaunchContext] the per-bank
-  /// deep-link builders use to prefill the transfer screen.  The
-  /// bank-info display name (e.g. "MB Bank (Quân Đội)") needs to
-  /// be mapped to the NAPAS BIN — backend doesn't return that yet,
-  /// so we infer from the bank name.  When inference fails the
-  /// context is still useful for the home-screen-launch path.
-  BankAppLaunchContext? _contextFromBankInfo(BankInfo? info) {
-    if (info == null) return null;
-    return BankAppLaunchContext(
-      amount: info.amount.toStringAsFixed(0),
-      receiverBankBin: _napasBin(info.bankName),
-      receiverAccount: info.accountNumber,
-      receiverName: info.accountName,
-      memo: info.reference,
-    );
-  }
-
-  /// Very rough mapping from bank display name → NAPAS BIN.
-  /// Backend should send this field directly in a follow-up so we
-  /// don't have to string-match here.
-  String? _napasBin(String bankName) {
-    final n = bankName.toLowerCase();
-    if (n.contains('mb')) return '970422';
-    if (n.contains('acb')) return '970416';
-    if (n.contains('vietcombank') || n.contains('vcb')) return '970436';
-    if (n.contains('abbank')) return '970425';
-    if (n.contains('tpbank')) return '970423';
-    if (n.contains('techcombank')) return '970407';
-    if (n.contains('vietinbank')) return '970415';
-    return null;
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -101,13 +69,6 @@ class QrPaymentSheet extends StatelessWidget {
                 },
               ),
             ),
-            const SizedBox(height: 16),
-            // Open-bank-app row — Zalo-style.  Tiles try a per-bank
-            // deep link first (prefills account/amount/memo on the
-            // transfer screen when the bank app has registered an
-            // intent-filter for qr.vietqr.io); fall back to opening
-            // the bank's home screen if the deep link is unhandled.
-            _OpenBankAppRow(context: _contextFromBankInfo(bank)),
             if (bank != null) ...[
               const SizedBox(height: 24),
               const Divider(),
@@ -135,158 +96,6 @@ class QrPaymentSheet extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-/// Horizontal scrollable row of Vietnamese banking apps.  Iterates
-/// over [BankAppRegistry.forVietnam()] — adding a bank or swapping
-/// a launch strategy = one entry in the registry, zero changes
-/// here.  Zalo-style handoff: tap → bank app opens → user scans the
-/// on-screen QR via the bank's built-in scanner.
-class _OpenBankAppRow extends StatelessWidget {
-  /// Caller can inject a custom registry for tests; default = VN.
-  final BankAppRegistry? registry;
-  /// Optional transfer details passed to each launcher's
-  /// [BankAppLauncher.launch] call.  When provided + the bank has
-  /// a `deepLinkBuilder`, the bank app opens directly on the
-  /// transfer screen prefilled with these values.
-  final BankAppLaunchContext? context;
-  // ignore: unused_element_parameter
-  const _OpenBankAppRow({this.registry, this.context});
-
-  @override
-  Widget build(BuildContext buildContext) {
-    final launchers = (registry ?? BankAppRegistry.forVietnam()).all();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(left: 4, bottom: 6),
-          child: Text(
-            'Open your bank app',
-            style: Theme.of(buildContext).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
-          ),
-        ),
-        SizedBox(
-          height: 88,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            itemCount: launchers.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 8),
-            itemBuilder: (_, i) => _BankAppTile(
-              launcher: launchers[i],
-              launchContext: context,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _BankAppTile extends StatefulWidget {
-  final BankAppLauncher launcher;
-  final BankAppLaunchContext? launchContext;
-  const _BankAppTile({required this.launcher, this.launchContext});
-
-  @override
-  State<_BankAppTile> createState() => _BankAppTileState();
-}
-
-class _BankAppTileState extends State<_BankAppTile> {
-  bool _launching = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(10),
-        onTap: _launching ? null : _onTap,
-        child: Container(
-          width: 88,
-          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: Colors.grey.shade300),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (_launching)
-                const SizedBox(
-                  width: 28, height: 28,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              else
-                Icon(Icons.account_balance, size: 28, color: Colors.blue.shade700),
-              const SizedBox(height: 6),
-              Text(
-                widget.launcher.displayName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _onTap() async {
-    setState(() => _launching = true);
-    try {
-      final outcome = await widget.launcher.launch(
-        context: widget.launchContext,
-      );
-      if (!mounted) return;
-      switch (outcome) {
-        case BankAppLaunchOutcome.appOpened:
-          // App launched — user is in bank app now.  No UI feedback.
-          break;
-        case BankAppLaunchOutcome.appNotInstalled:
-          // Don't auto-redirect to Play Store; ask first so users
-          // who legitimately have the app installed (via APK
-          // sideload, store-detection blind spots, etc.) aren't
-          // dragged into an unnecessary "update needed" flow.
-          await _promptInstall();
-          break;
-        case BankAppLaunchOutcome.fallbackOpened:
-          // Only reached when the user explicitly accepted the
-          // install prompt; nothing more to surface.
-          break;
-        case BankAppLaunchOutcome.failed:
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Could not open ${widget.launcher.displayName}.'),
-          ));
-          break;
-      }
-    } finally {
-      if (mounted) setState(() => _launching = false);
-    }
-  }
-
-  /// Show a SnackBar with an "Install" action so the Play Store
-  /// redirect is opt-in instead of automatic.
-  Future<void> _promptInstall() async {
-    final scaffold = ScaffoldMessenger.of(context);
-    final launcher = widget.launcher;
-    scaffold.showSnackBar(
-      SnackBar(
-        content: Text("${launcher.displayName} doesn't seem to be installed."),
-        action: launcher is AndroidPackageBankAppLauncher
-            ? SnackBarAction(
-                label: 'Install',
-                onPressed: () async {
-                  await launcher.openPlayStore();
-                },
-              )
-            : null,
-        duration: const Duration(seconds: 4),
       ),
     );
   }
