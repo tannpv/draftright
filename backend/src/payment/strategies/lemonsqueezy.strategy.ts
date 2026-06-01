@@ -228,6 +228,15 @@ export class LemonSqueezyStrategy extends BasePaymentStrategy {
           current_period_end: toUnix(renewsAtIso),
         };
 
+      case 'subscription_payment_failed':
+        // Renewal charge failed (card declined / expired / etc.).
+        // LS retries per its dunning schedule before firing
+        // `subscription_expired` if every retry fails.  Notify the
+        // user now so they can update their card; do NOT revoke
+        // access — that's `subscription_expired`'s job.
+        if (!subId) return { type: 'ignored' };
+        return { type: 'lemonsqueezy_payment_failed', lemonsqueezy_subscription_id: subId };
+
       case 'subscription_cancelled':
         // User clicked "Cancel" in LS Customer Portal — keep access
         // until current period end.  Status flips to CANCELLED so

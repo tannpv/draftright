@@ -59,6 +59,24 @@ describe('LemonSqueezyStrategy.verifyWebhook', () => {
     });
   });
 
+  it('emits lemonsqueezy_payment_failed on payment_failed events', async () => {
+    const raw = event('subscription_payment_failed', { ref: 'DR-PRO-ABC', subId: 'sub_888' });
+    const action = await strat.verifyWebhook(Buffer.from(raw), { 'x-signature': sign(raw) });
+    expect(action).toEqual({
+      type: 'lemonsqueezy_payment_failed',
+      lemonsqueezy_subscription_id: 'sub_888',
+    });
+  });
+
+  it('ignores payment_failed without data.id', async () => {
+    const raw = JSON.stringify({
+      meta: { event_name: 'subscription_payment_failed' },
+      data: {},
+    });
+    const action = await strat.verifyWebhook(Buffer.from(raw), { 'x-signature': sign(raw) });
+    expect(action).toEqual({ type: 'ignored' });
+  });
+
   it('emits lemonsqueezy_subscription_canceled on cancel events', async () => {
     const raw = event('subscription_cancelled', { ref: 'DR-PRO-ABC', subId: 'sub_999' });
     const action = await strat.verifyWebhook(Buffer.from(raw), { 'x-signature': sign(raw) });
