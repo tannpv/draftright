@@ -138,13 +138,38 @@ class PaymentService {
     }
   }
 
+  /// Currency the strategy expects to charge the plan in.  VietQR +
+  /// bank-transfer can only settle in VND because the QR code is a
+  /// Vietnamese-bank-only spec; everything else defaults to USD.
+  String _currencyFor(PaymentMethodKind method) {
+    switch (method) {
+      case PaymentMethodKind.vietqr:
+      case PaymentMethodKind.bankTransfer:
+        return 'VND';
+      case PaymentMethodKind.lemonsqueezy:
+      case PaymentMethodKind.stripe:
+      case PaymentMethodKind.paypal:
+        return 'USD';
+    }
+  }
+
   /// Fetch the public plan catalog and return the Pro-tier plan id
-  /// the upgrade button should target.  Single source of truth so the
-  /// UI doesn't carry plan-picking logic.
-  Future<String> resolveProPlanId() async {
+  /// the upgrade button should target for [method].  Currency-aware
+  /// so VietQR doesn't pick a USD plan (which would store
+  /// `amount=499` and bake "499 đồng" into the QR — useless).
+  /// Single source of truth so the UI doesn't carry plan-picking
+  /// logic.
+  Future<String> resolveProPlanId({PaymentMethodKind? method}) async {
     final plans = await backend.listPlans();
-    final pro = _pickProPlan(plans);
-    if (pro == null) throw Exception('Could not find a Pro plan in the catalog');
+    final currency = method != null ? _currencyFor(method) : null;
+    final pro = _pickProPlan(plans, currency: currency);
+    if (pro == null) {
+      throw Exception(
+        currency != null
+            ? 'Could not find a Pro plan in $currency for $method'
+            : 'Could not find a Pro plan in the catalog',
+      );
+    }
     final planId = (pro['id'] ?? '').toString();
     if (planId.isEmpty) throw Exception('Pro plan row is missing an id');
     return planId;
@@ -153,14 +178,24 @@ class PaymentService {
   /// Pick the first plan that looks like the paid Pro tier:
   ///   - billing_period != 'none' (excludes the Free plan)
   ///   - is_active = true (excludes archived rows)
+  ///   - currency matches when provided (VND for VietQR/bank,
+  ///     USD for Stripe/LS/PayPal)
   ///   - prefers 'monthly' over 'yearly' for the upgrade button
   ///
   /// One-place rule so future "Pro Yearly" toggles only edit here.
-  Map<String, dynamic>? _pickProPlan(List<Map<String, dynamic>> plans) {
+  Map<String, dynamic>? _pickProPlan(
+    List<Map<String, dynamic>> plans, {
+    String? currency,
+  }) {
     final paid = plans.where((p) {
       final bp = (p['billing_period'] ?? '').toString().toLowerCase();
       final active = p['is_active'] ?? true;
-      return bp != 'none' && active == true;
+      if (bp == 'none' || active != true) return false;
+      if (currency != null) {
+        final c = (p['currency'] ?? '').toString().toUpperCase();
+        if (c != currency.toUpperCase()) return false;
+      }
+      return true;
     }).toList();
     if (paid.isEmpty) return null;
     final monthly = paid.firstWhere(

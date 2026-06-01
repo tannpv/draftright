@@ -320,7 +320,11 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
       _startingKind = kind;
     });
     try {
-      final planId = await _payments.resolveProPlanId();
+      // Pass the method so the resolver picks a currency-compatible
+      // plan (VND for VietQR/bank, USD for LS/Stripe/PayPal).
+      // Without this, VietQR would pick the USD Pro plan and the
+      // QR code would encode amount=499 đồng (~$0.02).
+      final planId = await _payments.resolveProPlanId(method: kind);
       if (!mounted) return;
       await _payments.upgradeWith(
         context: context,
