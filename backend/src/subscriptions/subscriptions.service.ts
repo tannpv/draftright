@@ -83,20 +83,20 @@ export class SubscriptionsService {
     return this.subsRepo.count({ where: { status: SubscriptionStatus.ACTIVE } });
   }
 
-  // ── Stripe-specific helpers (Phase 3a) ──────────────────────────────────
+  // ── Generic store-ref helpers (any provider) ────────────────────────────
 
   /**
-   * After a Stripe checkout completes, stamp the Subscription row with
-   * the Stripe Subscription ID (sub_XXXX) so renewal/cancel webhooks can
-   * find it. Reuses the existing `store_transaction_id` column.
+   * Stamp a subscription with its provider-side transaction ID so
+   * later renewal/cancel webhooks can find it.  Looks up the
+   * most-recent ACTIVE subscription belonging to the user that paid
+   * `referenceCode` and writes `store_type` + `store_transaction_id`.
    *
-   * Looks up the subscription via the user_id of the matching payment.
+   * One implementation per provider would duplicate the join + the
+   * "find most recent" rule — centralise once.  Callers pass the
+   * StoreType so the row's audit field matches the provider that
+   * actually charged.
    */
-  async stampStripeSubscription(referenceCode: string, stripeSubId: string): Promise<void> {
-    // Most recently activated row for the user that paid this reference_code.
-    // Identified via a join through payments — but to keep this service Payment-agnostic,
-    // the caller has already activated the subscription, and we just need to find
-    // the most-recent ACTIVE row that lacks a store_transaction_id.
+  async stampStoreRef(referenceCode: string, storeType: StoreType, transactionId: string): Promise<void> {
     const recent = await this.subsRepo
       .createQueryBuilder('sub')
       .innerJoin('payments', 'pay', 'pay.user_id = sub.user_id AND pay.reference_code = :ref', { ref: referenceCode })
@@ -106,34 +106,71 @@ export class SubscriptionsService {
     if (!recent) return;
     await this.subsRepo.update(
       { id: recent.id },
-      { store_type: StoreType.STRIPE, store_transaction_id: stripeSubId },
+      { store_type: storeType, store_transaction_id: transactionId },
     );
   }
 
   /**
-   * Extend a Stripe subscription's expires_at to the new period end. Called from
-   * `invoice.payment_succeeded` webhook. Returns rows affected (0 if Stripe sub
-   * not found in our DB — webhook may have arrived out-of-order or the
-   * stamp from `stampStripeSubscription` raced with this).
+   * Extend a subscription's `expires_at` on a successful renewal.
+   * Lookup keyed on `(store_type, store_transaction_id)` so the same
+   * code path serves every provider — pass the provider-specific
+   * StoreType.  Returns rows affected (0 = no matching row, webhook
+   * arrived out-of-order or the stamp from `stampStoreRef` raced).
    */
-  async extendByStripeSubId(stripeSubId: string, expiresAt: Date): Promise<number> {
+  async extendByStoreRef(storeType: StoreType, transactionId: string, expiresAt: Date): Promise<number> {
     const result = await this.subsRepo.update(
-      { store_type: StoreType.STRIPE, store_transaction_id: stripeSubId, status: SubscriptionStatus.ACTIVE },
+      { store_type: storeType, store_transaction_id: transactionId, status: SubscriptionStatus.ACTIVE },
       { expires_at: expiresAt },
     );
     return result.affected ?? 0;
   }
 
   /**
-   * Mark a Stripe subscription cancelled after `customer.subscription.deleted`.
-   * Access remains until expires_at — the cron at Stage 5 expires it after that.
+   * Mark a subscription cancelled.  Access remains until expires_at —
+   * the expiry cron flips it to EXPIRED after that.  Matches any
+   * provider; keep this generic.
    */
-  async cancelByStripeSubId(stripeSubId: string): Promise<number> {
+  async cancelByStoreRef(storeType: StoreType, transactionId: string): Promise<number> {
     const result = await this.subsRepo.update(
-      { store_type: StoreType.STRIPE, store_transaction_id: stripeSubId, status: SubscriptionStatus.ACTIVE },
+      { store_type: storeType, store_transaction_id: transactionId, status: SubscriptionStatus.ACTIVE },
       { status: SubscriptionStatus.CANCELLED },
     );
     return result.affected ?? 0;
+  }
+
+  /**
+   * Mark a subscription expired immediately (used when the provider
+   * reports the subscription has fully ended — e.g. after final
+   * dunning retries failed).  Distinct from cancel: cancel keeps
+   * access until expires_at; expire revokes access now.
+   */
+  async expireByStoreRef(storeType: StoreType, transactionId: string): Promise<number> {
+    const result = await this.subsRepo.update(
+      { store_type: storeType, store_transaction_id: transactionId },
+      { status: SubscriptionStatus.EXPIRED, expires_at: new Date() },
+    );
+    return result.affected ?? 0;
+  }
+
+  // ── Stripe-specific helpers (Phase 3a) ──────────────────────────────────
+
+  /**
+   * Stripe-specific wrappers — kept for backward compat with the
+   * Stripe webhook path that was already shipped (Phase 3a).  All
+   * three delegate to the generic `stampStoreRef` / `extendByStoreRef`
+   * / `cancelByStoreRef` helpers above; new providers should call
+   * the generic versions directly.
+   */
+  async stampStripeSubscription(referenceCode: string, stripeSubId: string): Promise<void> {
+    return this.stampStoreRef(referenceCode, StoreType.STRIPE, stripeSubId);
+  }
+
+  async extendByStripeSubId(stripeSubId: string, expiresAt: Date): Promise<number> {
+    return this.extendByStoreRef(StoreType.STRIPE, stripeSubId, expiresAt);
+  }
+
+  async cancelByStripeSubId(stripeSubId: string): Promise<number> {
+    return this.cancelByStoreRef(StoreType.STRIPE, stripeSubId);
   }
 
   /**

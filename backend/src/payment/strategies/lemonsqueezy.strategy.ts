@@ -192,23 +192,55 @@ export class LemonSqueezyStrategy extends BasePaymentStrategy {
 
     const name = event?.meta?.event_name;
     const referenceCode = event?.meta?.custom_data?.reference_code;
-    this.logger.log(`Lemon Squeezy webhook: ${name} (ref=${referenceCode || 'none'})`);
+    const subId = String(event?.data?.id || '');
+    // LS sends ISO timestamps on subscription events; convert to unix
+    // seconds to match the Stripe variant's current_period_end shape.
+    const renewsAtIso = event?.data?.attributes?.renews_at as string | undefined;
+    const endsAtIso = event?.data?.attributes?.ends_at as string | undefined;
+    const customerIdRaw = event?.data?.attributes?.customer_id;
+    const customerId = customerIdRaw != null ? String(customerIdRaw) : undefined;
+    this.logger.log(`Lemon Squeezy webhook: ${name} (ref=${referenceCode || 'none'}, sub=${subId || 'none'})`);
+
+    const toUnix = (iso?: string): number =>
+      iso ? Math.floor(new Date(iso).getTime() / 1000) : 0;
 
     switch (name) {
-      case 'subscription_payment_success':
       case 'subscription_created':
-        // First successful charge → activate. completePayment is idempotent
-        // (acts only on a PENDING payment), so renewal events safely no-op for
-        // now. TODO(fast-follow): extend expiry on renewals + handle cancel.
+      case 'subscription_payment_success':
+        // Both first activation AND renewal cycles emit
+        // subscription_payment_success.  We pass everything through
+        // and let payment.service decide: if a PENDING payment with
+        // this reference_code exists → complete it (first charge);
+        // else → extend expires_at via store_ref (renewal).
         if (!referenceCode) {
           this.logger.warn('Lemon Squeezy payment_success without reference_code — cannot match payment.');
           return { type: 'ignored' };
         }
-        return { type: 'payment_completed', reference_code: referenceCode };
+        if (!subId) {
+          this.logger.warn('Lemon Squeezy payment_success without data.id — cannot stamp subscription.');
+          return { type: 'ignored' };
+        }
+        return {
+          type: 'lemonsqueezy_payment_success',
+          reference_code: referenceCode,
+          lemonsqueezy_subscription_id: subId,
+          lemonsqueezy_customer_id: customerId,
+          current_period_end: toUnix(renewsAtIso),
+        };
 
-      // Acknowledged but not yet acted on (subscription lapses at expires_at).
       case 'subscription_cancelled':
+        // User clicked "Cancel" in LS Customer Portal — keep access
+        // until current period end.  Status flips to CANCELLED so
+        // the expiry cron doesn't auto-renew.
+        if (!subId) return { type: 'ignored' };
+        return { type: 'lemonsqueezy_subscription_canceled', lemonsqueezy_subscription_id: subId };
+
       case 'subscription_expired':
+        // Final dunning attempt failed OR subscription reached its
+        // ends_at after cancellation.  Revoke access immediately.
+        if (!subId) return { type: 'ignored' };
+        return { type: 'lemonsqueezy_subscription_expired', lemonsqueezy_subscription_id: subId };
+
       case 'subscription_updated':
       default:
         return { type: 'ignored' };
