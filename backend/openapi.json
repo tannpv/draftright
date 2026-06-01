@@ -2022,6 +2022,25 @@
         ]
       }
     },
+    "/payment/portal": {
+      "get": {
+        "operationId": "PaymentController_getPortal",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "payment"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/payment/status/{ref}": {
       "get": {
         "operationId": "PaymentController_getStatus",
