@@ -50,10 +50,15 @@ class SettingsService extends ChangeNotifier {
 
   Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
-    // Always use the compile-time const — the Settings UI is gone, and any
-    // stale value previously persisted by an older build must not point a
-    // user at a defunct local/test backend.
-    _backendUrl = _normalizeUrl(kDefaultBackendUrl);
+    // Read user-set URL if present (Settings → Server → Backend URL);
+    // fall back to the compile-time default.  Re-introduced 2026-06-01
+    // so we can point the app at `api.dev.draftright.info` without
+    // rebuilding.  An old install that previously wrote a defunct
+    // localhost URL will need to clear it manually — acceptable
+    // tradeoff for being able to swap envs in the field.
+    _backendUrl = _normalizeUrl(
+      _prefs.getString('draftright.backendUrl') ?? kDefaultBackendUrl,
+    );
     _translateLanguage = _prefs.getString('draftright.translateLanguage') ?? 'Vietnamese';
     _enabledTones = _prefs.getStringList('draftright.enabledTones')
         ?? Tone.values.map((t) => t.apiValue).toList();

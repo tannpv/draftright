@@ -1,0 +1,61 @@
+# Append-only Caddy snippet for the dev environment.
+# Copy into the active Caddyfile (alongside the existing prod blocks)
+# and reload Caddy:
+#
+#   cat deploy/Caddyfile.dev >> /etc/caddy/Caddyfile     # one-time
+#   systemctl reload caddy
+#
+# Lives on the same VPS as prod — same IP (129.212.208.248), same
+# Caddy daemon — so HTTPS certs are issued by Caddy's ACME client
+# the same way as prod.
+
+# ── Dev backend ─────────────────────────────────────────────────
+# Points at the backend-dev container declared in
+# docker-compose.dev.yml (port 3100 on the host).
+api.dev.draftright.info {
+    # Match prod limits — 6MB so bug-report screenshots flow.  Don't
+    # be more permissive than prod or we'll miss prod-only failures.
+    request_body {
+        max_size 6MB
+    }
+    encode gzip
+    log {
+        output file /var/log/caddy/api.dev.draftright.info.log
+        format json
+    }
+    reverse_proxy localhost:3100
+}
+
+# ── Dev website ─────────────────────────────────────────────────
+# Hosts the same Astro build as prod but with PUBLIC_API_URL pointed
+# at the dev backend.  AASA + assetlinks.json live under /.well-known
+# the same way prod does — iOS Universal Links resolve here too, so
+# mobile builds talking to api.dev can return-to-app after LS
+# checkout.
+dev.draftright.info {
+    encode gzip
+    log {
+        output file /var/log/caddy/dev.draftright.info.log
+        format json
+    }
+    # Apple's AASA file must serve as application/json with no
+    # extension; Caddy's mime sniffer doesn't know what to do with
+    # an extensionless file, so set it explicitly.
+    @aasa path /.well-known/apple-app-site-association
+    header @aasa Content-Type application/json
+    reverse_proxy localhost:4100
+}
+
+# ── Dev admin portal ───────────────────────────────────────────
+# Mirrors admin.draftright.info; baked with VITE_API_URL=api.dev.
+# Use the seeded admin (admin@draftright.com / DraftRight2026) — the
+# dev DB starts empty, prod creds (admin@draftright.info) won't
+# work until you grant them via seed or a SQL insert.
+admin.dev.draftright.info {
+    encode gzip
+    log {
+        output file /var/log/caddy/admin.dev.draftright.info.log
+        format json
+    }
+    reverse_proxy localhost:5273
+}
