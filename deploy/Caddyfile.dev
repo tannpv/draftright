@@ -45,3 +45,17 @@ dev.draftright.info {
     header @aasa Content-Type application/json
     reverse_proxy localhost:4100
 }
+
+# ── Dev admin portal ───────────────────────────────────────────
+# Mirrors admin.draftright.info; baked with VITE_API_URL=api.dev.
+# Use the seeded admin (admin@draftright.com / DraftRight2026) — the
+# dev DB starts empty, prod creds (admin@draftright.info) won't
+# work until you grant them via seed or a SQL insert.
+admin.dev.draftright.info {
+    encode gzip
+    log {
+        output file /var/log/caddy/admin.dev.draftright.info.log
+        format json
+    }
+    reverse_proxy localhost:5273
+}

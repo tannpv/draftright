@@ -75,6 +75,18 @@ services:
       - "4100:80"
     restart: unless-stopped
 
+  admin-dev:
+    build:
+      context: ./admin
+      args:
+        # Vite bakes VITE_API_URL into the bundle at build time;
+        # rebuild needed to repoint at a different backend.
+        VITE_API_URL: https://api.dev.draftright.info
+    container_name: dr-admin-dev
+    ports:
+      - "5273:80"
+    restart: unless-stopped
+
 # Reuse the existing prod `postgres` + `redis` services + their volume.
 # This compose file is intended to be brought up alongside the prod
 # stack (`docker-compose.yml`); Docker merges service definitions by

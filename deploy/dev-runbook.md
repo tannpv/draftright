@@ -10,7 +10,10 @@ droplet, `129.212.208.248`), separate containers, separate DB.
 - A live `/payment/success` Astro page so mobile Universal Link
   return-to-app can be verified end-to-end.
 - A separate Postgres DB so test payments / users don't touch prod.
-- Same backend code as `develop` branch; cut new builds from there.
+- A separate admin portal at `admin.dev.draftright.info` for
+  granting Pro to test accounts without touching prod data.
+- Same backend / admin / website code as `develop` branch; cut new
+  builds from there.
 
 ## One-time setup (first time only)
 
