@@ -22,11 +22,6 @@ dependencies:
   flutter_facebook_auth: ^7.1.1
   package_info_plus: ^8.0.0
   url_launcher: ^6.3.0
-  # Android Intent launching by package name — used by the VN bank
-  # app launcher.  URL schemes are unreliable (banks change/break
-  # them silently); package-based launches via Intent.ACTION_MAIN
-  # are the documented reliable path.
-  android_intent_plus: ^5.1.0
   system_tray: ^2.0.0
   hotkey_manager: ^0.2.0
   window_manager: ^0.3.0
