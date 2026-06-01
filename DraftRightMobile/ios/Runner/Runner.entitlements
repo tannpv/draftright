@@ -10,9 +10,15 @@
 	<array>
 		<string>$(AppIdentifierPrefix)com.draftright.v2.shared</string>
 	</array>
+	<!-- iOS Universal Links.  Each domain needs its own entry; iOS
+	     does NOT inherit between subdomains.  Both prod + dev
+	     declared so the same IPA serves either backend (user can
+	     swap Settings → Server → Backend URL between them without
+	     a rebuild). -->
 	<key>com.apple.developer.associated-domains</key>
 	<array>
 		<string>applinks:draftright.info</string>
+		<string>applinks:dev.draftright.info</string>
 	</array>
 </dict>
 </plist>
