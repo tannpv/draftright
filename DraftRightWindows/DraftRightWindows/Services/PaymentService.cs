@@ -31,7 +31,12 @@ public sealed class PaymentService
 
     private void RegisterDefaultHandlers()
     {
-        Func<string, IObservable<PaymentStatusUpdate>> watch = WatchPayment;
+        // Wrap in a lambda because `WatchPayment`'s optional
+        // `interval`/`timeout` parameters block method-group
+        // conversion to `Func<string, ...>` under the Windows CI
+        // toolchain (CS0123).  Pre-existing breakage from the
+        // 2026-05-31 windows-payment-method-picker commit.
+        Func<string, IObservable<PaymentStatusUpdate>> watch = refCode => WatchPayment(refCode);
         Register(new RedirectPaymentHandler(PaymentMethodKind.LemonSqueezy));
         Register(new RedirectPaymentHandler(PaymentMethodKind.Stripe));
         Register(new RedirectPaymentHandler(PaymentMethodKind.PayPal));
