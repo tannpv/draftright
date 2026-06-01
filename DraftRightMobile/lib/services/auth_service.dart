@@ -152,6 +152,25 @@ class AuthService extends ChangeNotifier {
     // until 90-day idle expiry; on next login we re-mint and the old row
     // is revoked via the (user_id, device_id) partial unique index.
     await _extension.clearToken();
+
+    // Reset every social-provider cache so the next sign-in shows a
+    // fresh account picker.  Without this, GoogleSignIn re-uses the
+    // last account silently and the user gets re-logged in as the
+    // same identity even after Sign Out.  Best-effort: a provider
+    // throwing here must not block backend logout.
+    try {
+      await GoogleSignIn(
+        scopes: const ['email', 'profile'],
+        serverClientId: _googleServerClientId,
+      ).signOut();
+    } catch (e) {
+      DRLogger.warn('Google signOut failed: $e', category: 'AUTH');
+    }
+    try {
+      await FacebookAuth.instance.logOut();
+    } catch (e) {
+      DRLogger.warn('Facebook logOut failed: $e', category: 'AUTH');
+    }
     notifyListeners();
   }
 
