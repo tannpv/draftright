@@ -171,9 +171,14 @@ class APIClient:
         return self._handle_response(resp)
 
     def get_customer_portal_url(self) -> str:
-        """GET /lemonsqueezy/portal — one-shot Customer Portal URL."""
+        """GET /payment/portal — one-shot Customer Portal URL.
+
+        Backend dispatches per the user's active subscription source
+        (Lemon Squeezy / Stripe).  VietQR / bank / admin-granted have
+        no self-service portal and return 404.
+        """
         resp = requests.get(
-            self._url("/lemonsqueezy/portal"),
+            self._url("/payment/portal"),
             headers=self._headers(auth=True),
             timeout=self.TIMEOUT,
         )

@@ -11,6 +11,7 @@ import { BasePaymentStrategy } from './base-payment.strategy';
 import { Payment } from '../entities/payment.entity';
 import { AppSettings } from '../../admin/entities/app-settings.entity';
 import { EnvSchema } from '../../config/env.schema';
+import { User } from '../../users/entities/user.entity';
 import { websiteUrl } from '../../common/app-config';
 
 /**
@@ -108,6 +109,26 @@ export class StripeStrategy extends BasePaymentStrategy {
       payment,
       redirect_url: session.url || undefined,
     };
+  }
+
+  /**
+   * One-shot Stripe Billing Portal URL.  Requires the user to have a
+   * `stripe_customer_id` (every Stripe Checkout flow saves one onto
+   * the user; see verifyWebhook).  Stripe's portal handles cancel /
+   * plan change / card update without any custom UI on our side.
+   */
+  async getCustomerPortalUrl(user: User): Promise<string | null> {
+    if (!user.stripe_customer_id) return null;
+    const { secretKey } = await this.getCredentials();
+    if (!secretKey) throw new Error('Stripe is not configured.');
+
+    const Stripe = (await import('stripe')).default;
+    const stripe = new Stripe(secretKey);
+    const session = await stripe.billingPortal.sessions.create({
+      customer: user.stripe_customer_id,
+      return_url: `${websiteUrl()}/account?subscribed=1`,
+    });
+    return session.url || null;
   }
 
   /**

@@ -12,6 +12,7 @@ import { BasePaymentStrategy } from './base-payment.strategy';
 import { Payment } from '../entities/payment.entity';
 import { AppSettings } from '../../admin/entities/app-settings.entity';
 import { EnvSchema } from '../../config/env.schema';
+import { User } from '../../users/entities/user.entity';
 import { websiteUrl } from '../../common/app-config';
 
 /**
@@ -133,6 +134,31 @@ export class LemonSqueezyStrategy extends BasePaymentStrategy {
     if (!url) throw new Error('Lemon Squeezy checkout returned no URL');
 
     return { payment, redirect_url: url };
+  }
+
+  /**
+   * One-shot LS Customer Portal URL.  Mirrors the standalone
+   * LemonsqueezyService.createCustomerPortalUrl helper so the unified
+   * `/payment/portal` endpoint can dispatch through the strategy
+   * registry instead of branching on store_type at the controller.
+   */
+  async getCustomerPortalUrl(user: User): Promise<string | null> {
+    if (!user.lemonsqueezy_customer_id) return null;
+    const { apiKey } = await this.getCredentials();
+    if (!apiKey) throw new Error('Lemon Squeezy is not configured.');
+
+    const res = await fetch(
+      `https://api.lemonsqueezy.com/v1/customers/${user.lemonsqueezy_customer_id}`,
+      {
+        headers: { Accept: 'application/vnd.api+json', Authorization: `Bearer ${apiKey}` },
+      },
+    );
+    if (!res.ok) {
+      this.logger.error(`LS customer fetch failed: HTTP ${res.status}`);
+      throw new Error('Could not load customer portal');
+    }
+    const json = await res.json() as { data: { attributes: { urls: { customer_portal: string } } } };
+    return json?.data?.attributes?.urls?.customer_portal ?? null;
   }
 
   async verifyWebhook(payload: any, headers: any): Promise<WebhookAction> {

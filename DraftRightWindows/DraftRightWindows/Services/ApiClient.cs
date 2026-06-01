@@ -200,7 +200,10 @@ public sealed class ApiClient : IDisposable
     public async Task<string> GetCustomerPortalUrlAsync()
     {
         DRLogger.Log("GetCustomerPortalUrlAsync", DRLogger.Category.API);
-        var resp = await GetAsync<CustomerPortalResponse>("/lemonsqueezy/portal");
+        // Unified endpoint — backend dispatches per store_type
+        // (Lemon Squeezy / Stripe).  VietQR / bank / admin-granted
+        // return 404; we surface that to the user as a SnackBar.
+        var resp = await GetAsync<CustomerPortalResponse>("/payment/portal");
         return resp.Url;
     }
 
