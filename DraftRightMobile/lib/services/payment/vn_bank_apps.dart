@@ -15,23 +15,41 @@ enum BankAppLaunchOutcome {
   failed,
 }
 
-/// Context passed when launching — future launchers may prefill the
-/// transfer details (amount, account, memo) when the target app
-/// supports a structured deep link.  Today's URL-scheme launchers
-/// ignore everything and just open the app; declared here so the
-/// contract is ready for richer launchers without breaking callers.
+/// Context passed when launching.  Launchers with a known per-bank
+/// deep-link format use this to prefill the transfer screen
+/// (account / amount / memo).  Launchers without one fall back to
+/// opening the app's home screen.
 class BankAppLaunchContext {
+  /// Transfer amount (integer string for VND).
   final String? amount;
-  final String? receiverBankCode;
+  /// NAPAS bank BIN of the RECEIVING bank (e.g. '970422' = MB).
+  /// Different from the launcher's own `code`; the user picks which
+  /// app to open, but the money still flows to a single receiving
+  /// account.
+  final String? receiverBankBin;
+  /// Receiving account number.
   final String? receiverAccount;
+  /// Receiving account name (display only — banks ignore this on
+  /// transfer screens).
+  final String? receiverName;
+  /// Transfer memo / reference code.  Critical: SePay webhook
+  /// matches on this to auto-confirm the payment.
   final String? memo;
+
   const BankAppLaunchContext({
     this.amount,
-    this.receiverBankCode,
+    this.receiverBankBin,
     this.receiverAccount,
+    this.receiverName,
     this.memo,
   });
 }
+
+/// Builder that produces a bank-specific deep-link URL from a
+/// [BankAppLaunchContext].  Returns null when the context lacks
+/// fields the bank's URL format requires (caller falls back to
+/// home-screen launch).
+typedef BankDeepLinkBuilder = String? Function(BankAppLaunchContext ctx);
 
 /// One bank's "open app" capability.
 ///
@@ -74,23 +92,54 @@ class AndroidPackageBankAppLauncher implements BankAppLauncher {
   final String androidPackage;
 
   /// Best-effort URL scheme used as a secondary launch attempt for
-  /// banks where ACTION_MAIN isn't enough (e.g. they require a
-  /// scheme-specific deep link to reach an internal screen).  Empty
-  /// = no secondary attempt.
+  /// banks where ACTION_MAIN isn't enough.  Empty = no secondary
+  /// attempt.  Schemes change/break silently — keep them as
+  /// fallback only.
   final String urlScheme;
+
+  /// Optional builder that produces a per-bank deep-link URL from
+  /// the supplied [BankAppLaunchContext].  When set + the resulting
+  /// URL launches successfully, the bank app opens **directly on
+  /// the transfer screen** with account/amount/memo prefilled —
+  /// the Zalo-style hand-off.  When null OR the URL can't launch,
+  /// the launcher falls through to the home-screen-open path.
+  final BankDeepLinkBuilder? deepLinkBuilder;
 
   const AndroidPackageBankAppLauncher({
     required this.code,
     required this.displayName,
     required this.androidPackage,
     this.urlScheme = '',
+    this.deepLinkBuilder,
   });
 
   @override
   Future<BankAppLaunchOutcome> launch({BankAppLaunchContext? context}) async {
-    // 1. Try launching the package directly via Android Intent.
-    //    Works iff the package is installed; doesn't depend on the
-    //    bank declaring a URL scheme.
+    // 1. Try the per-bank deep link if both a builder + context
+    //    are provided.  This is the "prefill the transfer screen"
+    //    path — when it works, the user lands on the bank app's
+    //    transfer screen with account+amount+memo already typed in.
+    if (deepLinkBuilder != null && context != null) {
+      final url = deepLinkBuilder!(context);
+      if (url != null && url.isNotEmpty) {
+        try {
+          final uri = Uri.parse(url);
+          if (await canLaunchUrl(uri)) {
+            final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+            if (ok) return BankAppLaunchOutcome.appOpened;
+          }
+        } on PlatformException catch (_) {
+          // fall through to non-prefilled launch
+        } catch (e) {
+          if (kDebugMode) {
+            debugPrint('AndroidPackageLauncher($code) deepLink miss: $e');
+          }
+        }
+      }
+    }
+    // 2. No deep link or it failed — open the app's home screen via
+    //    Android Intent.  User has to navigate to the QR scanner /
+    //    transfer screen manually.
     try {
       final intent = AndroidIntent(
         action: 'android.intent.action.MAIN',
@@ -103,9 +152,8 @@ class AndroidPackageBankAppLauncher implements BankAppLauncher {
     } catch (e) {
       if (kDebugMode) debugPrint('AndroidPackageLauncher($code) intent miss: $e');
     }
-    // 2. Try the URL scheme as a secondary best-effort.  Some banks
-    //    register a scheme but not a public launcher activity for
-    //    ACTION_MAIN.
+    // 3. Try the URL scheme as a tertiary best-effort.  Rare; some
+    //    banks register a scheme but not a public LAUNCHER activity.
     if (urlScheme.isNotEmpty) {
       try {
         final uri = Uri.parse(urlScheme);
@@ -119,9 +167,7 @@ class AndroidPackageBankAppLauncher implements BankAppLauncher {
         if (kDebugMode) debugPrint('AndroidPackageLauncher($code) scheme miss: $e');
       }
     }
-    // 3. Nothing launched.  Don't redirect to Play Store
-    //    automatically — return the typed outcome so the caller
-    //    can prompt the user instead.
+    // 4. Nothing launched — typed outcome so the caller can prompt.
     return BankAppLaunchOutcome.appNotInstalled;
   }
 
@@ -192,43 +238,75 @@ class BankAppRegistry {
           displayName: 'MB Bank',
           androidPackage: 'com.mbmobile',
           urlScheme: 'mbbank://',
+          deepLinkBuilder: _vietqrUniversalLink,
         ),
         AndroidPackageBankAppLauncher(
           code: 'ACB',
           displayName: 'ACB ONE',
           androidPackage: 'mobile.acb.com.vn',
+          deepLinkBuilder: _vietqrUniversalLink,
         ),
         AndroidPackageBankAppLauncher(
           code: 'VCB',
           displayName: 'Vietcombank',
           androidPackage: 'com.VCB',
           urlScheme: 'vcbdigibank://',
+          deepLinkBuilder: _vietqrUniversalLink,
         ),
         AndroidPackageBankAppLauncher(
           code: 'AB',
           displayName: 'ABBank',
           androidPackage: 'vn.com.abbank.mobilebanking',
           urlScheme: 'abbankezpay://',
+          deepLinkBuilder: _vietqrUniversalLink,
         ),
         AndroidPackageBankAppLauncher(
           code: 'TPB',
           displayName: 'TPBank',
           androidPackage: 'com.tpb.mb.gprsandroid',
           urlScheme: 'tpb://',
+          deepLinkBuilder: _vietqrUniversalLink,
         ),
         AndroidPackageBankAppLauncher(
           code: 'TCB',
           displayName: 'Techcombank',
           androidPackage: 'vn.com.techcombank.bb.app',
           urlScheme: 'techcombank://',
+          deepLinkBuilder: _vietqrUniversalLink,
         ),
         AndroidPackageBankAppLauncher(
           code: 'VTB',
           displayName: 'VietinBank',
           androidPackage: 'com.vietinbank.ipay',
           urlScheme: 'vietinbank://',
+          deepLinkBuilder: _vietqrUniversalLink,
         ),
       ]);
+
+  /// VietQR-hosted universal link.  When a VN bank app has
+  /// registered an Android intent-filter for the `vietqr.io`
+  /// domain (most major ones do as of 2026) tapping this URL opens
+  /// the bank app directly on the transfer screen with
+  /// account+amount+memo prefilled — same UX as Zalo.  Banks that
+  /// haven't registered the filter fall back to the home-screen
+  /// launch path.
+  ///
+  /// Format used by vietqr.io intent:
+  ///   https://qr.vietqr.io/transfer?bank=<BIN>&account=<acct>&amount=<n>&memo=<m>
+  static String? _vietqrUniversalLink(BankAppLaunchContext ctx) {
+    final bin = ctx.receiverBankBin;
+    final acct = ctx.receiverAccount;
+    if (bin == null || bin.isEmpty || acct == null || acct.isEmpty) {
+      return null;
+    }
+    final params = <String, String>{
+      'bank': bin,
+      'account': acct,
+      if (ctx.amount != null && ctx.amount!.isNotEmpty) 'amount': ctx.amount!,
+      if (ctx.memo != null && ctx.memo!.isNotEmpty) 'memo': ctx.memo!,
+    };
+    return Uri.https('qr.vietqr.io', '/transfer', params).toString();
+  }
 
   /// All launchers in the catalog, in display order.
   List<BankAppLauncher> all() => List.unmodifiable(_entries);

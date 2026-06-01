@@ -17,6 +17,38 @@ class QrPaymentSheet extends StatelessWidget {
   final Stream<PaymentStatusUpdate>? statusStream;
   const QrPaymentSheet({super.key, required this.checkout, this.statusStream});
 
+  /// Map bank-info fields to a [BankAppLaunchContext] the per-bank
+  /// deep-link builders use to prefill the transfer screen.  The
+  /// bank-info display name (e.g. "MB Bank (Quân Đội)") needs to
+  /// be mapped to the NAPAS BIN — backend doesn't return that yet,
+  /// so we infer from the bank name.  When inference fails the
+  /// context is still useful for the home-screen-launch path.
+  BankAppLaunchContext? _contextFromBankInfo(BankInfo? info) {
+    if (info == null) return null;
+    return BankAppLaunchContext(
+      amount: info.amount.toStringAsFixed(0),
+      receiverBankBin: _napasBin(info.bankName),
+      receiverAccount: info.accountNumber,
+      receiverName: info.accountName,
+      memo: info.reference,
+    );
+  }
+
+  /// Very rough mapping from bank display name → NAPAS BIN.
+  /// Backend should send this field directly in a follow-up so we
+  /// don't have to string-match here.
+  String? _napasBin(String bankName) {
+    final n = bankName.toLowerCase();
+    if (n.contains('mb')) return '970422';
+    if (n.contains('acb')) return '970416';
+    if (n.contains('vietcombank') || n.contains('vcb')) return '970436';
+    if (n.contains('abbank')) return '970425';
+    if (n.contains('tpbank')) return '970423';
+    if (n.contains('techcombank')) return '970407';
+    if (n.contains('vietinbank')) return '970415';
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final bank = checkout.bankInfo;
@@ -70,12 +102,12 @@ class QrPaymentSheet extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            // Open-bank-app row — Zalo-style.  Each tile tries the
-            // bank's URL scheme; if the app isn't installed it falls
-            // back to the Play Store page.  Once the bank app opens
-            // the user uses its built-in QR scanner to read the
-            // on-screen image (or screenshots + scans from gallery).
-            const _OpenBankAppRow(),
+            // Open-bank-app row — Zalo-style.  Tiles try a per-bank
+            // deep link first (prefills account/amount/memo on the
+            // transfer screen when the bank app has registered an
+            // intent-filter for qr.vietqr.io); fall back to opening
+            // the bank's home screen if the deep link is unhandled.
+            _OpenBankAppRow(context: _contextFromBankInfo(bank)),
             if (bank != null) ...[
               const SizedBox(height: 24),
               const Divider(),
@@ -116,11 +148,16 @@ class QrPaymentSheet extends StatelessWidget {
 class _OpenBankAppRow extends StatelessWidget {
   /// Caller can inject a custom registry for tests; default = VN.
   final BankAppRegistry? registry;
+  /// Optional transfer details passed to each launcher's
+  /// [BankAppLauncher.launch] call.  When provided + the bank has
+  /// a `deepLinkBuilder`, the bank app opens directly on the
+  /// transfer screen prefilled with these values.
+  final BankAppLaunchContext? context;
   // ignore: unused_element_parameter
-  const _OpenBankAppRow({this.registry});
+  const _OpenBankAppRow({this.registry, this.context});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext buildContext) {
     final launchers = (registry ?? BankAppRegistry.forVietnam()).all();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -129,7 +166,7 @@ class _OpenBankAppRow extends StatelessWidget {
           padding: const EdgeInsets.only(left: 4, bottom: 6),
           child: Text(
             'Open your bank app',
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+            style: Theme.of(buildContext).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
           ),
         ),
         SizedBox(
@@ -139,7 +176,10 @@ class _OpenBankAppRow extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 4),
             itemCount: launchers.length,
             separatorBuilder: (_, __) => const SizedBox(width: 8),
-            itemBuilder: (_, i) => _BankAppTile(launcher: launchers[i]),
+            itemBuilder: (_, i) => _BankAppTile(
+              launcher: launchers[i],
+              launchContext: context,
+            ),
           ),
         ),
       ],
@@ -149,7 +189,8 @@ class _OpenBankAppRow extends StatelessWidget {
 
 class _BankAppTile extends StatefulWidget {
   final BankAppLauncher launcher;
-  const _BankAppTile({required this.launcher});
+  final BankAppLaunchContext? launchContext;
+  const _BankAppTile({required this.launcher, this.launchContext});
 
   @override
   State<_BankAppTile> createState() => _BankAppTileState();
@@ -199,7 +240,9 @@ class _BankAppTileState extends State<_BankAppTile> {
   Future<void> _onTap() async {
     setState(() => _launching = true);
     try {
-      final outcome = await widget.launcher.launch();
+      final outcome = await widget.launcher.launch(
+        context: widget.launchContext,
+      );
       if (!mounted) return;
       switch (outcome) {
         case BankAppLaunchOutcome.appOpened:
