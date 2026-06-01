@@ -61,6 +61,22 @@ export class PaymentController {
     return this.paymentService.findByUser(req.user.id);
   }
 
+  // --- Authenticated: unified customer portal ---
+  //
+  // Replaces the provider-specific /lemonsqueezy/portal route.  Looks
+  // up the user's active subscription and dispatches to the right
+  // provider's portal API.  Clients (mobile + 3 desktops) should
+  // call this instead of /lemonsqueezy/portal; the LS-specific route
+  // is kept for backward compat until those clients ship.
+
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @Get('portal')
+  async getPortal(@Req() req: any) {
+    const url = await this.paymentService.getCustomerPortalUrl(req.user.id);
+    return { url };
+  }
+
   // --- Public: webhooks from payment providers ---
 
   @Post('webhook/stripe')

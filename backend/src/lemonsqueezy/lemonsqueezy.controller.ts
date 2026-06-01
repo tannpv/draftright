@@ -17,6 +17,13 @@ export class LemonsqueezyController {
     return { url };
   }
 
+  /**
+   * @deprecated Use the unified `GET /payment/portal` instead — it
+   * dispatches to the right provider per the user's active
+   * subscription (LS or Stripe).  Kept here for backward compat with
+   * older clients (pre-2026-06-01); remove after all clients ship
+   * the new path.
+   */
   @UseGuards(JwtAuthGuard)
   @Get('portal')
   async getPortal(@Req() req: any) {

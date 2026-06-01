@@ -75,3 +75,69 @@ describe('PaymentService — enabled methods', () => {
     expect(vietqrStrategy.createCheckout).toHaveBeenCalled();
   });
 });
+
+describe('PaymentService — getCustomerPortalUrl dispatch', () => {
+  const settingsRepo = { findOne: jest.fn() } as any;
+  const plansService = { findById: jest.fn() } as any;
+  const paymentRepo  = { create: jest.fn(), save: jest.fn() } as any;
+  const userRepo     = { findOne: jest.fn() } as any;
+  const subsService  = { findActiveByUserId: jest.fn() } as any;
+  const emailService = {} as any;
+
+  // Strategy stubs include the new getCustomerPortalUrl hook.
+  const stripeStrategy       = { createCheckout: jest.fn(), verifyWebhook: jest.fn(), getCustomerPortalUrl: jest.fn() } as any;
+  const vietqrStrategy       = { createCheckout: jest.fn(), verifyWebhook: jest.fn(), getCustomerPortalUrl: jest.fn().mockResolvedValue(null) } as any;
+  const lemonSqueezyStrategy = { createCheckout: jest.fn(), verifyWebhook: jest.fn(), getCustomerPortalUrl: jest.fn() } as any;
+
+  let svc: PaymentService;
+  beforeEach(() => {
+    jest.clearAllMocks();
+    const cfg = { get: () => undefined } as any;
+    svc = new PaymentService(
+      paymentRepo, userRepo, settingsRepo, plansService, subsService,
+      stripeStrategy, vietqrStrategy, lemonSqueezyStrategy, emailService, cfg,
+    );
+  });
+
+  it('dispatches to LemonSqueezyStrategy for LS-sourced subscriptions', async () => {
+    userRepo.findOne.mockResolvedValue({ id: 'u1', lemonsqueezy_customer_id: 'cus_1' });
+    subsService.findActiveByUserId.mockResolvedValue({ store_type: 'lemonsqueezy' });
+    lemonSqueezyStrategy.getCustomerPortalUrl.mockResolvedValue('https://ls.example/portal');
+    expect(await svc.getCustomerPortalUrl('u1')).toBe('https://ls.example/portal');
+    expect(lemonSqueezyStrategy.getCustomerPortalUrl).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'u1' }),
+    );
+    expect(stripeStrategy.getCustomerPortalUrl).not.toHaveBeenCalled();
+  });
+
+  it('dispatches to StripeStrategy for Stripe-sourced subscriptions', async () => {
+    userRepo.findOne.mockResolvedValue({ id: 'u2', stripe_customer_id: 'cus_2' });
+    subsService.findActiveByUserId.mockResolvedValue({ store_type: 'stripe' });
+    stripeStrategy.getCustomerPortalUrl.mockResolvedValue('https://billing.stripe.com/x');
+    expect(await svc.getCustomerPortalUrl('u2')).toBe('https://billing.stripe.com/x');
+  });
+
+  it('throws NotFound when no active subscription', async () => {
+    userRepo.findOne.mockResolvedValue({ id: 'u3' });
+    subsService.findActiveByUserId.mockResolvedValue(null);
+    await expect(svc.getCustomerPortalUrl('u3')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('throws NotFound when subscription is admin_granted (no portal)', async () => {
+    userRepo.findOne.mockResolvedValue({ id: 'u4' });
+    subsService.findActiveByUserId.mockResolvedValue({ store_type: 'admin_granted' });
+    await expect(svc.getCustomerPortalUrl('u4')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('throws NotFound when strategy returns null (e.g. missing customer id)', async () => {
+    userRepo.findOne.mockResolvedValue({ id: 'u5', lemonsqueezy_customer_id: null });
+    subsService.findActiveByUserId.mockResolvedValue({ store_type: 'lemonsqueezy' });
+    lemonSqueezyStrategy.getCustomerPortalUrl.mockResolvedValue(null);
+    await expect(svc.getCustomerPortalUrl('u5')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('throws NotFound when user does not exist', async () => {
+    userRepo.findOne.mockResolvedValue(null);
+    await expect(svc.getCustomerPortalUrl('ghost')).rejects.toBeInstanceOf(NotFoundException);
+  });
+});

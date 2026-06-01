@@ -52,11 +52,12 @@ final class PaymentClient {
 
     // MARK: - Customer portal
 
-    /// GET /lemonsqueezy/portal → one-shot LS Customer Portal URL.
-    /// Throws on Stripe-only subscriptions until backend offers a
-    /// unified portal endpoint.
+    /// GET /payment/portal → one-shot Customer Portal URL for the
+    /// active subscription (Lemon Squeezy or Stripe).  Backend
+    /// dispatches per `subscription.store_type`; VietQR / bank /
+    /// admin-granted return 404.
     func getCustomerPortalURL() async throws -> URL {
-        let json = try await getJSON(path: "/lemonsqueezy/portal", authed: true)
+        let json = try await getJSON(path: "/payment/portal", authed: true)
         guard let s = json["url"] as? String, let url = URL(string: s) else {
             throw PaymentError.missingURL
         }
