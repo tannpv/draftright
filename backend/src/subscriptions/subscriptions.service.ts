@@ -30,7 +30,25 @@ export class SubscriptionsService {
     return this.subsRepo.save(sub);
   }
 
-  async grant(userId: string, planId: string, expiresAt?: Date): Promise<Subscription> {
+  /**
+   * Activate a subscription on the supplied [storeType] (defaults to
+   * ADMIN_GRANTED so the admin "Grant Pro" button keeps working with
+   * no caller changes).  Any prior active subscription for this user
+   * is cancelled first so we never have two active rows.
+   *
+   * Payment flows pass the correct store_type (lemonsqueezy / stripe
+   * / vietqr / bank_transfer / paypal) — see
+   * `PaymentService.activateSubscription` for the method→store_type
+   * mapping.  Keeping store_type accurate matters for analytics +
+   * for `getCustomerPortalUrl` which dispatches the portal call by
+   * store_type.
+   */
+  async grant(
+    userId: string,
+    planId: string,
+    expiresAt?: Date,
+    storeType: StoreType = StoreType.ADMIN_GRANTED,
+  ): Promise<Subscription> {
     await this.subsRepo.update(
       { user_id: userId, status: SubscriptionStatus.ACTIVE },
       { status: SubscriptionStatus.CANCELLED },
@@ -39,7 +57,7 @@ export class SubscriptionsService {
       user_id: userId,
       plan_id: planId,
       status: SubscriptionStatus.ACTIVE,
-      store_type: StoreType.ADMIN_GRANTED,
+      store_type: storeType,
       started_at: new Date(),
       expires_at: expiresAt || null,
     });
