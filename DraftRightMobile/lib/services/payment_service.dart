@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:draftright_mobile/services/backend_client.dart';
 import 'package:draftright_mobile/services/logger_service.dart';
+import 'package:draftright_mobile/services/payment/billing_period.dart';
 import 'package:draftright_mobile/services/payment/payment_handler.dart';
 import 'package:draftright_mobile/services/payment/payment_method.dart';
 import 'package:draftright_mobile/services/payment/payment_status.dart';
@@ -154,20 +155,29 @@ class PaymentService {
   }
 
   /// Fetch the public plan catalog and return the Pro-tier plan id
-  /// the upgrade button should target for [method].  Currency-aware
-  /// so VietQR doesn't pick a USD plan (which would store
-  /// `amount=499` and bake "499 đồng" into the QR — useless).
+  /// the upgrade button should target for [method] at the requested
+  /// [billingPeriod] cadence.
+  ///
+  ///   - Currency-aware so VietQR doesn't pick a USD plan (which
+  ///     would bake "499 đồng" into the QR — useless).
+  ///   - Cadence-aware so the yearly toggle on the subscription
+  ///     screen actually charges the yearly variant.
+  ///
   /// Single source of truth so the UI doesn't carry plan-picking
   /// logic.
-  Future<String> resolveProPlanId({PaymentMethodKind? method}) async {
+  Future<String> resolveProPlanId({
+    PaymentMethodKind? method,
+    BillingPeriod? billingPeriod,
+  }) async {
     final plans = await backend.listPlans();
     final currency = method != null ? _currencyFor(method) : null;
-    final pro = _pickProPlan(plans, currency: currency);
+    final pro = _pickProPlan(plans, currency: currency, billingPeriod: billingPeriod);
     if (pro == null) {
+      final cadence = billingPeriod?.wireName ?? 'any';
       throw Exception(
         currency != null
-            ? 'Could not find a Pro plan in $currency for $method'
-            : 'Could not find a Pro plan in the catalog',
+            ? 'Could not find a Pro plan in $currency ($cadence) for $method'
+            : 'Could not find a Pro plan ($cadence) in the catalog',
       );
     }
     final planId = (pro['id'] ?? '').toString();
@@ -180,12 +190,13 @@ class PaymentService {
   ///   - is_active = true (excludes archived rows)
   ///   - currency matches when provided (VND for VietQR/bank,
   ///     USD for Stripe/LS/PayPal)
-  ///   - prefers 'monthly' over 'yearly' for the upgrade button
-  ///
-  /// One-place rule so future "Pro Yearly" toggles only edit here.
+  ///   - cadence matches [billingPeriod] when provided; otherwise
+  ///     prefers 'monthly' (legacy default) then falls back to the
+  ///     first paid plan.
   Map<String, dynamic>? _pickProPlan(
     List<Map<String, dynamic>> plans, {
     String? currency,
+    BillingPeriod? billingPeriod,
   }) {
     final paid = plans.where((p) {
       final bp = (p['billing_period'] ?? '').toString().toLowerCase();
@@ -198,10 +209,19 @@ class PaymentService {
       return true;
     }).toList();
     if (paid.isEmpty) return null;
-    final monthly = paid.firstWhere(
-      (p) => (p['billing_period'] ?? '').toString().toLowerCase() == 'monthly',
+    if (billingPeriod != null) {
+      for (final p in paid) {
+        if (BillingPeriod.fromWire(p['billing_period']?.toString()) == billingPeriod) {
+          return p;
+        }
+      }
+      // Requested cadence not in the catalog — fall through to the
+      // monthly-default fallback so the UI doesn't crash on a
+      // partially-configured backend.
+    }
+    return paid.firstWhere(
+      (p) => BillingPeriod.fromWire(p['billing_period']?.toString()) == BillingPeriod.monthly,
       orElse: () => paid.first,
     );
-    return monthly;
   }
 }

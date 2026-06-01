@@ -104,6 +104,17 @@ export class LemonSqueezyStrategy extends BasePaymentStrategy {
           product_options: {
             redirect_url:
               options?.success_url || `${websiteUrl()}/payment/success?ref=${payment.reference_code}`,
+            // Lock the hosted checkout page to the variant we picked
+            // (monthly OR yearly per plan.billing_period).  Without
+            // this, LS shows a variant switcher when the product has
+            // multiple active variants — a user could pick yearly
+            // on a checkout we created for monthly, our DB would
+            // still record monthly, and the resulting subscription
+            // expires_at would be 1 month not 1 year (caught
+            // 2026-06-01).  The mobile yearly toggle covers the
+            // user-side of this; enabled_variants closes the
+            // server-side gap.
+            enabled_variants: [Number(variantId)],
           },
         },
         relationships: {
@@ -199,7 +210,13 @@ export class LemonSqueezyStrategy extends BasePaymentStrategy {
     const endsAtIso = event?.data?.attributes?.ends_at as string | undefined;
     const customerIdRaw = event?.data?.attributes?.customer_id;
     const customerId = customerIdRaw != null ? String(customerIdRaw) : undefined;
-    this.logger.log(`Lemon Squeezy webhook: ${name} (ref=${referenceCode || 'none'}, sub=${subId || 'none'})`);
+    // Actual variant LS charged.  May differ from what we sent to
+    // createCheckout if (pre `enabled_variants` lock) the user
+    // switched on the hosted page.  payment.service handler uses
+    // this to re-resolve plan_id post-charge.
+    const variantIdRaw = event?.data?.attributes?.variant_id;
+    const variantId = variantIdRaw != null ? String(variantIdRaw) : undefined;
+    this.logger.log(`Lemon Squeezy webhook: ${name} (ref=${referenceCode || 'none'}, sub=${subId || 'none'}, variant=${variantId || 'none'})`);
 
     const toUnix = (iso?: string): number =>
       iso ? Math.floor(new Date(iso).getTime() / 1000) : 0;
@@ -225,6 +242,7 @@ export class LemonSqueezyStrategy extends BasePaymentStrategy {
           reference_code: referenceCode,
           lemonsqueezy_subscription_id: subId,
           lemonsqueezy_customer_id: customerId,
+          lemonsqueezy_variant_id: variantId,
           current_period_end: toUnix(renewsAtIso),
         };
 

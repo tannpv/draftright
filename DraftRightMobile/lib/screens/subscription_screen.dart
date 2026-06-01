@@ -3,8 +3,10 @@ import 'package:provider/provider.dart';
 import 'package:draftright_mobile/services/auth_service.dart';
 import 'package:draftright_mobile/services/backend_client.dart';
 import 'package:draftright_mobile/services/payment_service.dart';
+import 'package:draftright_mobile/services/payment/billing_period.dart';
 import 'package:draftright_mobile/services/payment/payment_method.dart';
 import 'package:draftright_mobile/services/settings_service.dart';
+import 'package:draftright_mobile/widgets/billing_period_selector.dart';
 
 class SubscriptionScreen extends StatefulWidget {
   const SubscriptionScreen({super.key});
@@ -38,6 +40,12 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
   // True while we're fetching the customer-portal URL and launching
   // the browser.  Prevents double-tap.
   bool _openingPortal = false;
+
+  // User-selected billing cadence for the upgrade button.  Defaults
+  // to monthly (lower friction, lower commitment).  Threaded into
+  // `PaymentService.resolveProPlanId` so the backend creates a
+  // checkout for the matching plan id.
+  BillingPeriod _billingPeriod = BillingPeriod.monthly;
 
   @override
   void initState() {
@@ -224,8 +232,13 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
           ),
           const SizedBox(height: 8),
           Text(
-            'Pick a payment method. Your plan activates automatically once payment completes.',
+            'Pick a billing cadence, then a payment method. Your plan activates automatically once payment completes.',
             style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+          ),
+          const SizedBox(height: 16),
+          BillingPeriodSelector(
+            value: _billingPeriod,
+            onChanged: (p) => setState(() => _billingPeriod = p),
           ),
           const SizedBox(height: 16),
           ..._buildPaymentMethodTiles(),
@@ -324,7 +337,16 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
       // plan (VND for VietQR/bank, USD for LS/Stripe/PayPal).
       // Without this, VietQR would pick the USD Pro plan and the
       // QR code would encode amount=499 đồng (~$0.02).
-      final planId = await _payments.resolveProPlanId(method: kind);
+      //
+      // Pass billingPeriod so the resolver hits the cadence the user
+      // selected.  This is the third leg of the LS yearly-fix tripod:
+      // mobile sends the correct plan_id → backend locks LS to a
+      // single variant → webhook re-resolves on actual charged
+      // variant.  See [[project_cc_payment_lemonsqueezy]].
+      final planId = await _payments.resolveProPlanId(
+        method: kind,
+        billingPeriod: _billingPeriod,
+      );
       if (!mounted) return;
       await _payments.upgradeWith(
         context: context,

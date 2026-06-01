@@ -16,6 +16,24 @@ export class PlansService {
   }
 
   /**
+   * Find the first active plan matching the supplied `(billing_period,
+   * currency)` pair.  Used by the LS webhook handler to map a
+   * received variant → matching local plan when the user switches
+   * variants on the hosted checkout page.  Returns null when nothing
+   * matches.
+   */
+  async findFirstActive(criteria: { billing_period: string; currency: string }): Promise<Plan | null> {
+    return this.plansRepo.findOne({
+      where: {
+        is_active: true,
+        billing_period: criteria.billing_period as BillingPeriod,
+        currency: criteria.currency,
+      },
+      order: { created_at: 'ASC' },
+    });
+  }
+
+  /**
    * Active plans for the public website/app pricing + checkout, cheapest first.
    * The client fetches these instead of hard-coding plan IDs, so prices and
    * plan changes made in admin never go stale on the storefront.
