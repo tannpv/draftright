@@ -106,6 +106,18 @@ class ErrorReporter {
     _bearerToken = token;
   }
 
+  /// Update the backend URL after the user changes it in
+  /// Settings → Server.  Without this, auto-captured errors keep
+  /// posting to the URL captured at `attach()` time — so switching
+  /// from prod → dev silently leaked dev crashes into the prod
+  /// /errors stream until the app was restarted.  Normalises
+  /// trailing slashes the same way [attach] does so the upload URL
+  /// stays consistent (`<base>/errors`).
+  static void setBackendUrl(String? url) {
+    if (url == null || url.isEmpty) return;
+    _backendUrl = url.replaceAll(RegExp(r'/+$'), '');
+  }
+
   /// Manually report a non-fatal issue (e.g. a caught exception in a
   /// service layer that the user shouldn't see but the team should).
   static void reportHandled(
