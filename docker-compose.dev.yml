@@ -33,27 +33,17 @@ services:
       - "3100:3000"
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    # Load every variable from .env.dev into the container.  Avoids
+    # the trap where compose `environment:` entries with hardcoded
+    # values silently override anything in --env-file at YAML-parse
+    # time (only `${VAR}` placeholders get substituted; literals
+    # don't).  Pin the few overrides that the dev container needs no
+    # matter what .env.dev says via the `environment:` block below.
+    env_file:
+      - .env.dev
     environment:
-      # Shared instance, separate logical DB.
-      - DATABASE_URL=postgresql://draftright:password@postgres:5432/draftright_dev
-      # Same Redis instance, separate keyspace via DB index 1.
-      - REDIS_URL=redis://redis:6379/1
-      - JWT_SECRET=${JWT_SECRET_DEV:-${JWT_SECRET}}
-      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET_DEV:-${JWT_REFRESH_SECRET}}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - ADMIN_EMAIL=${ADMIN_EMAIL}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
-      - WEBSITE_URL=https://dev.draftright.info
       - PORT=3000
-      # Strategy redirects (LS / Stripe success_url / cancel_url) use
-      # WEBSITE_URL above, so LS hosted-checkout sends users back to
-      # the dev website + the mobile Universal Link still resolves.
-      - LEMONSQUEEZY_API_KEY=${LEMONSQUEEZY_API_KEY_DEV:-}
-      - LEMONSQUEEZY_STORE_ID=${LEMONSQUEEZY_STORE_ID_DEV:-}
-      - LEMONSQUEEZY_PRO_VARIANT_ID=${LEMONSQUEEZY_PRO_VARIANT_ID_DEV:-}
-      - LEMONSQUEEZY_WEBHOOK_SECRET=${LEMONSQUEEZY_WEBHOOK_SECRET_DEV:-}
-      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY_DEV:-}
-      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET_DEV:-}
+      - WEBSITE_URL=https://dev.draftright.info
     depends_on:
       postgres:
         condition: service_healthy
