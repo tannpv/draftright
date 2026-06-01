@@ -31,6 +31,13 @@ public sealed class SubscriptionTab : WinForms.UserControl, IPaymentSheetPresent
     private bool _isStarting;
     private PaymentMethodKind? _startingKind;
 
+    /// <summary>
+    /// User-selected billing cadence for the upgrade button.  Defaults
+    /// to monthly (lower friction).  Threaded into
+    /// <see cref="PaymentService.ResolveProPlanIdAsync"/>.
+    /// </summary>
+    private BillingPeriod _billingPeriod = BillingPeriod.Monthly;
+
     public SubscriptionTab()
     {
         _payments = new PaymentService(App.Api);
@@ -153,13 +160,15 @@ public sealed class SubscriptionTab : WinForms.UserControl, IPaymentSheetPresent
 
         _content.Controls.Add(new WinForms.Label
         {
-            Text = "Pick a payment method.  Your plan activates automatically once payment completes.",
+            Text = "Pick a billing cadence, then a payment method.  Your plan activates automatically once payment completes.",
             Font = new Font("Segoe UI", 9),
             ForeColor = TextMuted,
             Location = new Point(16, y),
             Size = new Size(440, 32),
         });
         y += 36;
+
+        AddBillingPeriodPicker(ref y);
 
         if (methods.Count == 0)
         {
@@ -177,6 +186,50 @@ public sealed class SubscriptionTab : WinForms.UserControl, IPaymentSheetPresent
         {
             AddMethodTile(kind, ref y);
         }
+    }
+
+    /// <summary>
+    /// Monthly / Yearly segmented control rendered above the
+    /// payment-method tiles.  Two RadioButtons styled as a flat
+    /// segmented look (WinForms has no native segmented control).
+    /// </summary>
+    private void AddBillingPeriodPicker(ref int y)
+    {
+        var group = new WinForms.Panel
+        {
+            Location = new Point(16, y),
+            Size = new Size(448, 32),
+            BackColor = BgDark,
+        };
+        var values = (BillingPeriod[])Enum.GetValues(typeof(BillingPeriod));
+        var segWidth = group.Width / values.Length;
+        for (int i = 0; i < values.Length; i++)
+        {
+            var period = values[i];
+            var isSelected = period == _billingPeriod;
+            var btn = new WinForms.Button
+            {
+                Text = period.DisplayName(),
+                Location = new Point(i * segWidth, 0),
+                Size = new Size(segWidth, 32),
+                FlatStyle = WinForms.FlatStyle.Flat,
+                BackColor = isSelected ? BrandBlue : CardBg,
+                ForeColor = TextPrimary,
+                Font = new Font("Segoe UI", 9, isSelected ? FontStyle.Bold : FontStyle.Regular),
+            };
+            btn.FlatAppearance.BorderColor = BorderColor;
+            btn.FlatAppearance.BorderSize = 1;
+            btn.Click += (_, _) =>
+            {
+                if (_billingPeriod == period) return;
+                _billingPeriod = period;
+                // Re-render the section so the highlighted segment updates.
+                _ = RefreshAsync();
+            };
+            group.Controls.Add(btn);
+        }
+        _content.Controls.Add(group);
+        y += 44;
     }
 
     private void AddMethodTile(PaymentMethodKind kind, ref int y)
@@ -229,7 +282,10 @@ public sealed class SubscriptionTab : WinForms.UserControl, IPaymentSheetPresent
             chevron.Text = "…";
             try
             {
-                var planId = await _payments.ResolveProPlanIdAsync();
+                // Pass method + cadence so the resolver picks a
+                // currency-compatible plan at the cadence the user
+                // toggled.  See [[project_cc_payment_lemonsqueezy]].
+                var planId = await _payments.ResolveProPlanIdAsync(kind, _billingPeriod);
                 await _payments.UpgradeAsync(kind, planId, this);
             }
             catch (Exception e)

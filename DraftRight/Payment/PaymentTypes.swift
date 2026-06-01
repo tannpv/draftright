@@ -192,6 +192,38 @@ struct PaymentStatusUpdate {
     }
 }
 
+/// Billing cadence supported by the backend `plans.billing_period`
+/// column.  Mirrors `BillingPeriod` on the Flutter client (1:1, same
+/// `wireName`s) so the UI never threads raw `"monthly"` / `"yearly"`
+/// strings through services.
+///
+/// When the backend adds a new cadence (e.g. quarterly) add a case
+/// here and update `BillingPeriodPicker`.  No other file branches on
+/// the cadence string.
+enum BillingPeriod: String, CaseIterable {
+    case monthly
+    case yearly
+
+    /// Lowercase identifier matching `plans.billing_period` in the
+    /// API payload.
+    var wireName: String { rawValue }
+
+    /// User-facing English label.
+    var displayName: String {
+        switch self {
+        case .monthly: return "Monthly"
+        case .yearly:  return "Yearly"
+        }
+    }
+
+    /// Parse a wire value (case-insensitive).  Returns nil for unknown
+    /// or `"none"` (the Free plan) so callers decide their fallback.
+    static func fromWire(_ value: String?) -> BillingPeriod? {
+        guard let v = value?.lowercased(), !v.isEmpty else { return nil }
+        return BillingPeriod.allCases.first { $0.wireName == v }
+    }
+}
+
 enum PaymentError: LocalizedError {
     case notConfigured
     case unknownCheckoutShape

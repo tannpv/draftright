@@ -17,6 +17,7 @@ from typing import Callable, Optional, Protocol
 from draftright.models.payment import (
     BankInfo,
     BankTransferCheckout,
+    BillingPeriod,
     CheckoutResult,
     PaymentMethodKind,
     PaymentStatus,
@@ -215,25 +216,67 @@ class PaymentService:
                 kinds.append(k)
         return kinds
 
-    def resolve_pro_plan_id(self) -> str:
-        """Pick the Pro-tier plan id from /plans.  Prefers monthly."""
+    def resolve_pro_plan_id(
+        self,
+        method: Optional[PaymentMethodKind] = None,
+        billing_period: Optional[BillingPeriod] = None,
+    ) -> str:
+        """Pick the Pro-tier plan id from /plans for the requested
+        ``method`` + ``billing_period``.
+
+          - Currency-aware so VietQR doesn't pick a USD plan (the QR
+            would bake ``"$4.99 đồng"`` — useless).
+          - Cadence-aware so the Monthly / Yearly toggle on the
+            Subscription page charges the matching variant.
+
+        Mirrors ``resolveProPlanId`` on Flutter / macOS / Windows.
+        """
         plans = self.api.list_plans()
-        paid = [
-            p for p in plans
-            if isinstance(p, dict)
-            and str(p.get("billing_period", "")).lower() not in ("", "none")
-            and (p.get("is_active") if "is_active" in p else True)
-        ]
+        want_currency = self.currency_for(method) if method is not None else None
+
+        def matches(p: dict) -> bool:
+            bp = str(p.get("billing_period", "")).lower()
+            active = p.get("is_active") if "is_active" in p else True
+            if not bp or bp == "none" or not active:
+                return False
+            if want_currency is not None:
+                cur = str(p.get("currency", "")).upper()
+                if cur != want_currency.upper():
+                    return False
+            return True
+
+        paid = [p for p in plans if isinstance(p, dict) and matches(p)]
         if not paid:
-            raise APIError("Could not find a Pro plan in the catalog")
+            raise APIError(
+                f"Could not find a Pro plan in {want_currency} for {method}"
+                if want_currency is not None
+                else "Could not find a Pro plan in the catalog"
+            )
+        if billing_period is not None:
+            for p in paid:
+                if BillingPeriod.from_wire(p.get("billing_period")) is billing_period:
+                    pid = str(p.get("id", ""))
+                    if pid:
+                        return pid
+        # No exact cadence match (or none requested) — fall back to
+        # monthly, then the first paid plan.
         monthly = next(
-            (p for p in paid if str(p.get("billing_period", "")).lower() == "monthly"),
+            (p for p in paid if BillingPeriod.from_wire(p.get("billing_period")) is BillingPeriod.MONTHLY),
             paid[0],
         )
         pid = str(monthly.get("id", ""))
         if not pid:
             raise APIError("Pro plan row is missing an id")
         return pid
+
+    @staticmethod
+    def currency_for(method: PaymentMethodKind) -> str:
+        """Currency the strategy expects to charge the plan in.  VietQR
+        + bank-transfer settle in VND (Vietnamese-bank-only spec); all
+        others default to USD.  Mirrors ``_currencyFor`` on Flutter."""
+        if method in (PaymentMethodKind.VIETQR, PaymentMethodKind.BANK_TRANSFER):
+            return "VND"
+        return "USD"
 
     def upgrade(
         self,

@@ -30,6 +30,12 @@ final class SubscriptionViewModel: ObservableObject, PaymentSheetPresenter {
     @Published var isOpeningPortal: Bool = false
     @Published var pendingSheet: ActiveSheet?
 
+    /// User-selected billing cadence for the upgrade button.  Defaults
+    /// to monthly (lower friction, lower commitment).  Threaded into
+    /// `PaymentService.resolveProPlanId` so the backend creates a
+    /// checkout for the matching plan id.
+    @Published var billingPeriod: BillingPeriod = .monthly
+
     private var service: PaymentService?
 
     func bind(appModel: AppModel) {
@@ -72,7 +78,14 @@ final class SubscriptionViewModel: ObservableObject, PaymentSheetPresenter {
         startingKind = kind
         defer { isStarting = false; startingKind = nil }
         do {
-            let planId = try await service.resolveProPlanId()
+            // Pass method + cadence so the resolver picks a
+            // currency-compatible plan (VND for VietQR/bank, USD
+            // otherwise) at the cadence the user toggled.  See the
+            // LS yearly-fix tripod in [[project_cc_payment_lemonsqueezy]].
+            let planId = try await service.resolveProPlanId(
+                method: kind,
+                billingPeriod: billingPeriod
+            )
             try await service.upgrade(method: kind, planId: planId, presenter: self)
         } catch {
             state = .error(error.localizedDescription)

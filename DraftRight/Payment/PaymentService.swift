@@ -48,24 +48,61 @@ final class PaymentService {
         return try await client.listPaymentMethods()
     }
 
-    /// Resolve the Pro-tier plan id from `/plans`.  Single source of
-    /// truth so the UI doesn't carry plan-picking logic.  Prefers
-    /// monthly over yearly when both exist.
-    func resolveProPlanId() async throws -> String {
+    /// Resolve the Pro-tier plan id from `/plans` for the requested
+    /// [method] + [billingPeriod].
+    ///
+    ///   - Currency-aware so VietQR doesn't pick a USD plan (which
+    ///     would bake "$4.99 đồng" into the QR — useless).
+    ///   - Cadence-aware so the yearly toggle on the subscription
+    ///     view actually charges the yearly variant.
+    ///
+    /// Single source of truth so the UI doesn't carry plan-picking
+    /// logic.  Mirrors `PaymentService.resolveProPlanId` on the
+    /// Flutter client.
+    func resolveProPlanId(
+        method: PaymentMethodKind? = nil,
+        billingPeriod: BillingPeriod? = nil
+    ) async throws -> String {
         let plans = try await client.listPlans()
+        let currency = method.flatMap { Self.currency(for: $0) }
         let paid = plans.filter { p in
             let bp = (p["billing_period"] as? String)?.lowercased() ?? ""
             let active = (p["is_active"] as? Bool) ?? true
-            return !bp.isEmpty && bp != "none" && active
+            if bp.isEmpty || bp == "none" || !active { return false }
+            if let want = currency {
+                let c = (p["currency"] as? String)?.uppercased() ?? ""
+                if c != want.uppercased() { return false }
+            }
+            return true
         }
         guard !paid.isEmpty else { throw PaymentError.noProPlan }
+        if let want = billingPeriod,
+           let exact = paid.first(where: {
+               BillingPeriod.fromWire($0["billing_period"] as? String) == want
+           }),
+           let id = exact["id"] as? String, !id.isEmpty {
+            return id
+        }
+        // No exact cadence match (or none requested) — fall back to
+        // monthly, then the first paid plan.
         let monthly = paid.first(where: {
-            ($0["billing_period"] as? String)?.lowercased() == "monthly"
+            BillingPeriod.fromWire($0["billing_period"] as? String) == .monthly
         }) ?? paid[0]
         guard let id = monthly["id"] as? String, !id.isEmpty else {
             throw PaymentError.noProPlan
         }
         return id
+    }
+
+    /// Currency the strategy expects to charge the plan in.  VietQR +
+    /// bank-transfer can only settle in VND because the QR code is a
+    /// Vietnamese-bank-only spec; everything else defaults to USD.
+    /// Mirrors `_currencyFor` on the Flutter client.
+    static func currency(for method: PaymentMethodKind) -> String {
+        switch method {
+        case .vietqr, .bankTransfer: return "VND"
+        case .lemonsqueezy, .stripe, .paypal: return "USD"
+        }
     }
 
     /// Run the full upgrade flow for [method]: create checkout

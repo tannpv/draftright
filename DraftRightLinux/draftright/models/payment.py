@@ -31,6 +31,33 @@ class PaymentMethodKind(Enum):
         return None
 
 
+class BillingPeriod(Enum):
+    """Billing cadence supported by the backend ``plans.billing_period``
+    column.  Mirrors ``BillingPeriod`` on Flutter / macOS / Windows
+    (1:1, same wire names) so the UI never threads raw ``"monthly"`` /
+    ``"yearly"`` strings through services.
+    """
+
+    MONTHLY = "monthly"
+    YEARLY = "yearly"
+
+    @property
+    def display_name(self) -> str:
+        """User-facing English label."""
+        return "Monthly" if self == BillingPeriod.MONTHLY else "Yearly"
+
+    @classmethod
+    def from_wire(cls, value: Optional[str]) -> Optional["BillingPeriod"]:
+        """Parse a wire value (case-insensitive).  None for unknown / Free."""
+        if not value:
+            return None
+        norm = value.lower()
+        for p in cls:
+            if p.value == norm:
+                return p
+        return None
+
+
 @dataclass(frozen=True)
 class PaymentMethodDescriptor:
     """UI metadata for one :class:`PaymentMethodKind`."""
