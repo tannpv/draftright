@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:draftright_mobile/services/payment/checkout_result.dart';
 import 'package:draftright_mobile/services/payment/payment_status.dart';
+import 'package:draftright_mobile/services/payment/vn_bank_apps.dart';
 import 'package:draftright_mobile/services/payment/widgets/payment_status_banner.dart';
 
 /// Bottom-sheet shown for VietQR checkout.  Renders the QR image and
@@ -68,6 +69,13 @@ class QrPaymentSheet extends StatelessWidget {
                 },
               ),
             ),
+            const SizedBox(height: 16),
+            // Open-bank-app row — Zalo-style.  Each tile tries the
+            // bank's URL scheme; if the app isn't installed it falls
+            // back to the Play Store page.  Once the bank app opens
+            // the user uses its built-in QR scanner to read the
+            // on-screen image (or screenshots + scans from gallery).
+            const _OpenBankAppRow(),
             if (bank != null) ...[
               const SizedBox(height: 24),
               const Divider(),
@@ -97,6 +105,120 @@ class QrPaymentSheet extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// Horizontal scrollable row of Vietnamese banking apps.  Iterates
+/// over [BankAppRegistry.forVietnam()] — adding a bank or swapping
+/// a launch strategy = one entry in the registry, zero changes
+/// here.  Zalo-style handoff: tap → bank app opens → user scans the
+/// on-screen QR via the bank's built-in scanner.
+class _OpenBankAppRow extends StatelessWidget {
+  /// Caller can inject a custom registry for tests; default = VN.
+  // ignore: unused_element_parameter
+  final BankAppRegistry? registry;
+  const _OpenBankAppRow({this.registry});
+
+  @override
+  Widget build(BuildContext context) {
+    final launchers = (registry ?? BankAppRegistry.forVietnam()).all();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 4, bottom: 6),
+          child: Text(
+            'Open your bank app',
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+          ),
+        ),
+        SizedBox(
+          height: 88,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            itemCount: launchers.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 8),
+            itemBuilder: (_, i) => _BankAppTile(launcher: launchers[i]),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _BankAppTile extends StatefulWidget {
+  final BankAppLauncher launcher;
+  const _BankAppTile({required this.launcher});
+
+  @override
+  State<_BankAppTile> createState() => _BankAppTileState();
+}
+
+class _BankAppTileState extends State<_BankAppTile> {
+  bool _launching = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: _launching ? null : _onTap,
+        child: Container(
+          width: 88,
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: Colors.grey.shade300),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (_launching)
+                const SizedBox(
+                  width: 28, height: 28,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              else
+                Icon(Icons.account_balance, size: 28, color: Colors.blue.shade700),
+              const SizedBox(height: 6),
+              Text(
+                widget.launcher.displayName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _onTap() async {
+    setState(() => _launching = true);
+    try {
+      final outcome = await widget.launcher.launch();
+      if (!mounted) return;
+      switch (outcome) {
+        case BankAppLaunchOutcome.appOpened:
+          // App launched — user is in bank app now.  No UI feedback.
+          break;
+        case BankAppLaunchOutcome.fallbackOpened:
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('${widget.launcher.displayName} not installed — opening Play Store.'),
+          ));
+          break;
+        case BankAppLaunchOutcome.failed:
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Could not open ${widget.launcher.displayName}.'),
+          ));
+          break;
+      }
+    } finally {
+      if (mounted) setState(() => _launching = false);
+    }
   }
 }
 
