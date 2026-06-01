@@ -4,7 +4,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CheckoutResult, WebhookAction, CreateCheckoutOptions } from './payment-strategy.interface';
 import { BasePaymentStrategy } from './base-payment.strategy';
-import { Payment } from '../entities/payment.entity';
+import { Payment, PaymentMethod } from '../entities/payment.entity';
 import { AppSettings } from '../../admin/entities/app-settings.entity';
 import { EnvSchema } from '../../config/env.schema';
 import { extractPaymentReference } from '../payment-reference';
@@ -52,6 +52,26 @@ export class VietQRStrategy extends BasePaymentStrategy {
     //   - `compact2` = same QR + amount + addInfo overlaid as text.
     //     Users can verify the amount visually before scanning, and
     //     the scanned payload is identical to compact.
+    const bankInfo = {
+      bank_name: this.getBankDisplayName(bankId),
+      account_number: accountNumber,
+      account_name: accountName,
+      amount: payment.amount,
+      currency: 'VND',
+      reference: payment.reference_code,
+    };
+
+    // BANK_TRANSFER and VIETQR share this strategy but have different
+    // UX shapes on the client.  Returning both qr_data + bank_info
+    // for either method made the Flutter sealed CheckoutResult
+    // dispatcher (priority: redirect > qr > bank) always pick
+    // QrCheckout, so the Bank-transfer dialog never showed.
+    //   - VIETQR        → qr_data + bank_info (manual fallback table)
+    //   - BANK_TRANSFER → bank_info only      (no QR — manual transfer flow)
+    if (payment.method === PaymentMethod.BANK_TRANSFER) {
+      return { payment, bank_info: bankInfo };
+    }
+
     const qrUrl = `https://img.vietqr.io/image/${bankId}-${accountNumber}-compact2.jpg`
       + `?amount=${payment.amount}`
       + `&addInfo=${encodeURIComponent(payment.reference_code)}`
@@ -60,14 +80,7 @@ export class VietQRStrategy extends BasePaymentStrategy {
     return {
       payment,
       qr_data: qrUrl,
-      bank_info: {
-        bank_name: this.getBankDisplayName(bankId),
-        account_number: accountNumber,
-        account_name: accountName,
-        amount: payment.amount,
-        currency: 'VND',
-        reference: payment.reference_code,
-      },
+      bank_info: bankInfo,
     };
   }
 
