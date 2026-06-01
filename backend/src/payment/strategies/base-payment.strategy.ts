@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { Payment } from '../entities/payment.entity';
 import { AppSettings } from '../../admin/entities/app-settings.entity';
 import { EnvSchema } from '../../config/env.schema';
+import { User } from '../../users/entities/user.entity';
 import { CheckoutResult, WebhookAction, CreateCheckoutOptions } from './payment-strategy.interface';
 
 /**
@@ -50,4 +51,22 @@ export abstract class BasePaymentStrategy {
 
   abstract createCheckout(payment: Payment, options?: CreateCheckoutOptions): Promise<CheckoutResult>;
   abstract verifyWebhook(payload: any, headers: any): Promise<WebhookAction>;
+
+  /**
+   * Mint a one-shot Customer Portal URL for managing the existing
+   * subscription (cancel, change plan, update card).
+   *
+   * Returns null when the strategy doesn't support a portal (VietQR /
+   * bank-transfer have no concept of one — those users contact support
+   * or transfer again).  The default implementation returns null so
+   * strategies without a portal don't need to opt in.
+   *
+   * Implementations may throw if portal creation fails on the provider
+   * side (e.g. Stripe key not configured) — PaymentService surfaces
+   * the error to the controller.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async getCustomerPortalUrl(_user: User): Promise<string | null> {
+    return null;
+  }
 }

@@ -142,6 +142,55 @@ export class PaymentService {
     return result;
   }
 
+  // --- Customer Portal (unified across providers) ---
+
+  /**
+   * Mint a one-shot Customer Portal URL for the user's active
+   * subscription.  Dispatches via the strategy registry — Stripe +
+   * Lemon Squeezy each implement their own
+   * `getCustomerPortalUrl(user)`; VietQR / bank-transfer have no
+   * portal concept and return null.
+   *
+   * Throws NotFoundException when:
+   *   - the user has no active subscription, or
+   *   - the active subscription's store_type doesn't have a portal
+   *     (admin-granted plans, mobile IAP, bank-transfer).
+   */
+  async getCustomerPortalUrl(userId: string): Promise<string> {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+
+    const sub = await this.subscriptionsService.findActiveByUserId(userId);
+    if (!sub) {
+      throw new NotFoundException('No active subscription to manage');
+    }
+
+    // Map subscription.store_type → PaymentMethod registry key.
+    // Keys hardcoded one-by-one rather than via PaymentMethod enum
+    // because StoreType is a separate concept (e.g. ADMIN_GRANTED
+    // has no payment method).
+    let method: string | null = null;
+    switch (sub.store_type) {
+      case 'stripe':       method = PaymentMethod.STRIPE;       break;
+      case 'lemonsqueezy': method = PaymentMethod.LEMONSQUEEZY; break;
+      default:             method = null;
+    }
+    if (!method) {
+      throw new NotFoundException(
+        `Subscriptions sourced from '${sub.store_type}' have no self-service portal`,
+      );
+    }
+
+    const strategy = this.getStrategy(method);
+    const url = await strategy.getCustomerPortalUrl(user);
+    if (!url) {
+      throw new NotFoundException(
+        'Customer portal is not available for this subscription',
+      );
+    }
+    return url;
+  }
+
   // --- Generic: handle webhook from any provider ---
 
   async handleWebhook(method: string, payload: any, headers: any): Promise<{ success: boolean; reference_code?: string }> {
