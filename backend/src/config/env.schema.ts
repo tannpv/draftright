@@ -77,6 +77,13 @@ export const envSchema = z.object({
   // ADMIN_EMAIL stays strict because it's used as a Postgres lookup key.
 
 
+  // --- Sign in with Apple --------------------------------------------
+  // Comma-separated list of accepted JWT audiences (bundle IDs).
+  // Each client app — iOS, macOS, future web — gets its own bundle id
+  // from Apple, and the same backend serves all of them.  When unset,
+  // the verifier falls back to the V2 bundle IDs (iOS + macOS).
+  APPLE_AUDIENCES: z.string().optional(),
+
   // --- Payment: Stripe ------------------------------------------------
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),

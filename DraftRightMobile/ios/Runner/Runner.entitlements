@@ -20,5 +20,14 @@
 		<string>applinks:draftright.info</string>
 		<string>applinks:dev.draftright.info</string>
 	</array>
+	<!-- Sign in with Apple capability.  Backed by the same Apple
+	     Developer-portal entitlement that App Store Connect generates
+	     when the App ID has "Sign In with Apple" enabled.  Required
+	     by App Store Guideline 4.8: any third-party login (Google,
+	     Facebook, …) must be paired with this. -->
+	<key>com.apple.developer.applesignin</key>
+	<array>
+		<string>Default</string>
+	</array>
 </dict>
 </plist>
