@@ -60,9 +60,6 @@ export class StripeStrategy extends BasePaymentStrategy {
     if (!plan) {
       throw new Error('Stripe checkout requires payment.plan to be eagerly loaded.');
     }
-    if (!plan.stripe_price_id) {
-      throw new Error(`Plan ${plan.id} has no stripe_price_id. Run scripts/sync-stripe-prices.ts.`);
-    }
 
     const Stripe = (await import('stripe')).default;
     const stripe = new Stripe(secretKey);
@@ -71,9 +68,15 @@ export class StripeStrategy extends BasePaymentStrategy {
     // google_pay we don't want a hosted Stripe Checkout (that would
     // bounce the user to a browser).  Instead create a PaymentIntent
     // and return its client_secret + merchant config; the mobile
-    // SDK presents the native sheet and confirms client-side.
+    // SDK presents the native sheet and confirms client-side.  This
+    // branch runs BEFORE the stripe_price_id check because wallets
+    // bill an amount directly — they don't need a pre-created Price.
     if (payment.method === PaymentMethod.APPLE_PAY || payment.method === PaymentMethod.GOOGLE_PAY) {
       return this.createWalletPaymentIntent(payment, stripe, options);
+    }
+
+    if (!plan.stripe_price_id) {
+      throw new Error(`Plan ${plan.id} has no stripe_price_id. Run scripts/sync-stripe-prices.ts.`);
     }
 
     const sessionParams: any = {
