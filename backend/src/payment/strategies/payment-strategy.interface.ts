@@ -35,6 +35,17 @@ export interface CheckoutResult {
     merchant_identifier?: string;
     country_code: string;
     currency_code: string;
+    /**
+     * Display amount for the platform sheet's line-item.  Apple Pay
+     * shows this string verbatim above the "Pay" button; Google Pay
+     * uses it as the order summary line.  Format is a positive decimal
+     * string ("4.99") — Stripe SDK does NOT convert from cents.
+     */
+    display_amount: string;
+    /**
+     * Human label for the line-item ("DraftRight Pro · Monthly").
+     */
+    display_label: string;
   };
 }
 

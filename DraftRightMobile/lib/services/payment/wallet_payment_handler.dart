@@ -126,13 +126,14 @@ class WalletPaymentHandler implements PaymentHandler {
           applePay: ApplePayParams(
             merchantCountryCode: r.countryCode,
             currencyCode: r.currencyCode,
-            // SDK uses PaymentIntent amount; this list is for UI
-            // line-items only.  Single "DraftRight Pro" line keeps
-            // the sheet clean.
-            cartItems: const [
+            // Apple Pay sheet renders cartItems verbatim — using the
+            // PaymentIntent amount alone leaves the sheet showing $0.00.
+            // Backend ships display_amount + display_label tailored
+            // for the chosen plan + cadence.
+            cartItems: [
               ApplePayCartSummaryItem.immediate(
-                label: 'DraftRight Pro',
-                amount: '0',
+                label: r.displayLabel,
+                amount: r.displayAmount,
               ),
             ],
           ),

@@ -37,6 +37,8 @@ sealed class CheckoutResult {
         merchantIdentifier: walletRaw['merchant_identifier']?.toString(),
         countryCode: (walletRaw['country_code'] ?? 'US').toString(),
         currencyCode: (walletRaw['currency_code'] ?? 'USD').toString(),
+        displayAmount: (walletRaw['display_amount'] ?? '0').toString(),
+        displayLabel: (walletRaw['display_label'] ?? 'DraftRight Pro').toString(),
       );
     }
     final redirect = json['redirect_url'];
@@ -81,6 +83,12 @@ class WalletCheckout extends CheckoutResult {
   final String countryCode;
   /// ISO-4217 three-letter currency code.
   final String currencyCode;
+  /// Positive decimal string ("4.99") for the wallet sheet's
+  /// line-item.  Sheets render this verbatim — Stripe SDK does
+  /// not convert from cents.
+  final String displayAmount;
+  /// Label for the wallet sheet's line-item, e.g. "Pro · Monthly".
+  final String displayLabel;
 
   const WalletCheckout({
     required super.referenceCode,
@@ -88,6 +96,8 @@ class WalletCheckout extends CheckoutResult {
     required this.publishableKey,
     required this.countryCode,
     required this.currencyCode,
+    required this.displayAmount,
+    required this.displayLabel,
     this.merchantIdentifier,
   });
 }

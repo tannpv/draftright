@@ -181,6 +181,20 @@ export class StripeStrategy extends BasePaymentStrategy {
       'APPLE_PAY_MERCHANT_ID',
     );
 
+    // payment.amount is in smallest unit (cents for USD).  Apple Pay
+    // / Google Pay sheets need a positive decimal string ("4.99"),
+    // not cents.  Two-decimal precision for USD; VND has no minor
+    // unit so emit as a whole number when needed (off the wallet
+    // path today but handled defensively).
+    const isZeroDecimal = ['VND', 'JPY', 'KRW'].includes(payment.currency.toUpperCase());
+    const displayAmount = isZeroDecimal
+      ? String(payment.amount)
+      : (payment.amount / 100).toFixed(2);
+    const cadence = (plan?.billing_period as string | undefined) || '';
+    const displayLabel = cadence
+      ? `${plan?.name || 'Pro'} · ${cadence.charAt(0).toUpperCase()}${cadence.slice(1)}`
+      : (plan?.name || 'Pro');
+
     return {
       payment,
       wallet_intent: {
@@ -189,6 +203,8 @@ export class StripeStrategy extends BasePaymentStrategy {
         merchant_identifier: merchantIdentifier || undefined,
         country_code: (plan?.country_code as string | undefined) || 'US',
         currency_code: payment.currency.toUpperCase(),
+        display_amount: displayAmount,
+        display_label: displayLabel,
       },
     };
   }
