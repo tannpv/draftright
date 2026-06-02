@@ -192,6 +192,56 @@ export class PaymentService {
     return url;
   }
 
+  /**
+   * Cancel the user's currently-active subscription via the provider
+   * API (LS / Stripe).  90% of users coming to "Manage subscription"
+   * just want to cancel — handling it in-app avoids the hosted-portal
+   * email magic-link dance that frustrated users on iOS.
+   *
+   * Cancel mechanics:
+   *   - Provider keeps the subscription billed-through until the
+   *     current period end, then expires it.  Our local
+   *     `subscriptions.status` flips to 'cancelled' via the provider's
+   *     `subscription_cancelled` webhook (already wired).
+   *   - `expires_at` stays at the renewal date — user keeps Pro until
+   *     then.
+   *
+   * Throws:
+   *   - NotFoundException when there's no active subscription or the
+   *     store_type doesn't support programmatic cancel
+   *     (admin_granted / vietqr / bank_transfer).
+   */
+  async cancelActiveSubscription(userId: string): Promise<{ cancelled: boolean; expires_at: Date | null }> {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+
+    const sub = await this.subscriptionsService.findActiveByUserId(userId);
+    if (!sub) throw new NotFoundException('No active subscription to cancel');
+    if (!sub.store_transaction_id) {
+      throw new NotFoundException('Subscription has no provider reference to cancel');
+    }
+
+    // Same store_type → PaymentMethod mapping as getCustomerPortalUrl.
+    let method: string | null = null;
+    switch (sub.store_type) {
+      case 'stripe':       method = PaymentMethod.STRIPE;       break;
+      case 'lemonsqueezy': method = PaymentMethod.LEMONSQUEEZY; break;
+      default:             method = null;
+    }
+    if (!method) {
+      throw new NotFoundException(
+        `Subscriptions sourced from '${sub.store_type}' can't be cancelled in-app`,
+      );
+    }
+
+    const strategy = this.getStrategy(method);
+    const cancelled = await strategy.cancelSubscription(sub.store_transaction_id);
+    if (!cancelled) {
+      throw new NotFoundException('Provider declined to cancel the subscription');
+    }
+    return { cancelled: true, expires_at: sub.expires_at };
+  }
+
   // --- Generic: handle webhook from any provider ---
 
   async handleWebhook(method: string, payload: any, headers: any): Promise<{ success: boolean; reference_code?: string }> {

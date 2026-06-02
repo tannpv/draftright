@@ -1,5 +1,5 @@
 import {
-  Controller, Post, Get, Body, Param, Query, Req, UseGuards, RawBodyRequest,
+  Controller, Post, Get, Delete, Body, Param, Query, Req, UseGuards, RawBodyRequest, HttpCode,
 } from '@nestjs/common';
 import { Request } from 'express';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
@@ -75,6 +75,20 @@ export class PaymentController {
   async getPortal(@Req() req: any) {
     const url = await this.paymentService.getCustomerPortalUrl(req.user.id);
     return { url };
+  }
+
+  // --- Authenticated: in-app cancel ---
+  //
+  // Replaces the trip-to-LS-portal flow for the most common manage
+  // action (cancel).  Card-update + plan-change still go via the
+  // portal endpoint above.  See [[project_session_20260602_apple_signin]]
+  // for the in-app cancel rationale.
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @Delete('subscription')
+  @HttpCode(200)
+  async cancelSubscription(@Req() req: any) {
+    return this.paymentService.cancelActiveSubscription(req.user.id);
   }
 
   // --- Public: webhooks from payment providers ---

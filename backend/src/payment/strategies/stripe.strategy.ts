@@ -132,6 +132,27 @@ export class StripeStrategy extends BasePaymentStrategy {
   }
 
   /**
+   * Cancel a Stripe subscription at period end via the Stripe API.
+   * Mirrors LemonSqueezyStrategy.cancelSubscription so the unified
+   * `/payment/cancel` endpoint dispatches through the strategy
+   * registry instead of branching on store_type at the controller.
+   */
+  async cancelSubscription(stripeSubscriptionId: string): Promise<boolean> {
+    const { secretKey } = await this.getCredentials();
+    if (!secretKey) throw new Error('Stripe is not configured.');
+    const Stripe = (await import('stripe')).default;
+    const stripe = new Stripe(secretKey);
+    // cancel_at_period_end keeps access until the renewal date and
+    // fires `customer.subscription.updated` immediately + then
+    // `customer.subscription.deleted` at period end — same shape as
+    // LS's cancel/expire pair.
+    await stripe.subscriptions.update(stripeSubscriptionId, {
+      cancel_at_period_end: true,
+    });
+    return true;
+  }
+
+  /**
    * Verify + dispatch Stripe webhook events. Handles 5 event types relevant to
    * subscription lifecycle. Other events return { type: 'ignored' }.
    */

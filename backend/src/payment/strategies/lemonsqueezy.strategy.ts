@@ -172,6 +172,38 @@ export class LemonSqueezyStrategy extends BasePaymentStrategy {
     return json?.data?.attributes?.urls?.customer_portal ?? null;
   }
 
+  /**
+   * Cancel a LS subscription via their API (`DELETE /v1/subscriptions/:id`).
+   *
+   * Per LS docs: a "cancelled" subscription stops billing but keeps
+   * access through the current `renews_at` date.  The
+   * `subscription_cancelled` webhook fires immediately + we mirror
+   * `subscriptions.status='cancelled'` (expires_at unchanged) in our
+   * own webhook handler — see `payment.service.ts`.
+   *
+   * Returns true on success.  Throws on network / 4xx so the caller
+   * surfaces the failure to the user.
+   */
+  async cancelSubscription(lsSubscriptionId: string): Promise<boolean> {
+    const { apiKey } = await this.getCredentials();
+    if (!apiKey) throw new Error('Lemon Squeezy is not configured.');
+    const res = await fetch(
+      `https://api.lemonsqueezy.com/v1/subscriptions/${lsSubscriptionId}`,
+      {
+        method: 'DELETE',
+        headers: {
+          Accept: 'application/vnd.api+json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+      },
+    );
+    if (!res.ok) {
+      this.logger.error(`LS cancel failed: HTTP ${res.status} for sub=${lsSubscriptionId}`);
+      throw new Error('Could not cancel the subscription');
+    }
+    return true;
+  }
+
   async verifyWebhook(payload: any, headers: any): Promise<WebhookAction> {
     const { webhookSecret } = await this.getCredentials();
     if (!webhookSecret) {

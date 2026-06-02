@@ -347,4 +347,26 @@ class BackendClient {
     }
     return url;
   }
+
+  /// Cancel the user's currently-active subscription via the backend
+  /// (which calls LS / Stripe APIs directly).  Returns the date Pro
+  /// access ends — the user keeps access through that date.
+  Future<CancelSubscriptionResult> cancelSubscription() async {
+    final data = await _authed((t) => _api.deleteJson('/payment/subscription', token: t));
+    return CancelSubscriptionResult(
+      cancelled: data['cancelled'] == true,
+      accessUntil: data['expires_at'] != null
+          ? DateTime.tryParse(data['expires_at'].toString())
+          : null,
+    );
+  }
+}
+
+/// Outcome of a successful POST /payment/subscription cancellation —
+/// the user has been told the subscription is cancelled but still
+/// has Pro access until `accessUntil`.
+class CancelSubscriptionResult {
+  final bool cancelled;
+  final DateTime? accessUntil;
+  const CancelSubscriptionResult({required this.cancelled, this.accessUntil});
 }

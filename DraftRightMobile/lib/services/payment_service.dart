@@ -151,6 +151,18 @@ class PaymentService {
     }
   }
 
+  /// Cancel the user's currently-active subscription in-app via the
+  /// backend (which calls LS / Stripe APIs directly — no portal trip).
+  ///
+  /// The user keeps Pro access until the existing renewal date; the
+  /// provider's cancellation webhook flips
+  /// `subscriptions.status='cancelled'` shortly after this returns.
+  /// Callers should refresh `/subscription` once this completes to
+  /// pick up the new status.
+  Future<CancelSubscriptionResult> cancelSubscription() async {
+    return backend.cancelSubscription();
+  }
+
   /// Currency the strategy expects to charge the plan in.  VietQR +
   /// bank-transfer can only settle in VND because the QR code is a
   /// Vietnamese-bank-only spec; everything else defaults to USD.
