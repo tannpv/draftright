@@ -119,21 +119,33 @@ class PaymentService {
     );
   }
 
-  /// Open the Lemon Squeezy Customer Portal in an in-app browser so
-  /// the user can cancel, change plan, or update their card.  The
-  /// backend mints a one-shot URL per request; we open it in the
-  /// same SFSafariViewController / Chrome Custom Tab used for
-  /// checkout to keep the UX consistent.
+  /// Open the Lemon Squeezy Customer Portal so the user can cancel,
+  /// change plan, or update their card.  The backend mints a signed
+  /// URL per request.
+  ///
+  /// **Why iOS uses the system browser (not in-app) for THIS flow:**
+  /// SFSafariViewController has an isolated cookie jar — every launch
+  /// is a fresh LS session, so LS prompts for the magic-link login
+  /// every single time.  Chrome Custom Tabs on Android share cookies
+  /// with the system Chrome browser, so the portal opens directly if
+  /// the user has ever logged into LS in Chrome.
+  ///
+  /// To match that "no-login-prompt" UX on iOS we send portal opens
+  /// to system Safari (`LaunchMode.externalApplication`), where the
+  /// LS session persists across launches.  Checkout stays in-app
+  /// because (a) checkout is a one-shot — no recurring cookies
+  /// needed, and (b) keeping the user inside the app for the most
+  /// commercially sensitive flow is the right call.
   ///
   /// Throws if the user has no LS subscription, the backend isn't
   /// configured, or the browser refuses to launch.  Callers should
   /// surface the error in a SnackBar.
   Future<void> openCustomerPortal() async {
     final url = await backend.getCustomerPortalUrl();
-    final launched = await launchUrl(
-      Uri.parse(url),
-      mode: LaunchMode.inAppBrowserView,
-    );
+    final mode = _isIos
+        ? LaunchMode.externalApplication
+        : LaunchMode.inAppBrowserView;
+    final launched = await launchUrl(Uri.parse(url), mode: mode);
     if (!launched) {
       throw Exception('Could not open the customer portal');
     }
