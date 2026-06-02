@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:draftright_mobile/services/auth_service.dart';
+import 'package:draftright_mobile/services/settings_service.dart';
 import 'package:draftright_mobile/screens/register_screen.dart';
 import 'package:draftright_mobile/widgets/social_login_buttons.dart';
 import 'package:draftright_mobile/widgets/anonymous_bug_report_button.dart';
@@ -166,11 +167,79 @@ class _LoginScreenState extends State<LoginScreen> {
                 // to report it. Anonymous submit is supported by the backend.
                 const SizedBox(height: 4),
                 const AnonymousBugReportButton(routeName: '/login'),
+                // Pre-login backend-URL editor — the post-login Settings
+                // tab also has one, but testers / TestFlight users hit
+                // a chicken-and-egg when their account only exists on
+                // dev and the app defaults to prod.  Discreet button
+                // so end users don't trip over it.
+                const SizedBox(height: 4),
+                TextButton(
+                  onPressed: _showServerPicker,
+                  child: const Text(
+                    'Server',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                ),
               ],
             ),
           ),
         ),
       ),
     );
+  }
+
+  Future<void> _showServerPicker() async {
+    final settings = context.read<SettingsService>();
+    final controller = TextEditingController(text: settings.backendUrl);
+    final newUrl = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Backend URL'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextField(
+              controller: controller,
+              decoration: const InputDecoration(hintText: 'https://api…'),
+              autocorrect: false,
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              children: [
+                ActionChip(
+                  label: const Text('Prod'),
+                  onPressed: () =>
+                      controller.text = 'https://api.draftright.info',
+                ),
+                ActionChip(
+                  label: const Text('Dev'),
+                  onPressed: () =>
+                      controller.text = 'https://api.dev.draftright.info',
+                ),
+              ],
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(null),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (newUrl != null && newUrl.isNotEmpty) {
+      await settings.setBackendUrl(newUrl);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Backend URL set to $newUrl')),
+      );
+    }
   }
 }
