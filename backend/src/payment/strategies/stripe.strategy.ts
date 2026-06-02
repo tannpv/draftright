@@ -273,6 +273,28 @@ export class StripeStrategy extends BasePaymentStrategy {
         };
       }
 
+      case 'payment_intent.succeeded': {
+        // Native-wallet checkout success (Apple Pay / Google Pay path).
+        // The mobile SDK confirms a PaymentIntent client-side; Stripe
+        // fires this event when the charge captures.  No
+        // subscription object yet — wallet PaymentIntents bill a
+        // single cycle.  Backend activates Pro for the current
+        // period using metadata.reference_code; auto-renewal is a
+        // follow-up (would create a Stripe Subscription using the
+        // saved payment method).
+        const intent = event.data.object;
+        if (!intent.metadata?.reference_code) {
+          this.logger.warn(`payment_intent.succeeded missing reference_code (id=${event.id})`);
+          return { type: 'ignored' };
+        }
+        return {
+          type: 'payment_completed',
+          reference_code: intent.metadata.reference_code,
+          stripe_subscription_id: undefined,           // not a subscription yet
+          stripe_customer_id: intent.customer || undefined,
+        };
+      }
+
       case 'invoice.payment_succeeded': {
         // Subscription renewal — extends expiry. Also fires after trial → first paid charge.
         // API version 2026-04-22 moved invoice.subscription → invoice.parent.subscription_details.subscription
