@@ -5,7 +5,17 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import * as jwt from 'jsonwebtoken';
-import jwksClient from 'jwks-rsa';
+import { createPublicKey } from 'node:crypto';
+
+/** Shape of one entry in Apple's `/auth/keys` JWK set. */
+interface AppleJwk {
+  kty: string;
+  kid: string;
+  use: string;
+  alg: string;
+  n: string;
+  e: string;
+}
 import { UsersService } from '../users/users.service';
 import { PlansService } from '../plans/plans.service';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
@@ -274,13 +284,7 @@ export class AuthService {
       'com.draftright.draftrightMobile.v2,com.draftright.app.v2';
     const audiences = audiencesRaw.split(',').map(s => s.trim()).filter(Boolean);
 
-    const client = jwksClient({
-      jwksUri: 'https://appleid.apple.com/auth/keys',
-      cache: true,
-      cacheMaxAge: 24 * 60 * 60 * 1000,  // Apple rotates keys infrequently
-    });
-    const key = await client.getSigningKey(decoded.header.kid);
-    const publicKey = key.getPublicKey();
+    const publicKey = await this.fetchApplePublicKeyPem(decoded.header.kid);
 
     let payload: jwt.JwtPayload;
     try {
@@ -309,6 +313,41 @@ export class AuthService {
       name: profile.name,         // Apple only ships full name on first consent
       avatar_url: profile.avatar_url,
     };
+  }
+
+  /**
+   * Cached fetch of Apple's JWKs.  Apple rotates infrequently, so a
+   * 24-hour in-process cache keeps us off the network on every
+   * Apple sign-in while still picking up rotations the next day.
+   *
+   * No external dep (was jwks-rsa, but its transitive `jose` ships
+   * ESM-only and breaks Jest under CJS).  Pure Node `crypto.createPublicKey`
+   * accepts JWK directly since Node 16, producing a PEM that
+   * `jsonwebtoken.verify` consumes.
+   */
+  private static _appleJwksCache: { keys: AppleJwk[]; expiresAt: number } | null = null;
+
+  private async fetchApplePublicKeyPem(kid: string): Promise<string> {
+    const now = Date.now();
+    let cache = AuthService._appleJwksCache;
+    if (!cache || cache.expiresAt < now) {
+      const res = await fetch('https://appleid.apple.com/auth/keys');
+      if (!res.ok) {
+        throw new UnauthorizedException('Could not fetch Apple signing keys');
+      }
+      const json = (await res.json()) as { keys: AppleJwk[] };
+      cache = { keys: json.keys || [], expiresAt: now + 24 * 60 * 60 * 1000 };
+      AuthService._appleJwksCache = cache;
+    }
+    const jwk = cache.keys.find((k) => k.kid === kid);
+    if (!jwk) {
+      // Could be a fresh rotation we haven't seen — bust the cache
+      // and retry once before giving up.
+      AuthService._appleJwksCache = null;
+      throw new UnauthorizedException(`Apple key not found for kid=${kid}`);
+    }
+    const keyObject = createPublicKey({ key: jwk as any, format: 'jwk' });
+    return keyObject.export({ type: 'spki', format: 'pem' }) as string;
   }
 
   private async verifyFacebookToken(accessToken: string): Promise<{ socialId: string; email: string; name?: string; avatar_url?: string }> {
