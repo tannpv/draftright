@@ -13,6 +13,7 @@ import { AppSettings } from '../../admin/entities/app-settings.entity';
 import { EnvSchema } from '../../config/env.schema';
 import { User } from '../../users/entities/user.entity';
 import { websiteUrl } from '../../common/app-config';
+import { PaymentMethod } from '../entities/payment.entity';
 
 /**
  * Stripe strategy — Phase 3a refactor.
@@ -66,6 +67,15 @@ export class StripeStrategy extends BasePaymentStrategy {
     const Stripe = (await import('stripe')).default;
     const stripe = new Stripe(secretKey);
 
+    // Native-wallet branch: when the inbound method is apple_pay or
+    // google_pay we don't want a hosted Stripe Checkout (that would
+    // bounce the user to a browser).  Instead create a PaymentIntent
+    // and return its client_secret + merchant config; the mobile
+    // SDK presents the native sheet and confirms client-side.
+    if (payment.method === PaymentMethod.APPLE_PAY || payment.method === PaymentMethod.GOOGLE_PAY) {
+      return this.createWalletPaymentIntent(payment, stripe, options);
+    }
+
     const sessionParams: any = {
       mode: 'subscription',
       payment_method_types: ['card'],
@@ -108,6 +118,75 @@ export class StripeStrategy extends BasePaymentStrategy {
     return {
       payment,
       redirect_url: session.url || undefined,
+    };
+  }
+
+  /**
+   * Create a Stripe PaymentIntent for a native-wallet checkout
+   * (Apple Pay / Google Pay).  Returns the client_secret the mobile
+   * SDK needs to present the platform sheet — no redirect.  The
+   * usual `payment_intent.succeeded` webhook activates the
+   * subscription, identical to the hosted Checkout Session flow.
+   *
+   * `setup_future_usage: 'off_session'` saves the wallet's tokenised
+   * payment method on the Stripe Customer so future renewals charge
+   * silently (no second wallet prompt).
+   */
+  private async createWalletPaymentIntent(
+    payment: Payment,
+    stripe: import('stripe').default,
+    options?: CreateCheckoutOptions,
+  ): Promise<CheckoutResult> {
+    const plan: any = (payment as any).plan;
+    // Reuse the existing Stripe Customer or create one keyed by
+    // user_email so renewals + admin lookups can find it later.
+    let customerId = options?.stripe_customer_id;
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email: options?.user_email,
+        metadata: { user_id: payment.user_id },
+      });
+      customerId = customer.id;
+    }
+
+    const intent = await stripe.paymentIntents.create({
+      amount: payment.amount,
+      currency: payment.currency.toLowerCase(),
+      customer: customerId,
+      setup_future_usage: 'off_session',
+      payment_method_types: ['card'],
+      metadata: {
+        reference_code: payment.reference_code,
+        payment_id: payment.id,
+        user_id: payment.user_id,
+        plan_id: payment.plan_id,
+        method: payment.method,
+      },
+    });
+
+    // Resolve env config for the wallet handshake.  Publishable key
+    // is safe to ship to clients; the secret key stays server-side.
+    // Apple merchant ID is whatever was registered in Stripe + Apple
+    // Dev portal; Google Pay needs no merchant id (Stripe handles).
+    const publishableKey = this.resolveCredential(
+      // No DB column yet — env-only for now.
+      null,
+      'STRIPE_PUBLISHABLE_KEY',
+    );
+    const merchantIdentifier = this.resolveCredential(
+      null,
+      'APPLE_PAY_MERCHANT_ID',
+    );
+
+    return {
+      payment,
+      wallet_intent: {
+        client_secret: intent.client_secret || '',
+        publishable_key: publishableKey,
+        merchant_identifier: merchantIdentifier || undefined,
+        country_code: (plan?.country_code as string | undefined) || 'US',
+        currency_code: payment.currency.toUpperCase(),
+      },
     };
   }
 

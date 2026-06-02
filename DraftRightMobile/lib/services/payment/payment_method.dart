@@ -9,7 +9,9 @@ enum PaymentMethodKind {
   stripe,
   vietqr,
   bankTransfer,
-  paypal;
+  paypal,
+  applePay,
+  googlePay;
 
   /// String the backend uses on the wire.  Single source of truth.
   String get wireName {
@@ -19,6 +21,8 @@ enum PaymentMethodKind {
       case PaymentMethodKind.vietqr:        return 'vietqr';
       case PaymentMethodKind.bankTransfer:  return 'bank_transfer';
       case PaymentMethodKind.paypal:        return 'paypal';
+      case PaymentMethodKind.applePay:      return 'apple_pay';
+      case PaymentMethodKind.googlePay:     return 'google_pay';
     }
   }
 
@@ -87,6 +91,20 @@ class PaymentMethodDescriptor {
           kind: PaymentMethodKind.paypal,
           displayName: 'PayPal',
           description: 'Pay with PayPal balance or card',
+          currencies: ['USD'],
+        );
+      case PaymentMethodKind.applePay:
+        return const PaymentMethodDescriptor(
+          kind: PaymentMethodKind.applePay,
+          displayName: 'Apple Pay',
+          description: 'Pay with Face ID, Touch ID, or your Apple ID password',
+          currencies: ['USD'],
+        );
+      case PaymentMethodKind.googlePay:
+        return const PaymentMethodDescriptor(
+          kind: PaymentMethodKind.googlePay,
+          displayName: 'Google Pay',
+          description: 'Pay instantly with your saved Google Pay cards',
           currencies: ['USD'],
         );
     }

@@ -9,6 +9,7 @@ import 'package:draftright_mobile/services/payment/billing_period.dart';
 import 'package:draftright_mobile/services/payment/payment_handler.dart';
 import 'package:draftright_mobile/services/payment/payment_method.dart';
 import 'package:draftright_mobile/services/payment/payment_status.dart';
+import 'package:draftright_mobile/services/payment/wallet_payment_handler.dart';
 
 /// Orchestrates upgrade-to-Pro across every payment method the backend
 /// advertises.
@@ -38,6 +39,12 @@ class PaymentService {
           PaymentMethodKind.paypal:       const RedirectPaymentHandler(PaymentMethodKind.paypal),
           PaymentMethodKind.vietqr:       QrPaymentHandler(watcher: watchPayment),
           PaymentMethodKind.bankTransfer: BankTransferPaymentHandler(watcher: watchPayment),
+          // Native-wallet handlers — one shared class, two registry
+          // entries.  Platform-gating in listAvailableMethods drops
+          // each entry from the picker on platforms that can't run
+          // its wallet (Apple Pay on Android, Google Pay on iOS).
+          PaymentMethodKind.applePay:     const WalletPaymentHandler(PaymentMethodKind.applePay),
+          PaymentMethodKind.googlePay:    const WalletPaymentHandler(PaymentMethodKind.googlePay),
         });
   }
 
@@ -54,13 +61,27 @@ class PaymentService {
   }
 
   bool _isAllowedOnThisPlatform(PaymentMethodKind kind) {
+    // Hosted Stripe is blocked on iOS by App Store Guideline 3.1.1
+    // (no external-browser path through Stripe direct for digital
+    // subscriptions in iOS App Store builds).
     if (kind == PaymentMethodKind.stripe && _isIos) return false;
+    // Native wallets are only available on the platform they're
+    // native to.  Apple Pay = iOS only; Google Pay = Android only.
+    // Both are processed by Stripe under the hood and surface
+    // through `flutter_stripe`.
+    if (kind == PaymentMethodKind.applePay && !_isIos) return false;
+    if (kind == PaymentMethodKind.googlePay && !_isAndroid) return false;
     return true;
   }
 
   bool get _isIos {
     if (kIsWeb) return false;
     try { return Platform.isIOS; } catch (_) { return false; }
+  }
+
+  bool get _isAndroid {
+    if (kIsWeb) return false;
+    try { return Platform.isAndroid; } catch (_) { return false; }
   }
 
   /// Run the full upgrade flow for [method]: create the checkout
@@ -174,6 +195,8 @@ class PaymentService {
       case PaymentMethodKind.lemonsqueezy:
       case PaymentMethodKind.stripe:
       case PaymentMethodKind.paypal:
+      case PaymentMethodKind.applePay:
+      case PaymentMethodKind.googlePay:
         return 'USD';
     }
   }

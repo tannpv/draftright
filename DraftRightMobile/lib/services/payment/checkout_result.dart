@@ -25,6 +25,20 @@ sealed class CheckoutResult {
             json['reference_code'] ??
             '')
         .toString();
+    // Wallet branch wins over redirect/qr/bank — it's only set by the
+    // backend for apple_pay / google_pay checkouts.  See backend
+    // StripeStrategy.createWalletPaymentIntent.
+    final walletRaw = json['wallet_intent'];
+    if (walletRaw is Map<String, dynamic>) {
+      return WalletCheckout(
+        referenceCode: ref,
+        clientSecret: (walletRaw['client_secret'] ?? '').toString(),
+        publishableKey: (walletRaw['publishable_key'] ?? '').toString(),
+        merchantIdentifier: walletRaw['merchant_identifier']?.toString(),
+        countryCode: (walletRaw['country_code'] ?? 'US').toString(),
+        currencyCode: (walletRaw['currency_code'] ?? 'USD').toString(),
+      );
+    }
     final redirect = json['redirect_url'];
     if (redirect is String && redirect.isNotEmpty) {
       return RedirectCheckout(referenceCode: ref, url: redirect);
@@ -47,9 +61,35 @@ sealed class CheckoutResult {
       );
     }
     throw const FormatException(
-      'Backend returned a checkout response with none of redirect_url / qr_data / bank_info',
+      'Backend returned a checkout response with none of redirect_url / qr_data / bank_info / wallet_intent',
     );
   }
+}
+
+/// Native-wallet checkout — used by Apple Pay (iOS) + Google Pay
+/// (Android).  Carries the Stripe PaymentIntent client_secret the
+/// SDK confirms client-side, plus merchant + locale context the
+/// platform sheet needs to render.
+class WalletCheckout extends CheckoutResult {
+  /// Stripe PaymentIntent client_secret.  `pi_..._secret_...`.
+  final String clientSecret;
+  /// Stripe publishable key (`pk_test_...` / `pk_live_...`).
+  final String publishableKey;
+  /// Apple Pay merchant ID; null on Android.
+  final String? merchantIdentifier;
+  /// ISO-3166 two-letter merchant country code.
+  final String countryCode;
+  /// ISO-4217 three-letter currency code.
+  final String currencyCode;
+
+  const WalletCheckout({
+    required super.referenceCode,
+    required this.clientSecret,
+    required this.publishableKey,
+    required this.countryCode,
+    required this.currencyCode,
+    this.merchantIdentifier,
+  });
 }
 
 class RedirectCheckout extends CheckoutResult {
