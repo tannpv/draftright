@@ -137,6 +137,19 @@ export class AuthService {
     const user = await this.usersService.findByEmail(email);
     if (!user) throw new UnauthorizedException('Invalid credentials');
 
+    // Social-only accounts (Google / Facebook / Apple sign-up) have
+    // no password_hash.  Calling bcrypt.compare(pw, null) throws
+    // "Illegal arguments: string, object" — surface a friendlier
+    // message that tells the user which provider to use instead.
+    if (!user.password_hash) {
+      const friendly = this.providerLabel(user.auth_provider);
+      throw new UnauthorizedException(
+        friendly
+          ? `This account was created with ${friendly}. Use the ${friendly} button to sign in.`
+          : 'This account uses a social sign-in. Use the provider you signed up with.',
+      );
+    }
+
     const valid = await bcrypt.compare(password, user.password_hash);
     if (!valid) throw new UnauthorizedException('Invalid credentials');
 
@@ -144,6 +157,22 @@ export class AuthService {
 
     const tokens = await this.generateTokens(user);
     return { ...tokens, user: { id: user.id, email: user.email, name: user.name } };
+  }
+
+  /**
+   * Human label for the social provider that owns an account, used
+   * to tell email-login attempts which button to press.  Returns
+   * null for `local` accounts (they have a password and should
+   * never hit this path).
+   */
+  private providerLabel(provider: AuthProvider): string | null {
+    switch (provider) {
+      case AuthProvider.GOOGLE:   return 'Google';
+      case AuthProvider.FACEBOOK: return 'Facebook';
+      case AuthProvider.TIKTOK:   return 'TikTok';
+      case AuthProvider.APPLE:    return 'Apple';
+      default:                    return null;
+    }
   }
 
   async refresh(refreshToken: string) {
