@@ -6,6 +6,7 @@ import 'package:draftright_mobile/services/payment/checkout_result.dart';
 import 'package:draftright_mobile/services/payment/payment_handler.dart';
 import 'package:draftright_mobile/services/payment/payment_method.dart';
 import 'package:draftright_mobile/services/logger_service.dart';
+import 'package:draftright_mobile/services/error_reporter.dart';
 
 /// Post-checkout UX for native-wallet payments (Apple Pay on iOS,
 /// Google Pay on Android).  Both methods produce a Stripe
@@ -91,9 +92,48 @@ class WalletPaymentHandler implements PaymentHandler {
         confirmParams: _confirmParams(result),
       );
     } catch (e, st) {
-      DRLogger.error('confirmPlatformPayPaymentIntent failed: $e\n$st', category: 'PaymentService');
+      // Capture EVERY field we can reach on the exception — Apple
+      // Pay's StripeException sometimes carries a `code`/`declineCode`/
+      // `localizedMessage` distinct from the bare toString.  Ship it
+      // all to /errors via ErrorReporter so the dev DB has the full
+      // picture even on release builds (where DRLogger only writes to
+      // a sandboxed file we can't read remotely).
+      final detail = _debugDump(e);
+      DRLogger.error('confirmPlatformPayPaymentIntent failed: $detail\n$st', category: 'PaymentService');
+      ErrorReporter.reportHandled(
+        e,
+        stack: st,
+        severity: 'warning',
+        context: {
+          'flow': 'wallet_payment',
+          'kind': kind.name,
+          'reference_code': result.referenceCode,
+          'amount': result.displayAmount,
+          'currency': result.currencyCode,
+          'country': result.countryCode,
+          'detail': detail,
+        },
+      );
       throw Exception(_explain('confirmPlatformPayPaymentIntent', e));
     }
+  }
+
+  /// Best-effort dump of every public property on a Stripe exception
+  /// so /errors records the full picture (code, message, declineCode,
+  /// etc.) rather than just "FailureCode.Canceled".
+  String _debugDump(Object e) {
+    if (e is StripeException) {
+      final err = e.error;
+      return 'StripeException(code=${err.code} '
+          'message=${err.message} '
+          'declineCode=${err.declineCode} '
+          'stripeErrorCode=${err.stripeErrorCode} '
+          'type=${err.type})';
+    }
+    if (e is StripeConfigException) {
+      return 'StripeConfigException(message=${e.message})';
+    }
+    return '${e.runtimeType}: $e';
   }
 
   /// Pull a useful message out of `StripeException` / `StripeError` /
