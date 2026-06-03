@@ -50,6 +50,13 @@ export class PaymentService {
       [PaymentMethod.VIETQR,        this.vietqrStrategy],
       [PaymentMethod.BANK_TRANSFER, this.vietqrStrategy],
       [PaymentMethod.LEMONSQUEEZY,  this.lemonSqueezyStrategy],
+      // Apple Pay + Google Pay both run on Stripe (LS has no
+      // wallet-token API).  They produce the same PaymentIntent /
+      // webhook flow as STRIPE — same strategy, different
+      // PaymentMethod label so the client can render the right
+      // native button.
+      [PaymentMethod.APPLE_PAY,     this.stripeStrategy],
+      [PaymentMethod.GOOGLE_PAY,    this.stripeStrategy],
     ]);
   }
 

@@ -13,6 +13,7 @@ import { AppSettings } from '../../admin/entities/app-settings.entity';
 import { EnvSchema } from '../../config/env.schema';
 import { User } from '../../users/entities/user.entity';
 import { websiteUrl } from '../../common/app-config';
+import { PaymentMethod } from '../entities/payment.entity';
 
 /**
  * Stripe strategy — Phase 3a refactor.
@@ -59,12 +60,24 @@ export class StripeStrategy extends BasePaymentStrategy {
     if (!plan) {
       throw new Error('Stripe checkout requires payment.plan to be eagerly loaded.');
     }
-    if (!plan.stripe_price_id) {
-      throw new Error(`Plan ${plan.id} has no stripe_price_id. Run scripts/sync-stripe-prices.ts.`);
-    }
 
     const Stripe = (await import('stripe')).default;
     const stripe = new Stripe(secretKey);
+
+    // Native-wallet branch: when the inbound method is apple_pay or
+    // google_pay we don't want a hosted Stripe Checkout (that would
+    // bounce the user to a browser).  Instead create a PaymentIntent
+    // and return its client_secret + merchant config; the mobile
+    // SDK presents the native sheet and confirms client-side.  This
+    // branch runs BEFORE the stripe_price_id check because wallets
+    // bill an amount directly — they don't need a pre-created Price.
+    if (payment.method === PaymentMethod.APPLE_PAY || payment.method === PaymentMethod.GOOGLE_PAY) {
+      return this.createWalletPaymentIntent(payment, stripe, options);
+    }
+
+    if (!plan.stripe_price_id) {
+      throw new Error(`Plan ${plan.id} has no stripe_price_id. Run scripts/sync-stripe-prices.ts.`);
+    }
 
     const sessionParams: any = {
       mode: 'subscription',
@@ -108,6 +121,91 @@ export class StripeStrategy extends BasePaymentStrategy {
     return {
       payment,
       redirect_url: session.url || undefined,
+    };
+  }
+
+  /**
+   * Create a Stripe PaymentIntent for a native-wallet checkout
+   * (Apple Pay / Google Pay).  Returns the client_secret the mobile
+   * SDK needs to present the platform sheet — no redirect.  The
+   * usual `payment_intent.succeeded` webhook activates the
+   * subscription, identical to the hosted Checkout Session flow.
+   *
+   * `setup_future_usage: 'off_session'` saves the wallet's tokenised
+   * payment method on the Stripe Customer so future renewals charge
+   * silently (no second wallet prompt).
+   */
+  private async createWalletPaymentIntent(
+    payment: Payment,
+    stripe: import('stripe').default,
+    options?: CreateCheckoutOptions,
+  ): Promise<CheckoutResult> {
+    const plan: any = (payment as any).plan;
+    // Reuse the existing Stripe Customer or create one keyed by
+    // user_email so renewals + admin lookups can find it later.
+    let customerId = options?.stripe_customer_id;
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email: options?.user_email,
+        metadata: { user_id: payment.user_id },
+      });
+      customerId = customer.id;
+    }
+
+    const intent = await stripe.paymentIntents.create({
+      amount: payment.amount,
+      currency: payment.currency.toLowerCase(),
+      customer: customerId,
+      setup_future_usage: 'off_session',
+      payment_method_types: ['card'],
+      metadata: {
+        reference_code: payment.reference_code,
+        payment_id: payment.id,
+        user_id: payment.user_id,
+        plan_id: payment.plan_id,
+        method: payment.method,
+      },
+    });
+
+    // Resolve env config for the wallet handshake.  Publishable key
+    // is safe to ship to clients; the secret key stays server-side.
+    // Apple merchant ID is whatever was registered in Stripe + Apple
+    // Dev portal; Google Pay needs no merchant id (Stripe handles).
+    const publishableKey = this.resolveCredential(
+      // No DB column yet — env-only for now.
+      null,
+      'STRIPE_PUBLISHABLE_KEY',
+    );
+    const merchantIdentifier = this.resolveCredential(
+      null,
+      'APPLE_PAY_MERCHANT_ID',
+    );
+
+    // payment.amount is in smallest unit (cents for USD).  Apple Pay
+    // / Google Pay sheets need a positive decimal string ("4.99"),
+    // not cents.  Two-decimal precision for USD; VND has no minor
+    // unit so emit as a whole number when needed (off the wallet
+    // path today but handled defensively).
+    const isZeroDecimal = ['VND', 'JPY', 'KRW'].includes(payment.currency.toUpperCase());
+    const displayAmount = isZeroDecimal
+      ? String(payment.amount)
+      : (payment.amount / 100).toFixed(2);
+    const cadence = (plan?.billing_period as string | undefined) || '';
+    const displayLabel = cadence
+      ? `${plan?.name || 'Pro'} · ${cadence.charAt(0).toUpperCase()}${cadence.slice(1)}`
+      : (plan?.name || 'Pro');
+
+    return {
+      payment,
+      wallet_intent: {
+        client_secret: intent.client_secret || '',
+        publishable_key: publishableKey,
+        merchant_identifier: merchantIdentifier || undefined,
+        country_code: (plan?.country_code as string | undefined) || 'US',
+        currency_code: payment.currency.toUpperCase(),
+        display_amount: displayAmount,
+        display_label: displayLabel,
+      },
     };
   }
 
@@ -188,6 +286,28 @@ export class StripeStrategy extends BasePaymentStrategy {
           reference_code: session.metadata?.reference_code,
           stripe_subscription_id: session.subscription || undefined,
           stripe_customer_id: session.customer || undefined,
+        };
+      }
+
+      case 'payment_intent.succeeded': {
+        // Native-wallet checkout success (Apple Pay / Google Pay path).
+        // The mobile SDK confirms a PaymentIntent client-side; Stripe
+        // fires this event when the charge captures.  No
+        // subscription object yet — wallet PaymentIntents bill a
+        // single cycle.  Backend activates Pro for the current
+        // period using metadata.reference_code; auto-renewal is a
+        // follow-up (would create a Stripe Subscription using the
+        // saved payment method).
+        const intent = event.data.object;
+        if (!intent.metadata?.reference_code) {
+          this.logger.warn(`payment_intent.succeeded missing reference_code (id=${event.id})`);
+          return { type: 'ignored' };
+        }
+        return {
+          type: 'payment_completed',
+          reference_code: intent.metadata.reference_code,
+          stripe_subscription_id: undefined,           // not a subscription yet
+          stripe_customer_id: intent.customer || undefined,
         };
       }
 

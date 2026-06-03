@@ -175,6 +175,14 @@ class _BootstrapState extends State<_Bootstrap> {
         try {
           ErrorReporter.setBackendUrl(settings.backendUrl);
         } catch (_) {/* reporter must never break a settings save */}
+        try {
+          // AuthService caches the base URL set in init(); it has a
+          // setter, but no one was calling it.  Without this, the
+          // Server toggle on LoginScreen / Settings updates the
+          // SharedPreferences entry but login keeps hitting the old
+          // URL (default = prod) until app restart.
+          auth.setBaseUrl(settings.backendUrl);
+        } catch (_) {/* same isolation rule as ErrorReporter */}
       });
 
       if (!mounted) return;

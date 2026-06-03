@@ -31,13 +31,21 @@ Sync metadata + screenshots, save as draft
 
 Sync metadata + screenshots, submit for review
 
+### ios beta
+
+```sh
+[bundle exec] fastlane ios beta
+```
+
+Build .ipa and upload to TestFlight (beta channel — no review submission)
+
 ### ios release
 
 ```sh
 [bundle exec] fastlane ios release
 ```
 
-Build .ipa and upload to App Store Connect (full release)
+Build .ipa and upload to App Store Connect (full release + submit for review)
 
 ----
 

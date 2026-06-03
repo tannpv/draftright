@@ -12,6 +12,41 @@ export interface CheckoutResult {
     currency: string;
     reference: string;
   };
+  /**
+   * Native wallet (Apple Pay / Google Pay) checkout payload — the
+   * mobile SDK confirms a PaymentIntent client-side without
+   * redirecting the user.  Sent instead of `redirect_url` when the
+   * inbound payment.method is `apple_pay` or `google_pay`.
+   *
+   * - `client_secret`: Stripe PaymentIntent.client_secret used by
+   *   `flutter_stripe` to present the platform sheet.
+   * - `publishable_key`: Stripe publishable key the mobile SDK needs
+   *   to talk to Stripe directly.
+   * - `merchant_identifier` (Apple Pay only): the Apple Pay merchant
+   *   ID configured in the Stripe + Apple dashboards.
+   * - `country_code`: ISO-3166 two-letter code for the merchant
+   *   country (Stripe checks this against the wallet's currency).
+   * - `currency_code`: ISO-4217 three-letter code; mirrors
+   *   payment.currency so the sheet shows the correct amount.
+   */
+  wallet_intent?: {
+    client_secret: string;
+    publishable_key: string;
+    merchant_identifier?: string;
+    country_code: string;
+    currency_code: string;
+    /**
+     * Display amount for the platform sheet's line-item.  Apple Pay
+     * shows this string verbatim above the "Pay" button; Google Pay
+     * uses it as the order summary line.  Format is a positive decimal
+     * string ("4.99") — Stripe SDK does NOT convert from cents.
+     */
+    display_amount: string;
+    /**
+     * Human label for the line-item ("DraftRight Pro · Monthly").
+     */
+    display_label: string;
+  };
 }
 
 /**

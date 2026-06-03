@@ -99,14 +99,20 @@ export class AllExceptionsFilter implements ExceptionFilter {
         } else {
           code = this.inferCode(status);
         }
-        if (typeof obj.error === 'string') {
-          message = obj.error;
-        } else if (typeof obj.message === 'string') {
+        // Prefer the specific `message` over the generic `error`.
+        // NestJS validation errors arrive as
+        //   `{ message: ['email must be an email'], error: 'Bad Request', statusCode: 400 }`
+        // — picking `error` would surface the unhelpful 'Bad Request'
+        // to mobile users instead of the actual field-level reason.
+        if (typeof obj.message === 'string') {
           message = obj.message;
         } else if (Array.isArray(obj.message)) {
           message = obj.message
             .filter((m): m is string => typeof m === 'string')
-            .join(', ');
+            .map(this.humanizeValidation)
+            .join('. ');
+        } else if (typeof obj.error === 'string') {
+          message = obj.error;
         } else {
           message = exception.message || 'Request failed';
         }
@@ -132,6 +138,31 @@ export class AllExceptionsFilter implements ExceptionFilter {
    * Keeps the common HTTP shapes mapped to the matching kebab-case
    * code so even legacy throw-sites get a code in the envelope.
    */
+  /**
+   * Convert one class-validator constraint message into something a
+   * non-engineer can read.  Pattern is `<field> <constraint phrase>`;
+   * we rewrite the prefix when the constraint phrase already names
+   * the field implicitly ("must be an email" → "Please enter a valid
+   * email address").
+   *
+   * Kept private + simple — adding rules is one new `if` per rule.
+   */
+  private humanizeValidation(raw: string): string {
+    const m = raw.toLowerCase();
+    const field = raw.split(' ')[0];
+    const titleCase = field.charAt(0).toUpperCase() + field.slice(1);
+    if (m.endsWith('must be an email')) return 'Please enter a valid email address.';
+    if (m.includes('must be longer than or equal to')) {
+      const n = raw.match(/(\d+)/)?.[1];
+      return n ? `${titleCase} must be at least ${n} characters.` : raw;
+    }
+    if (m.endsWith('should not be empty')) {
+      return `${titleCase} is required.`;
+    }
+    // Leave anything we don't have a friendlier phrasing for verbatim.
+    return raw;
+  }
+
   private inferCode(status: number): ErrorCode | string {
     switch (status) {
       case 400: return ERROR_CODES.invalidInput;

@@ -12,6 +12,12 @@ export enum PaymentMethod {
   VIETQR = 'vietqr',
   BANK_TRANSFER = 'bank_transfer',
   LEMONSQUEEZY = 'lemonsqueezy',
+  // Native in-app wallets — both processed through Stripe under the
+  // hood (LS doesn't expose a wallet-token API).  They surface in
+  // PaymentMethodKind enums on every client so the UI can render the
+  // platform-native button.
+  APPLE_PAY = 'apple_pay',
+  GOOGLE_PAY = 'google_pay',
 }
 
 export enum PaymentStatus {

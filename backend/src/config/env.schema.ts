@@ -87,6 +87,16 @@ export const envSchema = z.object({
   // --- Payment: Stripe ------------------------------------------------
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  // Publishable key (pk_*) — safe to expose; mobile SDK needs it to
+  // talk to Stripe directly when confirming a wallet PaymentIntent
+  // client-side.  Without it, native Apple Pay / Google Pay tiles
+  // fall back to the hosted card flow.
+  STRIPE_PUBLISHABLE_KEY: z.string().optional(),
+  // Apple Pay merchant ID registered in both the Stripe Dashboard
+  // (Settings → Payment methods → Apple Pay) and Apple Developer
+  // portal (Identifiers → Merchant IDs).  Stripe verifies via the
+  // domain-verification file Apple delivers.
+  APPLE_PAY_MERCHANT_ID: z.string().optional(),
 
   // --- Payment: Lemon Squeezy ----------------------------------------
   LEMONSQUEEZY_API_KEY: z.string().optional(),
