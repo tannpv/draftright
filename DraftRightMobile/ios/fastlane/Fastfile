@@ -59,9 +59,35 @@ platform :ios do
     )
   end
 
+  desc "Build .ipa and upload to TestFlight (beta channel — no review submission)"
+  lane :beta do
+    build_app(
+      workspace: "Runner.xcworkspace",
+      scheme: "Runner",
+      export_method: "app-store",
+      output_directory: "build/",
+      clean: true,
+      xcargs: "-allowProvisioningUpdates",
+      # xcpretty (the default formatter) isn't installed here and gym
+      # treats its absence as the whole build failing.  Disable the
+      # formatter — raw xcodebuild output goes straight to the log
+      # (verbose but accurate).
+      xcodebuild_formatter: "",
+    )
+    upload_to_testflight(
+      api_key: asc_api_key,
+      skip_waiting_for_build_processing: false,
+      skip_submission: true,
+      # Internal testers only (signed-in App Store Connect users with a
+      # tester role on this app).  Set true to release to external
+      # tester groups; today's flow stays internal.
+      distribute_external: false,
+    )
+  end
+
   # Future use: build the .ipa via gym and upload via deliver.
   # Disabled by default until distribution cert is seeded in keychain.
-  desc "Build .ipa and upload to App Store Connect (full release)"
+  desc "Build .ipa and upload to App Store Connect (full release + submit for review)"
   lane :release do
     build_app(
       workspace: "Runner.xcworkspace",
