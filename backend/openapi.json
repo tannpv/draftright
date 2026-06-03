@@ -2064,6 +2064,25 @@
         ]
       }
     },
+    "/payment/subscription": {
+      "delete": {
+        "operationId": "PaymentController_cancelSubscription",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "payment"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/payment/webhook/casso": {
       "post": {
         "operationId": "PaymentController_cassoWebhook",
@@ -2317,9 +2336,13 @@
             "example": "vietqr",
             "enum": [
               "stripe",
+              "paypal",
+              "momo",
               "vietqr",
               "bank_transfer",
-              "lemonsqueezy"
+              "lemonsqueezy",
+              "apple_pay",
+              "google_pay"
             ]
           },
           "success_url": {
