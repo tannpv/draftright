@@ -6,6 +6,9 @@ import { BillingPeriod } from '../plans/entities/plan.entity';
 import { PlansService } from '../plans/plans.service';
 import { Entitlement, EntitlementTier } from './entitlement';
 
+/** Safety floor when the canonical Free plan row is missing (bad seed). */
+const FREE_TIER_FALLBACK_LIMIT = 10;
+
 @Injectable()
 export class SubscriptionsService {
   constructor(
@@ -35,17 +38,26 @@ export class SubscriptionsService {
         tier: EntitlementTier.PRO,
         dailyLimit: active.plan.daily_limit,
         status: active.status,
-        expiresAt: active.expires_at ?? null,
+        expiresAt: active.expires_at,
         planName: active.plan.name,
       };
     }
-    const free = await this.plansService.findFreePlan();
+    let dailyLimit = FREE_TIER_FALLBACK_LIMIT;
+    let planName = 'Free';
+    try {
+      const free = await this.plansService.findFreePlan();
+      dailyLimit = free.daily_limit;
+      planName = free.name;
+    } catch {
+      // Free plan row missing (seed not run) — degrade to the floor
+      // rather than locking every non-Pro user out with a 500.
+    }
     return {
       tier: EntitlementTier.FREE,
-      dailyLimit: free.daily_limit,
+      dailyLimit,
       status: active?.status ?? null,
       expiresAt: null,
-      planName: free.name,
+      planName,
     };
   }
 

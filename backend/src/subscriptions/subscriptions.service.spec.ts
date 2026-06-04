@@ -27,6 +27,7 @@ describe('SubscriptionsService.resolveEntitlement', () => {
     expect(e.tier).toBe(EntitlementTier.FREE);
     expect(e.dailyLimit).toBe(10);
     expect(e.expiresAt).toBeNull();
+    expect(e.status).toBe(SubscriptionStatus.ACTIVE);
   });
 
   it('no active row (expired/cancelled/missing) → FREE, 10/day', async () => {
@@ -34,5 +35,6 @@ describe('SubscriptionsService.resolveEntitlement', () => {
     expect(e.tier).toBe(EntitlementTier.FREE);
     expect(e.dailyLimit).toBe(10);
     expect(e.status).toBeNull();
+    expect(e.planName).toBe('Free');
   });
 });
