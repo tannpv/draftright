@@ -2,14 +2,12 @@ import { Controller, Get, Post, Body, UseGuards, Request } from '@nestjs/common'
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { SubscriptionsService } from './subscriptions.service';
-import { UsageService } from '../usage/usage.service';
 
 @ApiTags('subscription')
 @Controller('subscription')
 export class SubscriptionsController {
   constructor(
     private readonly subscriptionsService: SubscriptionsService,
-    private readonly usageService: UsageService,
   ) {}
 
   @UseGuards(JwtAuthGuard)
