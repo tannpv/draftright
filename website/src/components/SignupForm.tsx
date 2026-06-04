@@ -1,13 +1,8 @@
 import { useState } from 'react';
 import GoogleSignInButton from './GoogleSignInButton';
+import { goToNext } from '../lib/redirect';
 
 const API = (import.meta.env.PUBLIC_API_URL as string | undefined) || 'https://api.draftright.info';
-
-/** Google accounts are already email-verified, so skip the verify step. */
-function goToNext() {
-  const next = new URLSearchParams(window.location.search).get('next');
-  window.location.href = next && next.startsWith('/') ? next : '/account';
-}
 
 export default function SignupForm() {
   const [name, setName] = useState('');
@@ -50,7 +45,7 @@ export default function SignupForm() {
 
   return (
     <form onSubmit={onSubmit} className="max-w-md mx-auto space-y-4">
-      <GoogleSignInButton onSuccess={goToNext} onError={setError} disabled={submitting} label="Sign up with Google" />
+      <GoogleSignInButton onSuccess={() => goToNext()} onError={setError} disabled={submitting} label="Sign up with Google" />
       <div className="flex items-center gap-3">
         <div className="flex-1 h-px bg-dark-border" />
         <span className="text-sm text-gray-500">or</span>
