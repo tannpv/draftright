@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import GoogleSignInButton from './GoogleSignInButton';
+import PasswordInput from './PasswordInput';
 import { goToNext } from '../lib/redirect';
 
 const API = (import.meta.env.PUBLIC_API_URL as string | undefined) || 'https://api.draftright.info';
@@ -69,15 +70,13 @@ export default function SignupForm() {
         required
         autoComplete="email"
       />
-      <input
-        className="w-full rounded-lg bg-dark-card border border-dark-border text-white placeholder-gray-500 p-3 focus:outline-none focus:ring-2 focus:ring-brand-400"
-        type="password"
-        placeholder="Password (min 8 characters)"
+      <PasswordInput
         value={password}
-        onChange={(e) => setPassword(e.target.value)}
-        required
-        minLength={8}
+        onChange={setPassword}
+        placeholder="Password (min 8 characters)"
         autoComplete="new-password"
+        minLength={8}
+        required
       />
       {error && <p className="text-red-400 text-sm">{error}</p>}
       <button
