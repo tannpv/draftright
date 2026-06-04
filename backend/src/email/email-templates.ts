@@ -47,7 +47,7 @@ export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
     subject: 'Your DraftRight {{plan}} subscription has expired',
     variables: ['name', 'plan'],
     html: shell('Your subscription has expired',
-      `<p style="color:#444;line-height:1.5;margin:0 0 16px;">Hi {{name}} — your Pro plan has ended. You're now on the Free plan with 10 rewrites per day. Restore Pro anytime to go unlimited.</p>
+      `<p style="color:#444;line-height:1.5;margin:0 0 16px;">Hi {{name}} — your {{plan}} plan has ended. You're now on the Free plan with 10 rewrites per day. Restore Pro anytime to go unlimited.</p>
     <p style="color:#444;line-height:1.5;margin:0 0 16px;"><a href="https://draftright.info/account" style="color:#5b3df6;">draftright.info/account</a></p>`),
   },
   {
