@@ -5,6 +5,8 @@ import 'package:draftright_mobile/models/tone.dart';
 import 'package:draftright_mobile/services/auth_service.dart';
 import 'package:draftright_mobile/services/backend_client.dart';
 import 'package:draftright_mobile/services/settings_service.dart';
+import 'package:draftright_mobile/screens/subscription_screen.dart';
+import 'package:draftright_mobile/widgets/nudge_host.dart';
 
 class PlaygroundScreen extends StatefulWidget {
   const PlaygroundScreen({super.key});
@@ -19,6 +21,18 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
   String? _result;
   bool _isLoading = false;
   String? _error;
+  late final BackendClient _backend;
+
+  @override
+  void initState() {
+    super.initState();
+    final auth = context.read<AuthService>();
+    final settings = context.read<SettingsService>();
+    _backend = BackendClient(
+      auth: auth,
+      getBaseUrl: () => settings.backendUrl,
+    );
+  }
 
   @override
   void dispose() {
@@ -30,9 +44,6 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
     final text = _textController.text.trim();
     if (text.isEmpty) return;
 
-    final auth = context.read<AuthService>();
-    final settings = context.read<SettingsService>();
-
     setState(() {
       _selectedTone = tone;
       _isLoading = true;
@@ -41,14 +52,10 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
     });
 
     try {
-      final client = BackendClient(
-        auth: auth,
-        getBaseUrl: () => settings.backendUrl,
-      );
-      final result = await client.rewrite(
+      final result = await _backend.rewrite(
         text: text,
         tone: tone,
-        targetLanguage: tone == Tone.translate ? settings.translateLanguage : null,
+        targetLanguage: tone == Tone.translate ? context.read<SettingsService>().translateLanguage : null,
       );
       setState(() {
         _result = result.rewrittenText;
@@ -66,7 +73,12 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Playground')),
-      body: Padding(
+      body: NudgeHost(
+        backend: _backend,
+        onUpgrade: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const SubscriptionScreen()),
+        ),
+        child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -159,6 +171,7 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
                 ),
               ),
           ],
+        ),
         ),
       ),
     );
