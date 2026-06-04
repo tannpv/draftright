@@ -58,4 +58,10 @@ class EnglishLanguagePackTest {
         assertEquals("~", row.first().label)
         assertTrue(row.any { it.label == "π" })
     }
+
+    @Test
+    fun `symbols1 second row contains underscore`() {
+        val row = EnglishLanguagePack.symbols1Rows[1]
+        assertTrue(row.any { it.label == "_" })
+    }
 }
