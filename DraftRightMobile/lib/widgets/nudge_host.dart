@@ -36,7 +36,9 @@ class _NudgeHostState extends State<NudgeHost> {
 
   String _todayKey() {
     final now = DateTime.now();
-    return '${now.year}-${now.month}-${now.day}';
+    final m = now.month.toString().padLeft(2, '0');
+    final d = now.day.toString().padLeft(2, '0');
+    return '${now.year}-$m-$d';
   }
 
   Future<void> _load() async {
