@@ -45,6 +45,7 @@ function formatRelative(iso: string): string {
 export default function AccountPage() {
   const [account, setAccount] = useState<Account | null>(null);
   const [loading, setLoading] = useState(true);
+  const [redirecting, setRedirecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
@@ -75,12 +76,23 @@ export default function AccountPage() {
         headers: { Authorization: `Bearer ${t}` },
       });
       if (res.status === 401) {
+        // Session lost — bounce to login cleanly (no red error flash).
+        setRedirecting(true);
         localStorage.removeItem('dr_access_token');
         window.location.href = '/login?next=' + encodeURIComponent('/account');
         return;
       }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setAccount(await res.json());
+      const data = await res.json();
+      if (!data) {
+        // Valid token but no user (e.g. account deleted) — treat as
+        // logged out rather than showing "Account not found".
+        setRedirecting(true);
+        localStorage.removeItem('dr_access_token');
+        window.location.href = '/login?next=' + encodeURIComponent('/account');
+        return;
+      }
+      setAccount(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load account');
     } finally {
@@ -184,7 +196,7 @@ export default function AccountPage() {
     }
   };
 
-  if (loading) {
+  if (loading || redirecting) {
     return <p className="text-center text-gray-400">Loading…</p>;
   }
   if (!account) {
