@@ -25,6 +25,20 @@ import { AppSettings } from '../admin/entities/app-settings.entity';
 import { EMAIL_CODE_TTL_MS } from '../common/app-config';
 import { EnvSchema } from '../config/env.schema';
 
+/**
+ * Normalised identity returned by every provider verifier.
+ * `emailVerified` reflects the PROVIDER's own claim — we only trust an
+ * email (auto-link / skip our verification step) when the provider
+ * asserts it owns a verified address. Never assume verified.
+ */
+interface SocialProfile {
+  socialId: string;
+  email: string;
+  name?: string;
+  avatar_url?: string;
+  emailVerified: boolean;
+}
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -199,12 +213,21 @@ export class AuthService {
     // Look up by social ID first
     let user = await this.usersService.findBySocialId(providerEnum, socialProfile.socialId);
 
+    // Only trust the email when the PROVIDER asserts it's verified.
+    const providerVerifiedEmail = socialProfile.emailVerified === true;
+
     if (!user) {
       // Check if email already exists (link accounts)
       user = await this.usersService.findByEmail(socialProfile.email);
       if (user) {
-        // Link social ID to existing account. The provider already
-        // verified ownership of this email, so mark it verified.
+        // Auto-linking a social identity to a pre-existing account is an
+        // account-takeover vector if the provider's email isn't actually
+        // verified. Refuse to link unless the provider proved ownership.
+        if (!providerVerifiedEmail) {
+          throw new UnauthorizedException(
+            'This email is registered. Sign in with your password to link this account.',
+          );
+        }
         const socialIdColumn = `${provider}_id`;
         await this.usersService.update(user.id, {
           [socialIdColumn]: socialProfile.socialId,
@@ -213,8 +236,8 @@ export class AuthService {
         } as any);
         user = await this.usersService.findById(user.id);
       } else {
-        // Create new user. Social providers (Google/Apple/etc.) only
-        // return verified emails, so skip our own email-verification step.
+        // Create new user. Skip our own email-verification step only when
+        // the provider already verified the address.
         const socialIdColumn = `${provider}_id`;
         user = await this.usersService.create({
           email: socialProfile.email,
@@ -222,7 +245,7 @@ export class AuthService {
           auth_provider: providerEnum,
           [socialIdColumn]: socialProfile.socialId,
           avatar_url: socialProfile.avatar_url,
-          email_verified: true,
+          email_verified: providerVerifiedEmail,
         } as any);
 
         // Assign free plan
@@ -251,7 +274,7 @@ export class AuthService {
     provider: AuthProvider,
     idToken: string,
     profile: { name?: string; email?: string; avatar_url?: string },
-  ): Promise<{ socialId: string; email: string; name?: string; avatar_url?: string }> {
+  ): Promise<SocialProfile> {
     switch (provider) {
       case AuthProvider.GOOGLE:
         return this.verifyGoogleToken(idToken);
@@ -267,13 +290,15 @@ export class AuthService {
           email: profile.email || '',
           name: profile.name,
           avatar_url: profile.avatar_url,
+          // TikTok returns no verified-email claim — treat as unverified.
+          emailVerified: false,
         };
       default:
         throw new BadRequestException(`Unsupported provider`);
     }
   }
 
-  private async verifyGoogleToken(idToken: string): Promise<{ socialId: string; email: string; name?: string; avatar_url?: string }> {
+  private async verifyGoogleToken(idToken: string): Promise<SocialProfile> {
     // Verify with Google's tokeninfo endpoint
     const response = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
     if (!response.ok) throw new UnauthorizedException('Invalid Google token');
@@ -283,6 +308,8 @@ export class AuthService {
       email: data.email,
       name: data.name,
       avatar_url: data.picture,
+      // tokeninfo returns email_verified as the string "true" / "false".
+      emailVerified: data.email_verified === true || data.email_verified === 'true',
     };
   }
 
@@ -308,7 +335,7 @@ export class AuthService {
   private async verifyAppleToken(
     idToken: string,
     profile: { name?: string; email?: string; avatar_url?: string },
-  ): Promise<{ socialId: string; email: string; name?: string; avatar_url?: string }> {
+  ): Promise<SocialProfile> {
     const decoded = jwt.decode(idToken, { complete: true });
     if (!decoded || typeof decoded === 'string' || !decoded.header.kid) {
       throw new UnauthorizedException('Invalid Apple token (no kid)');
@@ -340,11 +367,16 @@ export class AuthService {
     // mobile SDK caches it and we also receive it here as
     // profile.email.  Prefer the token claim when present.
     const email = (payload.email as string) || profile.email || '';
+    // Apple sends email_verified as a boolean or the string "true".
+    const appleVerified = (payload as any).email_verified;
     return {
       socialId: payload.sub,
       email,
       name: profile.name,         // Apple only ships full name on first consent
       avatar_url: profile.avatar_url,
+      // Only trust the token's own claim; the profile.email fallback
+      // (cached client-side) carries no verification proof.
+      emailVerified: !!payload.email && (appleVerified === true || appleVerified === 'true'),
     };
   }
 
@@ -383,7 +415,7 @@ export class AuthService {
     return keyObject.export({ type: 'spki', format: 'pem' }) as string;
   }
 
-  private async verifyFacebookToken(accessToken: string): Promise<{ socialId: string; email: string; name?: string; avatar_url?: string }> {
+  private async verifyFacebookToken(accessToken: string): Promise<SocialProfile> {
     // Verify with Facebook's Graph API
     const response = await fetch(`https://graph.facebook.com/me?fields=id,name,email,picture.type(large)&access_token=${accessToken}`);
     if (!response.ok) throw new UnauthorizedException('Invalid Facebook token');
@@ -393,6 +425,8 @@ export class AuthService {
       email: data.email,
       name: data.name,
       avatar_url: data.picture?.data?.url,
+      // Graph returns the email field only for a confirmed account email.
+      emailVerified: !!data.email,
     };
   }
 
