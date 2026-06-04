@@ -3,7 +3,8 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between, LessThan } from 'typeorm';
 import { Subscription, SubscriptionStatus } from './entities/subscription.entity';
-import { EmailService } from '../email/email.service';
+import { SubscriptionNotifier } from './subscription-notifier';
+import { SubscriptionEvent } from './subscription-event';
 
 /**
  * Subscription lifecycle cron — runs daily at 09:00 UTC.
@@ -28,7 +29,7 @@ export class SubscriptionsCron {
   constructor(
     @InjectRepository(Subscription)
     private readonly subsRepo: Repository<Subscription>,
-    private readonly emailService: EmailService,
+    private readonly notifier: SubscriptionNotifier,
   ) {}
 
   @Cron(CronExpression.EVERY_DAY_AT_9AM)
@@ -61,18 +62,14 @@ export class SubscriptionsCron {
 
     for (const sub of due) {
       if (!sub.user?.email || !sub.plan || !sub.expires_at) continue;
-      try {
-        await this.emailService.sendRenewalReminder(
-          sub.user.email,
-          sub.user.name || sub.user.email,
-          sub.plan.name,
-          sub.expires_at,
-          (sub.plan as any).currency || 'USD',
-          sub.plan.price_cents,
-        );
-      } catch (err: any) {
-        this.logger.error(`Failed to send renewal reminder for sub ${sub.id}: ${err.message}`);
-      }
+      await this.notifier.notify(SubscriptionEvent.EXPIRING_SOON, {
+        email: sub.user.email,
+        name: sub.user.name || sub.user.email,
+        planName: sub.plan.name,
+        expiresAt: sub.expires_at,
+        currency: (sub.plan as any).currency || 'USD',
+        amountCents: sub.plan.price_cents,
+      });
     }
   }
 
@@ -105,15 +102,11 @@ export class SubscriptionsCron {
 
     for (const sub of lapsed) {
       if (!sub.user?.email || !sub.plan) continue;
-      try {
-        await this.emailService.sendSubscriptionExpired(
-          sub.user.email,
-          sub.user.name || sub.user.email,
-          sub.plan.name,
-        );
-      } catch (err: any) {
-        this.logger.error(`Failed to send expired email for sub ${sub.id}: ${err.message}`);
-      }
+      await this.notifier.notify(SubscriptionEvent.EXPIRED, {
+        email: sub.user.email,
+        name: sub.user.name || sub.user.email,
+        planName: sub.plan.name,
+      });
     }
   }
 }

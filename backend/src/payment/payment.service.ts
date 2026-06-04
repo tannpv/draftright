@@ -17,6 +17,8 @@ import { ConfigService } from '@nestjs/config';
 import { AppSettings } from '../admin/entities/app-settings.entity';
 import { generatePaymentReference } from './payment-reference';
 import { EmailService } from '../email/email.service';
+import { SubscriptionNotifier } from '../subscriptions/subscription-notifier';
+import { SubscriptionEvent } from '../subscriptions/subscription-event';
 import { PAYMENT_PENDING_TTL_MS } from '../common/app-config';
 import { EnvSchema } from '../config/env.schema';
 
@@ -40,6 +42,7 @@ export class PaymentService {
     private readonly lemonSqueezyStrategy: LemonSqueezyStrategy,
     private readonly emailService: EmailService,
     private readonly cfg: ConfigService<EnvSchema, true>,
+    private readonly notifier: SubscriptionNotifier,
   ) {
     // Use the PaymentMethod enum (entities/payment.entity.ts) as the keys —
     // the same enum the DB rows use, so adding a new method only requires one
@@ -518,13 +521,21 @@ export class PaymentService {
       storeTypeForMethod(payment.method),
     );
 
-    // Best-effort "subscription active" email — never block activation on it.
+    // Best-effort "subscription active" notification — routed through the
+    // SubscriptionNotifier so all channels (email, future push) are wired
+    // in one place. The notifier swallows its own errors; the outer
+    // try/catch exists only to guard against a missing user NPE.
     try {
       const user = await this.userRepo.findOne({ where: { id: payment.user_id } });
       if (user?.email) {
-        await this.emailService.sendSubscriptionActivated(
-          user.email, user.name, payment.plan?.name || 'Pro', expiresAt, payment.currency, payment.amount,
-        );
+        await this.notifier.notify(SubscriptionEvent.UPGRADED, {
+          email: user.email,
+          name: user.name,
+          planName: payment.plan?.name || 'Pro',
+          expiresAt,
+          currency: payment.currency,
+          amountCents: payment.amount,
+        });
       }
     } catch (e: any) {
       this.logger.warn(`subscription-activated email failed: ${e?.message}`);

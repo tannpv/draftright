@@ -1,5 +1,6 @@
 import { HttpException, Logger } from '@nestjs/common';
 import { RewriteService, PROVIDER_UNAVAILABLE_MESSAGE } from './rewrite.service';
+import { EntitlementTier } from '../subscriptions/entitlement';
 
 /**
  * Regression guard for the provider-error leak (2026-06-04): an OpenAI
@@ -61,5 +62,42 @@ describe('RewriteService — provider error sanitization', () => {
     expect(spy).toHaveBeenCalled();
     const logged = spy.mock.calls.map((c) => String(c[0])).join('\n');
     expect(logged).toContain('cb4272f5');
+  });
+});
+
+describe('RewriteService — entitlement gating', () => {
+  function build(entitlement: any, usageToday: number, callProvider: () => Promise<any>) {
+    const subscriptions: any = { resolveEntitlement: async () => entitlement };
+    const usage: any = { countTodayByUser: async () => usageToday, log: async () => undefined };
+    const aiProviders: any = {
+      findDefault: async () => ({ model: 'm', type: 'openai' }),
+      callProvider,
+    };
+    const cache: any = {
+      get: async () => null,
+      set: async () => undefined,
+      isBatchStarted: async () => true, // skip batch prefetch in this path
+
+      markBatchStarted: async () => undefined,
+    };
+    const rewriteLog: any = { log: async () => undefined };
+    const metrics: any = { observe: () => undefined };
+    return new RewriteService(
+      subscriptions, usage, aiProviders, cache, rewriteLog, metrics,
+    );
+  }
+
+  const FREE = { tier: EntitlementTier.FREE, dailyLimit: 10, status: 'expired', expiresAt: null, planName: 'Free' };
+
+  it('expired user under cap gets a rewrite (not 403)', async () => {
+    const svc = build(FREE, 3, async () => ({ text: 'ok', responseTimeMs: 1 }));
+    const res = await svc.rewrite('u', 'hi', 'polished');
+    expect(res.rewritten_text).toBe('ok');
+    expect(res.daily_limit).toBe(10);
+  });
+
+  it('free user at cap is rejected with 429', async () => {
+    const svc = build(FREE, 10, async () => ({ text: 'ok', responseTimeMs: 1 }));
+    await expect(svc.rewrite('u', 'hi', 'polished')).rejects.toMatchObject({ status: 429 });
   });
 });

@@ -30,8 +30,9 @@ describe('PaymentService — enabled methods', () => {
     // CSV ends up taking the DEFAULT_PAYMENT_METHOD path when no DB
     // value is set. Specific tests override findOneSettings.
     const cfg = { get: () => undefined } as any;
+    const notifier = { notify: jest.fn().mockResolvedValue(undefined) } as any;
     svc = new PaymentService(
-      paymentRepo, userRepo, settingsRepo, plansService, subsService, stripeStrategy, vietqrStrategy, lemonSqueezyStrategy, emailService, cfg,
+      paymentRepo, userRepo, settingsRepo, plansService, subsService, stripeStrategy, vietqrStrategy, lemonSqueezyStrategy, emailService, cfg, notifier,
     );
   });
   afterAll(() => {
@@ -93,9 +94,10 @@ describe('PaymentService — getCustomerPortalUrl dispatch', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     const cfg = { get: () => undefined } as any;
+    const notifier = { notify: jest.fn().mockResolvedValue(undefined) } as any;
     svc = new PaymentService(
       paymentRepo, userRepo, settingsRepo, plansService, subsService,
-      stripeStrategy, vietqrStrategy, lemonSqueezyStrategy, emailService, cfg,
+      stripeStrategy, vietqrStrategy, lemonSqueezyStrategy, emailService, cfg, notifier,
     );
   });
 
