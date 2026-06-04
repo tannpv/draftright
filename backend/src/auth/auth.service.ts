@@ -203,15 +203,18 @@ export class AuthService {
       // Check if email already exists (link accounts)
       user = await this.usersService.findByEmail(socialProfile.email);
       if (user) {
-        // Link social ID to existing account
+        // Link social ID to existing account. The provider already
+        // verified ownership of this email, so mark it verified.
         const socialIdColumn = `${provider}_id`;
         await this.usersService.update(user.id, {
           [socialIdColumn]: socialProfile.socialId,
           avatar_url: socialProfile.avatar_url || user.avatar_url,
+          email_verified: true,
         } as any);
         user = await this.usersService.findById(user.id);
       } else {
-        // Create new user
+        // Create new user. Social providers (Google/Apple/etc.) only
+        // return verified emails, so skip our own email-verification step.
         const socialIdColumn = `${provider}_id`;
         user = await this.usersService.create({
           email: socialProfile.email,
@@ -219,6 +222,7 @@ export class AuthService {
           auth_provider: providerEnum,
           [socialIdColumn]: socialProfile.socialId,
           avatar_url: socialProfile.avatar_url,
+          email_verified: true,
         } as any);
 
         // Assign free plan
