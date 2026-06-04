@@ -2,12 +2,16 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Subscription, SubscriptionStatus, StoreType } from './entities/subscription.entity';
+import { BillingPeriod } from '../plans/entities/plan.entity';
+import { PlansService } from '../plans/plans.service';
+import { Entitlement, EntitlementTier } from './entitlement';
 
 @Injectable()
 export class SubscriptionsService {
   constructor(
     @InjectRepository(Subscription)
     private readonly subsRepo: Repository<Subscription>,
+    private readonly plansService: PlansService,
   ) {}
 
   async findActiveByUserId(userId: string): Promise<Subscription | null> {
@@ -16,6 +20,33 @@ export class SubscriptionsService {
       relations: ['plan'],
       order: { created_at: 'DESC' },
     });
+  }
+
+  /**
+   * Single source of truth for what a user may do right now. An active
+   * paid plan → PRO (unlimited). Everything else — active Free, EXPIRED,
+   * CANCELLED, or no row at all — resolves to the canonical Free plan so
+   * lapsed users keep 10/day instead of being locked out.
+   */
+  async resolveEntitlement(userId: string): Promise<Entitlement> {
+    const active = await this.findActiveByUserId(userId);
+    if (active?.plan && active.plan.billing_period !== BillingPeriod.NONE) {
+      return {
+        tier: EntitlementTier.PRO,
+        dailyLimit: active.plan.daily_limit,
+        status: active.status,
+        expiresAt: active.expires_at ?? null,
+        planName: active.plan.name,
+      };
+    }
+    const free = await this.plansService.findFreePlan();
+    return {
+      tier: EntitlementTier.FREE,
+      dailyLimit: free.daily_limit,
+      status: active?.status ?? null,
+      expiresAt: null,
+      planName: free.name,
+    };
   }
 
   async createFreeSubscription(userId: string, planId: string): Promise<Subscription> {
