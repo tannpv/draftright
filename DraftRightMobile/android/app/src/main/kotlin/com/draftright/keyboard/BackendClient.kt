@@ -12,6 +12,23 @@ class BackendClient {
         const val NETWORK_TIMEOUT_MS = 15_000
         /** Backend enforces a max input length; truncate client-side to match. */
         const val MAX_INPUT_CHARS = 3000
+        /** Shown when the backend gives no usable user-facing message. */
+        const val GENERIC_ERROR = "Rewrite service is temporarily unavailable. Please try again."
+
+        /**
+         * Pull the backend's user-facing `error` field out of an error
+         * response body. Returns null when the body is missing, isn't JSON,
+         * or has no non-blank `error` — callers fall back to [GENERIC_ERROR].
+         * Never returns the raw body, which can carry provider internals.
+         */
+        fun parseErrorMessage(body: String?): String? {
+            if (body.isNullOrBlank()) return null
+            return try {
+                JSONObject(body).optString("error").takeIf { it.isNotBlank() }
+            } catch (_: Exception) {
+                null
+            }
+        }
     }
 
     fun rewrite(
@@ -56,8 +73,11 @@ class BackendClient {
                     val responseCode = conn.responseCode
                     if (responseCode >= 400) {
                         val errorBody = conn.errorStream?.bufferedReader()?.use { it.readText() }
-                            ?: "Unknown error"
-                        onResult(Result.failure(Exception("HTTP $responseCode: $errorBody")))
+                        // Surface only the backend's user-facing `error` field.
+                        // Never render the raw body — it can carry provider
+                        // internals (API key prefixes, upstream JSON, request ids).
+                        val message = parseErrorMessage(errorBody) ?: GENERIC_ERROR
+                        onResult(Result.failure(Exception(message)))
                         return@thread
                     }
 

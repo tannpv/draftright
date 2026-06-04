@@ -1,4 +1,4 @@
-import { Injectable, HttpException } from '@nestjs/common';
+import { Injectable, HttpException, Logger } from '@nestjs/common';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { UsageService } from '../usage/usage.service';
 import { AiProvidersService } from '../ai-providers/ai-providers.service';
@@ -55,8 +55,19 @@ function parseGrammarResult(text: string): { grammar: any } {
   }
 }
 
+/**
+ * User-facing copy for any upstream AI-provider failure. Deliberately
+ * generic: provider responses carry sensitive internals (API key
+ * prefixes, upstream URLs, raw JSON) that must never reach a client.
+ * The real cause is logged server-side instead.
+ */
+export const PROVIDER_UNAVAILABLE_MESSAGE =
+  'Rewrite service is temporarily unavailable. Please try again shortly.';
+
 @Injectable()
 export class RewriteService {
+  private readonly logger = new Logger(RewriteService.name);
+
   constructor(
     private readonly subscriptionsService: SubscriptionsService,
     private readonly usageService: UsageService,
@@ -80,7 +91,16 @@ export class RewriteService {
     try {
       result = await this.aiProvidersService.callProvider(provider, prompt, text);
     } catch (error: any) {
-      throw new HttpException({ error: `AI provider error: ${error.message}` }, 502);
+      // Provider errors carry sensitive internals (API key prefix,
+      // upstream URLs, raw JSON). Log the full detail server-side, but
+      // return a generic body so no client ever renders it.
+      this.logger.error(
+        `AI provider call failed [${provider.type}/${provider.model}]: ${error?.message}`,
+      );
+      throw new HttpException(
+        { error: PROVIDER_UNAVAILABLE_MESSAGE, code: 'provider-failed' },
+        502,
+      );
     }
 
     // Log for fine-tuning (fire-and-forget)
