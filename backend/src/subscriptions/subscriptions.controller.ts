@@ -17,7 +17,7 @@ export class SubscriptionsController {
   @Get()
   async getMySubscription(@Request() req: any) {
     const sub = await this.subscriptionsService.findActiveByUserId(req.user.id);
-    const usageToday = await this.usageService.countTodayByUser(req.user.id);
+    const nudge = await this.subscriptionsService.buildNudgeState(req.user.id);
     return {
       plan: sub?.plan ? {
         name: sub.plan.name,
@@ -26,7 +26,8 @@ export class SubscriptionsController {
       } : null,
       status: sub?.status || null,
       expires_at: sub?.expires_at || null,
-      usage_today: usageToday,
+      usage_today: nudge.usageToday,
+      nudge,
     };
   }
 

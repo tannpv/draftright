@@ -5,6 +5,8 @@ import { Subscription, SubscriptionStatus, StoreType } from './entities/subscrip
 import { BillingPeriod } from '../plans/entities/plan.entity';
 import { PlansService } from '../plans/plans.service';
 import { Entitlement, EntitlementTier } from './entitlement';
+import { UsageService } from '../usage/usage.service';
+import { NudgeState, deriveBanner } from './nudge';
 
 /** Safety floor when the canonical Free plan row is missing (bad seed). */
 const FREE_TIER_FALLBACK_LIMIT = 10;
@@ -15,6 +17,7 @@ export class SubscriptionsService {
     @InjectRepository(Subscription)
     private readonly subsRepo: Repository<Subscription>,
     private readonly plansService: PlansService,
+    private readonly usageService: UsageService,
   ) {}
 
   async findActiveByUserId(userId: string): Promise<Subscription | null> {
@@ -58,6 +61,27 @@ export class SubscriptionsService {
       status: active?.status ?? null,
       expiresAt: null,
       planName,
+    };
+  }
+
+  /**
+   * Backend-owned nudge payload — the single place any client surface
+   * reads its strip state from. Pure banner logic lives in deriveBanner.
+   */
+  async buildNudgeState(userId: string): Promise<NudgeState> {
+    const ent = await this.resolveEntitlement(userId);
+    const usageToday = await this.usageService.countTodayByUser(userId);
+    const lastExpired = await this.subsRepo.findOne({
+      where: { user_id: userId, status: SubscriptionStatus.EXPIRED },
+      order: { updated_at: 'DESC' },
+    });
+    const banner = deriveBanner(ent, usageToday, lastExpired?.updated_at ?? null, new Date());
+    return {
+      tier: ent.tier,
+      usageToday,
+      dailyLimit: ent.dailyLimit,
+      expiresAt: ent.expiresAt ? ent.expiresAt.toISOString() : null,
+      banner,
     };
   }
 
