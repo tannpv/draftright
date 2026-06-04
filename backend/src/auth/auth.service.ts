@@ -147,6 +147,54 @@ export class AuthService {
     return Math.floor(100000 + Math.random() * 900000).toString();
   }
 
+  /**
+   * Start a password reset. Mirrors resendVerification: silent for
+   * unknown emails AND for social-only accounts (no password to reset)
+   * so we never leak which addresses exist. The controller always
+   * returns success regardless.
+   */
+  async forgotPassword(email: string): Promise<void> {
+    const user = await this.usersService.findByEmail(email.trim().toLowerCase());
+    if (!user || user.auth_provider !== AuthProvider.LOCAL || !user.password_hash) return;
+
+    const code = this.generateVerificationCode();
+    const expires = new Date(Date.now() + EMAIL_CODE_TTL_MS);
+    await this.usersService.update(user.id, {
+      password_reset_code: code,
+      password_reset_expires: expires,
+    });
+    this.emailService.sendPasswordResetEmail(user.email, user.name, code).catch((err) => {
+      this.logger.error(`Failed to send password reset to ${user.email}: ${err.message}`);
+    });
+  }
+
+  /**
+   * Complete a password reset with the emailed 6-digit code. Single-use:
+   * the code is cleared on success.
+   */
+  async resetPassword(email: string, code: string, newPassword: string): Promise<{ success: true }> {
+    if (!newPassword || newPassword.length < 8) {
+      throw new BadRequestException('Password must be at least 8 characters');
+    }
+    const user = await this.usersService.findByEmail(email.trim().toLowerCase());
+    if (
+      !user ||
+      !user.password_reset_code ||
+      !user.password_reset_expires ||
+      user.password_reset_code !== code ||
+      user.password_reset_expires.getTime() < Date.now()
+    ) {
+      throw new BadRequestException('Invalid or expired reset code');
+    }
+    const password_hash = await bcrypt.hash(newPassword, 10);
+    await this.usersService.update(user.id, {
+      password_hash,
+      password_reset_code: null,
+      password_reset_expires: null,
+    });
+    return { success: true };
+  }
+
   async login(email: string, password: string) {
     const user = await this.usersService.findByEmail(email);
     if (!user) throw new UnauthorizedException('Invalid credentials');

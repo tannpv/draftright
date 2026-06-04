@@ -76,6 +76,12 @@ export class User {
   @Column({ type: 'timestamptz', nullable: true })
   email_verification_expires: Date | null;
 
+  @Column({ type: 'varchar', length: 6, nullable: true })
+  password_reset_code: string | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  password_reset_expires: Date | null;
+
   @Column({ type: 'varchar', length: 64, nullable: true })
   lemonsqueezy_customer_id: string | null;
 

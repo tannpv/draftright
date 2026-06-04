@@ -64,6 +64,9 @@ export default function LoginForm() {
         autoComplete="current-password"
         required
       />
+      <div className="text-right">
+        <a href="/forgot-password" className="text-sm text-brand-400 hover:underline">Forgot password?</a>
+      </div>
       {error && <p className="text-red-400 text-sm">{error}</p>}
       <button
         className="w-full rounded-full bg-brand-400 px-5 py-3 text-sm font-semibold text-white hover:bg-brand-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"

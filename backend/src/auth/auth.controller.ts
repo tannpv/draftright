@@ -49,6 +49,20 @@ export class AuthController {
     return { success: true };
   }
 
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  async forgotPassword(@Body() body: { email: string }) {
+    // Always succeeds — never reveal whether the email exists.
+    await this.authService.forgotPassword(body.email);
+    return { success: true };
+  }
+
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  async resetPassword(@Body() body: { email: string; code: string; new_password: string }) {
+    return this.authService.resetPassword(body.email, body.code, body.new_password);
+  }
+
   @Post('social')
   async socialLogin(@Body() body: { provider: string; id_token: string; name?: string; email?: string; avatar_url?: string }) {
     return this.authService.socialLogin(body.provider, body.id_token, {

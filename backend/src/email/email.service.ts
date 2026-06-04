@@ -84,6 +84,10 @@ export class EmailService {
     await this.sendTemplated('verification', toEmail, { name: name || 'there', code }, true);
   }
 
+  async sendPasswordResetEmail(toEmail: string, name: string, code: string): Promise<void> {
+    await this.sendTemplated('password-reset', toEmail, { name: name || 'there', code }, true);
+  }
+
   /**
    * Admin-triggered "Send test email" — verifies Resend creds + DNS are wired.
    * Throws on any error so the admin sees the failure reason in their toast.
