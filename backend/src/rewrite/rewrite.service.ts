@@ -126,9 +126,9 @@ export class RewriteService {
     // Check cache first
     const cached = await this.rewriteCache.get(userId, text, tone);
     if (cached) {
-      const sub = await this.subscriptionsService.findActiveByUserId(userId);
-      const dailyLimit = sub?.plan?.daily_limit ?? 0;
+      const ent = await this.subscriptionsService.resolveEntitlement(userId);
       const usageToday = await this.usageService.countTodayByUser(userId);
+      const dailyLimit = ent.dailyLimit;
       this.metrics.observe({
         outcome: REWRITE_OUTCOMES.ok,
         tone,
@@ -138,22 +138,9 @@ export class RewriteService {
       return { rewritten_text: cached, usage_today: usageToday, daily_limit: dailyLimit };
     }
 
-    // Check subscription & limits
-    const sub = await this.subscriptionsService.findActiveByUserId(userId);
-    if (!sub || !sub.plan) {
-      // No usable subscription/plan for this user. Mapped to
-      // user_not_found so cross-service Grafana joins (NestJS +
-      // Go) stay on the same enumerated outcome set.
-      this.metrics.observe({
-        outcome: REWRITE_OUTCOMES.userNotFound,
-        tone,
-        provider: 'n/a',
-        durationMs: Date.now() - startedAt,
-      });
-      throw new HttpException({ error: 'No active subscription', usage_today: 0, daily_limit: 0 }, 403);
-    }
-
-    const dailyLimit = sub.plan.daily_limit;
+    // Everyone resolves to at least Free (10/day) — no lockout on lapse.
+    const ent = await this.subscriptionsService.resolveEntitlement(userId);
+    const dailyLimit = ent.dailyLimit;
     const usageToday = await this.usageService.countTodayByUser(userId);
 
     if (dailyLimit !== -1 && usageToday >= dailyLimit) {
