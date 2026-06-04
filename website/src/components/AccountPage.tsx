@@ -107,7 +107,10 @@ export default function AccountPage() {
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data: { url: string } = await res.json();
-      window.location.href = data.url;
+      // Open the provider portal in a new tab so the user keeps /account
+      // instead of being yanked off to an LS/Stripe-branded page.
+      window.open(data.url, '_blank', 'noopener,noreferrer');
+      setActionLoading(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load portal');
       setActionLoading(null);
@@ -282,7 +285,7 @@ export default function AccountPage() {
                   disabled={actionLoading === 'manage'}
                   className="rounded-full border border-brand-400 px-6 py-2.5 text-sm font-semibold text-brand-400 hover:bg-brand-400/10 disabled:opacity-50"
                 >
-                  {actionLoading === 'manage' ? 'Opening…' : 'Billing & invoices'}
+                  {actionLoading === 'manage' ? 'Opening…' : 'Billing & invoices ↗'}
                 </button>
               </>
             ) : (
@@ -306,6 +309,12 @@ export default function AccountPage() {
             Download app
           </a>
         </div>
+
+        {isCancellable && !confirmingCancel && !cancelledMsg && (
+          <p className="mt-3 text-xs text-gray-500">
+            Billing &amp; invoices open our payment provider in a new tab for receipts and card changes.
+          </p>
+        )}
 
         {error && <p className="mt-3 text-sm text-red-400">{error}</p>}
       </div>
