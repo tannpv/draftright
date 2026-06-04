@@ -1,5 +1,6 @@
 import { HttpException, Logger } from '@nestjs/common';
 import { RewriteService, PROVIDER_UNAVAILABLE_MESSAGE } from './rewrite.service';
+import { EntitlementTier } from '../subscriptions/entitlement';
 
 /**
  * Regression guard for the provider-error leak (2026-06-04): an OpenAI
@@ -64,8 +65,6 @@ describe('RewriteService — provider error sanitization', () => {
   });
 });
 
-import { EntitlementTier } from '../subscriptions/entitlement';
-
 describe('RewriteService — entitlement gating', () => {
   function build(entitlement: any, usageToday: number, callProvider: () => Promise<any>) {
     const subscriptions: any = { resolveEntitlement: async () => entitlement };
@@ -77,12 +76,13 @@ describe('RewriteService — entitlement gating', () => {
     const cache: any = {
       get: async () => null,
       set: async () => undefined,
-      isBatchStarted: async () => true,
+      isBatchStarted: async () => true, // skip batch prefetch in this path
+
       markBatchStarted: async () => undefined,
     };
     const rewriteLog: any = { log: async () => undefined };
     const metrics: any = { observe: () => undefined };
-    return new (require('./rewrite.service').RewriteService)(
+    return new RewriteService(
       subscriptions, usage, aiProviders, cache, rewriteLog, metrics,
     );
   }
