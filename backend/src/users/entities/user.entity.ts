@@ -82,6 +82,9 @@ export class User {
   @Column({ type: 'timestamptz', nullable: true })
   password_reset_expires: Date | null;
 
+  @Column({ type: 'int', default: 0 })
+  password_reset_attempts: number;
+
   @Column({ type: 'varchar', length: 64, nullable: true })
   lemonsqueezy_customer_id: string | null;
 

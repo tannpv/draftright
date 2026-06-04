@@ -5,7 +5,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import * as jwt from 'jsonwebtoken';
-import { createPublicKey } from 'node:crypto';
+import { createPublicKey, randomInt } from 'node:crypto';
 
 /** Shape of one entry in Apple's `/auth/keys` JWK set. */
 interface AppleJwk {
@@ -143,8 +143,13 @@ export class AuthService {
     });
   }
 
+  // After this many wrong attempts the reset code is invalidated, so the
+  // 10^6 keyspace can't be brute-forced within the 15-minute TTL.
+  private static readonly MAX_RESET_ATTEMPTS = 5;
+
   private generateVerificationCode(): string {
-    return Math.floor(100000 + Math.random() * 900000).toString();
+    // CSPRNG — Math.random() is predictable and unfit for auth codes.
+    return randomInt(0, 1_000_000).toString().padStart(6, '0');
   }
 
   /**
@@ -162,6 +167,7 @@ export class AuthService {
     await this.usersService.update(user.id, {
       password_reset_code: code,
       password_reset_expires: expires,
+      password_reset_attempts: 0,
     });
     this.emailService.sendPasswordResetEmail(user.email, user.name, code).catch((err) => {
       this.logger.error(`Failed to send password reset to ${user.email}: ${err.message}`);
@@ -177,13 +183,23 @@ export class AuthService {
       throw new BadRequestException('Password must be at least 8 characters');
     }
     const user = await this.usersService.findByEmail(email.trim().toLowerCase());
-    if (
-      !user ||
-      !user.password_reset_code ||
-      !user.password_reset_expires ||
+    if (!user || !user.password_reset_code || !user.password_reset_expires) {
+      throw new BadRequestException('Invalid or expired reset code');
+    }
+    const badCode =
       user.password_reset_code !== code ||
-      user.password_reset_expires.getTime() < Date.now()
-    ) {
+      user.password_reset_expires.getTime() < Date.now();
+    if (badCode) {
+      // Throttle brute force: count failures and burn the code once the
+      // cap is hit, forcing the user to request a fresh one.
+      const attempts = (user.password_reset_attempts ?? 0) + 1;
+      const exhausted = attempts >= AuthService.MAX_RESET_ATTEMPTS;
+      await this.usersService.update(
+        user.id,
+        exhausted
+          ? { password_reset_code: null, password_reset_expires: null, password_reset_attempts: 0 }
+          : { password_reset_attempts: attempts },
+      );
       throw new BadRequestException('Invalid or expired reset code');
     }
     const password_hash = await bcrypt.hash(newPassword, 10);
@@ -191,6 +207,7 @@ export class AuthService {
       password_hash,
       password_reset_code: null,
       password_reset_expires: null,
+      password_reset_attempts: 0,
     });
     return { success: true };
   }

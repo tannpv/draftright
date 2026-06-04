@@ -61,6 +61,31 @@ describe('AuthService — forgot/reset password', () => {
     expect(patch.password_reset_expires).toBeNull();
   });
 
+  it('reset increments the attempt counter on a wrong code', async () => {
+    const { svc, usersService } = build(localUser({ password_reset_attempts: 0 }));
+    await expect(svc.resetPassword('a@b.com', '999999', 'newpassword1'))
+      .rejects.toBeInstanceOf(BadRequestException);
+    const patch = usersService.update.mock.calls[0][1];
+    expect(patch.password_reset_attempts).toBe(1);
+    expect(patch.password_reset_code).toBeUndefined(); // not burned yet
+  });
+
+  it('reset burns the code once attempts hit the cap', async () => {
+    const { svc, usersService } = build(localUser({ password_reset_attempts: 4 }));
+    await expect(svc.resetPassword('a@b.com', '999999', 'newpassword1'))
+      .rejects.toBeInstanceOf(BadRequestException);
+    const patch = usersService.update.mock.calls[0][1];
+    expect(patch.password_reset_code).toBeNull();
+    expect(patch.password_reset_expires).toBeNull();
+  });
+
+  it('generated codes are 6 digits, zero-padded', async () => {
+    const { svc, usersService } = build(localUser());
+    await svc.forgotPassword('a@b.com');
+    const patch = usersService.update.mock.calls[0][1];
+    expect(patch.password_reset_code).toMatch(/^\d{6}$/);
+  });
+
   it('forgot stays silent (no email) for a social-only account', async () => {
     const { svc, emailService } = build(localUser({
       auth_provider: AuthProvider.GOOGLE, password_hash: null,
