@@ -1,6 +1,15 @@
 import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
 
-export type EmailStatus = 'sent' | 'failed' | 'skipped';
+export type EmailStatus =
+  // set at send time
+  | 'sent'
+  | 'failed'
+  | 'skipped'
+  | 'suppressed'
+  // updated later by the Resend delivery webhook
+  | 'delivered'
+  | 'bounced'
+  | 'complained';
 
 /**
  * One row per attempted email send. Written by EmailService.deliver() so the

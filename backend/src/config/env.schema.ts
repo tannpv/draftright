@@ -74,6 +74,9 @@ export const envSchema = z.object({
   // we don't constrain to strict RFC-5321 here — Resend's own parser
   // does that and surfaces clearer errors than Zod's `.email()`.
   EMAIL_FROM: z.string().optional(),
+  // Svix signing secret for the Resend delivery webhook (whsec_…). When
+  // unset, the webhook endpoint rejects everything (fail closed).
+  RESEND_WEBHOOK_SECRET: z.string().optional(),
   // ADMIN_EMAIL stays strict because it's used as a Postgres lookup key.
 
 

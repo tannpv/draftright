@@ -2329,6 +2329,17 @@
           "updates"
         ]
       }
+    },
+    "/webhooks/resend": {
+      "post": {
+        "operationId": "EmailWebhookController_handle",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
     }
   },
   "info": {
