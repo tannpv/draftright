@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:draftright_mobile/models/nudge_state.dart';
 import 'package:draftright_mobile/models/tone.dart';
 import 'package:draftright_mobile/services/api_client.dart';
 import 'package:draftright_mobile/services/auth_service.dart';
@@ -86,6 +87,7 @@ class SubscriptionInfo {
   final String? expiresAt;
   final int usageToday;
   final int dailyLimit;
+  final NudgeState? nudge;
 
   const SubscriptionInfo({
     required this.planName,
@@ -94,6 +96,7 @@ class SubscriptionInfo {
     this.expiresAt,
     required this.usageToday,
     required this.dailyLimit,
+    this.nudge,
   });
 
   bool get isFree => billingPeriod == 'none';
@@ -114,6 +117,9 @@ class SubscriptionInfo {
       dailyLimit = (json['daily_limit'] as num?)?.toInt() ?? 10;
     }
 
+    final nudgeJson = json['nudge'];
+    final nudge = nudgeJson is Map<String, dynamic> ? NudgeState.fromJson(nudgeJson) : null;
+
     return SubscriptionInfo(
       planName: planName,
       billingPeriod: billingPeriod,
@@ -121,6 +127,7 @@ class SubscriptionInfo {
       expiresAt: json['expires_at']?.toString(),
       usageToday: (json['usage_today'] as num?)?.toInt() ?? 0,
       dailyLimit: dailyLimit,
+      nudge: nudge,
     );
   }
 }
