@@ -5,6 +5,7 @@ import { Subscription } from './entities/subscription.entity';
 import { SubscriptionsService } from './subscriptions.service';
 import { SubscriptionsController } from './subscriptions.controller';
 import { SubscriptionsCron } from './subscriptions.cron';
+import { SubscriptionNotifier } from './subscription-notifier';
 import { UsageModule } from '../usage/usage.module';
 import { PlansModule } from '../plans/plans.module';
 
@@ -17,7 +18,7 @@ import { PlansModule } from '../plans/plans.module';
     // EmailService comes from the global EmailModule registered in app.module.
   ],
   controllers: [SubscriptionsController],
-  providers: [SubscriptionsService, SubscriptionsCron],
-  exports: [SubscriptionsService],
+  providers: [SubscriptionsService, SubscriptionsCron, SubscriptionNotifier],
+  exports: [SubscriptionsService, SubscriptionNotifier],
 })
 export class SubscriptionsModule {}
