@@ -2,12 +2,22 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Subscription, SubscriptionStatus, StoreType } from './entities/subscription.entity';
+import { BillingPeriod } from '../plans/entities/plan.entity';
+import { PlansService } from '../plans/plans.service';
+import { Entitlement, EntitlementTier } from './entitlement';
+import { UsageService } from '../usage/usage.service';
+import { NudgeState, deriveBanner } from './nudge';
+
+/** Safety floor when the canonical Free plan row is missing (bad seed). */
+const FREE_TIER_FALLBACK_LIMIT = 10;
 
 @Injectable()
 export class SubscriptionsService {
   constructor(
     @InjectRepository(Subscription)
     private readonly subsRepo: Repository<Subscription>,
+    private readonly plansService: PlansService,
+    private readonly usageService: UsageService,
   ) {}
 
   async findActiveByUserId(userId: string): Promise<Subscription | null> {
@@ -16,6 +26,63 @@ export class SubscriptionsService {
       relations: ['plan'],
       order: { created_at: 'DESC' },
     });
+  }
+
+  /**
+   * Single source of truth for what a user may do right now. An active
+   * paid plan → PRO (unlimited). Everything else — active Free, EXPIRED,
+   * CANCELLED, or no row at all — resolves to the canonical Free plan so
+   * lapsed users keep 10/day instead of being locked out.
+   */
+  async resolveEntitlement(userId: string): Promise<Entitlement> {
+    const active = await this.findActiveByUserId(userId);
+    if (active?.plan && active.plan.billing_period !== BillingPeriod.NONE) {
+      return {
+        tier: EntitlementTier.PRO,
+        dailyLimit: active.plan.daily_limit,
+        status: active.status,
+        expiresAt: active.expires_at,
+        planName: active.plan.name,
+      };
+    }
+    let dailyLimit = FREE_TIER_FALLBACK_LIMIT;
+    let planName = 'Free';
+    try {
+      const free = await this.plansService.findFreePlan();
+      dailyLimit = free.daily_limit;
+      planName = free.name;
+    } catch {
+      // Free plan row missing (seed not run) — degrade to the floor
+      // rather than locking every non-Pro user out with a 500.
+    }
+    return {
+      tier: EntitlementTier.FREE,
+      dailyLimit,
+      status: active?.status ?? null,
+      expiresAt: null,
+      planName,
+    };
+  }
+
+  /**
+   * Backend-owned nudge payload — the single place any client surface
+   * reads its strip state from. Pure banner logic lives in deriveBanner.
+   */
+  async buildNudgeState(userId: string): Promise<NudgeState> {
+    const ent = await this.resolveEntitlement(userId);
+    const usageToday = await this.usageService.countTodayByUser(userId);
+    const lastExpired = await this.subsRepo.findOne({
+      where: { user_id: userId, status: SubscriptionStatus.EXPIRED },
+      order: { updated_at: 'DESC' },
+    });
+    const banner = deriveBanner(ent, usageToday, lastExpired?.updated_at ?? null, new Date());
+    return {
+      tier: ent.tier,
+      usageToday,
+      dailyLimit: ent.dailyLimit,
+      expiresAt: ent.expiresAt ? ent.expiresAt.toISOString() : null,
+      banner,
+    };
   }
 
   async createFreeSubscription(userId: string, planId: string): Promise<Subscription> {

@@ -48,6 +48,49 @@ public static class PaymentMethodKindExtensions
     };
 }
 
+/// <summary>
+/// Billing cadence supported by the backend <c>plans.billing_period</c>
+/// column.  Mirrors <c>BillingPeriod</c> on Flutter / macOS (1:1, same
+/// wire names) so the UI never threads raw <c>"monthly"</c> /
+/// <c>"yearly"</c> strings through services.
+/// </summary>
+public enum BillingPeriod
+{
+    Monthly,
+    Yearly,
+}
+
+public static class BillingPeriodExtensions
+{
+    /// <summary>Lowercase identifier matching <c>plans.billing_period</c>.</summary>
+    public static string WireName(this BillingPeriod period) => period switch
+    {
+        BillingPeriod.Monthly => "monthly",
+        BillingPeriod.Yearly  => "yearly",
+        _ => throw new ArgumentOutOfRangeException(nameof(period)),
+    };
+
+    /// <summary>User-facing English label.</summary>
+    public static string DisplayName(this BillingPeriod period) => period switch
+    {
+        BillingPeriod.Monthly => "Monthly",
+        BillingPeriod.Yearly  => "Yearly",
+        _ => throw new ArgumentOutOfRangeException(nameof(period)),
+    };
+
+    /// <summary>Parse a wire value (case-insensitive).  Null for unknown / Free.</summary>
+    public static BillingPeriod? FromWire(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return null;
+        return value.ToLowerInvariant() switch
+        {
+            "monthly" => BillingPeriod.Monthly,
+            "yearly"  => BillingPeriod.Yearly,
+            _         => null,
+        };
+    }
+}
+
 /// <summary>UI metadata for one <see cref="PaymentMethodKind"/>.</summary>
 public sealed record PaymentMethodDescriptor(
     PaymentMethodKind Kind,
@@ -270,4 +313,6 @@ public sealed class PlanRow
     [JsonPropertyName("name")]            public string Name { get; set; } = string.Empty;
     [JsonPropertyName("billing_period")]  public string BillingPeriod { get; set; } = string.Empty;
     [JsonPropertyName("is_active")]       public bool IsActive { get; set; } = true;
+    /// <summary>USD for LS/Stripe/PayPal plans; VND for VietQR/bank-transfer.</summary>
+    [JsonPropertyName("currency")]        public string Currency { get; set; } = "USD";
 }

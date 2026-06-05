@@ -5,6 +5,7 @@ import { Resend } from 'resend';
 import { AppSettings } from '../admin/entities/app-settings.entity';
 import { EmailLog, EmailStatus } from './entities/email-log.entity';
 import { EmailTemplate } from './entities/email-template.entity';
+import { EmailSuppression } from './entities/email-suppression.entity';
 import { EMAIL_TEMPLATE_MAP } from './email-templates';
 
 @Injectable()
@@ -20,7 +21,32 @@ export class EmailService {
     private readonly emailLogRepo: Repository<EmailLog>,
     @InjectRepository(EmailTemplate)
     private readonly templateRepo: Repository<EmailTemplate>,
+    @InjectRepository(EmailSuppression)
+    private readonly suppressionRepo: Repository<EmailSuppression>,
   ) {}
+
+  /** True if we've stopped emailing this address (hard bounce / complaint). */
+  async isSuppressed(email: string): Promise<boolean> {
+    return (await this.suppressionRepo.count({ where: { email: email.toLowerCase() } })) > 0;
+  }
+
+  /** Add an address to the suppression list (idempotent). */
+  async suppress(email: string, reason: string): Promise<void> {
+    await this.suppressionRepo
+      .createQueryBuilder()
+      .insert()
+      .values({ email: email.toLowerCase(), reason })
+      .orIgnore()
+      .execute();
+  }
+
+  /**
+   * Update the delivery status of a previously-sent email by its Resend
+   * message id. Called by the delivery webhook. Best-effort.
+   */
+  async markByProviderId(providerId: string, status: EmailStatus, detail: string | null): Promise<void> {
+    await this.emailLogRepo.update({ provider_id: providerId }, { status, ...(detail ? { error: detail } : {}) });
+  }
 
   /** Best-effort audit row for every send attempt (never throws). */
   private async record(to: string, subject: string, type: string, status: EmailStatus, providerId: string | null, error: string | null): Promise<void> {
@@ -62,6 +88,12 @@ export class EmailService {
    * block on email). Every public method is a thin wrapper over this.
    */
   private async deliver(to: string, subject: string, html: string, label: string, throwOnError = false): Promise<void> {
+    if (await this.isSuppressed(to)) {
+      this.logger.warn(`Suppressed recipient — skipping ${label} to ${to}`);
+      await this.record(to, subject, label, 'suppressed', null, 'Recipient on suppression list (bounce/complaint)');
+      if (throwOnError) throw new InternalServerErrorException('This email address can no longer receive mail.');
+      return;
+    }
     const c = await this.getClient();
     if (!c) {
       this.logger.warn(`Resend not configured — would send ${label} to ${to}`);
@@ -82,6 +114,10 @@ export class EmailService {
 
   async sendVerificationEmail(toEmail: string, name: string, code: string): Promise<void> {
     await this.sendTemplated('verification', toEmail, { name: name || 'there', code }, true);
+  }
+
+  async sendPasswordResetEmail(toEmail: string, name: string, code: string): Promise<void> {
+    await this.sendTemplated('password-reset', toEmail, { name: name || 'there', code }, true);
   }
 
   /**

@@ -175,6 +175,14 @@ class _BootstrapState extends State<_Bootstrap> {
         try {
           ErrorReporter.setBackendUrl(settings.backendUrl);
         } catch (_) {/* reporter must never break a settings save */}
+        try {
+          // AuthService caches the base URL set in init(); it has a
+          // setter, but no one was calling it.  Without this, the
+          // Server toggle on LoginScreen / Settings updates the
+          // SharedPreferences entry but login keeps hitting the old
+          // URL (default = prod) until app restart.
+          auth.setBaseUrl(settings.backendUrl);
+        } catch (_) {/* same isolation rule as ErrorReporter */}
       });
 
       if (!mounted) return;
@@ -452,7 +460,15 @@ class _HomeScreenState extends State<HomeScreen> {
     // Defer one frame so the Navigator is mounted on cold-start.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final nav = Navigator.of(context, rootNavigator: true);
+      // Use the local Navigator (NOT rootNavigator: true) so the new
+      // route lands under DraftRightApp's MultiProvider.  The bootstrap
+      // MaterialApp wraps DraftRightApp, so its Navigator is the
+      // "root" one — but it lives ABOVE MultiProvider, so routes
+      // pushed there can't read AuthService / SettingsService and
+      // crash with "Could not find the correct Provider<AuthService>"
+      // on SubscriptionScreen's initState.  See bug captured
+      // 2026-06-01 on the iPhone 17 Pro simulator.
+      final nav = Navigator.of(context);
       // Don't stack duplicate Subscription routes if the user is
       // already on it (e.g. they kicked off checkout, returned via
       // universal link, paid, returned again).

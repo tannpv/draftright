@@ -46,4 +46,9 @@ final class EnglishLanguagePackTests: XCTestCase {
         XCTAssertEqual(row.first?.label, "~")
         XCTAssertTrue(row.contains(where: { $0.label == "π" }))
     }
+
+    func test_symbols1SecondRowContainsUnderscore() {
+        let row = EnglishLanguagePack().symbols1Rows[1]
+        XCTAssertTrue(row.contains(where: { $0.label == "_" }))
+    }
 }

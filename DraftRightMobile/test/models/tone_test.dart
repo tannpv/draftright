@@ -2,8 +2,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:draftright_mobile/models/tone.dart';
 
 void main() {
-  test('Tone.values has 6 tones', () {
-    expect(Tone.values.length, 6);
+  test('Tone.values has 8 tones', () {
+    expect(Tone.values.length, 8);
   });
 
   test('each tone has a non-empty displayName', () {

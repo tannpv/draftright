@@ -31,7 +31,7 @@ object EnglishLanguagePack : LanguagePack {
 
     override val symbols1Rows: List<List<KeyDef>> = listOf(
         chars("1", "2", "3", "4", "5", "6", "7", "8", "9", "0"),
-        chars("@", "#", "$", "%", "&", "-", "+", "(", ")"),
+        chars("@", "#", "$", "%", "&", "-", "_", "+", "(", ")"),
         listOf(KeyDef("#+=", SpecialKeys.SYMBOLS2, 1.5f)) +
             chars("!", "\"", "'", ":", ";", "/", "?") +
             listOf(KeyDef("←", SpecialKeys.BACKSPACE, 1.5f)),

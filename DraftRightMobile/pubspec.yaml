@@ -31,6 +31,8 @@ dependencies:
   # flow (LS hosted-checkout redirects to https://draftright.info/
   # payment/success?ref=...).  Stream-based API; mirrors share_service.
   app_links: ^6.3.0
+  sign_in_with_apple: ^8.1.0
+  flutter_stripe: ^12.6.0
 
 dev_dependencies:
   flutter_test:

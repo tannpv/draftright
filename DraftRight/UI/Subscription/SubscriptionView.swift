@@ -80,10 +80,11 @@ struct SubscriptionView: View {
     private var upgradeBlock: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Upgrade to Pro").font(.title3.weight(.semibold))
-            Text("Pick a payment method.  Your plan activates automatically once payment completes.")
+            Text("Pick a billing cadence, then a payment method.  Your plan activates automatically once payment completes.")
                 .font(.callout)
                 .foregroundColor(.secondary)
         }
+        BillingPeriodPicker(selection: $vm.billingPeriod)
         Group {
             if vm.methodsLoaded {
                 if vm.availableMethods.isEmpty {

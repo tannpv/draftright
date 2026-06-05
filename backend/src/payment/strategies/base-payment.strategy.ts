@@ -69,4 +69,27 @@ export abstract class BasePaymentStrategy {
   async getCustomerPortalUrl(_user: User): Promise<string | null> {
     return null;
   }
+
+  /**
+   * Cancel the supplied provider-side subscription so the user stops
+   * being billed at the next cycle.  The provider's cancellation
+   * webhook will follow shortly and stamp the local subscription
+   * row's status — this method is responsible only for the upstream
+   * cancel call.
+   *
+   * Returns:
+   *   - `true`  when the provider accepted the cancel,
+   *   - `false` when the strategy can't cancel programmatically
+   *     (VietQR, bank-transfer, admin-granted — those caller should
+   *     either reject the request or no-op locally).
+   *
+   * Throws when the provider call fails (network / 4xx).
+   *
+   * Default implementation returns false so strategies without
+   * cancel support don't need to opt in.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async cancelSubscription(_subscriptionId: string): Promise<boolean> {
+    return false;
+  }
 }

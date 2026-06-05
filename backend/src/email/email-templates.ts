@@ -33,6 +33,16 @@ export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
     <p style="color:#444;line-height:1.5;margin:0 0 16px;">Enter it in the app to finish setting up your account. It expires in 15 minutes.</p>`),
   },
   {
+    key: 'password-reset',
+    label: 'Password reset',
+    subject: 'Reset your DraftRight password',
+    variables: ['name', 'code'],
+    html: shell('Reset your password, {{name}}',
+      `<p style="color:#444;line-height:1.5;margin:0 0 16px;">Your password reset code is:</p>
+    <p style="font-size:28px;font-weight:700;letter-spacing:4px;color:#5b3df6;margin:0 0 16px;">{{code}}</p>
+    <p style="color:#444;line-height:1.5;margin:0 0 16px;">Enter it on the reset page to choose a new password. It expires in 15 minutes. If you didn't request this, you can ignore this email.</p>`),
+  },
+  {
     key: 'subscription-activated',
     label: 'Subscription activated (payment success)',
     subject: 'Your DraftRight {{plan}} subscription is active',
@@ -47,8 +57,8 @@ export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
     subject: 'Your DraftRight {{plan}} subscription has expired',
     variables: ['name', 'plan'],
     html: shell('Your subscription has expired',
-      `<p style="color:#444;line-height:1.5;margin:0 0 16px;">Hi {{name}} — your DraftRight <strong>{{plan}}</strong> subscription has ended, and your account is back on the free plan.</p>
-    <p style="color:#444;line-height:1.5;margin:0 0 16px;">Renew any time to restore unlimited rewrites: <a href="https://draftright.info/account" style="color:#5b3df6;">draftright.info/account</a></p>`),
+      `<p style="color:#444;line-height:1.5;margin:0 0 16px;">Hi {{name}} — your {{plan}} plan has ended. You're now on the Free plan with 10 rewrites per day. Restore Pro anytime to go unlimited.</p>
+    <p style="color:#444;line-height:1.5;margin:0 0 16px;"><a href="https://draftright.info/account" style="color:#5b3df6;">draftright.info/account</a></p>`),
   },
   {
     key: 'renewal-reminder',

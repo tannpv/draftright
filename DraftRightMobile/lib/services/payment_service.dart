@@ -5,9 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:draftright_mobile/services/backend_client.dart';
 import 'package:draftright_mobile/services/logger_service.dart';
+import 'package:draftright_mobile/services/payment/billing_period.dart';
 import 'package:draftright_mobile/services/payment/payment_handler.dart';
 import 'package:draftright_mobile/services/payment/payment_method.dart';
 import 'package:draftright_mobile/services/payment/payment_status.dart';
+import 'package:draftright_mobile/services/payment/wallet_payment_handler.dart';
 
 /// Orchestrates upgrade-to-Pro across every payment method the backend
 /// advertises.
@@ -37,6 +39,12 @@ class PaymentService {
           PaymentMethodKind.paypal:       const RedirectPaymentHandler(PaymentMethodKind.paypal),
           PaymentMethodKind.vietqr:       QrPaymentHandler(watcher: watchPayment),
           PaymentMethodKind.bankTransfer: BankTransferPaymentHandler(watcher: watchPayment),
+          // Native-wallet handlers — one shared class, two registry
+          // entries.  Platform-gating in listAvailableMethods drops
+          // each entry from the picker on platforms that can't run
+          // its wallet (Apple Pay on Android, Google Pay on iOS).
+          PaymentMethodKind.applePay:     const WalletPaymentHandler(PaymentMethodKind.applePay),
+          PaymentMethodKind.googlePay:    const WalletPaymentHandler(PaymentMethodKind.googlePay),
         });
   }
 
@@ -53,13 +61,27 @@ class PaymentService {
   }
 
   bool _isAllowedOnThisPlatform(PaymentMethodKind kind) {
+    // Hosted Stripe is blocked on iOS by App Store Guideline 3.1.1
+    // (no external-browser path through Stripe direct for digital
+    // subscriptions in iOS App Store builds).
     if (kind == PaymentMethodKind.stripe && _isIos) return false;
+    // Native wallets are only available on the platform they're
+    // native to.  Apple Pay = iOS only; Google Pay = Android only.
+    // Both are processed by Stripe under the hood and surface
+    // through `flutter_stripe`.
+    if (kind == PaymentMethodKind.applePay && !_isIos) return false;
+    if (kind == PaymentMethodKind.googlePay && !_isAndroid) return false;
     return true;
   }
 
   bool get _isIos {
     if (kIsWeb) return false;
     try { return Platform.isIOS; } catch (_) { return false; }
+  }
+
+  bool get _isAndroid {
+    if (kIsWeb) return false;
+    try { return Platform.isAndroid; } catch (_) { return false; }
   }
 
   /// Run the full upgrade flow for [method]: create the checkout
@@ -118,24 +140,48 @@ class PaymentService {
     );
   }
 
-  /// Open the Lemon Squeezy Customer Portal in an in-app browser so
-  /// the user can cancel, change plan, or update their card.  The
-  /// backend mints a one-shot URL per request; we open it in the
-  /// same SFSafariViewController / Chrome Custom Tab used for
-  /// checkout to keep the UX consistent.
+  /// Open the Lemon Squeezy Customer Portal so the user can cancel,
+  /// change plan, or update their card.  The backend mints a signed
+  /// URL per request.
+  ///
+  /// **Why iOS uses the system browser (not in-app) for THIS flow:**
+  /// SFSafariViewController has an isolated cookie jar — every launch
+  /// is a fresh LS session, so LS prompts for the magic-link login
+  /// every single time.  Chrome Custom Tabs on Android share cookies
+  /// with the system Chrome browser, so the portal opens directly if
+  /// the user has ever logged into LS in Chrome.
+  ///
+  /// To match that "no-login-prompt" UX on iOS we send portal opens
+  /// to system Safari (`LaunchMode.externalApplication`), where the
+  /// LS session persists across launches.  Checkout stays in-app
+  /// because (a) checkout is a one-shot — no recurring cookies
+  /// needed, and (b) keeping the user inside the app for the most
+  /// commercially sensitive flow is the right call.
   ///
   /// Throws if the user has no LS subscription, the backend isn't
   /// configured, or the browser refuses to launch.  Callers should
   /// surface the error in a SnackBar.
   Future<void> openCustomerPortal() async {
     final url = await backend.getCustomerPortalUrl();
-    final launched = await launchUrl(
-      Uri.parse(url),
-      mode: LaunchMode.inAppBrowserView,
-    );
+    final mode = _isIos
+        ? LaunchMode.externalApplication
+        : LaunchMode.inAppBrowserView;
+    final launched = await launchUrl(Uri.parse(url), mode: mode);
     if (!launched) {
       throw Exception('Could not open the customer portal');
     }
+  }
+
+  /// Cancel the user's currently-active subscription in-app via the
+  /// backend (which calls LS / Stripe APIs directly — no portal trip).
+  ///
+  /// The user keeps Pro access until the existing renewal date; the
+  /// provider's cancellation webhook flips
+  /// `subscriptions.status='cancelled'` shortly after this returns.
+  /// Callers should refresh `/subscription` once this completes to
+  /// pick up the new status.
+  Future<CancelSubscriptionResult> cancelSubscription() async {
+    return backend.cancelSubscription();
   }
 
   /// Currency the strategy expects to charge the plan in.  VietQR +
@@ -149,25 +195,36 @@ class PaymentService {
       case PaymentMethodKind.lemonsqueezy:
       case PaymentMethodKind.stripe:
       case PaymentMethodKind.paypal:
+      case PaymentMethodKind.applePay:
+      case PaymentMethodKind.googlePay:
         return 'USD';
     }
   }
 
   /// Fetch the public plan catalog and return the Pro-tier plan id
-  /// the upgrade button should target for [method].  Currency-aware
-  /// so VietQR doesn't pick a USD plan (which would store
-  /// `amount=499` and bake "499 đồng" into the QR — useless).
+  /// the upgrade button should target for [method] at the requested
+  /// [billingPeriod] cadence.
+  ///
+  ///   - Currency-aware so VietQR doesn't pick a USD plan (which
+  ///     would bake "499 đồng" into the QR — useless).
+  ///   - Cadence-aware so the yearly toggle on the subscription
+  ///     screen actually charges the yearly variant.
+  ///
   /// Single source of truth so the UI doesn't carry plan-picking
   /// logic.
-  Future<String> resolveProPlanId({PaymentMethodKind? method}) async {
+  Future<String> resolveProPlanId({
+    PaymentMethodKind? method,
+    BillingPeriod? billingPeriod,
+  }) async {
     final plans = await backend.listPlans();
     final currency = method != null ? _currencyFor(method) : null;
-    final pro = _pickProPlan(plans, currency: currency);
+    final pro = _pickProPlan(plans, currency: currency, billingPeriod: billingPeriod);
     if (pro == null) {
+      final cadence = billingPeriod?.wireName ?? 'any';
       throw Exception(
         currency != null
-            ? 'Could not find a Pro plan in $currency for $method'
-            : 'Could not find a Pro plan in the catalog',
+            ? 'Could not find a Pro plan in $currency ($cadence) for $method'
+            : 'Could not find a Pro plan ($cadence) in the catalog',
       );
     }
     final planId = (pro['id'] ?? '').toString();
@@ -180,12 +237,13 @@ class PaymentService {
   ///   - is_active = true (excludes archived rows)
   ///   - currency matches when provided (VND for VietQR/bank,
   ///     USD for Stripe/LS/PayPal)
-  ///   - prefers 'monthly' over 'yearly' for the upgrade button
-  ///
-  /// One-place rule so future "Pro Yearly" toggles only edit here.
+  ///   - cadence matches [billingPeriod] when provided; otherwise
+  ///     prefers 'monthly' (legacy default) then falls back to the
+  ///     first paid plan.
   Map<String, dynamic>? _pickProPlan(
     List<Map<String, dynamic>> plans, {
     String? currency,
+    BillingPeriod? billingPeriod,
   }) {
     final paid = plans.where((p) {
       final bp = (p['billing_period'] ?? '').toString().toLowerCase();
@@ -198,10 +256,19 @@ class PaymentService {
       return true;
     }).toList();
     if (paid.isEmpty) return null;
-    final monthly = paid.firstWhere(
-      (p) => (p['billing_period'] ?? '').toString().toLowerCase() == 'monthly',
+    if (billingPeriod != null) {
+      for (final p in paid) {
+        if (BillingPeriod.fromWire(p['billing_period']?.toString()) == billingPeriod) {
+          return p;
+        }
+      }
+      // Requested cadence not in the catalog — fall through to the
+      // monthly-default fallback so the UI doesn't crash on a
+      // partially-configured backend.
+    }
+    return paid.firstWhere(
+      (p) => BillingPeriod.fromWire(p['billing_period']?.toString()) == BillingPeriod.monthly,
       orElse: () => paid.first,
     );
-    return monthly;
   }
 }

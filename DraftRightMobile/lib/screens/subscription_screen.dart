@@ -3,8 +3,10 @@ import 'package:provider/provider.dart';
 import 'package:draftright_mobile/services/auth_service.dart';
 import 'package:draftright_mobile/services/backend_client.dart';
 import 'package:draftright_mobile/services/payment_service.dart';
+import 'package:draftright_mobile/services/payment/billing_period.dart';
 import 'package:draftright_mobile/services/payment/payment_method.dart';
 import 'package:draftright_mobile/services/settings_service.dart';
+import 'package:draftright_mobile/widgets/billing_period_selector.dart';
 
 class SubscriptionScreen extends StatefulWidget {
   const SubscriptionScreen({super.key});
@@ -38,6 +40,17 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
   // True while we're fetching the customer-portal URL and launching
   // the browser.  Prevents double-tap.
   bool _openingPortal = false;
+
+  // True while the in-app cancel request is in flight.  Prevents
+  // double-tap that would race two DELETE /payment/subscription
+  // requests.
+  bool _cancelling = false;
+
+  // User-selected billing cadence for the upgrade button.  Defaults
+  // to monthly (lower friction, lower commitment).  Threaded into
+  // `PaymentService.resolveProPlanId` so the backend creates a
+  // checkout for the matching plan id.
+  BillingPeriod _billingPeriod = BillingPeriod.monthly;
 
   @override
   void initState() {
@@ -224,30 +237,47 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
           ),
           const SizedBox(height: 8),
           Text(
-            'Pick a payment method. Your plan activates automatically once payment completes.',
+            'Pick a billing cadence, then a payment method. Your plan activates automatically once payment completes.',
             style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+          ),
+          const SizedBox(height: 16),
+          BillingPeriodSelector(
+            value: _billingPeriod,
+            onChanged: (p) => setState(() => _billingPeriod = p),
           ),
           const SizedBox(height: 16),
           ..._buildPaymentMethodTiles(),
         ] else ...[
-          // Paid plan: show the Manage button so the user can cancel,
-          // change plan, or update card.  Opens the LS Customer
-          // Portal in the same in-app browser used for checkout.
+          // Paid plan: two actions.  90% of users coming here just
+          // want to cancel — that's an in-app POST now (no portal
+          // login dance).  Card-update + plan-change are rarer
+          // actions; those still go through the LS portal.
           const SizedBox(height: 32),
           FilledButton.tonalIcon(
-            onPressed: _openingPortal ? null : _onManageTap,
-            icon: _openingPortal
+            onPressed: _cancelling ? null : _onCancelTap,
+            icon: _cancelling
                 ? const SizedBox(
                     width: 16, height: 16,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Icon(Icons.settings_outlined),
-            label: Text(_openingPortal ? 'Opening…' : 'Manage subscription'),
+                : const Icon(Icons.cancel_outlined),
+            label: Text(_cancelling ? 'Cancelling…' : 'Cancel subscription'),
             style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
           ),
           const SizedBox(height: 8),
+          TextButton.icon(
+            onPressed: _openingPortal ? null : _onManageTap,
+            icon: _openingPortal
+                ? const SizedBox(
+                    width: 14, height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.open_in_new, size: 18),
+            label: Text(_openingPortal ? 'Opening…' : 'Update card or change plan'),
+          ),
+          const SizedBox(height: 8),
           Text(
-            'Cancel, change plan, or update your payment method.',
+            'Cancelling stops the next renewal — you keep Pro until your current period ends.',
             style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
           ),
         ],
@@ -313,6 +343,73 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
     }
   }
 
+  Future<void> _onCancelTap() async {
+    if (_cancelling) return;
+    final accessUntilRaw = _info?.expiresAt;
+    final accessUntil = accessUntilRaw != null ? DateTime.tryParse(accessUntilRaw) : null;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Cancel subscription?'),
+        content: Text(
+          accessUntil != null
+              ? 'Pro access will continue until ${_formatDate(accessUntil)}, '
+                'after which you’ll be moved to the Free plan.'
+              : 'Pro access will continue until the end of your current '
+                'period, after which you’ll be moved to the Free plan.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Keep Pro'),
+          ),
+          FilledButton.tonal(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Cancel subscription'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    if (!mounted) return;
+
+    setState(() => _cancelling = true);
+    try {
+      final result = await _payments.cancelSubscription();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            result.accessUntil != null
+                ? 'Cancelled. You keep Pro until ${_formatDate(result.accessUntil!)}.'
+                : 'Cancelled. You keep Pro until your current period ends.',
+          ),
+          duration: const Duration(seconds: 5),
+        ),
+      );
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      );
+    } finally {
+      if (mounted) setState(() => _cancelling = false);
+    }
+  }
+
+  /// Short human date for cancel confirmations + snackbars.  Lives
+  /// here rather than a date-utility because it's the only place
+  /// the file formats a date today; pull out if a second caller
+  /// arrives.
+  String _formatDate(DateTime d) {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    return '${d.day} ${months[d.month - 1]} ${d.year}';
+  }
+
   Future<void> _onMethodTap(PaymentMethodKind kind) async {
     if (_starting) return;
     setState(() {
@@ -324,7 +421,16 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
       // plan (VND for VietQR/bank, USD for LS/Stripe/PayPal).
       // Without this, VietQR would pick the USD Pro plan and the
       // QR code would encode amount=499 đồng (~$0.02).
-      final planId = await _payments.resolveProPlanId(method: kind);
+      //
+      // Pass billingPeriod so the resolver hits the cadence the user
+      // selected.  This is the third leg of the LS yearly-fix tripod:
+      // mobile sends the correct plan_id → backend locks LS to a
+      // single variant → webhook re-resolves on actual charged
+      // variant.  See [[project_cc_payment_lemonsqueezy]].
+      final planId = await _payments.resolveProPlanId(
+        method: kind,
+        billingPeriod: _billingPeriod,
+      );
       if (!mounted) return;
       await _payments.upgradeWith(
         context: context,
@@ -416,6 +522,8 @@ class _PaymentMethodTile extends StatelessWidget {
       case PaymentMethodKind.paypal:       return Icons.account_balance_wallet;
       case PaymentMethodKind.vietqr:       return Icons.qr_code_2;
       case PaymentMethodKind.bankTransfer: return Icons.account_balance;
+      case PaymentMethodKind.applePay:     return Icons.apple;
+      case PaymentMethodKind.googlePay:    return Icons.g_mobiledata;
     }
   }
 }

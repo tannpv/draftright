@@ -1,4 +1,7 @@
 import { useState } from 'react';
+import GoogleSignInButton from './GoogleSignInButton';
+import PasswordInput from './PasswordInput';
+import { goToNext } from '../lib/redirect';
 
 const API = (import.meta.env.PUBLIC_API_URL as string | undefined) || 'https://api.draftright.info';
 
@@ -26,8 +29,7 @@ export default function LoginForm() {
       const data: { access_token: string; refresh_token?: string } = await res.json();
       localStorage.setItem('dr_access_token', data.access_token);
       if (data.refresh_token) localStorage.setItem('dr_refresh_token', data.refresh_token);
-      const next = new URLSearchParams(window.location.search).get('next');
-      window.location.href = next && next.startsWith('/') ? next : '/account';
+      goToNext();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
     } finally {
@@ -40,6 +42,12 @@ export default function LoginForm() {
 
   return (
     <form onSubmit={onSubmit} className="max-w-md mx-auto space-y-4">
+      <GoogleSignInButton onSuccess={() => goToNext()} onError={setError} disabled={submitting} label="Continue with Google" />
+      <div className="flex items-center gap-3">
+        <div className="flex-1 h-px bg-dark-border" />
+        <span className="text-sm text-gray-500">or</span>
+        <div className="flex-1 h-px bg-dark-border" />
+      </div>
       <input
         className="w-full rounded-lg bg-dark-card border border-dark-border text-white placeholder-gray-500 p-3 focus:outline-none focus:ring-2 focus:ring-brand-400"
         type="email"
@@ -49,15 +57,16 @@ export default function LoginForm() {
         required
         autoComplete="email"
       />
-      <input
-        className="w-full rounded-lg bg-dark-card border border-dark-border text-white placeholder-gray-500 p-3 focus:outline-none focus:ring-2 focus:ring-brand-400"
-        type="password"
-        placeholder="Password"
+      <PasswordInput
         value={password}
-        onChange={(e) => setPassword(e.target.value)}
-        required
+        onChange={setPassword}
+        placeholder="Password"
         autoComplete="current-password"
+        required
       />
+      <div className="text-right">
+        <a href="/forgot-password" className="text-sm text-brand-400 hover:underline">Forgot password?</a>
+      </div>
       {error && <p className="text-red-400 text-sm">{error}</p>}
       <button
         className="w-full rounded-full bg-brand-400 px-5 py-3 text-sm font-semibold text-white hover:bg-brand-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"

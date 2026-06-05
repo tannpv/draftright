@@ -18,6 +18,11 @@ export function storeTypeForMethod(method: PaymentMethod): StoreType {
     case PaymentMethod.VIETQR:        return StoreType.VIETQR;
     case PaymentMethod.BANK_TRANSFER: return StoreType.BANK_TRANSFER;
     case PaymentMethod.PAYPAL:        return StoreType.PAYPAL;
+    // Apple Pay + Google Pay run on Stripe under the hood, so the
+    // resulting subscription's store_type is STRIPE — the Stripe
+    // strategy owns its lifecycle (renewal, cancel, portal).
+    case PaymentMethod.APPLE_PAY:     return StoreType.STRIPE;
+    case PaymentMethod.GOOGLE_PAY:    return StoreType.STRIPE;
     // MoMo was removed from the active method set in 2026-05-x but
     // the enum value stays for historical payment rows.  Map to
     // ADMIN_GRANTED so legacy rows still activate without crashing.

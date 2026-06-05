@@ -17,6 +17,8 @@ import { ConfigService } from '@nestjs/config';
 import { AppSettings } from '../admin/entities/app-settings.entity';
 import { generatePaymentReference } from './payment-reference';
 import { EmailService } from '../email/email.service';
+import { SubscriptionNotifier } from '../subscriptions/subscription-notifier';
+import { SubscriptionEvent } from '../subscriptions/subscription-event';
 import { PAYMENT_PENDING_TTL_MS } from '../common/app-config';
 import { EnvSchema } from '../config/env.schema';
 
@@ -40,6 +42,7 @@ export class PaymentService {
     private readonly lemonSqueezyStrategy: LemonSqueezyStrategy,
     private readonly emailService: EmailService,
     private readonly cfg: ConfigService<EnvSchema, true>,
+    private readonly notifier: SubscriptionNotifier,
   ) {
     // Use the PaymentMethod enum (entities/payment.entity.ts) as the keys —
     // the same enum the DB rows use, so adding a new method only requires one
@@ -50,6 +53,13 @@ export class PaymentService {
       [PaymentMethod.VIETQR,        this.vietqrStrategy],
       [PaymentMethod.BANK_TRANSFER, this.vietqrStrategy],
       [PaymentMethod.LEMONSQUEEZY,  this.lemonSqueezyStrategy],
+      // Apple Pay + Google Pay both run on Stripe (LS has no
+      // wallet-token API).  They produce the same PaymentIntent /
+      // webhook flow as STRIPE — same strategy, different
+      // PaymentMethod label so the client can render the right
+      // native button.
+      [PaymentMethod.APPLE_PAY,     this.stripeStrategy],
+      [PaymentMethod.GOOGLE_PAY,    this.stripeStrategy],
     ]);
   }
 
@@ -192,6 +202,56 @@ export class PaymentService {
     return url;
   }
 
+  /**
+   * Cancel the user's currently-active subscription via the provider
+   * API (LS / Stripe).  90% of users coming to "Manage subscription"
+   * just want to cancel — handling it in-app avoids the hosted-portal
+   * email magic-link dance that frustrated users on iOS.
+   *
+   * Cancel mechanics:
+   *   - Provider keeps the subscription billed-through until the
+   *     current period end, then expires it.  Our local
+   *     `subscriptions.status` flips to 'cancelled' via the provider's
+   *     `subscription_cancelled` webhook (already wired).
+   *   - `expires_at` stays at the renewal date — user keeps Pro until
+   *     then.
+   *
+   * Throws:
+   *   - NotFoundException when there's no active subscription or the
+   *     store_type doesn't support programmatic cancel
+   *     (admin_granted / vietqr / bank_transfer).
+   */
+  async cancelActiveSubscription(userId: string): Promise<{ cancelled: boolean; expires_at: Date | null }> {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+
+    const sub = await this.subscriptionsService.findActiveByUserId(userId);
+    if (!sub) throw new NotFoundException('No active subscription to cancel');
+    if (!sub.store_transaction_id) {
+      throw new NotFoundException('Subscription has no provider reference to cancel');
+    }
+
+    // Same store_type → PaymentMethod mapping as getCustomerPortalUrl.
+    let method: string | null = null;
+    switch (sub.store_type) {
+      case 'stripe':       method = PaymentMethod.STRIPE;       break;
+      case 'lemonsqueezy': method = PaymentMethod.LEMONSQUEEZY; break;
+      default:             method = null;
+    }
+    if (!method) {
+      throw new NotFoundException(
+        `Subscriptions sourced from '${sub.store_type}' can't be cancelled in-app`,
+      );
+    }
+
+    const strategy = this.getStrategy(method);
+    const cancelled = await strategy.cancelSubscription(sub.store_transaction_id);
+    if (!cancelled) {
+      throw new NotFoundException('Provider declined to cancel the subscription');
+    }
+    return { cancelled: true, expires_at: sub.expires_at };
+  }
+
   // --- Generic: handle webhook from any provider ---
 
   async handleWebhook(method: string, payload: any, headers: any): Promise<{ success: boolean; reference_code?: string }> {
@@ -253,6 +313,29 @@ export class PaymentService {
           where: { reference_code: action.reference_code, status: PaymentStatus.PENDING },
         });
         if (pending) {
+          // Defensive: re-resolve plan_id from the variant LS
+          // actually charged.  In normal flow (post `enabled_variants`
+          // lock) the variant matches what we picked, so this is a
+          // no-op.  But if a legacy checkout URL lets the user
+          // switch on the page, this corrects the plan_id BEFORE
+          // activation so the subscription expires_at reflects the
+          // billing period the user actually paid for.
+          if (action.lemonsqueezy_variant_id) {
+            const truePlanId = await this.resolvePlanIdFromLsVariant(
+              action.lemonsqueezy_variant_id,
+              pending.currency || 'USD',
+            );
+            if (truePlanId && truePlanId !== pending.plan_id) {
+              await this.paymentRepo.update(
+                { id: pending.id },
+                { plan_id: truePlanId },
+              );
+              this.logger.warn(
+                `LS variant switch detected: payment ${action.reference_code} ` +
+                  `pre-charge plan=${pending.plan_id} post-charge plan=${truePlanId}. Corrected.`,
+              );
+            }
+          }
           const completion = await this.completePayment(action.reference_code, 'completed');
           if (completion.success) {
             await this.subscriptionsService.stampStoreRef(
@@ -338,6 +421,38 @@ export class PaymentService {
    * Stripe `invoice.payment_succeeded` — extend the subscription's expires_at
    * to the new period end. Idempotent: setting same expiry twice is safe.
    */
+  /**
+   * Look up the local plan that matches the Lemon Squeezy variant
+   * the user actually paid for.  Used by the webhook handler to
+   * defensively correct payment.plan_id when LS charges a different
+   * variant from what we sent at checkout creation.
+   *
+   * Resolution:
+   *   1. Read app_settings.lemonsqueezy_variant_{monthly,yearly}
+   *   2. Match the inbound variant_id → derive billing_period
+   *   3. Find an active Pro plan with (billing_period + currency)
+   *
+   * Returns null if no match — caller keeps the original plan_id.
+   */
+  private async resolvePlanIdFromLsVariant(
+    lsVariantId: string,
+    currency: string,
+  ): Promise<string | null> {
+    const settings = await this.settingsRepo.findOne({ where: {} });
+    if (!settings) return null;
+    let billingPeriod: string | null = null;
+    if (settings.lemonsqueezy_variant_monthly &&
+        String(settings.lemonsqueezy_variant_monthly) === lsVariantId) {
+      billingPeriod = 'monthly';
+    } else if (settings.lemonsqueezy_variant_yearly &&
+               String(settings.lemonsqueezy_variant_yearly) === lsVariantId) {
+      billingPeriod = 'yearly';
+    }
+    if (!billingPeriod) return null;
+    const plan = await this.plansService.findFirstActive({ billing_period: billingPeriod, currency });
+    return plan?.id || null;
+  }
+
   private async handleSubscriptionRenewed(stripeSubId: string, periodEndUnixSec: number): Promise<void> {
     const expiresAt = new Date(periodEndUnixSec * 1000);
     const updated = await this.subscriptionsService.extendByStripeSubId(stripeSubId, expiresAt);
@@ -406,13 +521,21 @@ export class PaymentService {
       storeTypeForMethod(payment.method),
     );
 
-    // Best-effort "subscription active" email — never block activation on it.
+    // Best-effort "subscription active" notification — routed through the
+    // SubscriptionNotifier so all channels (email, future push) are wired
+    // in one place. The notifier swallows its own errors; the outer
+    // try/catch exists only to guard against a missing user NPE.
     try {
       const user = await this.userRepo.findOne({ where: { id: payment.user_id } });
       if (user?.email) {
-        await this.emailService.sendSubscriptionActivated(
-          user.email, user.name, payment.plan?.name || 'Pro', expiresAt, payment.currency, payment.amount,
-        );
+        await this.notifier.notify(SubscriptionEvent.UPGRADED, {
+          email: user.email,
+          name: user.name,
+          planName: payment.plan?.name || 'Pro',
+          expiresAt,
+          currency: payment.currency,
+          amountCents: payment.amount,
+        });
       }
     } catch (e: any) {
       this.logger.warn(`subscription-activated email failed: ${e?.message}`);

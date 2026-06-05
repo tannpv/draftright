@@ -20,5 +20,23 @@
 		<string>applinks:draftright.info</string>
 		<string>applinks:dev.draftright.info</string>
 	</array>
+	<!-- Sign in with Apple capability.  Backed by the same Apple
+	     Developer-portal entitlement that App Store Connect generates
+	     when the App ID has "Sign In with Apple" enabled.  Required
+	     by App Store Guideline 4.8: any third-party login (Google,
+	     Facebook, …) must be paired with this. -->
+	<key>com.apple.developer.applesignin</key>
+	<array>
+		<string>Default</string>
+	</array>
+	<!-- Apple Pay capability.  Each merchant ID listed here is
+	     verified by Apple and registered in the Stripe dashboard
+	     (Settings → Payment methods → Apple Pay) so Stripe can mint
+	     wallet tokens client-side.  Add new merchant IDs to BOTH
+	     this list AND the Stripe dashboard. -->
+	<key>com.apple.developer.in-app-payments</key>
+	<array>
+		<string>merchant.com.draftright.app.v2</string>
+	</array>
 </dict>
 </plist>

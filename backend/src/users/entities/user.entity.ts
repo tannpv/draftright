@@ -11,6 +11,7 @@ export enum AuthProvider {
   GOOGLE = 'google',
   FACEBOOK = 'facebook',
   TIKTOK = 'tiktok',
+  APPLE = 'apple',
 }
 
 @Entity('users')
@@ -45,6 +46,16 @@ export class User {
   @Column({ type: 'varchar', length: 255, nullable: true, unique: true })
   tiktok_id: string;
 
+  /**
+   * Apple's `sub` claim from the identity token — the stable user ID
+   * Apple guarantees is unique per (user, team).  Distinct from the
+   * email column because Apple users can opt to receive a relay
+   * address rather than expose their real email.  Set only when the
+   * user signs in with Sign in with Apple.
+   */
+  @Column({ type: 'varchar', length: 255, nullable: true, unique: true })
+  apple_id: string;
+
   @Column({ type: 'varchar', length: 500, nullable: true })
   avatar_url: string;
 
@@ -64,6 +75,15 @@ export class User {
 
   @Column({ type: 'timestamptz', nullable: true })
   email_verification_expires: Date | null;
+
+  @Column({ type: 'varchar', length: 6, nullable: true })
+  password_reset_code: string | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  password_reset_expires: Date | null;
+
+  @Column({ type: 'int', default: 0 })
+  password_reset_attempts: number;
 
   @Column({ type: 'varchar', length: 64, nullable: true })
   lemonsqueezy_customer_id: string | null;

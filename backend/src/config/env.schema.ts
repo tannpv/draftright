@@ -74,12 +74,32 @@ export const envSchema = z.object({
   // we don't constrain to strict RFC-5321 here — Resend's own parser
   // does that and surfaces clearer errors than Zod's `.email()`.
   EMAIL_FROM: z.string().optional(),
+  // Svix signing secret for the Resend delivery webhook (whsec_…). When
+  // unset, the webhook endpoint rejects everything (fail closed).
+  RESEND_WEBHOOK_SECRET: z.string().optional(),
   // ADMIN_EMAIL stays strict because it's used as a Postgres lookup key.
 
+
+  // --- Sign in with Apple --------------------------------------------
+  // Comma-separated list of accepted JWT audiences (bundle IDs).
+  // Each client app — iOS, macOS, future web — gets its own bundle id
+  // from Apple, and the same backend serves all of them.  When unset,
+  // the verifier falls back to the V2 bundle IDs (iOS + macOS).
+  APPLE_AUDIENCES: z.string().optional(),
 
   // --- Payment: Stripe ------------------------------------------------
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  // Publishable key (pk_*) — safe to expose; mobile SDK needs it to
+  // talk to Stripe directly when confirming a wallet PaymentIntent
+  // client-side.  Without it, native Apple Pay / Google Pay tiles
+  // fall back to the hosted card flow.
+  STRIPE_PUBLISHABLE_KEY: z.string().optional(),
+  // Apple Pay merchant ID registered in both the Stripe Dashboard
+  // (Settings → Payment methods → Apple Pay) and Apple Developer
+  // portal (Identifiers → Merchant IDs).  Stripe verifies via the
+  // domain-verification file Apple delivers.
+  APPLE_PAY_MERCHANT_ID: z.string().optional(),
 
   // --- Payment: Lemon Squeezy ----------------------------------------
   LEMONSQUEEZY_API_KEY: z.string().optional(),

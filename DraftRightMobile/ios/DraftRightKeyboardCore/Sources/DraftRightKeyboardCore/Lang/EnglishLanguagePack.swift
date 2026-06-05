@@ -29,7 +29,7 @@ public struct EnglishLanguagePack: LanguagePack {
     public var symbols1Rows: [[KeyDef]] {
         [
             chars("1", "2", "3", "4", "5", "6", "7", "8", "9", "0"),
-            chars("@", "#", "$", "%", "&", "-", "+", "(", ")"),
+            chars("@", "#", "$", "%", "&", "-", "_", "+", "(", ")"),
             [KeyDef("#+=", SpecialKeys.symbols2, widthWeight: 1.5)]
                 + chars("!", "\"", "'", ":", ";", "/", "?")
                 + [KeyDef("←", SpecialKeys.backspace, widthWeight: 1.5)],

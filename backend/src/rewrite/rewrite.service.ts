@@ -1,4 +1,4 @@
-import { Injectable, HttpException } from '@nestjs/common';
+import { Injectable, HttpException, Logger } from '@nestjs/common';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { UsageService } from '../usage/usage.service';
 import { AiProvidersService } from '../ai-providers/ai-providers.service';
@@ -55,8 +55,19 @@ function parseGrammarResult(text: string): { grammar: any } {
   }
 }
 
+/**
+ * User-facing copy for any upstream AI-provider failure. Deliberately
+ * generic: provider responses carry sensitive internals (API key
+ * prefixes, upstream URLs, raw JSON) that must never reach a client.
+ * The real cause is logged server-side instead.
+ */
+export const PROVIDER_UNAVAILABLE_MESSAGE =
+  'Rewrite service is temporarily unavailable. Please try again shortly.';
+
 @Injectable()
 export class RewriteService {
+  private readonly logger = new Logger(RewriteService.name);
+
   constructor(
     private readonly subscriptionsService: SubscriptionsService,
     private readonly usageService: UsageService,
@@ -80,7 +91,16 @@ export class RewriteService {
     try {
       result = await this.aiProvidersService.callProvider(provider, prompt, text);
     } catch (error: any) {
-      throw new HttpException({ error: `AI provider error: ${error.message}` }, 502);
+      // Provider errors carry sensitive internals (API key prefix,
+      // upstream URLs, raw JSON). Log the full detail server-side, but
+      // return a generic body so no client ever renders it.
+      this.logger.error(
+        `AI provider call failed [${provider.type}/${provider.model}]: ${error?.message}`,
+      );
+      throw new HttpException(
+        { error: PROVIDER_UNAVAILABLE_MESSAGE, code: 'provider-failed' },
+        502,
+      );
     }
 
     // Log for fine-tuning (fire-and-forget)
@@ -106,9 +126,9 @@ export class RewriteService {
     // Check cache first
     const cached = await this.rewriteCache.get(userId, text, tone);
     if (cached) {
-      const sub = await this.subscriptionsService.findActiveByUserId(userId);
-      const dailyLimit = sub?.plan?.daily_limit ?? 0;
+      const ent = await this.subscriptionsService.resolveEntitlement(userId);
       const usageToday = await this.usageService.countTodayByUser(userId);
+      const dailyLimit = ent.dailyLimit;
       this.metrics.observe({
         outcome: REWRITE_OUTCOMES.ok,
         tone,
@@ -118,22 +138,9 @@ export class RewriteService {
       return { rewritten_text: cached, usage_today: usageToday, daily_limit: dailyLimit };
     }
 
-    // Check subscription & limits
-    const sub = await this.subscriptionsService.findActiveByUserId(userId);
-    if (!sub || !sub.plan) {
-      // No usable subscription/plan for this user. Mapped to
-      // user_not_found so cross-service Grafana joins (NestJS +
-      // Go) stay on the same enumerated outcome set.
-      this.metrics.observe({
-        outcome: REWRITE_OUTCOMES.userNotFound,
-        tone,
-        provider: 'n/a',
-        durationMs: Date.now() - startedAt,
-      });
-      throw new HttpException({ error: 'No active subscription', usage_today: 0, daily_limit: 0 }, 403);
-    }
-
-    const dailyLimit = sub.plan.daily_limit;
+    // Everyone resolves to at least Free (10/day) — no lockout on lapse.
+    const ent = await this.subscriptionsService.resolveEntitlement(userId);
+    const dailyLimit = ent.dailyLimit;
     const usageToday = await this.usageService.countTodayByUser(userId);
 
     if (dailyLimit !== -1 && usageToday >= dailyLimit) {

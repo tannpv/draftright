@@ -6,11 +6,13 @@ import 'package:provider/provider.dart';
 import 'package:draftright_mobile/services/auth_service.dart';
 import 'package:draftright_mobile/services/error_reporter.dart';
 
-/// True on iOS / iPadOS. Apple's App Store Guideline 4.8 requires that
-/// any third-party login service (Google, Facebook, TikTok, etc.) be
-/// paired with Sign in with Apple. Until we add Sign in with Apple,
-/// the cleanest path is to hide third-party social logins on Apple
-/// platforms so the guideline doesn't apply.
+/// True on iOS / iPadOS / macOS — where Sign in with Apple is
+/// available AND where App Store Guideline 4.8 requires it alongside
+/// any other third-party login.  Used to:
+///   - show the Apple button (Apple platforms only — the SDK is iOS/
+///     macOS-exclusive),
+///   - gate the order so Apple renders first on those platforms
+///     (Apple HIG: "place it first or most prominently").
 bool _isApplePlatform() {
   if (kIsWeb) return false;
   try {
@@ -54,31 +56,45 @@ class _SocialLoginButtonsState extends State<SocialLoginButtons> {
   @override
   Widget build(BuildContext context) {
     final auth = context.read<AuthService>();
-    final hideGoogle = _isApplePlatform();
+    final showApple = _isApplePlatform();
 
-    // On Apple platforms, hide Google entirely until Sign in with Apple
-    // is wired up. Apple's Guideline 4.8 forbids third-party social
-    // logins without an Apple-equivalent option. Once Sign in with Apple
-    // is added, both buttons can show on iOS/macOS.
-    if (hideGoogle) {
-      // Email/password is the only path on Apple platforms today.
-      // Returning an empty widget collapses the social section.
-      return const SizedBox.shrink();
-    }
+    final appleButton = _SocialButton(
+      // Use the system label per Apple HIG ("Sign in with Apple"),
+      // not "Continue with…", on Apple platforms.
+      label: 'Sign in with Apple',
+      icon: const Icon(Icons.apple, color: Colors.white, size: 22),
+      backgroundColor: Colors.black,
+      textColor: Colors.white,
+      isLoading: _loadingProvider == 'apple',
+      onPressed: _loadingProvider != null
+          ? null
+          : () => _handleSocial('apple', auth.signInWithApple),
+    );
+
+    final googleButton = _SocialButton(
+      label: 'Continue with Google',
+      icon: _googleIcon(),
+      backgroundColor: Colors.white,
+      textColor: Colors.black87,
+      borderColor: Colors.grey.shade300,
+      isLoading: _loadingProvider == 'google',
+      onPressed: _loadingProvider != null
+          ? null
+          : () => _handleSocial('google', auth.signInWithGoogle),
+    );
+
+    // Apple HIG: Sign in with Apple goes FIRST on Apple platforms so
+    // it satisfies Guideline 4.8 "as prominent" requirement.  On
+    // Android / desktop Linux + Windows we only show Google.
+    final buttons = showApple
+        ? <Widget>[appleButton, const SizedBox(height: 12), googleButton]
+        : <Widget>[googleButton];
 
     return Column(
       children: [
         const _Divider(),
         const SizedBox(height: 16),
-        _SocialButton(
-          label: 'Continue with Google',
-          icon: _googleIcon(),
-          backgroundColor: Colors.white,
-          textColor: Colors.black87,
-          borderColor: Colors.grey.shade300,
-          isLoading: _loadingProvider == 'google',
-          onPressed: _loadingProvider != null ? null : () => _handleSocial('google', auth.signInWithGoogle),
-        ),
+        ...buttons,
         // Facebook + TikTok buttons hidden for the App Store submission until
         // their respective SDK credentials are wired up. Restore by enabling
         // the buttons below — both `signInWithFacebook` and `signInWithTikTok`

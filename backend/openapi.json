@@ -1633,6 +1633,20 @@
         ]
       }
     },
+    "/auth/forgot-password": {
+      "post": {
+        "operationId": "AuthController_forgotPassword",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      }
+    },
     "/auth/login": {
       "post": {
         "operationId": "AuthController_login",
@@ -1712,6 +1726,20 @@
     "/auth/resend-verification": {
       "post": {
         "operationId": "AuthController_resendVerification",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/reset-password": {
+      "post": {
+        "operationId": "AuthController_resetPassword",
         "parameters": [],
         "responses": {
           "200": {
@@ -2064,6 +2092,25 @@
         ]
       }
     },
+    "/payment/subscription": {
+      "delete": {
+        "operationId": "PaymentController_cancelSubscription",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "payment"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/payment/webhook/casso": {
       "post": {
         "operationId": "PaymentController_cassoWebhook",
@@ -2282,6 +2329,17 @@
           "updates"
         ]
       }
+    },
+    "/webhooks/resend": {
+      "post": {
+        "operationId": "EmailWebhookController_handle",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
     }
   },
   "info": {
@@ -2317,9 +2375,13 @@
             "example": "vietqr",
             "enum": [
               "stripe",
+              "paypal",
+              "momo",
               "vietqr",
               "bank_transfer",
-              "lemonsqueezy"
+              "lemonsqueezy",
+              "apple_pay",
+              "google_pay"
             ]
           },
           "success_url": {

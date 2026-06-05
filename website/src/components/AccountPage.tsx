@@ -45,11 +45,14 @@ function formatRelative(iso: string): string {
 export default function AccountPage() {
   const [account, setAccount] = useState<Account | null>(null);
   const [loading, setLoading] = useState(true);
+  const [redirecting, setRedirecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [extTokens, setExtTokens] = useState<ExtensionToken[] | null>(null);
   const [revoking, setRevoking] = useState<string | null>(null);
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
+  const [cancelledMsg, setCancelledMsg] = useState<string | null>(null);
 
   useEffect(() => {
     const t = localStorage.getItem('dr_access_token');
@@ -73,12 +76,23 @@ export default function AccountPage() {
         headers: { Authorization: `Bearer ${t}` },
       });
       if (res.status === 401) {
+        // Session lost — bounce to login cleanly (no red error flash).
+        setRedirecting(true);
         localStorage.removeItem('dr_access_token');
         window.location.href = '/login?next=' + encodeURIComponent('/account');
         return;
       }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setAccount(await res.json());
+      const data = await res.json();
+      if (!data) {
+        // Valid token but no user (e.g. account deleted) — treat as
+        // logged out rather than showing "Account not found".
+        setRedirecting(true);
+        localStorage.removeItem('dr_access_token');
+        window.location.href = '/login?next=' + encodeURIComponent('/account');
+        return;
+      }
+      setAccount(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load account');
     } finally {
@@ -105,9 +119,44 @@ export default function AccountPage() {
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data: { url: string } = await res.json();
-      window.location.href = data.url;
+      // Open the provider portal in a new tab so the user keeps /account
+      // instead of being yanked off to an LS/Stripe-branded page.
+      window.open(data.url, '_blank', 'noopener,noreferrer');
+      setActionLoading(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load portal');
+      setActionLoading(null);
+    }
+  };
+
+  // In-app cancel — same DELETE /payment/subscription the mobile app uses.
+  // Cancels at the provider (Stripe / Lemon Squeezy) at period end; Pro is
+  // retained until expires_at. Card/plan changes still go via `manage` (portal).
+  const cancel = async () => {
+    if (!token) return;
+    setActionLoading('cancel');
+    setError(null);
+    try {
+      const res = await fetch(`${API}/payment/subscription`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error || body?.message || `HTTP ${res.status}`);
+      }
+      const data: { cancelled: boolean; expires_at: string | null } = await res.json();
+      const until = data.expires_at ? new Date(data.expires_at).toLocaleDateString() : null;
+      setCancelledMsg(
+        until
+          ? `Cancelled. You keep Pro until ${until}, then move to the Free plan.`
+          : 'Cancelled. You keep Pro until your current period ends.',
+      );
+      setConfirmingCancel(false);
+      void load(token);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not cancel subscription');
+    } finally {
       setActionLoading(null);
     }
   };
@@ -147,7 +196,7 @@ export default function AccountPage() {
     }
   };
 
-  if (loading) {
+  if (loading || redirecting) {
     return <p className="text-center text-gray-400">Loading…</p>;
   }
   if (!account) {
@@ -158,7 +207,9 @@ export default function AccountPage() {
   const isActive = !!sub && sub.status === 'active';
   const isPro = sub?.plan_name === 'Pro' && isActive;
   const isExpired = !!sub && sub.status !== 'active';
-  const isLemonSqueezy = sub?.store_type === 'lemonsqueezy';
+  // Only provider-billed subs can be cancelled / managed in-app.
+  const isCancellable = isActive && (sub?.store_type === 'stripe' || sub?.store_type === 'lemonsqueezy');
+  const accessUntil = sub?.expires_at ? new Date(sub.expires_at).toLocaleDateString() : null;
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -204,17 +255,53 @@ export default function AccountPage() {
           </p>
         )}
 
-        <div className="mt-6 flex gap-3">
-          {isActive ? (
-            isLemonSqueezy ? (
-              <button
-                onClick={manage}
-                disabled={actionLoading === 'manage'}
-                className="rounded-full bg-brand-400 px-6 py-2.5 text-sm font-semibold text-white hover:bg-brand-500 disabled:opacity-50"
-              >
-                {actionLoading === 'manage' ? 'Opening…' : 'Manage subscription'}
-              </button>
+        {cancelledMsg && (
+          <p className="mt-4 rounded-lg bg-brand-400/10 border border-brand-400/30 p-3 text-sm text-brand-300">
+            {cancelledMsg}
+          </p>
+        )}
+
+        <div className="mt-6 flex flex-wrap gap-3 items-center">
+          {isActive && !cancelledMsg ? (
+            confirmingCancel ? (
+              <>
+                <span className="text-sm text-gray-300">
+                  {accessUntil
+                    ? `You'll keep Pro until ${accessUntil}, then move to Free. Cancel?`
+                    : 'Pro continues until your period ends, then you move to Free. Cancel?'}
+                </span>
+                <button
+                  onClick={() => setConfirmingCancel(false)}
+                  className="rounded-full border border-brand-400 px-5 py-2.5 text-sm font-semibold text-brand-400 hover:bg-brand-400/10"
+                >
+                  Keep Pro
+                </button>
+                <button
+                  onClick={cancel}
+                  disabled={actionLoading === 'cancel'}
+                  className="rounded-full bg-red-500/90 px-5 py-2.5 text-sm font-semibold text-white hover:bg-red-500 disabled:opacity-50"
+                >
+                  {actionLoading === 'cancel' ? 'Cancelling…' : 'Confirm cancel'}
+                </button>
+              </>
+            ) : isCancellable ? (
+              <>
+                <button
+                  onClick={() => setConfirmingCancel(true)}
+                  className="rounded-full bg-brand-400 px-6 py-2.5 text-sm font-semibold text-white hover:bg-brand-500"
+                >
+                  Cancel subscription
+                </button>
+                <button
+                  onClick={manage}
+                  disabled={actionLoading === 'manage'}
+                  className="rounded-full border border-brand-400 px-6 py-2.5 text-sm font-semibold text-brand-400 hover:bg-brand-400/10 disabled:opacity-50"
+                >
+                  {actionLoading === 'manage' ? 'Opening…' : 'Billing & invoices ↗'}
+                </button>
+              </>
             ) : (
+              // VietQR / bank / admin-granted: no provider portal to cancel through.
               <button
                 onClick={subscribe}
                 className="rounded-full border border-brand-400 px-6 py-2.5 text-sm font-semibold text-brand-400 hover:bg-brand-400/10"
@@ -222,18 +309,24 @@ export default function AccountPage() {
                 Change plan
               </button>
             )
-          ) : (
+          ) : !isActive ? (
             <button
               onClick={subscribe}
               className="rounded-full bg-brand-400 px-6 py-2.5 text-sm font-semibold text-white hover:bg-brand-500 disabled:opacity-50"
             >
               {isExpired ? 'Renew subscription' : 'Subscribe to Pro'}
             </button>
-          )}
+          ) : null}
           <a href="/download" className="rounded-full border border-brand-400 px-6 py-2.5 text-sm font-semibold text-brand-400 hover:bg-brand-400/10">
             Download app
           </a>
         </div>
+
+        {isCancellable && !confirmingCancel && !cancelledMsg && (
+          <p className="mt-3 text-xs text-gray-500">
+            Billing &amp; invoices open our payment provider in a new tab for receipts and card changes.
+          </p>
+        )}
 
         {error && <p className="mt-3 text-sm text-red-400">{error}</p>}
       </div>
