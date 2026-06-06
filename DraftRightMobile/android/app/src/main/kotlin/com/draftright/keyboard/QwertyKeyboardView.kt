@@ -37,9 +37,10 @@ class QwertyKeyboardView(
     private val ROW_HEIGHT_DP = 48
     private val KEY_MARGIN_DP = 3
     private val KEY_RADIUS_DP = 5
-    // Inset around special-key vector icons inside the key bounds, so the glyph
-    // matches the optical size of the letter keys rather than filling the key.
-    private val KEY_ICON_PADDING_DP = 13
+    // Small inset around special-key vector icons. Must stay below the icon's
+    // 24dp intrinsic size on the narrowest key (the globe, weight 1.0) — too
+    // large and CENTER_INSIDE scales the glyph down to a dot.
+    private val KEY_ICON_PADDING_DP = 6
 
     // Key-press preview popup (the magnified character shown above a pressed
     // key). Sized to match the larger, easier-to-read preview on stock
