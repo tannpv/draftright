@@ -27,8 +27,6 @@ interface KeyboardActionListener {
     fun onSpaceSwipe(direction: Int) {}
 }
 
-enum class ShiftState { OFF, SINGLE, CAPS_LOCK }
-
 class QwertyKeyboardView(
     context: Context,
     private val listener: KeyboardActionListener
@@ -59,6 +57,20 @@ class QwertyKeyboardView(
             shiftState = ShiftState.OFF
             buildKeyboard()
         }
+
+    /** Current shift state, so the IME can feed it back into auto-cap. */
+    val currentShiftState: ShiftState get() = shiftState
+
+    /**
+     * Apply an auto-capitalization decision from the IME (see [AutoCapitalize]).
+     * Only rebuilds when the state actually changes, to avoid flicker on every
+     * cursor update, and only on the alpha layer so a symbol layer is untouched.
+     */
+    fun applyAutoShift(state: ShiftState) {
+        if (currentLayer != 0 || state == shiftState) return
+        shiftState = state
+        buildKeyboard()
+    }
 
     private val keyColor: Int
     private val keyColorSpecial: Int
