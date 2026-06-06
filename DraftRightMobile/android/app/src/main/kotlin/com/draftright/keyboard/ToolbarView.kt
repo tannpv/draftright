@@ -30,7 +30,8 @@ class ToolbarView(
         // which previously left the tinted tone icons invisible against the bar.
         val isDark = KeyboardTheme.isDark(context)
         val barBgColor = if (isDark) Color.parseColor("#1B1B1F") else Color.parseColor("#ECEFF1")
-        val iconColor = if (isDark) Color.WHITE else Color.parseColor("#212121")
+        // Tone icons use the DraftRight brand blue (matches the website primary).
+        val iconColor = Color.parseColor(KeyboardTheme.BRAND_BLUE)
         setBackgroundColor(barBgColor)
         val dp44 = dpToPx(44)
         layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dp44)
