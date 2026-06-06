@@ -26,7 +26,12 @@ class ToolbarView(
     init {
         orientation = HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
-        setBackgroundColor(resolveAttrColor(android.R.attr.colorBackground))
+        // Explicit colors — theme attrs are unreliable inside InputMethodService,
+        // which previously left the tinted tone icons invisible against the bar.
+        val isDark = KeyboardTheme.isDark(context)
+        val barBgColor = if (isDark) Color.parseColor("#1B1B1F") else Color.parseColor("#ECEFF1")
+        val iconColor = if (isDark) Color.WHITE else Color.parseColor("#212121")
+        setBackgroundColor(barBgColor)
         val dp44 = dpToPx(44)
         layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dp44)
         setPadding(dpToPx(4), 0, dpToPx(4), 0)
@@ -43,7 +48,7 @@ class ToolbarView(
 
         // Each tone renders its Material vector icon (Tone.iconRes) tinted to the
         // theme text color — see KeyIcons for the name -> drawable mapping.
-        val iconTint = ColorStateList.valueOf(resolveAttrColor(android.R.attr.textColorPrimary))
+        val iconTint = ColorStateList.valueOf(iconColor)
         for (tone in Tone.values()) {
             val btn = ImageView(context).apply {
                 setImageResource(KeyIcons.resolve(tone.iconRes))
@@ -114,9 +119,4 @@ class ToolbarView(
 
     private fun dpToPx(dp: Int): Int =
         TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, dp.toFloat(), resources.displayMetrics).toInt()
-
-    private fun resolveAttrColor(attr: Int): Int {
-        val tv = TypedValue()
-        return if (context.theme.resolveAttribute(attr, tv, true)) tv.data else Color.WHITE
-    }
 }
