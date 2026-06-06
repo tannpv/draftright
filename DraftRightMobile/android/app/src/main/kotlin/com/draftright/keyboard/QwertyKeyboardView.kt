@@ -82,6 +82,7 @@ class QwertyKeyboardView(
     private val keyColorPressed: Int
     private val keyTextColor: Int
     private val keyboardBgColor: Int
+    private val brandColor = Color.parseColor(KeyboardTheme.BRAND_BLUE)
 
     init {
         orientation = VERTICAL
@@ -175,10 +176,15 @@ class QwertyKeyboardView(
         // Material vector icon; everything else stays a text key.
         val iconRes = iconNameForKey(code)?.let { KeyIcons.resolve(it) } ?: 0
 
+        // Functional keys (shift, ?123/#+=/ABC layer switch, globe, backspace,
+        // enter) use the brand blue; letters and space keep the neutral color.
+        val isFunctionTextKey = code == SpecialKeys.SYMBOLS ||
+            code == SpecialKeys.SYMBOLS2 || code == SpecialKeys.ALPHA
+
         val keyView: View = if (iconRes != 0) {
             ImageView(context).apply {
                 setImageResource(iconRes)
-                imageTintList = ColorStateList.valueOf(keyTextColor)
+                imageTintList = ColorStateList.valueOf(brandColor)
                 scaleType = ImageView.ScaleType.CENTER_INSIDE
                 val pad = dpToPx(KEY_ICON_PADDING_DP)
                 setPadding(pad, pad, pad, pad)
@@ -190,7 +196,7 @@ class QwertyKeyboardView(
             TextView(context).apply {
                 text = displayLabel
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, textSize)
-                setTextColor(keyTextColor)
+                setTextColor(if (isFunctionTextKey) brandColor else keyTextColor)
                 gravity = Gravity.CENTER
                 background = bg
                 isClickable = true
