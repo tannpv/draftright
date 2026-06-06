@@ -45,7 +45,6 @@ class QwertyKeyboardView(
 
     private var shiftState = ShiftState.OFF
     private var currentLayer = 0 // 0=alpha, 1=symbols1, 2=symbols2
-    private var lastShiftTap = 0L
 
     private val handler = Handler(Looper.getMainLooper())
     private var backspaceRepeating = false
@@ -158,7 +157,7 @@ class QwertyKeyboardView(
             isCharKey(code) && currentLayer == 0 && shiftState != ShiftState.OFF ->
                 keyDef.label.uppercase(languagePack.locale)
             isSpaceKey(code) -> languagePack.displayName
-            code == SpecialKeys.SHIFT && shiftState == ShiftState.CAPS_LOCK -> "⬆️"
+            code == SpecialKeys.SHIFT -> shiftState.glyph()
             else -> keyDef.label
         }
 
@@ -281,17 +280,8 @@ class QwertyKeyboardView(
             code == SpecialKeys.BACKSPACE -> listener.onBackspace()
             code == SpecialKeys.ENTER -> listener.onEnter()
             code == SpecialKeys.SHIFT -> {
-                val now = System.currentTimeMillis()
-                if (now - lastShiftTap < SpecialKeys.DOUBLE_TAP_MS) {
-                    shiftState = if (shiftState == ShiftState.CAPS_LOCK) ShiftState.OFF else ShiftState.CAPS_LOCK
-                } else {
-                    shiftState = when (shiftState) {
-                        ShiftState.OFF -> ShiftState.SINGLE
-                        ShiftState.SINGLE -> ShiftState.OFF
-                        ShiftState.CAPS_LOCK -> ShiftState.OFF
-                    }
-                }
-                lastShiftTap = now
+                // Single-tap cycles OFF -> SINGLE -> CAPS_LOCK -> OFF (Samsung-style).
+                shiftState = shiftState.nextOnTap()
                 buildKeyboard()
             }
             code == SpecialKeys.SYMBOLS -> {
