@@ -21,6 +21,9 @@ public struct JapaneseLanguagePack: LanguagePack {
 
     public init() {}
 
+    /// Rōmaji→kana composer; its kana buffer drives the candidate engine.
+    public func makeComposer() -> Composer? { RomajiKanaComposer() }
+
     public func makeCandidateEngine() -> CandidateEngine? {
         let dict = JapanesePackResolver.loadOrFallback(
             appGroupContainer: Self.appGroupContainer,
