@@ -12,7 +12,7 @@
 // suggestions appear in-app with no app update.
 
 export type InputMethod = 'composition' | 'candidate' | 'passthrough';
-export type EngineKind = 'composition' | 'rime' | 'none';
+export type EngineKind = 'composition' | 'rime' | 'dictionary' | 'none';
 
 export interface LanguagePack {
   url: string;
