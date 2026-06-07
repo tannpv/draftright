@@ -50,6 +50,15 @@ class TelexCorpusTest {
         "huouw" to "hươu",
         "nguoiwf" to "người",
         "muonwj" to "mượn",
+        // Flexible modifier after trailing consonants (salvaged from the
+        // superseded telex-circumflex branch) — both spellings reach the vowel.
+        "nguyeexn" to "nguyễn",
+        "nguyenex" to "nguyễn",
+        "nguyene" to "nguyên",
+        "vietej" to "việt",
+        "kae" to "kae",       // no false circumflex when no matching vowel
+        "bee" to "bê",
+        "beee" to "bee",      // re-type cancels ê back to e + literal
     )
 
     @Test fun `telex corpus`() {
