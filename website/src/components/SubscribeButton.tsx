@@ -54,7 +54,7 @@ export default function SubscribeButton() {
         {loading ? 'Opening checkout…' : 'Subscribe to Pro'}
       </button>
       {error && <p className="mt-2 text-xs text-red-400 text-center">{error}</p>}
-      <p className="mt-3 text-center text-xs text-gray-500">Card or PayPal · Cancel anytime</p>
+      <p className="mt-3 text-center text-xs text-gray-500">Card or VietQR · Cancel anytime</p>
     </div>
   );
 }
