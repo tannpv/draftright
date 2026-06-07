@@ -1,0 +1,51 @@
+import Foundation
+
+/// Small built-in reading→kanji seed so Japanese works the moment it's enabled,
+/// before the full downloadable dictionary pack lands. Hand-curated common
+/// words; NOT GPL (SKK-JISYO is GPL — the full pack will use a permissive
+/// source, Mozc/jawiki, delivered as a download). Keep ASCII-free + compact.
+public enum JapaneseSeedDictionary {
+    public static let dict: [String: [String]] = [
+        "にほん": ["日本"],
+        "にほんご": ["日本語"],
+        "かんじ": ["漢字", "幹事", "感じ"],
+        "ひらがな": ["平仮名"],
+        "かたかな": ["片仮名"],
+        "わたし": ["私"],
+        "あなた": ["貴方"],
+        "ともだち": ["友達"],
+        "がっこう": ["学校"],
+        "せんせい": ["先生"],
+        "がくせい": ["学生"],
+        "ほん": ["本"],
+        "みず": ["水"],
+        "き": ["木", "気"],
+        "つき": ["月"],
+        "ひと": ["人"],
+        "くに": ["国"],
+        "ねこ": ["猫"],
+        "いぬ": ["犬"],
+        "さかな": ["魚"],
+        "やま": ["山"],
+        "かわ": ["川"],
+        "うみ": ["海"],
+        "そら": ["空"],
+        "あめ": ["雨"],
+        "はな": ["花", "鼻"],
+        "たべる": ["食べる"],
+        "のむ": ["飲む"],
+        "みる": ["見る"],
+        "いく": ["行く"],
+        "くる": ["来る"],
+        "いう": ["言う"],
+        "ありがとう": ["有難う"],
+        "なまえ": ["名前"],
+        "でんわ": ["電話"],
+        "じかん": ["時間"],
+        "でんしゃ": ["電車"],
+        "とうきょう": ["東京"],
+        "おおさか": ["大阪"],
+        "きょう": ["今日", "京"],
+        "にちようび": ["日曜日"],
+    ]
+}
