@@ -153,15 +153,23 @@ public final class TelexComposer: Composer {
     }
 
     static func applyHornOrBreve(_ buf: String, wIsUpper: Bool) -> String? {
-        // uow special: if buffer ends with "uo" (plain), produce "ươ".
-        if buf.count >= 2 {
-            let chars = Array(buf)
-            let twoBack = chars[chars.count - 2]
-            let oneBack = chars[chars.count - 1]
-            if Character(twoBack.lowercased()) == "u" && Character(oneBack.lowercased()) == "o" {
-                let u2: Character = (twoBack.isUppercase || wIsUpper) ? "Ư" : "ư"
-                let o2: Character = (oneBack.isUppercase || wIsUpper) ? "Ơ" : "ơ"
-                return String(buf.dropLast(2)) + String(u2) + String(o2)
+        let chars = Array(buf)
+        // A "uo" pair anywhere in the trailing vowel cluster becomes "ươ" — even
+        // when another vowel follows it: "ruo"+w → "rươ", "ruou"+w → "rươu"
+        // (rượu), "nguoi"+w → "ngươi" (người), "huou"+w → "hươu". The single-
+        // vowel rule below would otherwise horn the trailing vowel instead.
+        if let cluster = findLastVowelCluster(chars) {
+            var i = cluster.start
+            while i < cluster.end {
+                if Character(chars[i].lowercased()) == "u" && Character(chars[i + 1].lowercased()) == "o" {
+                    let u2: Character = (chars[i].isUppercase || wIsUpper) ? "Ư" : "ư"
+                    let o2: Character = (chars[i + 1].isUppercase || wIsUpper) ? "Ơ" : "ơ"
+                    var nc = chars
+                    nc[i] = u2
+                    nc[i + 1] = o2
+                    return String(nc)
+                }
+                i += 1
             }
         }
         guard let last = buf.last else { return nil }
