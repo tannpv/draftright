@@ -98,20 +98,30 @@ def has_kanji(s):
 pairs.sort(key=lambda x: (x[0], 0 if has_kanji(x[1]) else 1, x[2]))
 
 # Dedupe: for each reading keep candidates in cost order, no duplicates.
+# Track each reading's best (lowest) cost so we can keep only the most common.
 from collections import defaultdict
 grouped = defaultdict(list)
 seen = defaultdict(set)
+best_cost = {}
 for reading, surface, cost in pairs:
     if surface not in seen[reading]:
         seen[reading].add(surface)
         grouped[reading].append(surface)
+        if reading not in best_cost or cost < best_cost[reading]:
+            best_cost[reading] = cost
+
+# Cap to the most frequent readings (lowest best-cost). A keyboard needs common
+# words, not 700k rare proper nouns — keeps the pack small (~few MB) so it loads
+# fast on language-switch and fits the iOS extension memory budget.
+MAX_READINGS = 50000
+kept = sorted(grouped.keys(), key=lambda r: best_cost[r])[:MAX_READINGS]
 
 with open(dst, 'w', encoding='utf-8') as out:
-    for reading in sorted(grouped.keys()):
+    for reading in sorted(kept):
         candidates = ','.join(grouped[reading][:8])   # cap at 8 per reading
         out.write(f'{reading}\t{candidates}\n')
 
-print(f'  {len(grouped)} unique readings → {sum(len(v) for v in grouped.values())} candidates')
+print(f'  {len(grouped)} readings found → kept top {len(kept)} by frequency')
 PYEOF
 
 echo "[3/4] Writing pack to $PACK_PATH..."
