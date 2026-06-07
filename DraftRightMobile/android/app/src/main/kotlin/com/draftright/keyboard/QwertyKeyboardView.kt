@@ -1,7 +1,6 @@
 package com.draftright.keyboard
 
 import android.content.Context
-import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -11,7 +10,6 @@ import android.util.TypedValue
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
-import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.PopupWindow
 import android.widget.TextView
@@ -29,6 +27,8 @@ interface KeyboardActionListener {
     fun onSpaceSwipe(direction: Int) {}
 }
 
+enum class ShiftState { OFF, SINGLE, CAPS_LOCK }
+
 class QwertyKeyboardView(
     context: Context,
     private val listener: KeyboardActionListener
@@ -37,10 +37,6 @@ class QwertyKeyboardView(
     private val ROW_HEIGHT_DP = 48
     private val KEY_MARGIN_DP = 3
     private val KEY_RADIUS_DP = 5
-    // Small inset around special-key vector icons. Must stay below the icon's
-    // 24dp intrinsic size on the narrowest key (the globe, weight 1.0) — too
-    // large and CENTER_INSIDE scales the glyph down to a dot.
-    private val KEY_ICON_PADDING_DP = 6
 
     // Key-press preview popup (the magnified character shown above a pressed
     // key). Sized to match the larger, easier-to-read preview on stock
@@ -51,6 +47,7 @@ class QwertyKeyboardView(
 
     private var shiftState = ShiftState.OFF
     private var currentLayer = 0 // 0=alpha, 1=symbols1, 2=symbols2
+    private var lastShiftTap = 0L
 
     private val handler = Handler(Looper.getMainLooper())
     private var backspaceRepeating = false
@@ -63,26 +60,11 @@ class QwertyKeyboardView(
             buildKeyboard()
         }
 
-    /** Current shift state, so the IME can feed it back into auto-cap. */
-    val currentShiftState: ShiftState get() = shiftState
-
-    /**
-     * Apply an auto-capitalization decision from the IME (see [AutoCapitalize]).
-     * Only rebuilds when the state actually changes, to avoid flicker on every
-     * cursor update, and only on the alpha layer so a symbol layer is untouched.
-     */
-    fun applyAutoShift(state: ShiftState) {
-        if (currentLayer != 0 || state == shiftState) return
-        shiftState = state
-        buildKeyboard()
-    }
-
     private val keyColor: Int
     private val keyColorSpecial: Int
     private val keyColorPressed: Int
     private val keyTextColor: Int
     private val keyboardBgColor: Int
-    private val brandColor = Color.parseColor(KeyboardTheme.BRAND_BLUE)
 
     init {
         orientation = VERTICAL
@@ -164,6 +146,7 @@ class QwertyKeyboardView(
             isCharKey(code) && currentLayer == 0 && shiftState != ShiftState.OFF ->
                 keyDef.label.uppercase(languagePack.locale)
             isSpaceKey(code) -> languagePack.displayName
+            code == SpecialKeys.SHIFT && shiftState == ShiftState.CAPS_LOCK -> "⬆️"
             else -> keyDef.label
         }
 
@@ -172,37 +155,15 @@ class QwertyKeyboardView(
             else -> if (isSpaceKey(code)) 12f else 18f
         }
 
-        // Special keys (shift / backspace / enter / globe) render a tinted
-        // Material vector icon; everything else stays a text key.
-        val iconRes = iconNameForKey(code)?.let { KeyIcons.resolve(it) } ?: 0
-
-        // Functional keys (shift, ?123/#+=/ABC layer switch, globe, backspace,
-        // enter) use the brand blue; letters and space keep the neutral color.
-        val isFunctionTextKey = code == SpecialKeys.SYMBOLS ||
-            code == SpecialKeys.SYMBOLS2 || code == SpecialKeys.ALPHA
-
-        val keyView: View = if (iconRes != 0) {
-            ImageView(context).apply {
-                setImageResource(iconRes)
-                imageTintList = ColorStateList.valueOf(brandColor)
-                scaleType = ImageView.ScaleType.CENTER_INSIDE
-                val pad = dpToPx(KEY_ICON_PADDING_DP)
-                setPadding(pad, pad, pad, pad)
-                background = bg
-                isClickable = true
-                isFocusable = true
-            }
-        } else {
-            TextView(context).apply {
-                text = displayLabel
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, textSize)
-                setTextColor(if (isFunctionTextKey) brandColor else keyTextColor)
-                gravity = Gravity.CENTER
-                background = bg
-                isClickable = true
-                isFocusable = true
-                typeface = Typeface.DEFAULT
-            }
+        val tv = TextView(context).apply {
+            text = displayLabel
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, textSize)
+            setTextColor(keyTextColor)
+            gravity = Gravity.CENTER
+            background = bg
+            isClickable = true
+            isFocusable = true
+            typeface = Typeface.DEFAULT
         }
 
         var longPressFired = false
@@ -215,7 +176,7 @@ class QwertyKeyboardView(
             if (accentChars != null && accentChars.isNotEmpty()) {
                 accentPopup?.dismiss()
                 val options = listOf(keyDef.label[0]) + accentChars
-                val popup = AccentPopupView(context, keyView, options) { picked ->
+                val popup = AccentPopupView(context, tv, options) { picked ->
                     val out = if (currentLayer == 0 && shiftState != ShiftState.OFF) {
                         picked.toString().uppercase(languagePack.locale)
                     } else picked.toString()
@@ -233,7 +194,7 @@ class QwertyKeyboardView(
 
         var spaceDownX = 0f
         var spaceSwiped = false
-        keyView.setOnTouchListener { v, event ->
+        tv.setOnTouchListener { v, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
                     bg.setColor(keyColorPressed)
@@ -286,19 +247,7 @@ class QwertyKeyboardView(
             }
         }
 
-        return keyView
-    }
-
-    /**
-     * Logical Material-icon name for a special key, or null for text keys. The
-     * shift key's icon tracks its state (see [ShiftState.iconName]).
-     */
-    private fun iconNameForKey(code: Int): String? = when (code) {
-        SpecialKeys.SHIFT -> shiftState.iconName()
-        SpecialKeys.BACKSPACE -> "backspace"
-        SpecialKeys.ENTER -> "keyboard_return"
-        SpecialKeys.GLOBE -> "language"
-        else -> null
+        return tv
     }
 
     private fun handleKeyPress(keyDef: KeyDef) {
@@ -320,8 +269,17 @@ class QwertyKeyboardView(
             code == SpecialKeys.BACKSPACE -> listener.onBackspace()
             code == SpecialKeys.ENTER -> listener.onEnter()
             code == SpecialKeys.SHIFT -> {
-                // Single-tap cycles OFF -> SINGLE -> CAPS_LOCK -> OFF (Samsung-style).
-                shiftState = shiftState.nextOnTap()
+                val now = System.currentTimeMillis()
+                if (now - lastShiftTap < SpecialKeys.DOUBLE_TAP_MS) {
+                    shiftState = if (shiftState == ShiftState.CAPS_LOCK) ShiftState.OFF else ShiftState.CAPS_LOCK
+                } else {
+                    shiftState = when (shiftState) {
+                        ShiftState.OFF -> ShiftState.SINGLE
+                        ShiftState.SINGLE -> ShiftState.OFF
+                        ShiftState.CAPS_LOCK -> ShiftState.OFF
+                    }
+                }
+                lastShiftTap = now
                 buildKeyboard()
             }
             code == SpecialKeys.SYMBOLS -> {

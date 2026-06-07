@@ -1,8 +1,11 @@
 import UIKit
 import DraftRightKeyboardCore
 
-// ShiftState now lives in DraftRightKeyboardCore (with the tap cycle + icon
-// mapping) so its logic is unit-testable without UIKit.
+// MARK: - Key model
+
+enum ShiftState {
+    case off, single, capsLock
+}
 
 // MARK: - Delegate
 
@@ -41,17 +44,7 @@ final class QwertyKeyboardView: UIView {
 
     private var shiftState: ShiftState = .off
     private var currentLayer = 0 // 0=alpha, 1=symbols1, 2=symbols2
-
-    /// Current shift state, so the controller can feed it back into auto-cap.
-    var currentShiftState: ShiftState { shiftState }
-
-    /// Apply an auto-capitalization decision (see AutoCapitalize). Rebuilds only
-    /// on change and only on the alpha layer, to avoid flicker on cursor moves.
-    func applyAutoShift(_ state: ShiftState) {
-        guard currentLayer == 0, state != shiftState else { return }
-        shiftState = state
-        buildKeyboard()
-    }
+    private var lastShiftTap: TimeInterval = 0
 
     private var backspaceTimer: Timer?
 
@@ -201,42 +194,32 @@ final class QwertyKeyboardView: UIView {
         }
         button.backgroundColor = bgColor
 
-        // Special keys (shift / backspace / enter / globe) render a tinted SF
-        // Symbol; everything else stays a text key.
-        if let symbol = symbolName(for: code) {
-            let config = UIImage.SymbolConfiguration(pointSize: 20, weight: .regular)
-            button.setImage(UIImage(systemName: symbol, withConfiguration: config), for: .normal)
-            button.tintColor = .draftRightBrand
-            button.setTitle(nil, for: .normal)
+        // Display label
+        let displayLabel: String
+        if isSpace(code) {
+            // Show the active language on the space bar so the user can see
+            // which one the globe just switched to.
+            displayLabel = languagePack.displayName
+        } else if code == SpecialKeys.shift && shiftState == .capsLock {
+            displayLabel = "\u{2B06}\u{FE0F}" // ⬆️ with variation selector
+        } else if isChar(code) && currentLayer == 0 && shiftState != .off {
+            displayLabel = keyDef.label.uppercased()
         } else {
-            let displayLabel: String
-            if isSpace(code) {
-                // Show the active language on the space bar so the user can see
-                // which one the globe just switched to.
-                displayLabel = languagePack.displayName
-            } else if isChar(code) && currentLayer == 0 && shiftState != .off {
-                displayLabel = keyDef.label.uppercased()
-            } else {
-                displayLabel = keyDef.label
-            }
-
-            let fontSize: CGFloat
-            if code == SpecialKeys.symbols || code == SpecialKeys.symbols2 || code == SpecialKeys.alpha {
-                fontSize = 12
-            } else if isSpace(code) {
-                fontSize = 14
-            } else {
-                fontSize = 18
-            }
-
-            // ?123 / #+= / ABC layer-switch keys use the brand blue too.
-            let isFunctionTextKey = code == SpecialKeys.symbols ||
-                code == SpecialKeys.symbols2 || code == SpecialKeys.alpha
-            button.setImage(nil, for: .normal)
-            button.setTitle(displayLabel, for: .normal)
-            button.setTitleColor(isFunctionTextKey ? .draftRightBrand : keyTextColor, for: .normal)
-            button.titleLabel?.font = .systemFont(ofSize: fontSize)
+            displayLabel = keyDef.label
         }
+
+        let fontSize: CGFloat
+        if code == SpecialKeys.symbols || code == SpecialKeys.symbols2 || code == SpecialKeys.alpha {
+            fontSize = 12
+        } else if isSpace(code) {
+            fontSize = 14
+        } else {
+            fontSize = 18
+        }
+
+        button.setTitle(displayLabel, for: .normal)
+        button.setTitleColor(keyTextColor, for: .normal)
+        button.titleLabel?.font = .systemFont(ofSize: fontSize)
         button.accessibilityIdentifier = accessibilityId(for: keyDef)
 
         let wrapper = KeyDefWrapper(keyDef: keyDef, isSpecial: isSpecial, isShiftActive: isShiftActive, normalColor: bgColor)
@@ -256,18 +239,6 @@ final class QwertyKeyboardView: UIView {
         }
 
         return button
-    }
-
-    /// SF Symbol for a special key, or nil for text keys. The shift symbol
-    /// tracks its state (see ShiftState.iconName).
-    private func symbolName(for code: Int) -> String? {
-        switch code {
-        case SpecialKeys.shift:     return shiftState.iconName
-        case SpecialKeys.backspace: return "delete.left"
-        case SpecialKeys.enter:     return "return"
-        case SpecialKeys.globe:     return "globe"
-        default:                    return nil
-        }
     }
 
     /// Stable accessibility identifiers so UI tests can locate DraftRight's
@@ -410,8 +381,17 @@ final class QwertyKeyboardView: UIView {
             delegate?.keyboardDidEnter()
 
         case SpecialKeys.shift:
-            // Single-tap cycles off -> single -> capsLock -> off (Samsung-style).
-            shiftState = shiftState.nextOnTap()
+            let now = Date.timeIntervalSinceReferenceDate
+            if now - lastShiftTap < 0.3 {
+                shiftState = (shiftState == .capsLock) ? .off : .capsLock
+            } else {
+                switch shiftState {
+                case .off:      shiftState = .single
+                case .single:   shiftState = .off
+                case .capsLock: shiftState = .off
+                }
+            }
+            lastShiftTap = now
             buildKeyboard()
 
         case SpecialKeys.symbols:

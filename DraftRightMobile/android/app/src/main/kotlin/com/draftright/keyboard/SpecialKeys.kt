@@ -16,6 +16,9 @@ object SpecialKeys {
     // picker fires.
     const val LONG_PRESS_MS = 300L
 
+    // Two shift taps within this window toggle CAPS LOCK.
+    const val DOUBLE_TAP_MS = 300L
+
     // Horizontal travel on the space bar (px) that triggers a language
     // cycle. ~80 dp at 420 dpi ≈ 168 px. Tuned so a deliberate horizontal
     // drag fires but a tap or vertical jitter does not.

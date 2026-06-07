@@ -99,35 +99,6 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
         // Syncing here ensures the keyboard always matches current settings
         // without destroying and recreating the entire view.
         syncControllerWithSettings()
-        // Samsung parity: auto-capitalize at the start of the new field.
-        updateAutoCaps()
-    }
-
-    override fun onUpdateSelection(
-        oldSelStart: Int, oldSelEnd: Int,
-        newSelStart: Int, newSelEnd: Int,
-        candidatesStart: Int, candidatesEnd: Int,
-    ) {
-        super.onUpdateSelection(
-            oldSelStart, oldSelEnd, newSelStart, newSelEnd, candidatesStart, candidatesEnd,
-        )
-        // The cursor moved (a letter committed, Enter, or a manual tap). Re-read
-        // the platform caps mode so shift tracks sentence boundaries.
-        updateAutoCaps()
-    }
-
-    /**
-     * Re-derive the shift state from the editor's caps mode and push it to the
-     * keyboard view (Samsung-style auto-capitalization). Skipped mid-Telex
-     * composition so it never flips shift while a syllable is being built.
-     */
-    private fun updateAutoCaps() {
-        val ic = currentInputConnection ?: return
-        val ei = currentInputEditorInfo ?: return
-        if (controller?.composer?.currentComposingText()?.isNotEmpty() == true) return
-        val kb = keyboard ?: return
-        val capsMode = ic.getCursorCapsMode(ei.inputType)
-        kb.applyAutoShift(AutoCapitalize.resolve(kb.currentShiftState, capsMode))
     }
 
     override fun onFinishInput() {
