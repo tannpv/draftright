@@ -1,8 +1,12 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
+import { ConfigModule } from '@nestjs/config';
+import { RequestIdMiddleware } from './common/request-id.middleware';
+import { MetricsModule } from './common/metrics/metrics.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { databaseConfig } from './config/database.config';
+import { validateEnv } from './config/env.schema';
 import { HealthModule } from './health/health.module';
 import { UsersModule } from './users/users.module';
 import { PlansModule } from './plans/plans.module';
@@ -23,6 +27,14 @@ import { ImePacksModule } from './ime-packs/ime-packs.module';
 
 @Module({
   imports: [
+    // Typed, validated env config. Boot fails fast (with every offending
+    // field listed) when an env var is missing or malformed. Standard
+    // S14 in docs/architecture-standards.md.
+    ConfigModule.forRoot({
+      isGlobal: true,
+      cache: true,
+      validate: validateEnv,
+    }),
     TypeOrmModule.forRoot(databaseConfig()),
     // Global per-IP rate limit, applied via APP_GUARD below. The anon endpoints
     // (/bug-reports, /feedback, /errors) further tighten this with @Throttle()
@@ -50,6 +62,7 @@ import { ImePacksModule } from './ime-packs/ime-packs.module';
     BugReportsModule,
     ExtractionModule,
     ImePacksModule,
+    MetricsModule,
   ],
   providers: [
     // Global guard so ThrottlerModule's limits apply to every controller
@@ -58,4 +71,18 @@ import { ImePacksModule } from './ime-packs/ime-packs.module';
     { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  /**
+   * Plumb the request-id middleware over every route so:
+   *   - downstream handlers can read `req.requestId` for log enrichment,
+   *   - the global exception filter stamps it onto error envelopes,
+   *   - clients see `X-Request-Id` on every response for support tickets.
+   *
+   * Caddy forwards any incoming X-Request-Id verbatim; when present,
+   * the middleware honours it so the id stays consistent across the
+   * edge → backend → Go service chain.
+   */
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(RequestIdMiddleware).forRoutes('*');
+  }
+}
