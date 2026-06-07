@@ -3,7 +3,9 @@ package com.draftright.keyboard.lang
 import com.draftright.keyboard.KeyDef
 import com.draftright.keyboard.LanguagePack
 import com.draftright.keyboard.ime.CandidateEngine
+import com.draftright.keyboard.ime.ImeContext
 import com.draftright.keyboard.ime.JapaneseDictionaryEngine
+import com.draftright.keyboard.ime.JapanesePackResolver
 import com.draftright.keyboard.ime.JapaneseSeedDictionary
 import java.util.Locale
 
@@ -24,6 +26,16 @@ object JapaneseLanguagePack : LanguagePack {
     override val symbols2Rows: List<List<KeyDef>> = QwertyLayout.symbols2Rows
     override val longPressAccents: Map<Char, List<Char>> = emptyMap()
 
-    override fun candidateEngine(): CandidateEngine =
-        JapaneseDictionaryEngine(JapaneseSeedDictionary.dict)
+    /** Matches the backend manifest's pack URL prefix. */
+    private const val PACK_ID_PREFIX = "draftright-ime-ja"
+
+    override fun candidateEngine(): CandidateEngine {
+        val ctx = ImeContext.appOrNull()
+        val dict = if (ctx != null) {
+            JapanesePackResolver.loadOrFallback(ctx, PACK_ID_PREFIX) { JapaneseSeedDictionary.dict }
+        } else {
+            JapaneseSeedDictionary.dict
+        }
+        return JapaneseDictionaryEngine(dict)
+    }
 }

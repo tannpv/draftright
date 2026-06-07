@@ -37,10 +37,16 @@ export class ImePacksService {
       id: 'ja',
       displayName: '日本語',
       inputMethod: 'candidate',
-      engine: 'rime',
+      engine: 'dictionary',   // JapaneseDictionaryEngine (pivot from librime)
       layout: 'romaji',
       bundled: false,
-      pack: { url: `${PACK_BASE}/draftright-ime-ja-v1.pack`, version: 1, sizeBytes: 0, sha256: '', minEngineVersion: 1 },
+      pack: {
+        url: `${PACK_BASE}/draftright-ime-ja-v1.pack`,
+        version: 1,
+        sizeBytes: 16908861,
+        sha256: 'c86639dc0601330a5e936fe0319e3cf8e4bea68def96d62fb383eb8e27b0c058',
+        minEngineVersion: 1,
+      },
     },
     {
       id: 'zh-pinyin',

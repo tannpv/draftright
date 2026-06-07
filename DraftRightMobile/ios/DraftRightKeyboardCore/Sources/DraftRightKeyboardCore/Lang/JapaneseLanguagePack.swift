@@ -13,10 +13,21 @@ public struct JapaneseLanguagePack: LanguagePack {
     public let locale = Locale(identifier: "ja")
     public let longPressAccents: [Character: [Character]] = [:]
 
+    /// App Group container — set by KeyboardViewController, same pattern as English.
+    public static var appGroupContainer: URL?
+
+    /// Matches the backend manifest's pack URL prefix.
+    private static let packIdPrefix = "draftright-ime-ja"
+
     public init() {}
 
     public func makeCandidateEngine() -> CandidateEngine? {
-        JapaneseDictionaryEngine(dictionary: JapaneseSeedDictionary.dict)
+        let dict = JapanesePackResolver.loadOrFallback(
+            appGroupContainer: Self.appGroupContainer,
+            packIdPrefix: Self.packIdPrefix,
+            fallback: { JapaneseSeedDictionary.dict }
+        )
+        return JapaneseDictionaryEngine(dictionary: dict)
     }
 
     // Rōmaji is typed on the standard ASCII QWERTY (shared with English).
