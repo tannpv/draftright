@@ -28,7 +28,7 @@ import Playground from '../components/Playground.tsx';
       </h1>
       <!-- Subtext -->
       <p class="mt-6 text-lg md:text-xl text-gray-400 max-w-2xl mx-auto leading-relaxed">
-        Select any text, pick a tone, and get a polished rewrite in seconds. Works as a keyboard extension, share sheet, or desktop app.
+        Select any text, pick a tone, and get a polished rewrite in seconds. Use it on your Mac, on Windows, or right here in your browser.
       </p>
       <!-- CTAs -->
       <div class="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -47,7 +47,7 @@ import Playground from '../components/Playground.tsx';
       </div>
       <!-- Bottom note -->
       <p class="mt-8 text-sm text-gray-500">
-        No sign-up required &middot; 3 free rewrites &middot; Available on iOS, Android, macOS, Windows, Linux
+        No sign-up required &middot; 3 free rewrites &middot; Available now on macOS, Windows &amp; web &middot; iOS, Android &amp; Linux coming soon
       </p>
     </div>
   </section>
@@ -135,33 +135,87 @@ import Playground from '../components/Playground.tsx';
     </div>
   </section>
 
-  <!-- Two Ways to Use -->
+  <!-- Use It Your Way -->
   <section class="py-24">
     <div class="mx-auto max-w-7xl px-6">
       <!-- Header -->
       <div class="text-center mb-16">
-        <h2 class="text-4xl md:text-5xl font-bold tracking-tight">Two Ways to Use</h2>
+        <h2 class="text-4xl md:text-5xl font-bold tracking-tight">Use It Your Way</h2>
         <p class="mt-4 text-lg text-gray-400 max-w-2xl mx-auto">
-          Choose the method that fits your workflow.
+          Available today on desktop and the web. Mobile is on the way.
         </p>
       </div>
       <!-- Grid -->
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-        <!-- Keyboard -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <!-- Desktop -->
         <div class="rounded-2xl border border-dark-border bg-dark-card p-8">
-          <div class="text-4xl mb-4">&#9000;&#65039;</div>
-          <h3 class="text-2xl font-bold text-white mb-3">Keyboard Extension</h3>
+          <div class="flex items-center justify-between mb-4">
+            <div class="text-4xl">&#128421;&#65039;</div>
+            <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-brand-400/15 text-brand-400">Available now</span>
+          </div>
+          <h3 class="text-2xl font-bold text-white mb-3">Desktop App</h3>
           <p class="text-gray-400 leading-relaxed">
-            Full QWERTY keyboard with a built-in AI toolbar. Type and rewrite without leaving the app — Grammarly-style integration. Available on iOS and Android.
+            Native apps for macOS and Windows. Select text in any app, press your hotkey, and get an instant rewrite — right where you're working.
           </p>
         </div>
-        <!-- Share Sheet -->
+        <!-- Web -->
         <div class="rounded-2xl border border-dark-border bg-dark-card p-8">
-          <div class="text-4xl mb-4">&#128228;</div>
-          <h3 class="text-2xl font-bold text-white mb-3">Share Sheet</h3>
+          <div class="flex items-center justify-between mb-4">
+            <div class="text-4xl">&#127760;</div>
+            <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-brand-400/15 text-brand-400">Available now</span>
+          </div>
+          <h3 class="text-2xl font-bold text-white mb-3">Web Playground</h3>
           <p class="text-gray-400 leading-relaxed">
-            Keep your default keyboard. Select text, tap Share, choose DraftRight, and get your rewrite. Available on iOS.
+            Nothing to install. Paste your text, pick a tone, and rewrite right in your browser — try it further down this page.
           </p>
+        </div>
+        <!-- Mobile -->
+        <div class="rounded-2xl border border-dark-border bg-dark-card p-8">
+          <div class="flex items-center justify-between mb-4">
+            <div class="text-4xl">&#9000;&#65039;</div>
+            <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300">Coming soon</span>
+          </div>
+          <h3 class="text-2xl font-bold text-white mb-3">Mobile Keyboard</h3>
+          <p class="text-gray-400 leading-relaxed">
+            A full native keyboard for iOS and Android with the AI toolbar built in — smart auto-capitalization, multi-language typing, and a polished design. Launching soon.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Native Keyboard -->
+  <section class="py-24 border-t border-dark-border">
+    <div class="mx-auto max-w-7xl px-6">
+      <!-- Header -->
+      <div class="text-center mb-16">
+        <span class="inline-block text-xs font-semibold px-3 py-1 rounded-full bg-amber-500/15 text-amber-300 mb-4">Coming soon to iOS &amp; Android</span>
+        <h2 class="text-4xl md:text-5xl font-bold tracking-tight">A Keyboard That Feels Native</h2>
+        <p class="mt-4 text-lg text-gray-400 max-w-2xl mx-auto">
+          Not a clunky add-on — a polished keyboard you'll want to type on every day, with AI built right in.
+        </p>
+      </div>
+      <!-- Grid -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div class="rounded-2xl border border-dark-border bg-dark-card p-6 hover:border-brand-400/50 transition-all">
+          <div class="text-3xl mb-4">⇧</div>
+          <h3 class="text-lg font-semibold text-white mb-2">Smart Capitalization</h3>
+          <p class="text-sm text-gray-400 leading-relaxed">Sentences capitalize themselves — at the start of every field and after each full stop, just like your phone's built-in keyboard.</p>
+        </div>
+        <div class="rounded-2xl border border-dark-border bg-dark-card p-6 hover:border-brand-400/50 transition-all">
+          <div class="text-3xl mb-4">🌐</div>
+          <h3 class="text-lg font-semibold text-white mb-2">Many Languages</h3>
+          <p class="text-sm text-gray-400 leading-relaxed">Type in English, French, Spanish, German, Italian, Portuguese — plus Vietnamese with Telex. Switch with a tap or a swipe of the space bar.</p>
+        </div>
+        <div class="rounded-2xl border border-dark-border bg-dark-card p-6 hover:border-brand-400/50 transition-all">
+          <div class="text-3xl mb-4">✨</div>
+          <h3 class="text-lg font-semibold text-white mb-2">AI Tones Built In</h3>
+          <p class="text-sm text-gray-400 leading-relaxed">Rewrite in any tone straight from the keyboard toolbar — no copy, paste, or app-switching required.</p>
+        </div>
+        <div class="rounded-2xl border border-dark-border bg-dark-card p-6 hover:border-brand-400/50 transition-all">
+          <div class="text-3xl mb-4">🎨</div>
+          <h3 class="text-lg font-semibold text-white mb-2">Clean, Modern Design</h3>
+          <p class="text-sm text-gray-400 leading-relaxed">Crisp, professional icons and a single-tap caps cycle that adapts to light and dark mode automatically.</p>
         </div>
       </div>
     </div>
