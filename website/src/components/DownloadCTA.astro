@@ -1,11 +1,12 @@
 ---
-// Per-platform versions so they can bump independently.
-const ANDROID_VERSION = '2.1.7';
-const IOS_VERSION = '2.1.0';
-const MACOS_VERSION = '2.1.0';
-const WINDOWS_VERSION = '2.1.7';
-const LINUX_VERSION = '2.1.0';
+// Current published versions (mirror /updates/latest).
+const MACOS_VERSION = '2.3.21';
+const WINDOWS_VERSION = '2.3.14';
 const BASE = '/downloads';
+
+// Microsoft Store listing for the Windows app.
+// TODO: paste the real apps.microsoft.com URL here.
+const MS_STORE_URL = '';
 ---
 <section class="py-24">
   <div class="mx-auto max-w-5xl px-6">
@@ -13,60 +14,22 @@ const BASE = '/downloads';
     <div class="text-center mb-12">
       <h2 class="text-4xl md:text-5xl font-bold tracking-tight mb-4">Download DraftRight</h2>
       <p class="text-lg text-gray-400 max-w-2xl mx-auto">
-        Available on every major platform. Direct downloads — no app store needed.
-      </p>
-      <p class="mt-3 text-sm text-amber-400">
-        <span class="inline-block px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-semibold mr-2">BETA</span>
-        Builds are unsigned. You may need to allow installation from unknown sources.
+        Available now on macOS and Windows — or try it instantly in your browser, no install required.
       </p>
     </div>
 
-    <!-- Mobile downloads -->
-    <h3 class="text-2xl font-semibold mb-6 text-center">Mobile</h3>
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-16 max-w-3xl mx-auto">
-      <!-- Android APK -->
-      <a href={`${BASE}/DraftRight-Android-${ANDROID_VERSION}.apk`}
-         class="group rounded-2xl border border-dark-border bg-dark-card p-6 hover:border-brand-400 transition-all">
-        <div class="flex items-start gap-4">
-          <div class="text-4xl">&#129302;</div>
-          <div class="flex-1">
-            <h4 class="text-lg font-semibold text-white">Android <span class="text-xs text-gray-500">v{ANDROID_VERSION}</span></h4>
-            <p class="text-sm text-gray-400 mt-1">APK · 50 MB · Android 7.0+</p>
-            <div class="mt-3 inline-flex items-center gap-2 text-brand-400 font-medium text-sm group-hover:translate-x-1 transition-transform">
-              Download APK <span>→</span>
-            </div>
-          </div>
-        </div>
-      </a>
-
-      <!-- iOS Simulator -->
-      <a href={`${BASE}/DraftRight-iOS-Simulator-${IOS_VERSION}.zip`}
-         class="group rounded-2xl border border-dark-border bg-dark-card p-6 hover:border-brand-400 transition-all">
-        <div class="flex items-start gap-4">
-          <div class="text-4xl">&#128241;</div>
-          <div class="flex-1">
-            <h4 class="text-lg font-semibold text-white">iOS Simulator</h4>
-            <p class="text-sm text-gray-400 mt-1">53 MB · Mac + Xcode required</p>
-            <div class="mt-3 inline-flex items-center gap-2 text-brand-400 font-medium text-sm group-hover:translate-x-1 transition-transform">
-              Download for Simulator <span>→</span>
-            </div>
-          </div>
-        </div>
-      </a>
-    </div>
-
-    <!-- Desktop downloads -->
-    <h3 class="text-2xl font-semibold mb-6 text-center">Desktop</h3>
+    <!-- Available now -->
+    <h3 class="text-2xl font-semibold mb-6 text-center">Available now</h3>
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-16">
       <!-- macOS -->
-      <a href={`${BASE}/DraftRight-macOS-${MACOS_VERSION}.zip`}
+      <a href={`${BASE}/DraftRight-macOS-${MACOS_VERSION}.dmg`}
          class="group rounded-2xl border border-dark-border bg-dark-card p-6 hover:border-brand-400 transition-all">
         <div class="text-center">
           <div class="text-4xl mb-3">&#127815;</div>
-          <h4 class="text-lg font-semibold text-white">macOS</h4>
-          <p class="text-sm text-gray-400 mt-1">Universal · 617 KB · macOS 13+</p>
+          <h4 class="text-lg font-semibold text-white">macOS <span class="text-xs text-gray-500">v{MACOS_VERSION}</span></h4>
+          <p class="text-sm text-gray-400 mt-1">Universal · Signed &amp; notarized · macOS 13+</p>
           <div class="mt-4 inline-flex items-center gap-2 text-brand-400 font-medium text-sm group-hover:translate-x-1 transition-transform">
-            Download .app <span>→</span>
+            Download .dmg <span>&rarr;</span>
           </div>
         </div>
       </a>
@@ -76,30 +39,59 @@ const BASE = '/downloads';
         <div class="text-center">
           <div class="text-4xl mb-3">&#128421;&#65039;</div>
           <h4 class="text-lg font-semibold text-white">Windows <span class="text-xs text-gray-500">v{WINDOWS_VERSION}</span></h4>
-          <p class="text-sm text-gray-400 mt-1">Installer · Win 10/11</p>
+          <p class="text-sm text-gray-400 mt-1">Microsoft Store · Win 10/11</p>
+          {MS_STORE_URL && (
+            <a href={MS_STORE_URL}
+               class="mt-4 block text-brand-400 font-medium text-sm hover:underline">
+              Get it from Microsoft Store &rarr;
+            </a>
+          )}
           <a href={`${BASE}/DraftRight-Setup-Windows-${WINDOWS_VERSION}-x64.exe`}
-             class="mt-4 block text-brand-400 font-medium text-sm hover:underline">
-            Download for x64 (127 MB) →
-          </a>
-          <a href={`${BASE}/DraftRight-Setup-Windows-${WINDOWS_VERSION}-arm64.exe`}
-             class="mt-2 block text-gray-400 text-xs hover:text-brand-400 hover:underline">
-            ARM64 build (115 MB) →
+             class={`block text-gray-400 text-xs hover:text-brand-400 hover:underline ${MS_STORE_URL ? 'mt-2' : 'mt-4'}`}>
+            Or direct installer (x64) &rarr;
           </a>
         </div>
       </div>
 
-      <!-- Linux -->
-      <a href={`${BASE}/DraftRight-Linux-${LINUX_VERSION}.tar.gz`}
+      <!-- Web -->
+      <a href="/#playground"
          class="group rounded-2xl border border-dark-border bg-dark-card p-6 hover:border-brand-400 transition-all">
         <div class="text-center">
-          <div class="text-4xl mb-3">&#128039;</div>
-          <h4 class="text-lg font-semibold text-white">Linux</h4>
-          <p class="text-sm text-gray-400 mt-1">Source · 31 KB · GTK 4 · Python 3.10+</p>
+          <div class="text-4xl mb-3">&#127760;</div>
+          <h4 class="text-lg font-semibold text-white">Web</h4>
+          <p class="text-sm text-gray-400 mt-1">No install · Runs in your browser</p>
           <div class="mt-4 inline-flex items-center gap-2 text-brand-400 font-medium text-sm group-hover:translate-x-1 transition-transform">
-            Download tarball <span>→</span>
+            Open Web Playground <span>&rarr;</span>
           </div>
         </div>
       </a>
+    </div>
+
+    <!-- Coming soon -->
+    <h3 class="text-2xl font-semibold mb-2 text-center">Coming soon</h3>
+    <p class="text-center text-sm text-gray-500 mb-6">iOS, Android, and Linux are in active development.</p>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-16">
+      <!-- iOS -->
+      <div class="rounded-2xl border border-dark-border bg-dark-card/50 p-6 text-center opacity-80">
+        <div class="text-4xl mb-3">&#128241;</div>
+        <h4 class="text-lg font-semibold text-white">iOS</h4>
+        <p class="text-sm text-gray-400 mt-1">iPhone &amp; iPad · App + keyboard</p>
+        <span class="mt-4 inline-block text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300">Coming soon</span>
+      </div>
+      <!-- Android -->
+      <div class="rounded-2xl border border-dark-border bg-dark-card/50 p-6 text-center opacity-80">
+        <div class="text-4xl mb-3">&#129302;</div>
+        <h4 class="text-lg font-semibold text-white">Android</h4>
+        <p class="text-sm text-gray-400 mt-1">App + AI keyboard</p>
+        <span class="mt-4 inline-block text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300">Coming soon</span>
+      </div>
+      <!-- Linux -->
+      <div class="rounded-2xl border border-dark-border bg-dark-card/50 p-6 text-center opacity-80">
+        <div class="text-4xl mb-3">&#128039;</div>
+        <h4 class="text-lg font-semibold text-white">Linux</h4>
+        <p class="text-sm text-gray-400 mt-1">GTK 4 native app</p>
+        <span class="mt-4 inline-block text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300">Coming soon</span>
+      </div>
     </div>
 
     <!-- Install instructions -->
@@ -110,56 +102,22 @@ const BASE = '/downloads';
       <div class="mt-4 space-y-4 text-sm text-gray-300">
         <div>
           <h5 class="font-semibold text-white mb-1">macOS</h5>
-          <pre class="bg-dark-bg/50 rounded p-3 overflow-x-auto"><code>unzip DraftRight-macOS-{MACOS_VERSION}.zip
-mv DraftRight.app /Applications/
-# First launch: right-click → Open (unsigned)</code></pre>
-        </div>
-        <div>
-          <h5 class="font-semibold text-white mb-1">Android</h5>
-          <p>Tap the APK on your phone. Allow "Install unknown apps" when prompted. After install, enable the DraftRight keyboard in Settings → System → Languages & input.</p>
+          <p>Open the downloaded <code>DraftRight-macOS-{MACOS_VERSION}.dmg</code> and drag <strong>DraftRight</strong> to your Applications folder. The app is signed &amp; notarized by Apple, so it opens with a normal double-click. On first launch, grant Accessibility access in <strong>System Settings &rarr; Privacy &amp; Security &rarr; Accessibility</strong> so DraftRight can rewrite text in other apps. Press your hotkey on selected text to rewrite.</p>
         </div>
         <div>
           <h5 class="font-semibold text-white mb-1">Windows</h5>
-          <p>Double-click the downloaded <code>DraftRight-Setup-Windows-{WINDOWS_VERSION}-x64.exe</code> (or <code>-arm64.exe</code> for Surface Pro X / ARM laptops). SmartScreen will warn the publisher is unverified — click <strong>More info → Run anyway</strong>. The installer puts DraftRight in <code>%LocalAppData%\Programs\DraftRight</code> and adds a Start Menu shortcut. The app launches automatically and lives in the system tray; press <strong>Ctrl+Shift+R</strong> on selected text to rewrite.</p>
+          <p>Install from the Microsoft Store for automatic updates, or run the direct installer. The app lives in the system tray; press <strong>Ctrl+Shift+R</strong> on selected text to rewrite.</p>
         </div>
         <div>
-          <h5 class="font-semibold text-white mb-1">Linux</h5>
-          <pre class="bg-dark-bg/50 rounded p-3 overflow-x-auto"><code>tar -xzf DraftRight-Linux-{LINUX_VERSION}.tar.gz
-cd DraftRightLinux
-sudo apt install python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 xdotool xsel
-pip3 install -r requirements.txt
-./draftright-launch.sh</code></pre>
+          <h5 class="font-semibold text-white mb-1">Web</h5>
+          <p>No install needed — open the <a href="/#playground" class="text-brand-400 hover:underline">Web Playground</a>, paste your text, pick a tone, and rewrite.</p>
         </div>
-        <div>
-          <h5 class="font-semibold text-white mb-1">iOS Simulator (Mac + Xcode)</h5>
-          <pre class="bg-dark-bg/50 rounded p-3 overflow-x-auto"><code>unzip DraftRight-iOS-Simulator-{IOS_VERSION}.zip
-xcrun simctl install booted Runner.app
-xcrun simctl launch booted com.draftright.draftrightMobile.v2</code></pre>
-        </div>
-      </div>
-    </details>
-
-    <!-- Advanced -->
-    <details class="rounded-2xl border border-dark-border bg-dark-card/50 p-6">
-      <summary class="cursor-pointer text-base font-semibold text-gray-300 hover:text-white">
-        Advanced — iOS source for Apple Developer holders
-      </summary>
-      <div class="mt-4 text-sm text-gray-400">
-        <p class="mb-2">
-          Building a signed IPA for App Store / TestFlight requires an Apple Developer account ($99/yr).
-          If you have one, the iOS source is available below.
-        </p>
-        <a href={`${BASE}/DraftRight-iOS-Source-${IOS_VERSION}.tar.gz`}
-           class="inline-flex items-center gap-2 text-brand-400 hover:underline">
-          DraftRight-iOS-Source-{IOS_VERSION}.tar.gz (31 MB) <span>→</span>
-        </a>
       </div>
     </details>
 
     <!-- Footer note -->
     <p class="text-center text-sm text-gray-500 mt-8">
-      All builds connect to <code class="text-brand-400">api.draftright.info</code> by default.
-      Backend, all features included. Sign in with any account or create a new one.
+      All apps connect to <code class="text-brand-400">api.draftright.info</code>. Sign in with any account or create a new one — all features included.
     </p>
   </div>
 </section>
