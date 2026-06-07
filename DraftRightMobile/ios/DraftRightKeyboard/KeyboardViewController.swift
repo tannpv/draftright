@@ -31,6 +31,7 @@ class KeyboardViewController: UIInputViewController {
         // appears so a settings change in the main app takes effect on
         // the next invocation without requiring an extension reload.
         rebuildController()
+        updateAutoCaps()
     }
 
     override func textDidChange(_ textInput: UITextInput?) {
@@ -43,14 +44,34 @@ class KeyboardViewController: UIInputViewController {
         // Drop the buffer + marked text so the next field starts clean.
         // Our own keystrokes keep the buffer as the document's tail, so this
         // never fires mid-composition from normal typing.
-        guard let composer = controller?.composer else { return }
-        let composing = composer.currentComposingText()
-        guard !composing.isEmpty else { return }
-        let before = textDocumentProxy.documentContextBeforeInput ?? ""
-        if !before.hasSuffix(composing) {
-            textDocumentProxy.unmarkText()
-            composer.reset()
+        if let composer = controller?.composer {
+            let composing = composer.currentComposingText()
+            if !composing.isEmpty {
+                let before = textDocumentProxy.documentContextBeforeInput ?? ""
+                if !before.hasSuffix(composing) {
+                    textDocumentProxy.unmarkText()
+                    composer.reset()
+                }
+            }
         }
+        updateAutoCaps()
+    }
+
+    /// Samsung/iOS-style auto-capitalization: re-derive the shift state from the
+    /// text before the cursor and the field's caps trait, then push it to the
+    /// keyboard. Skipped mid-Telex composition so it never flips shift while a
+    /// syllable is being built.
+    private func updateAutoCaps() {
+        if let composing = controller?.composer?.currentComposingText(), !composing.isEmpty { return }
+        let sentenceCaps = textDocumentProxy.autocapitalizationType != UITextAutocapitalizationType.none
+        let atStart = AutoCapitalize.atSentenceStart(before: textDocumentProxy.documentContextBeforeInput)
+        keyboard.applyAutoShift(
+            AutoCapitalize.resolve(
+                current: keyboard.currentShiftState,
+                sentenceCaps: sentenceCaps,
+                atSentenceStart: atStart
+            )
+        )
     }
 
     private func rebuildController() {
