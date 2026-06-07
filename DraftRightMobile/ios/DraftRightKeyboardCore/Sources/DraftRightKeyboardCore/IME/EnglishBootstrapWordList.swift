@@ -1,0 +1,80 @@
+import Foundation
+
+/// Hand-curated ~300-entry English frequency list used as the bootstrap
+/// suggestion source before the downloadable 50k pack arrives. Mirror of
+/// `res/raw/wordlist_en.tsv` on Android — keep in sync until both sides
+/// load the same downloadable pack.
+///
+/// Kept as a Swift literal instead of a bundled .tsv resource so the
+/// keyboard extension doesn't need extra resource-handling on first
+/// launch; ~10 KB of static data is well below any memory budget.
+enum EnglishBootstrapWordList {
+    static let entries: [(word: String, freq: Int)] = [
+        ("the", 200000), ("of", 120000), ("and", 115000), ("to", 110000), ("a", 100000),
+        ("in", 95000), ("is", 88000), ("it", 82000), ("you", 78000), ("that", 75000),
+        ("he", 72000), ("was", 70000), ("for", 68000), ("on", 65000), ("are", 63000),
+        ("with", 61000), ("as", 59000), ("i", 57000), ("his", 55000), ("they", 53000),
+        ("be", 51000), ("at", 49000), ("one", 47000), ("have", 46000), ("this", 45000),
+        ("from", 43000), ("or", 42000), ("had", 41000), ("by", 40000), ("not", 39000),
+        ("word", 38000), ("but", 37000), ("what", 36000), ("some", 35000), ("we", 34000),
+        ("can", 33000), ("out", 32500), ("other", 32000), ("were", 31500), ("all", 31000),
+        ("there", 30500), ("when", 30000), ("up", 29500), ("use", 29000), ("your", 28500),
+        ("how", 28000), ("said", 27500), ("an", 27000), ("each", 26500), ("she", 26000),
+        ("which", 25500), ("do", 25000), ("their", 24500), ("time", 24000), ("if", 23500),
+        ("will", 23000), ("way", 22500), ("about", 22000), ("many", 21500), ("then", 21000),
+        ("them", 20500), ("write", 20000), ("would", 19500), ("like", 19000), ("so", 18500),
+        ("these", 18000), ("her", 17500), ("long", 17000), ("make", 16500), ("thing", 16000),
+        ("see", 15500), ("him", 15000), ("two", 14700), ("has", 14400), ("look", 14100),
+        ("more", 13800), ("day", 13500), ("could", 13200), ("go", 12900), ("come", 12600),
+        ("did", 12300), ("my", 12000), ("sound", 11800), ("no", 11600), ("most", 11400),
+        ("number", 11200), ("who", 11000), ("over", 10800), ("know", 10600), ("water", 10400),
+        ("than", 10200), ("call", 10000), ("first", 9800), ("people", 9600), ("may", 9400),
+        ("down", 9200), ("side", 9000), ("been", 8800), ("now", 8600), ("find", 8400),
+        ("any", 8200), ("new", 8000), ("work", 7800), ("part", 7700), ("take", 7600),
+        ("get", 7500), ("place", 7400), ("made", 7300), ("live", 7200), ("where", 7100),
+        ("after", 7000), ("back", 6900), ("little", 6800), ("only", 6700), ("round", 6600),
+        ("man", 6500), ("year", 6400), ("came", 6300), ("show", 6200), ("every", 6100),
+        ("good", 6000), ("me", 5900), ("give", 5800), ("our", 5700), ("under", 5600),
+        ("name", 5500), ("very", 5400), ("through", 5300), ("just", 5200), ("form", 5100),
+        ("sentence", 5000), ("great", 4900), ("think", 4800), ("say", 4700), ("help", 4600),
+        ("low", 4500), ("line", 4400), ("differ", 4300), ("turn", 4200), ("cause", 4100),
+        ("much", 4000), ("mean", 3900), ("before", 3800), ("move", 3700), ("right", 3600),
+        ("boy", 3500), ("old", 3400), ("too", 3300), ("same", 3200), ("tell", 3100),
+        ("does", 3000), ("set", 2950), ("three", 2900), ("want", 2850), ("air", 2800),
+        ("well", 2750), ("also", 2700), ("play", 2650), ("small", 2600), ("end", 2550),
+        ("put", 2500), ("home", 2450), ("read", 2400), ("hand", 2350), ("port", 2300),
+        ("large", 2250), ("spell", 2200), ("add", 2150), ("even", 2100), ("land", 2050),
+        ("here", 2000), ("must", 1950), ("big", 1900), ("high", 1850), ("such", 1800),
+        ("follow", 1750), ("act", 1700), ("why", 1650), ("ask", 1600), ("men", 1550),
+        ("change", 1500), ("went", 1450), ("light", 1400), ("kind", 1350), ("off", 1300),
+        ("need", 1280), ("house", 1260), ("picture", 1240), ("try", 1220), ("us", 1200),
+        ("again", 1180), ("animal", 1160), ("point", 1140), ("mother", 1120), ("world", 1100),
+        ("near", 1080), ("build", 1060), ("self", 1040), ("earth", 1020), ("father", 1000),
+        ("head", 980), ("stand", 960), ("own", 940), ("page", 920), ("should", 900),
+        ("country", 880), ("found", 860), ("answer", 840), ("school", 820), ("grow", 800),
+        ("study", 780), ("still", 760), ("learn", 740), ("plant", 720), ("cover", 700),
+        ("food", 680), ("sun", 660), ("four", 640), ("between", 620), ("state", 600),
+        ("keep", 580), ("eye", 560), ("never", 540), ("last", 520), ("let", 500),
+        ("thought", 490), ("city", 480), ("tree", 470), ("cross", 460), ("farm", 450),
+        ("hard", 440), ("start", 430), ("might", 420), ("story", 410), ("saw", 400),
+        ("far", 390), ("sea", 380), ("draw", 370), ("left", 360), ("late", 350),
+        ("run", 340), ("don't", 330), ("while", 320), ("press", 310), ("close", 300),
+        ("night", 290), ("real", 280), ("life", 270), ("few", 260), ("north", 250),
+        ("book", 240), ("carry", 230), ("took", 220), ("science", 210), ("eat", 200),
+        ("room", 190), ("friend", 180), ("began", 170), ("idea", 160), ("fish", 150),
+        ("mountain", 140), ("stop", 130), ("once", 125), ("base", 120), ("hear", 115),
+        ("horse", 110), ("cut", 105), ("sure", 100), ("watch", 98), ("color", 96),
+        ("face", 94), ("wood", 92), ("main", 90), ("open", 88), ("seem", 86),
+        ("together", 84), ("next", 82), ("white", 80), ("children", 78), ("begin", 76),
+        ("got", 74), ("walk", 72), ("example", 70), ("ease", 68), ("paper", 66),
+        ("group", 64), ("always", 62), ("music", 60), ("those", 58), ("both", 56),
+        ("mark", 54), ("often", 52), ("letter", 50), ("until", 48), ("mile", 46),
+        ("river", 44), ("car", 42), ("feet", 40), ("care", 38), ("second", 36),
+        ("enough", 34), ("plain", 32), ("girl", 30), ("usual", 28), ("young", 26),
+        ("ready", 24), ("above", 22), ("ever", 20), ("red", 18), ("list", 16),
+        ("though", 14), ("feel", 12), ("talk", 10),
+    ]
+
+    /// Cached InMemoryWordList — built once at first access.
+    static let wordList: InMemoryWordList = InMemoryWordList(words: entries)
+}

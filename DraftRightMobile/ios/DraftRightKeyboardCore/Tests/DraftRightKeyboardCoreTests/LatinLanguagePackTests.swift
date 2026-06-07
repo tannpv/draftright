@@ -128,9 +128,9 @@ final class LatinLanguagePackTests: XCTestCase {
 
     // MARK: Production registry
 
-    func test_productionRegistryHasAllSevenInOrder() {
+    func test_productionRegistryHasAllPacksInOrder() {
         let reg = LanguageRegistry.production
         let ids = reg.all.map { $0.id }
-        XCTAssertEqual(ids, ["en", "vi", "fr", "es", "de", "it", "pt"])
+        XCTAssertEqual(ids, ["en", "vi", "fr", "es", "de", "it", "pt", "ja"])
     }
 }

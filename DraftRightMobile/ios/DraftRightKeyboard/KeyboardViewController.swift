@@ -15,8 +15,17 @@ class KeyboardViewController: UIInputViewController {
     private let registry = LanguageRegistry.production
     private var controller: KeyboardController!
 
+    // Suggestion strip (Task 11 — Latin-script word prediction). Engine
+    // is sourced from the active pack's makeCandidateEngine(); nil means
+    // the bar stays hidden and the keyboard reclaims its height.
+    private let candidateBar = CandidateBarView()
+    private var candidateBarHeightConstraint: NSLayoutConstraint!
+    private var candidateEngine: CandidateEngine?
+    private let candidateLimit = 7
+
     private var totalHeight: CGFloat {
-        return KeyboardDimensions.toolbarHeight + keyboard.totalHeight
+        let barHeight = (candidateBar.isHidden ? 0 : CandidateBarView.barHeight)
+        return barHeight + KeyboardDimensions.toolbarHeight + keyboard.totalHeight
     }
 
     override func viewDidLoad() {
@@ -81,6 +90,11 @@ class KeyboardViewController: UIInputViewController {
             activeId: settings.activeLanguageId
         )
         keyboard.languagePack = controller.current
+        candidateEngine = controller.current.makeCandidateEngine()
+        // After a language switch (or first build) the previous engine's
+        // suggestions are stale — clear the bar so it doesn't show old hints.
+        candidateBar.setCandidates([])
+        adjustHeightForCandidateBar()
     }
 
     private func setupUI() {
@@ -88,6 +102,13 @@ class KeyboardViewController: UIInputViewController {
         heightConstraint = view.heightAnchor.constraint(equalToConstant: totalHeight)
         heightConstraint.priority = .defaultHigh
         heightConstraint.isActive = true
+
+        // Candidate bar (above the toolbar) — collapsed to 0-height until
+        // the active language pack provides suggestions.
+        candidateBar.onCandidatePicked = { [weak self] cand in self?.handleCandidatePicked(cand) }
+        candidateBar.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(candidateBar)
+        candidateBarHeightConstraint = candidateBar.heightAnchor.constraint(equalToConstant: 0)
 
         // Toolbar
         toolbar.delegate = self
@@ -100,9 +121,14 @@ class KeyboardViewController: UIInputViewController {
         view.addSubview(keyboard)
 
         NSLayoutConstraint.activate([
+            candidateBar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            candidateBar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            candidateBar.topAnchor.constraint(equalTo: view.topAnchor),
+            candidateBarHeightConstraint,
+
             toolbar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             toolbar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            toolbar.topAnchor.constraint(equalTo: view.topAnchor),
+            toolbar.topAnchor.constraint(equalTo: candidateBar.bottomAnchor),
             toolbar.heightAnchor.constraint(equalToConstant: KeyboardDimensions.toolbarHeight),
 
             keyboard.leadingAnchor.constraint(equalTo: view.leadingAnchor),
@@ -110,6 +136,49 @@ class KeyboardViewController: UIInputViewController {
             keyboard.topAnchor.constraint(equalTo: toolbar.bottomAnchor),
             keyboard.heightAnchor.constraint(equalToConstant: keyboard.totalHeight),
         ])
+    }
+
+    // MARK: - Candidate strip
+
+    /// Recompute the suggestion strip from current pack + composer state.
+    /// Safe to call after every keystroke — engine.suggest runs in the
+    /// microsecond range for the bootstrap word list, and CandidateBarView
+    /// only re-lays the row when the list changes.
+    private func refreshCandidates() {
+        guard let engine = candidateEngine else {
+            candidateBar.setCandidates([])
+            adjustHeightForCandidateBar()
+            return
+        }
+        let composing = controller?.composer?.currentComposingText() ?? ""
+        let items = engine.suggest(
+            composing: composing,
+            previousTokens: [],   // n-gram context wired later (Task 11 step 7)
+            limit: candidateLimit
+        )
+        candidateBar.setCandidates(items)
+        adjustHeightForCandidateBar()
+    }
+
+    /// Resize the input view when the bar appears / disappears so the
+    /// keyboard rows don't get clipped at the bottom.
+    private func adjustHeightForCandidateBar() {
+        let target: CGFloat = candidateBar.isHidden ? 0 : CandidateBarView.barHeight
+        if candidateBarHeightConstraint?.constant != target {
+            candidateBarHeightConstraint?.constant = target
+            heightConstraint?.constant = totalHeight
+        }
+    }
+
+    private func handleCandidatePicked(_ candidate: Candidate) {
+        // Commit the candidate followed by a trailing space (matches
+        // Gboard / Samsung UX). Clear composer + strip so the next
+        // keystroke starts a fresh word.
+        textDocumentProxy.unmarkText()
+        controller?.composer?.reset()
+        textDocumentProxy.insertText(candidate.text + " ")
+        candidateBar.setCandidates([])
+        adjustHeightForCandidateBar()
     }
 
     // MARK: - Text operations
@@ -257,13 +326,16 @@ extension KeyboardViewController: KeyboardActionDelegate {
     func keyboardDidType(_ char: String) {
         guard let ch = char.first, char.count == 1 else {
             textDocumentProxy.insertText(char)
+            refreshCandidates()
             return
         }
         dispatch(controller.onKey(ch), fallback: char)
+        refreshCandidates()
     }
 
     func keyboardDidBackspace() {
         dispatchBackspace(controller.onBackspace())
+        refreshCandidates()
     }
 
     func keyboardDidEnter() {
@@ -272,6 +344,7 @@ extension KeyboardViewController: KeyboardActionDelegate {
         textDocumentProxy.unmarkText()
         controller.composer?.reset()
         textDocumentProxy.insertText("\n")
+        refreshCandidates()
     }
 
     func keyboardDidSpace() {
@@ -280,6 +353,7 @@ extension KeyboardViewController: KeyboardActionDelegate {
         // insertText(" ") replaces the marked region (e.g. "viet")
         // with a single space and the word vanishes.
         dispatch(controller.onKey(" "), fallback: " ")
+        refreshCandidates()
     }
 
     func keyboardDidSwitchKeyboard() {
@@ -288,6 +362,9 @@ extension KeyboardViewController: KeyboardActionDelegate {
         if controller.enabled.count > 1 {
             controller.cycleLanguage()
             keyboard.languagePack = controller.current
+            candidateEngine = controller.current.makeCandidateEngine()
+            candidateBar.setCandidates([])
+            adjustHeightForCandidateBar()
         } else {
             advanceToNextInputMode()
         }
@@ -297,6 +374,9 @@ extension KeyboardViewController: KeyboardActionDelegate {
         guard controller.enabled.count > 1 else { return }
         controller.cycleLanguage(reverse: direction < 0)
         keyboard.languagePack = controller.current
+        candidateEngine = controller.current.makeCandidateEngine()
+        candidateBar.setCandidates([])
+        adjustHeightForCandidateBar()
     }
 
     // MARK: - KeystrokeOutcome dispatch

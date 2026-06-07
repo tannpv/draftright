@@ -66,6 +66,51 @@ enhancement, never blocking input.
 - **Versioned + checksummed.** Loaded at runtime via **mmap** (only touched
   pages resident → low RAM, fits the iOS keyboard-extension memory budget).
 
+### Language container model (the modular framework)
+
+Every language — bundled or downloaded — is described by one uniform
+descriptor so languages are pluggable and the catalog is server-driven:
+
+```
+LanguageModule {
+  id            // "ja", "zh-pinyin", "ko", "vi", "en", ...
+  displayName   // 日本語 / 中文 / 한국어
+  inputMethod   // .composition | .candidate     ← the key fork
+  engine        // which bundled engine drives it (composition | rime)
+  data          // .bundled | .pack(url, version, sizeBytes, sha256)
+  layout        // qwerty | romaji | pinyin | flick(later)
+}
+```
+
+**The `inputMethod` fork** decides bundled-vs-download:
+- **`.composition`** — Korean (Hangul automaton), Latin diacritics (Telex).
+  Pure algorithm, **no dictionary, no download** → ships bundled (~0 KB data).
+- **`.candidate`** — Japanese, Chinese (Pinyin). Needs a dictionary → data is a
+  **downloadable pack**, converted by the bundled RIME engine.
+
+**The container = registry + shared storage + engine interface:**
+- A runtime **`LanguageRegistry`** lists *installed* modules; the keyboard's
+  globe-cycle is built from it. Installing a pack registers a module → the
+  language appears with **no app update**.
+- A single **`ConversionEngine`** interface, two impls: `CompositionEngine`
+  (bundled, no data) and `RimeEngine` (loads a pack via mmap). The keyboard
+  talks only to the interface → a new candidate language = a new pack, **zero
+  new keyboard code**.
+
+**Bundled vs downloaded (size strategy):** the app bundles only the **engine
+binaries** (RIME ~few MB; composition automata ~0) + the composition languages
+(KO/Latin). All heavy dictionaries are per-language **packs**, opt-in download.
+
+**Server-driven catalog (extensibility payoff):** the manifest lists the full
+*available* language catalog. Publishing a new pack server-side makes it appear
+in the in-app "Add language" list **without an app update**, as long as its
+`inputMethod`/`engine` is one the bundled engines already support. New
+Pinyin/Cantonese/Thai schemas ship as packs alone.
+
+**Onboarding:** first launch → "Which languages will you type?" → Latin/Korean
+are instant (bundled); Japanese/Chinese show "Download (≈18 MB)" → fetch packs
+→ ready. Storage stays minimal for single-language users.
+
 ### Pack delivery (self-hosted)
 - Packs hosted on **draftright.info / CDN** (reuse existing downloads infra).
 - **Manifest endpoint** (e.g. `GET /ime-packs/manifest`) returns a list of

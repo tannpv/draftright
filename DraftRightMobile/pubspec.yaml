@@ -1,7 +1,7 @@
 name: draftright_mobile
 description: AI-powered text rewriting keyboard toolbar
 publish_to: 'none'
-version: 2.4.0+60
+version: 2.4.0+61
 
 environment:
   sdk: ^3.0.0
@@ -16,6 +16,7 @@ dependencies:
   # can set MediaType('image', 'jpeg') on screenshot uploads
   # (analyser flags the unreferenced dep otherwise).
   http_parser: ^4.0.0
+  crypto: ^3.0.0  # SHA-256 verify for downloaded IME packs
   path_provider: ^2.1.0
   provider: ^6.0.0
   google_sign_in: ^6.2.1

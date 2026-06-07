@@ -11,5 +11,6 @@ public extension LanguageRegistry {
         GermanLanguagePack(),
         ItalianLanguagePack(),
         PortugueseLanguagePack(),
+        JapaneseLanguagePack(),
     ])
 }

@@ -14,6 +14,8 @@ import android.view.inputmethod.ExtractedTextRequest
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import com.draftright.keyboard.ime.CandidateBarView
+import com.draftright.keyboard.ime.ImeContext
 import com.draftright.keyboard.lang.EnglishLanguagePack
 
 class DraftRightIME : InputMethodService(), KeyboardActionListener {
@@ -27,6 +29,22 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
     private var diffSheet: DiffSheetView? = null
     private var rootLayout: LinearLayout? = null
     private var originalText: String? = null
+    private var candidateBar: CandidateBarView? = null
+
+    /**
+     * Maximum candidates rendered at once. The bar scrolls horizontally so
+     * a higher cap is fine, but the trigram engine's top picks dominate —
+     * past 7 the suggestions tail off to noise.
+     */
+    private val candidateLimit: Int = 7
+
+    override fun onCreate() {
+        super.onCreate()
+        // Lets LanguagePack implementations reach Android resources lazily
+        // without polluting their interface with a Context parameter. The
+        // application context outlives the IME service so it's safe to cache.
+        ImeContext.attach(applicationContext)
+    }
 
     // Step B: construct LanguageRegistry + KeyboardController but do NOT wire
     // any UI for them yet. Goal: prove that loading 7 LanguagePack singletons
@@ -56,6 +74,13 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
         // Language strip removed in 2.3.1+51 in favor of Samsung-style
         // swipe-on-space-bar gesture (onSpaceSwipe). Switching feels native
         // and saves vertical real estate above the tone toolbar.
+
+        // Candidate strip — only renders when the active pack provides an
+        // engine. Hidden by default; populated as the user composes.
+        val cb = CandidateBarView(this)
+        cb.onCandidatePicked = { candidate -> handleCandidatePicked(candidate) }
+        candidateBar = cb
+        root.addView(cb)
 
         val tb = ToolbarView(this,
             onToneSelected = { tone -> handleToneSelected(tone) },
@@ -153,6 +178,7 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
         val c = controller
         if (c == null || char.length != 1) {
             ic.commitText(char, 1)
+            refreshCandidates()
             return
         }
         when (val outcome = c.onKey(char[0])) {
@@ -161,6 +187,7 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
             KeystrokeOutcome.DeleteOne -> ic.deleteSurroundingText(1, 0)
             KeystrokeOutcome.NoChange -> { /* no-op */ }
         }
+        refreshCandidates()
     }
 
     override fun onBackspace() {
@@ -168,6 +195,7 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
         val c = controller
         if (c == null) {
             ic.deleteSurroundingText(1, 0)
+            refreshCandidates()
             return
         }
         when (val outcome = c.onBackspace()) {
@@ -183,6 +211,7 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
                 ic.finishComposingText()
             }
         }
+        refreshCandidates()
     }
 
     override fun onEnter() {
@@ -207,6 +236,7 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
         val c = controller
         if (c == null) {
             ic.commitText(" ", 1)
+            refreshCandidates()
             return
         }
         when (val outcome = c.onKey(' ')) {
@@ -215,6 +245,7 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
             KeystrokeOutcome.DeleteOne -> ic.deleteSurroundingText(1, 0)
             KeystrokeOutcome.NoChange -> ic.commitText(" ", 1)
         }
+        refreshCandidates()
     }
 
     override fun onSwitchKeyboard() {
@@ -346,6 +377,46 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
     private fun dpToPx(dp: Int): Int {
         return (dp * resources.displayMetrics.density).toInt()
     }
+
+    // --- Candidate strip ------------------------------------------------
+
+    /**
+     * Recompute the suggestion strip from the current pack + composer state.
+     * Safe to call after every keystroke / backspace / space — engine.suggest
+     * returns within a few hundred microseconds for the bootstrap word list,
+     * and CandidateBarView only re-lays the row when the list changes.
+     */
+    private fun refreshCandidates() {
+        val bar = candidateBar ?: return
+        val pack = controller?.current
+        val engine = pack?.candidateEngine()
+        if (engine == null) {
+            bar.setCandidates(emptyList())
+            return
+        }
+        val composing = controller?.composer?.currentComposingText().orEmpty()
+        val items = engine.suggest(
+            composing = composing,
+            previousTokens = emptyList(),  // n-gram context wired in Task 11 step 7
+            limit = candidateLimit,
+        )
+        bar.setCandidates(items)
+    }
+
+    /**
+     * Commit the tapped candidate, reset the composer so the next keystroke
+     * starts fresh, append a trailing space (matches Samsung/Gboard UX), and
+     * clear the bar so we don't show stale suggestions.
+     */
+    private fun handleCandidatePicked(candidate: com.draftright.keyboard.ime.Candidate) {
+        val ic = currentInputConnection ?: return
+        ic.finishComposingText()
+        controller?.composer?.reset()
+        ic.commitText(candidate.text + " ", 1)
+        candidateBar?.setCandidates(emptyList())
+    }
+
+    // --- Controller / window-inset sync (from develop) -----------------
 
     private fun syncControllerWithSettings() {
         if (!::settings.isInitialized) return

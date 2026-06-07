@@ -63,6 +63,12 @@ class SceneDelegate: FlutterSceneDelegate {
             case "deleteKeychain":
                 guard let key else { result(invalidArgs()); return }
                 result(SharedKeychain.delete(key))
+            case "sharedPackDir":
+                // App Group container path so downloaded IME language packs land
+                // where the keyboard extension can read (mmap) them.
+                let url = FileManager.default.containerURL(
+                    forSecurityApplicationGroupIdentifier: "group.com.draftright.v2")
+                result(url?.path)
             default:
                 result(FlutterMethodNotImplemented)
             }

@@ -3,7 +3,9 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm install
 COPY . .
-RUN npm run build
+# Always start from a clean build so a stale rsync'd dist/ on the host
+# can never shadow the freshly compiled output.
+RUN rm -rf dist && npm run build
 
 FROM node:20-alpine
 WORKDIR /app

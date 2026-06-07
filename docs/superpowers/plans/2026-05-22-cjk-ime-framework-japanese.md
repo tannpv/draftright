@@ -10,6 +10,19 @@
 
 ---
 
+## Progress (updated 2026-05-25)
+
+- ✅ **Task 2** — backend manifest endpoint (`GET /ime-packs/manifest`, LanguageModule catalog). Committed.
+- ✅ **Task 3** — RomajiComposer (Swift + Kotlin), Core suite green. Committed.
+- ✅ **Task 5** — `ImePackService` (download/verify-sha256/atomic-install/remove) + native `sharedPackDir` resolvers (iOS App Group / Android files dir) + `forPlatform()` factory. 5 hermetic tests green. Committed.
+- ✅ **Task 7** — `LanguageModule` model + `ImeManifestClient` + reusable `LanguagePacksSection` widget + Settings wiring ("Add a language (download)"). manifest 3/3 + widget 3/3 green. Committed.
+- ⛔ **Task 1 (RIME spike, HARD GATE)** — NOT started. Device-bound. **Blocks Tasks 4, 6, 8.**
+- ⏸ **Tasks 4, 6, 8** — gated on Task 1 GO.
+
+**Next action:** run the Task 1 RIME spike on a real iPhone + Android device, write `rime-spike-findings.md` with GO/NO-GO, then resume Tasks 4 → 6 → 8.
+
+---
+
 ## ⛔ Gate: Task 1 must pass before Tasks 4+ begin
 
 Tasks 2–3 (manifest + composer) are safe to build in parallel and have no engine dependency. **Tasks 4 onward depend on Task 1 proving the RIME bridge is viable inside the iOS keyboard extension.** If Task 1's checkpoint fails (won't build, OOMs the extension, or can't return candidates), STOP and revisit the engine decision (Mozc, or a thinner converter) before continuing — do not build UI/packs on an unproven engine.
@@ -321,9 +334,56 @@ git commit -m "feat(ime): build + publish Japanese pack; e2e verified on device"
 
 ---
 
+## Task 11: Latin-script suggestion engine (no RIME dependency — can start now)
+
+Word completion + next-word prediction for Vietnamese / English / French /
+Spanish / German / Italian / Portuguese, riding the same
+`CandidateController` + `CandidateBarView` seam that Tasks 4 + 6 build for
+RIME. **NOT gated on Task 1** — a static trigram engine doesn't need
+librime, so this can ship even if the RIME spike fails.
+
+**Why this belongs in the framework plan:** the user requested suggestions
+for Vietnamese typing. The CJK framework's pluggable-engine shape is
+already the natural home — adding a second engine here proves the
+abstraction is sound (Rule #1: extendable).
+
+**Files:**
+- Create: `…/android/app/src/main/kotlin/com/draftright/keyboard/ime/CandidateEngine.kt` (Done — interface + `Candidate` data class)
+- Create: `…/android/app/src/main/kotlin/com/draftright/keyboard/ime/TrigramCandidateEngine.kt` (Done — engine impl)
+- Create: `…/android/app/src/main/kotlin/com/draftright/keyboard/ime/LanguageWordList.kt` (Done — `InMemoryWordList` + interface for future `MmapWordList`)
+- Modify: `…/android/app/src/main/kotlin/com/draftright/keyboard/LanguagePack.kt` (Done — added `candidateEngine(): CandidateEngine?`)
+- Mirror: `DraftRightKeyboardCore/Sources/DraftRightKeyboardCore/IME/CandidateEngine.swift` + Trigram + WordList for iOS parity (pending)
+- Test: `…/android/app/src/test/kotlin/com/draftright/keyboard/ime/TrigramCandidateEngineTest.kt` (Done — 6 cases cover prefix, bigram, casing, limit)
+- Pack: `scripts/build-word-list-pack.sh` (pending)
+- Backend: extend `/ime-packs/manifest` to advertise word-list packs alongside RIME packs (pending)
+
+- [x] **Step 1: CandidateEngine + Candidate types.** Engine-agnostic so the candidate bar (Task 6) consumes a single shape for both RIME and trigram backends.
+
+- [x] **Step 2: TrigramCandidateEngine + InMemoryWordList.** Prefix-match → frequency sort → bigram boost for next-word context. Six unit tests green.
+
+- [x] **Step 3: LanguagePack.candidateEngine() hook.** Default null (no bar shown) so existing packs unaffected until each opts in.
+
+- [ ] **Step 4: Bundle a small bootstrap word list per Latin language.** ~2k–5k most-common entries committed as `res/raw/wordlist_<lang>.txt` — enough to feel useful before the downloadable pack lands.
+
+- [ ] **Step 5: iOS mirror.** Port the three new files into `DraftRightKeyboardCore` so the same shape is reused by JP RIME adapter (Task 4) and the future iOS candidate bar.
+
+- [ ] **Step 6: Wire candidate bar to the trigram engine.** When Task 6's bar lands, route Latin packs through `TrigramCandidateEngine`, JP through the RIME adapter — same `CandidateController`.
+
+- [ ] **Step 7: Pack format + downloadable Vietnamese 50k word list.** Compact binary (sorted words + frequency table + bigram CSR) so a 1–2 MB pack mmap's in well under 5 ms. Publish via existing ImePackService (Task 5).
+
+- [ ] **Step 8: Commit + ship.**
+```bash
+git add DraftRightMobile/android/app/src/main/kotlin/com/draftright/keyboard/ime/
+git add DraftRightMobile/android/app/src/test/kotlin/com/draftright/keyboard/ime/
+git add DraftRightMobile/android/app/src/main/kotlin/com/draftright/keyboard/LanguagePack.kt
+git commit -m "feat(ime): trigram suggestion engine + LanguagePack candidateEngine hook"
+```
+
+---
+
 ## Self-Review
 
-- **Spec coverage:** engine=RIME (T1,T4); on-device/no-network typing (T4,T6); downloadable self-hosted packs + manifest (T2,T5,T8); App Group/files-dir + mmap (T1,T5,T6); romaji-QWERTY composer (T3); candidate bar (T6); settings download/remove (T7); framework-ready for ZH/KO (Composer/CandidateController/pack seams are language-agnostic). Korean/Chinese explicitly out of scope (separate phases) — matches spec.
+- **Spec coverage:** engine=RIME (T1,T4); on-device/no-network typing (T4,T6); downloadable self-hosted packs + manifest (T2,T5,T8,T11); App Group/files-dir + mmap (T1,T5,T6); romaji-QWERTY composer (T3); candidate bar (T6); settings download/remove (T7); Latin-script word/next-word prediction (T11); framework-ready for ZH/KO (Composer/CandidateController/pack seams are language-agnostic). Korean/Chinese explicitly out of scope (separate phases) — matches spec.
 - **Placeholders:** the manifest `sha256`/`size_bytes` are intentionally filled by the Task 8 build step (real artifact hashing) — not a plan placeholder, it's a publish-time value; flagged explicitly.
 - **Gate:** Task 1 NO-GO halts before Tasks 4+, per spec's "validate the bridge first" risk mitigation.
 - **Types:** `RimeEngine` (protocol, `candidates(for:)`), `CandidateController` (`input`/`candidates`/`select`/`reset`), `RomajiComposer` (`feed`/`reset`/`currentComposingText`, conforms to existing `Composer`), `ImePackService` (`install`/`remove`) — consistent across tasks.
