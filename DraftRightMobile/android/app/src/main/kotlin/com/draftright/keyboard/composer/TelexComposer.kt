@@ -190,16 +190,24 @@ class TelexComposer : Composer {
         }
 
         private fun applyHornOrBreve(buffer: String, wIsUpper: Boolean): String? {
-            // uow special: if buffer ends with "uo" (plain), produce "ươ".
-            if (buffer.length >= 2) {
-                val twoBack = buffer[buffer.length - 2]
-                val oneBack = buffer[buffer.length - 1]
-                if (twoBack.lowercaseChar() == 'u' && oneBack.lowercaseChar() == 'o') {
-                    val u2 = caseMap('ư', twoBack.isUpperCase() || wIsUpper)
-                    val o2 = caseMap('ơ', oneBack.isUpperCase() || wIsUpper)
-                    return buffer.dropLast(2) + u2 + o2
+            // A "uo" pair anywhere in the trailing vowel cluster becomes "ươ" —
+            // even when another vowel follows it. This covers "uo" at the end
+            // ("ruo"+w → "rươ"), before a coda ("truong"+w → "trương"), AND with
+            // a trailing vowel ("ruou"+w → "rươu"/rượu, "nguoi"+w → "ngươi"/
+            // người, "huou"+w → "hươu"). The single-vowel rules below would
+            // otherwise horn the trailing vowel instead.
+            val cluster = findLastVowelCluster(buffer)
+            if (cluster != null) {
+                for (i in cluster.first until cluster.last) {
+                    if (buffer[i].lowercaseChar() == 'u' && buffer[i + 1].lowercaseChar() == 'o') {
+                        val u2 = caseMap('ư', buffer[i].isUpperCase() || wIsUpper)
+                        val o2 = caseMap('ơ', buffer[i + 1].isUpperCase() || wIsUpper)
+                        return buffer.substring(0, i) + u2 + o2 + buffer.substring(i + 2)
+                    }
                 }
             }
+
+            // Single horn/breve on the immediate last vowel: a→ă, o→ơ, u→ư.
             val last = buffer.last()
             val singleReplacement = when (last.lowercaseChar()) {
                 'a' -> 'ă'
@@ -212,20 +220,9 @@ class TelexComposer : Composer {
             }
 
             // Lookback through trailing consonants — lets users type 'w' after
-            // the syllable's coda, e.g. "truong" + w → "trương" (then "trướn-g"
-            // with subsequent tone). Same cluster rules as the immediate case:
-            // a "uo" pair behind the consonants becomes "ươ"; a single base
-            // vowel takes horn/breve.
+            // the syllable's coda for the single-vowel case.
             val vowelIdx = findLastVowelThroughConsonants(buffer) ?: return null
             val vowelChar = buffer[vowelIdx]
-            if (vowelIdx >= 1) {
-                val before = buffer[vowelIdx - 1]
-                if (before.lowercaseChar() == 'u' && vowelChar.lowercaseChar() == 'o') {
-                    val u2 = caseMap('ư', before.isUpperCase() || wIsUpper)
-                    val o2 = caseMap('ơ', vowelChar.isUpperCase() || wIsUpper)
-                    return buffer.substring(0, vowelIdx - 1) + u2 + o2 + buffer.substring(vowelIdx + 1)
-                }
-            }
             val lookbackReplacement = when (vowelChar.lowercaseChar()) {
                 'a' -> 'ă'
                 'o' -> 'ơ'

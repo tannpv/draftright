@@ -237,15 +237,16 @@ export default function ErrorsPage() {
               <th className="px-4 py-3 text-left">Severity</th>
               <th className="px-4 py-3 text-left">Count</th>
               <th className="px-4 py-3 text-left">Status</th>
+              <th className="px-4 py-3 text-left">First seen</th>
               <th className="px-4 py-3 text-left">Last seen</th>
             </tr>
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={7} className="text-center text-[var(--muted)] py-12">Loading…</td></tr>
+              <tr><td colSpan={8} className="text-center text-[var(--muted)] py-12">Loading…</td></tr>
             )}
             {!loading && items.length === 0 && (
-              <tr><td colSpan={7} className="text-center text-[var(--muted)] py-12">No errors collected yet. Either things are going great, or no clients have reported in.</td></tr>
+              <tr><td colSpan={8} className="text-center text-[var(--muted)] py-12">No errors collected yet. Either things are going great, or no clients have reported in.</td></tr>
             )}
             {items.map((row) => (
               <tr
@@ -281,7 +282,8 @@ export default function ErrorsPage() {
                     {STATUS_LABELS[row.status] || row.status}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-[var(--muted)] text-xs">{timeAgo(row.last_seen_at)}</td>
+                <td className="px-4 py-3 text-[var(--muted)] text-xs whitespace-nowrap" title={new Date(row.first_seen_at).toLocaleString()}>{timeAgo(row.first_seen_at)}</td>
+                <td className="px-4 py-3 text-[var(--muted)] text-xs whitespace-nowrap" title={new Date(row.last_seen_at).toLocaleString()}>{timeAgo(row.last_seen_at)}</td>
               </tr>
             ))}
           </tbody>

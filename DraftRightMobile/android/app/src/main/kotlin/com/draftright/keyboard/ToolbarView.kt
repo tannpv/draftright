@@ -1,11 +1,13 @@
 package com.draftright.keyboard
 
 import android.content.Context
+import android.content.res.ColorStateList
 import android.graphics.Color
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.widget.HorizontalScrollView
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -16,7 +18,7 @@ class ToolbarView(
     private val onUndo: () -> Unit
 ) : LinearLayout(context) {
 
-    private val toneButtons = mutableMapOf<Tone, TextView>()
+    private val toneButtons = mutableMapOf<Tone, View>()
     private var undoButton: TextView? = null
     private var loadingTone: Tone? = null
     private var spinnerView: ProgressBar? = null
@@ -24,7 +26,13 @@ class ToolbarView(
     init {
         orientation = HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
-        setBackgroundColor(resolveAttrColor(android.R.attr.colorBackground))
+        // Explicit colors — theme attrs are unreliable inside InputMethodService,
+        // which previously left the tinted tone icons invisible against the bar.
+        val isDark = KeyboardTheme.isDark(context)
+        val barBgColor = if (isDark) Color.parseColor("#1B1B1F") else Color.parseColor("#ECEFF1")
+        // Tone icons use the DraftRight brand blue (matches the website primary).
+        val iconColor = Color.parseColor(KeyboardTheme.BRAND_BLUE)
+        setBackgroundColor(barBgColor)
         val dp44 = dpToPx(44)
         layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dp44)
         setPadding(dpToPx(4), 0, dpToPx(4), 0)
@@ -39,25 +47,21 @@ class ToolbarView(
             gravity = Gravity.CENTER_VERTICAL
         }
 
+        // Each tone renders its Material vector icon (Tone.iconRes) tinted to the
+        // theme text color — see KeyIcons for the name -> drawable mapping.
+        val iconTint = ColorStateList.valueOf(iconColor)
         for (tone in Tone.values()) {
-            val btn = TextView(context).apply {
-                text = when (tone) {
-                    Tone.SIMPLE -> "\u270E"        // ✎ pencil
-                    Tone.NATURAL -> "\uD83D\uDCAC" // 💬 speech bubble
-                    Tone.POLISHED -> "\u2728"       // ✨ sparkles
-                    Tone.CONCISE -> "\u2296"        // ⊖ compact
-                    Tone.TECHNICAL -> "\uD83D\uDD27" // 🔧 wrench
-                    Tone.CLAUDE -> "\uD83E\uDD16" // 🤖 robot (Claude)
-                    Tone.GRAMMAR_CHECK -> "\u2705" // ✅ check
-                    Tone.TRANSLATE -> "\uD83C\uDF10" // 🌐 globe
-                }
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
-                gravity = Gravity.CENTER
+            val btn = ImageView(context).apply {
+                setImageResource(KeyIcons.resolve(tone.iconRes))
+                imageTintList = iconTint
+                scaleType = ImageView.ScaleType.CENTER_INSIDE
                 setBackgroundResource(android.R.drawable.btn_default)
+                val pad = dpToPx(9)
+                setPadding(pad, pad, pad, pad)
                 layoutParams = LayoutParams(dpToPx(44), dpToPx(40)).apply {
                     marginEnd = dpToPx(2)
                 }
-                includeFontPadding = false
+                contentDescription = tone.displayName
                 setOnClickListener { onToneSelected(tone) }
             }
             toneButtons[tone] = btn
@@ -116,9 +120,4 @@ class ToolbarView(
 
     private fun dpToPx(dp: Int): Int =
         TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, dp.toFloat(), resources.displayMetrics).toInt()
-
-    private fun resolveAttrColor(attr: Int): Int {
-        val tv = TypedValue()
-        return if (context.theme.resolveAttribute(attr, tv, true)) tv.data else Color.WHITE
-    }
 }

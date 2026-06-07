@@ -76,6 +76,8 @@ final class ToolbarView: UIView {
         let button = UIButton(type: .system)
         let config = UIImage.SymbolConfiguration(pointSize: 16, weight: .medium)
         button.setImage(UIImage(systemName: tone.iconName, withConfiguration: config), for: .normal)
+        // Brand blue, matching the website primary, so the AI actions stand out.
+        button.tintColor = .draftRightBrand
         button.tag = index
         button.addTarget(self, action: #selector(toneTapped(_:)), for: .touchUpInside)
         button.widthAnchor.constraint(equalToConstant: 40).isActive = true

@@ -186,6 +186,12 @@ export default function InboxPage() {
                     )}
                   </div>
                 </div>
+                <span
+                  className="text-xs text-[var(--muted)] whitespace-nowrap self-start"
+                  title={ageString(item.created_at)}
+                >
+                  {new Date(item.created_at).toLocaleString()}
+                </span>
                 <button
                   onClick={() => toggleExpand(key)}
                   className="text-xs text-[var(--primary)] hover:underline"

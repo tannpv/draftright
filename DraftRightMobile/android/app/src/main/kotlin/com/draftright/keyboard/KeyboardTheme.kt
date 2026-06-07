@@ -12,6 +12,9 @@ import android.content.res.Configuration
  * if the theme strategy ever moves to a user setting.
  */
 object KeyboardTheme {
+    /** DraftRight brand blue — matches the website primary, rgb(93 135 255). */
+    const val BRAND_BLUE = "#5D87FF"
+
     fun isDark(context: Context): Boolean {
         val nightMode = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
         return nightMode == Configuration.UI_MODE_NIGHT_YES
