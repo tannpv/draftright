@@ -1,7 +1,9 @@
 package com.draftright.keyboard.lang
 
+import com.draftright.keyboard.Composer
 import com.draftright.keyboard.KeyDef
 import com.draftright.keyboard.LanguagePack
+import com.draftright.keyboard.composer.RomajiKanaComposer
 import com.draftright.keyboard.ime.CandidateEngine
 import com.draftright.keyboard.ime.ImeContext
 import com.draftright.keyboard.ime.JapaneseDictionaryEngine
@@ -25,6 +27,9 @@ object JapaneseLanguagePack : LanguagePack {
     override val symbols1Rows: List<List<KeyDef>> = QwertyLayout.symbols1Rows
     override val symbols2Rows: List<List<KeyDef>> = QwertyLayout.symbols2Rows
     override val longPressAccents: Map<Char, List<Char>> = emptyMap()
+
+    /** Rōmaji→kana composer; its kana buffer drives the candidate engine. */
+    override fun composer(): Composer = RomajiKanaComposer()
 
     /** Matches the backend manifest's pack URL prefix. */
     private const val PACK_ID_PREFIX = "draftright-ime-ja"
