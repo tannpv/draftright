@@ -50,6 +50,16 @@ class LanguagePack {
     required this.sha256,
   });
 
+  /// The stable file-system id for this pack — the URL filename without the
+  /// `.pack` extension (e.g. `draftright-ime-ja-v1`). Used as the `packId`
+  /// passed to [PackInstaller] so the on-disk filename matches the pattern that
+  /// the keyboard-side resolver (`JapanesePackResolver` / `WordListPackResolver`)
+  /// expects. Single source of truth: derived from the manifest URL.
+  String get packFileId {
+    final name = url.split('/').last;
+    return name.endsWith('.pack') ? name.substring(0, name.length - 5) : name;
+  }
+
   /// Human-readable size, e.g. "≈18 MB", for the download affordance.
   String get sizeLabel {
     if (sizeBytes <= 0) return '';

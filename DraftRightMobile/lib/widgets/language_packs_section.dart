@@ -57,7 +57,7 @@ class _DownloadableLanguageTileState extends State<_DownloadableLanguageTile> {
   }
 
   Future<void> _refresh() async {
-    final installed = await widget.installer.isInstalled(widget.module.id);
+    final installed = await widget.installer.isInstalled(widget.module.pack!.packFileId);
     if (mounted) setState(() => _installed = installed);
   }
 
@@ -69,7 +69,7 @@ class _DownloadableLanguageTileState extends State<_DownloadableLanguageTile> {
     });
     try {
       await widget.installer.install(
-        packId: widget.module.id,
+        packId: pack.packFileId,
         url: pack.url,
         sha256: pack.sha256,
         sizeBytes: pack.sizeBytes,
@@ -92,7 +92,7 @@ class _DownloadableLanguageTileState extends State<_DownloadableLanguageTile> {
   Future<void> _remove() async {
     setState(() => _busy = true);
     try {
-      await widget.installer.remove(widget.module.id);
+      await widget.installer.remove(widget.module.pack!.packFileId);
       if (mounted) setState(() => _installed = false);
     } finally {
       if (mounted) setState(() => _busy = false);
