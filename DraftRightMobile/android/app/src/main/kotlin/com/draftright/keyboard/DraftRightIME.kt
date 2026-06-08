@@ -410,7 +410,9 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
      */
     private fun handleCandidatePicked(candidate: com.draftright.keyboard.ime.Candidate) {
         val ic = currentInputConnection ?: return
-        ic.finishComposingText()
+        // commitText REPLACES the active composing region (the highlighted kana),
+        // so the kanji takes its place. Do NOT finishComposingText first — that
+        // would finalize the kana and make this append (e.g. "わたし私").
         controller?.composer?.reset()
         ic.commitText(candidate.text + " ", 1)
         candidateBar?.setCandidates(emptyList())

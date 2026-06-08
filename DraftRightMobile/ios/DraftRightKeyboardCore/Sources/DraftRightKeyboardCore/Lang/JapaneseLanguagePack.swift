@@ -21,13 +21,24 @@ public struct JapaneseLanguagePack: LanguagePack {
 
     public init() {}
 
+    /// Cached engine — makeCandidateEngine() is called on EVERY keystroke, and
+    /// the dictionary is 700k+ entries (~27 MB). Parse the pack once per IME
+    /// session, not per keystroke (that was the Japanese lag).
+    private static var cachedEngine: CandidateEngine?
+
+    /// Rōmaji→kana composer; its kana buffer drives the candidate engine.
+    public func makeComposer() -> Composer? { RomajiKanaComposer() }
+
     public func makeCandidateEngine() -> CandidateEngine? {
+        if let cached = Self.cachedEngine { return cached }
         let dict = JapanesePackResolver.loadOrFallback(
             appGroupContainer: Self.appGroupContainer,
             packIdPrefix: Self.packIdPrefix,
             fallback: { JapaneseSeedDictionary.dict }
         )
-        return JapaneseDictionaryEngine(dictionary: dict)
+        let engine = JapaneseDictionaryEngine(dictionary: dict)
+        Self.cachedEngine = engine
+        return engine
     }
 
     // Rōmaji is typed on the standard ASCII QWERTY (shared with English).

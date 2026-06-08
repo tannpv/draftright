@@ -40,9 +40,11 @@ PACK_PATH="$DIST/$PACK_NAME"
 META_PATH="$DIST/draftright-ime-ja-v${VERSION}.meta"
 
 MOZC_BASE="https://raw.githubusercontent.com/google/mozc/master/src/data/dictionary_oss"
-# Mozc dictionary is split into multiple shards — fetch the first 4 for a
-# compact but useful pack (~60-80k entries after dedup).
-SHARDS=(dictionary00.txt dictionary01.txt dictionary02.txt dictionary03.txt)
+# Mozc dictionary is split into 10 shards (00-09), NOT alphabetically — so we
+# must fetch ALL of them or common words (日本, 私, …) go missing.
+SHARDS=(dictionary00.txt dictionary01.txt dictionary02.txt dictionary03.txt
+        dictionary04.txt dictionary05.txt dictionary06.txt dictionary07.txt
+        dictionary08.txt dictionary09.txt)
 
 TMP_RAW=$(mktemp)
 TMP_SORTED=$(mktemp)
@@ -88,24 +90,38 @@ with open(src, encoding='utf-8') as f:
             continue
         pairs.append((reading, surface, cost))
 
-# Sort by reading then ascending cost (lower cost = better conversion).
-pairs.sort(key=lambda x: (x[0], x[2]))
+# Rank: kanji-containing surfaces first (the useful conversions), then by
+# ascending Mozc cost. Pure-katakana/other surfaces fall after kanji ones for
+# the same reading, so e.g. わたし → 私 ranks above ワタシ.
+def has_kanji(s):
+    return any('一' <= ch <= '鿿' for ch in s)
+pairs.sort(key=lambda x: (x[0], 0 if has_kanji(x[1]) else 1, x[2]))
 
 # Dedupe: for each reading keep candidates in cost order, no duplicates.
+# Track each reading's best (lowest) cost so we can keep only the most common.
 from collections import defaultdict
 grouped = defaultdict(list)
 seen = defaultdict(set)
+best_cost = {}
 for reading, surface, cost in pairs:
     if surface not in seen[reading]:
         seen[reading].add(surface)
         grouped[reading].append(surface)
+        if reading not in best_cost or cost < best_cost[reading]:
+            best_cost[reading] = cost
+
+# Cap to the most frequent readings (lowest best-cost). A keyboard needs common
+# words, not 700k rare proper nouns — keeps the pack small (~few MB) so it loads
+# fast on language-switch and fits the iOS extension memory budget.
+MAX_READINGS = 50000
+kept = sorted(grouped.keys(), key=lambda r: best_cost[r])[:MAX_READINGS]
 
 with open(dst, 'w', encoding='utf-8') as out:
-    for reading in sorted(grouped.keys()):
+    for reading in sorted(kept):
         candidates = ','.join(grouped[reading][:8])   # cap at 8 per reading
         out.write(f'{reading}\t{candidates}\n')
 
-print(f'  {len(grouped)} unique readings → {sum(len(v) for v in grouped.values())} candidates')
+print(f'  {len(grouped)} readings found → kept top {len(kept)} by frequency')
 PYEOF
 
 echo "[3/4] Writing pack to $PACK_PATH..."

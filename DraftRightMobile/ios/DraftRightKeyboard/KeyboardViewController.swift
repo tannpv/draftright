@@ -171,12 +171,17 @@ class KeyboardViewController: UIInputViewController {
     }
 
     private func handleCandidatePicked(_ candidate: Candidate) {
-        // Commit the candidate followed by a trailing space (matches
-        // Gboard / Samsung UX). Clear composer + strip so the next
-        // keystroke starts a fresh word.
-        textDocumentProxy.unmarkText()
+        // REPLACE the marked composing region (the highlighted kana) with the
+        // chosen kanji: setMarkedText swaps the marked text, then unmarkText
+        // finalizes it. Doing unmarkText first would finalize the kana and make
+        // the candidate append (e.g. "わたし私"). Trailing space matches Gboard.
         controller?.composer?.reset()
-        textDocumentProxy.insertText(candidate.text + " ")
+        textDocumentProxy.setMarkedText(
+            candidate.text,
+            selectedRange: NSRange(location: candidate.text.utf16.count, length: 0)
+        )
+        textDocumentProxy.unmarkText()
+        textDocumentProxy.insertText(" ")
         candidateBar.setCandidates([])
         adjustHeightForCandidateBar()
     }
