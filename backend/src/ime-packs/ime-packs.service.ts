@@ -49,13 +49,19 @@ export class ImePacksService {
       },
     },
     {
-      id: 'zh-pinyin',
-      displayName: '中文 (拼音)',
+      id: 'zh',
+      displayName: '中文',
       inputMethod: 'candidate',
-      engine: 'rime',
+      engine: 'dictionary',   // DictionaryCandidateEngine (pinyin→hanzi), same as JA
       layout: 'pinyin',
       bundled: false,
-      pack: { url: `${PACK_BASE}/draftright-ime-zh-pinyin-v1.pack`, version: 1, sizeBytes: 0, sha256: '', minEngineVersion: 1 },
+      pack: {
+        url: `${PACK_BASE}/draftright-ime-zh-v1.pack`,
+        version: 1,
+        sizeBytes: 1907323,
+        sha256: '9cc23ff9c85a76e4d38f5991ffd6e0e23e19eceb702d43a39d3e81a562b98b70',
+        minEngineVersion: 1,
+      },
     },
   ];
 
