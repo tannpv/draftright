@@ -47,6 +47,7 @@ public protocol LanguagePack {
 }
 
 public extension LanguagePack {
-    func makeComposer() -> Composer? { nil }
+    /// Default: no composition (Latin packs type directly). JP/VI override.
+    func makeComposer() -> Composer? { PassthroughComposer() }
     func makeCandidateEngine() -> CandidateEngine? { nil }
 }

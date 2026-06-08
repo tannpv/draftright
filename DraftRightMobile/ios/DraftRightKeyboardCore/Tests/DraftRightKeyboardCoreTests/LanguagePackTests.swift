@@ -19,8 +19,8 @@ final class LanguagePackTests: XCTestCase {
         XCTAssertEqual(p.displayName, "Stub")
     }
 
-    func test_composerFactoryDefaultsToNil() {
-        XCTAssertNil(StubPack().makeComposer())
+    func test_composerFactoryDefaultsToPassthrough() {
+        XCTAssertTrue(StubPack().makeComposer() is PassthroughComposer)
     }
 
     func test_keyDefCarriesLabelCodeAndWidthWeight() {

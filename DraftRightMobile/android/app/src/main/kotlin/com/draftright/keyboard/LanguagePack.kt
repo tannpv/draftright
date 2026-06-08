@@ -1,5 +1,6 @@
 package com.draftright.keyboard
 
+import com.draftright.keyboard.composer.PassthroughComposer
 import com.draftright.keyboard.ime.CandidateEngine
 import java.util.Locale
 
@@ -18,7 +19,8 @@ interface LanguagePack {
     val symbols2Rows: List<List<KeyDef>>
     val longPressAccents: Map<Char, List<Char>>
 
-    fun composer(): Composer? = null
+    /** Default: no composition (Latin packs type directly). JP/VI override. */
+    fun composer(): Composer = PassthroughComposer()
 
     /**
      * Suggestion engine shown in the candidate bar — Telex-aware trigram for
