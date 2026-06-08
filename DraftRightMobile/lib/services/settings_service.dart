@@ -159,6 +159,7 @@ class SettingsService extends ChangeNotifier {
     'it': 'Italiano',
     'pt': 'Português',
     'ja': '日本語',
+    'ko': '한국어',
   };
 
   static const List<String> supportedLanguages = [
