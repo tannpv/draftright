@@ -35,10 +35,22 @@ final class RomajiComposerTests: XCTestCase {
     }
 
     func test_moraic_n() {
-        XCTAssertEqual(kana("nn"), "んn")  // first n → ん; second n waits to start next mora
+        XCTAssertEqual(kana("nn"), "ん")    // doubled n → single ん
         XCTAssertEqual(kana("n'"), "ん")    // apostrophe forces a standalone ん
-        XCTAssertEqual(kana("hon"), "ほn")        // ho + lone trailing n stays pending (shown as romaji)
+        XCTAssertEqual(kana("hon"), "ほん")        // ho + trailing n finalizes to ん
         XCTAssertEqual(kana("honda"), "ほんだ")    // ho + n(+consonant→ん) + da
+    }
+
+    /// A trailing lone "n" finalizes to ん so the kana is dictionary-lookable
+    /// ("nihon" → にほん → 日本). Previously it stayed literal ("にほn"), so the
+    /// candidate engine never matched and only hiragana showed.
+    func test_trailing_moraic_n_finalized() {
+        XCTAssertEqual(kana("nihon"), "にほん")
+        XCTAssertEqual(kana("hon"), "ほん")
+        XCTAssertEqual(kana("n"), "ん")
+        XCTAssertEqual(kana("nn"), "ん")
+        XCTAssertEqual(kana("nihongo"), "にほんご")   // mid-word n still binds
+        XCTAssertEqual(kana("konnichiwa"), "こんにちわ")
     }
 
     func test_pending_tail_is_shown_as_romaji() {
@@ -51,8 +63,8 @@ final class RomajiComposerTests: XCTestCase {
     func test_lone_trailing_n_waits_then_commits_with_apostrophe() {
         let c = RomajiComposer()
         XCTAssertEqual(c.feed("ho"), "ほ")
-        XCTAssertEqual(c.feed("n"), "ほn")     // n alone waits, shown as romaji tail
-        XCTAssertEqual(c.feed("'"), "ほん")     // apostrophe forces the moraic n
+        XCTAssertEqual(c.feed("n"), "ほん")     // trailing n finalizes to ん
+        XCTAssertEqual(c.feed("'"), "ほん")     // apostrophe keeps the moraic ん
     }
 
     func test_reset() {

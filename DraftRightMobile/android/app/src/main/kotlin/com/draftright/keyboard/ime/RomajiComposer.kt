@@ -14,8 +14,19 @@ class RomajiComposer {
     private val kana = StringBuilder()
     private var pending = ""
 
-    /** Current composing text = resolved kana + unresolved rōmaji tail. */
-    fun text(): String = kana.toString() + pending
+    /** Current composing text = resolved kana + unresolved rōmaji tail.
+     *  A trailing lone "n" finalizes to the moraic ん so the kana is
+     *  dictionary-lookable ("nihon" → にほん → 日本); without this it stayed
+     *  literal ("にほn") and the candidate engine never matched. After an "nn"
+     *  pair the ん is already emitted, so the leftover n is dropped (the doubled
+     *  n is just the ん shortcut) rather than doubling to んん. A following key
+     *  still re-binds it (raw "na" transforms fresh to な). */
+    fun text(): String {
+        if (pending == "n") {
+            return kana.toString() + if (kana.endsWith("ん")) "" else "ん"
+        }
+        return kana.toString() + pending
+    }
 
     fun reset() {
         kana.setLength(0)

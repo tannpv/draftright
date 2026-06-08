@@ -16,7 +16,18 @@ public final class RomajiComposer {
     public init() {}
 
     /// Current composing text = resolved kana + unresolved rōmaji tail.
-    public func text() -> String { kana + pending }
+    /// A trailing lone "n" finalizes to the moraic ん so the kana is
+    /// dictionary-lookable ("nihon" → にほん → 日本); without this it stayed
+    /// literal ("にほn") and the candidate engine never matched. After an "nn"
+    /// pair the ん is already emitted, so the leftover n is dropped (the doubled
+    /// n is just the ん shortcut) rather than doubling to んん. A following key
+    /// still re-binds it (raw "na" transforms fresh to な).
+    public func text() -> String {
+        if pending == "n" {
+            return kana + (kana.hasSuffix("ん") ? "" : "ん")
+        }
+        return kana + pending
+    }
 
     public func reset() {
         kana = ""

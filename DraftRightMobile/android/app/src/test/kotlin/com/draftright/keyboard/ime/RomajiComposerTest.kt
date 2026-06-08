@@ -34,10 +34,23 @@ class RomajiComposerTest {
     }
 
     @Test fun moraicN() {
-        assertEquals("んn", kana("nn"))
+        assertEquals("ん", kana("nn"))
         assertEquals("ん", kana("n'"))
-        assertEquals("ほn", kana("hon"))
+        assertEquals("ほん", kana("hon"))
         assertEquals("ほんだ", kana("honda"))
+    }
+
+    /** A trailing lone "n" finalizes to ん so the kana is dictionary-lookable
+     *  ("nihon" → にほん → 日本). Previously it stayed literal ("にほn"), so the
+     *  candidate engine never matched and only hiragana showed. */
+    @Test fun trailingMoraicNFinalized() {
+        assertEquals("にほん", kana("nihon"))
+        assertEquals("ほん", kana("hon"))
+        assertEquals("ん", kana("n"))
+        assertEquals("ん", kana("nn"))
+        // mid-word n still binds to a following vowel/consonant (no over-eager ん)
+        assertEquals("にほんご", kana("nihongo"))
+        assertEquals("こんにちわ", kana("konnichiwa"))
     }
 
     @Test fun pendingTailShownAsRomaji() {
