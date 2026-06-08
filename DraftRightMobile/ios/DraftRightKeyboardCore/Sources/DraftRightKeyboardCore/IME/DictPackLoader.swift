@@ -10,7 +10,7 @@ import Foundation
 ///
 /// Rule #1: pure parsing, no platform I/O, no hardcoded filenames — callers
 /// supply the URL; `JapaneseLanguagePack` wires the resolver.
-public enum JapaneseDictLoader {
+public enum DictPackLoader {
 
     /// Load a reading→kanji map from a `.pack` URL on disk.
     public static func load(from url: URL) throws -> [String: [String]] {

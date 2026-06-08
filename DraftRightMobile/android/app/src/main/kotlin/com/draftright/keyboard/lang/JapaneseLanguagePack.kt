@@ -6,8 +6,8 @@ import com.draftright.keyboard.LanguagePack
 import com.draftright.keyboard.composer.RomajiKanaComposer
 import com.draftright.keyboard.ime.CandidateEngine
 import com.draftright.keyboard.ime.ImeContext
-import com.draftright.keyboard.ime.JapaneseDictionaryEngine
-import com.draftright.keyboard.ime.JapanesePackResolver
+import com.draftright.keyboard.ime.DictionaryCandidateEngine
+import com.draftright.keyboard.ime.DictPackResolver
 import com.draftright.keyboard.ime.JapaneseSeedDictionary
 import java.util.Locale
 
@@ -49,11 +49,11 @@ object JapaneseLanguagePack : LanguagePack {
             cachedEngine?.let { return it }
             val ctx = ImeContext.appOrNull()
             val dict = if (ctx != null) {
-                JapanesePackResolver.loadOrFallback(ctx, PACK_ID_PREFIX) { JapaneseSeedDictionary.dict }
+                DictPackResolver.loadOrFallback(ctx, PACK_ID_PREFIX) { JapaneseSeedDictionary.dict }
             } else {
                 JapaneseSeedDictionary.dict
             }
-            val engine = JapaneseDictionaryEngine(dict)
+            val engine = DictionaryCandidateEngine(dict)
             cachedEngine = engine
             return engine
         }

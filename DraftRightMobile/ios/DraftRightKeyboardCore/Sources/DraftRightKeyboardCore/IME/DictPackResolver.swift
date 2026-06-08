@@ -10,7 +10,7 @@ import Foundation
 ///
 /// Pack files live under `<App Group container>/packs/<prefix>-v<N>.pack`,
 /// written by the Flutter `ImePackService` in the host app.
-public enum JapanesePackResolver {
+public enum DictPackResolver {
 
     /// - Parameters:
     ///   - appGroupContainer: URL from `FileManager.containerURL(forSecurityApplicationGroupIdentifier:)`,
@@ -25,7 +25,7 @@ public enum JapanesePackResolver {
         fallback: () -> [String: [String]]
     ) -> [String: [String]] {
         if let installed = findLatestInstalled(appGroupContainer: appGroupContainer, packIdPrefix: packIdPrefix) {
-            if let dict = try? JapaneseDictLoader.load(from: installed), !dict.isEmpty {
+            if let dict = try? DictPackLoader.load(from: installed), !dict.isEmpty {
                 return dict
             }
         }

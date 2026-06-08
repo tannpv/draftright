@@ -15,7 +15,7 @@ import java.io.InputStream
  * Rule #1: pure parsing, no platform I/O, no hardcoded filenames — callers
  * supply the File/InputStream; `JapaneseLanguagePack` wires the resolver.
  */
-object JapaneseDictLoader {
+object DictPackLoader {
 
     /** Load a reading→kanji map from a `.pack` file on disk. */
     fun load(file: File): Map<String, List<String>> =
