@@ -68,7 +68,21 @@ class _DownloadableLanguagesState extends State<_DownloadableLanguages> {
           );
         }
         return LanguagePacksSection(
-            modules: data.modules, packInstaller: data.installer);
+          modules: data.modules,
+          packInstaller: data.installer,
+          onLanguageEnabledChanged: (id, enabled) {
+            // Install ⇒ add the language to the keyboard cycle; remove ⇒ drop
+            // it. Keeps download a single step instead of also toggling a chip.
+            final settings = context.read<SettingsService>();
+            final next = List<String>.from(settings.enabledLanguageIds);
+            if (enabled) {
+              if (!next.contains(id)) next.add(id);
+            } else {
+              next.remove(id);
+            }
+            settings.setEnabledLanguageIds(next);
+          },
+        );
       },
     );
   }

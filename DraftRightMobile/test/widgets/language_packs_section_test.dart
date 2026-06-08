@@ -65,6 +65,32 @@ void main() {
     expect(fake.removeCalledFor, 'ja');
     expect(find.textContaining('Download'), findsOneWidget);
   });
+
+  // TC: IMEUI-004  installing a pack auto-enables its language in the cycle;
+  // removing it disables it — so download is a single step, not two.
+  testWidgets('install reports the language enabled, remove reports disabled',
+      (t) async {
+    final fake = _FakeInstaller(installed: false);
+    final events = <(String, bool)>[];
+    await t.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: LanguagePacksSection(
+          modules: [_ja],
+          packInstaller: fake,
+          onLanguageEnabledChanged: (id, enabled) => events.add((id, enabled)),
+        ),
+      ),
+    ));
+    await t.pumpAndSettle();
+
+    await t.tap(find.textContaining('Download'));
+    await t.pumpAndSettle();
+    expect(events, contains(('ja', true)));
+
+    await t.tap(find.textContaining('Remove'));
+    await t.pumpAndSettle();
+    expect(events, contains(('ja', false)));
+  });
 }
 
 class _FakeInstaller implements PackInstaller {
