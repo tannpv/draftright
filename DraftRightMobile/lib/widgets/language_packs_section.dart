@@ -13,10 +13,17 @@ class LanguagePacksSection extends StatelessWidget {
     super.key,
     required this.modules,
     required this.packInstaller,
+    this.onLanguageEnabledChanged,
   });
 
   final List<LanguageModule> modules;
   final PackInstaller packInstaller;
+
+  /// Fired when a downloadable language is installed (`enabled == true`) or
+  /// removed (`false`), with the language id (e.g. `ja`). Lets the host add or
+  /// drop the language from the keyboard cycle so downloading is a single step
+  /// — install ⇒ in the cycle — instead of also having to toggle it on.
+  final void Function(String languageId, bool enabled)? onLanguageEnabledChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -25,7 +32,11 @@ class LanguagePacksSection extends StatelessWidget {
       children: [
         for (final m in modules)
           m.requiresDownload
-              ? _DownloadableLanguageTile(module: m, installer: packInstaller)
+              ? _DownloadableLanguageTile(
+                  module: m,
+                  installer: packInstaller,
+                  onEnabledChanged: onLanguageEnabledChanged,
+                )
               : ListTile(
                   title: Text(m.displayName),
                   trailing: const Text('Included'),
@@ -36,10 +47,15 @@ class LanguagePacksSection extends StatelessWidget {
 }
 
 class _DownloadableLanguageTile extends StatefulWidget {
-  const _DownloadableLanguageTile({required this.module, required this.installer});
+  const _DownloadableLanguageTile({
+    required this.module,
+    required this.installer,
+    this.onEnabledChanged,
+  });
 
   final LanguageModule module;
   final PackInstaller installer;
+  final void Function(String languageId, bool enabled)? onEnabledChanged;
 
   @override
   State<_DownloadableLanguageTile> createState() => _DownloadableLanguageTileState();
@@ -78,6 +94,8 @@ class _DownloadableLanguageTileState extends State<_DownloadableLanguageTile> {
         },
       );
       if (mounted) setState(() => _installed = true);
+      // Single-step UX: a freshly downloaded language joins the keyboard cycle.
+      widget.onEnabledChanged?.call(widget.module.id, true);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -94,6 +112,8 @@ class _DownloadableLanguageTileState extends State<_DownloadableLanguageTile> {
     try {
       await widget.installer.remove(widget.module.pack!.packFileId);
       if (mounted) setState(() => _installed = false);
+      // Removing the pack drops the language from the cycle too.
+      widget.onEnabledChanged?.call(widget.module.id, false);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
