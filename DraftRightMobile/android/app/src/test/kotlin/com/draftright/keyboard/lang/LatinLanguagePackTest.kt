@@ -35,7 +35,8 @@ class LatinLanguagePackTest {
     }
 
     @Test
-    fun `French composer is null`() = assertNull(FrenchLanguagePack.composer())
+    fun `French composer is passthrough`() =
+        assertTrue(FrenchLanguagePack.composer() is com.draftright.keyboard.composer.PassthroughComposer)
 
     // --- Spanish ---
 

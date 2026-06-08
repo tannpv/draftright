@@ -1,7 +1,9 @@
 package com.draftright.keyboard
 
+import com.draftright.keyboard.composer.PassthroughComposer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.Locale
 
@@ -25,8 +27,8 @@ class LanguagePackTest {
     }
 
     @Test
-    fun `composer factory defaults to null`() {
-        assertNull(stub.composer())
+    fun `composer factory defaults to passthrough`() {
+        assertTrue(stub.composer() is PassthroughComposer)
     }
 
     @Test
