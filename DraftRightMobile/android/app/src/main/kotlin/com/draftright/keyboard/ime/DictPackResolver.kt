@@ -13,7 +13,7 @@ import java.io.File
  * Pack files live under `<filesDir>/packs/<prefix>-v<N>.pack`, written by
  * the Flutter `ImePackService`.
  */
-object JapanesePackResolver {
+object DictPackResolver {
 
     /**
      * @param context       Android context — used to locate the packs directory.
@@ -28,7 +28,7 @@ object JapanesePackResolver {
     ): Map<String, List<String>> {
         val installed = findLatestInstalled(context, packIdPrefix)
         if (installed != null) {
-            val dict = runCatching { JapaneseDictLoader.load(installed) }.getOrNull()
+            val dict = runCatching { DictPackLoader.load(installed) }.getOrNull()
             if (!dict.isNullOrEmpty()) return dict
         }
         return fallback()

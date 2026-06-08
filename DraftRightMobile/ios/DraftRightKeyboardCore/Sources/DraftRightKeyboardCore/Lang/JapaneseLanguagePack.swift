@@ -31,12 +31,12 @@ public struct JapaneseLanguagePack: LanguagePack {
 
     public func makeCandidateEngine() -> CandidateEngine? {
         if let cached = Self.cachedEngine { return cached }
-        let dict = JapanesePackResolver.loadOrFallback(
+        let dict = DictPackResolver.loadOrFallback(
             appGroupContainer: Self.appGroupContainer,
             packIdPrefix: Self.packIdPrefix,
             fallback: { JapaneseSeedDictionary.dict }
         )
-        let engine = JapaneseDictionaryEngine(dictionary: dict)
+        let engine = DictionaryCandidateEngine(dictionary: dict)
         Self.cachedEngine = engine
         return engine
     }
