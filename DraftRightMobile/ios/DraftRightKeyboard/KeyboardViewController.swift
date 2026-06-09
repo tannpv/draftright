@@ -30,8 +30,21 @@ class KeyboardViewController: UIInputViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        wireSharedPackContainer()
         rebuildController()
         setupUI()
+    }
+
+    /// Point the candidate packs at the App Group container so the keyboard
+    /// reads the host app's downloaded JP/ZH dictionary packs. Without this
+    /// the `appGroupContainer` statics stay nil and only the small bundled
+    /// seed dictionary is ever used (no full kanji/hanzi conversion). Nil
+    /// container (e.g. Full Access off) safely falls back to the seed.
+    private func wireSharedPackContainer() {
+        let container = FileManager.default.containerURL(
+            forSecurityApplicationGroupIdentifier: "group.com.draftright.v2")
+        JapaneseLanguagePack.appGroupContainer = container
+        ChineseLanguagePack.appGroupContainer = container
     }
 
     override func viewWillAppear(_ animated: Bool) {
