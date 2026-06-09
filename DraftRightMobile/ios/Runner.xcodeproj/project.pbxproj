@@ -17,6 +17,7 @@
 		1D1E151DC20ADAC8D2F8C910 /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AD8997318C0237682399A953 /* Pods_Runner.framework */; };
 		1FAABDAD11D7F2FEBE581A4B /* SharedSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = F52E61497CDC2BCE4E673A21 /* SharedSettings.swift */; };
 		2066BD4DC241D0D897DC3500 /* KeyboardViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48B352C2112BE551474B2FE8 /* KeyboardViewController.swift */; };
+		222B81F3122A0F9215D39C5F /* BrandColor.swift in Sources */ = {isa = PBXBuildFile; fileRef = E057ECD64116FCFDDA971A7D /* BrandColor.swift */; };
 		23DEC5AFDEF253BACF320892 /* Pods_RunnerTests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FBE725CAFCBD2E5DCC9355BE /* Pods_RunnerTests.framework */; };
 		2D4483D597249DF478197B20 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 40CA77BC8C1023B5F3AE2D36 /* Foundation.framework */; };
 		331C808B294A63AB00263BE5 /* RunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 331C807B294A618700263BE5 /* RunnerTests.swift */; };
@@ -40,6 +41,7 @@
 		E79691A3E38A8CDA1FA32B59 /* TelexTypingUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AF882533116FB9CD3360FE1 /* TelexTypingUITests.swift */; };
 		E91EC3FF0E2C0F32F148BD58 /* Tone.swift in Sources */ = {isa = PBXBuildFile; fileRef = 102EE7DE0735023A9D90AF01 /* Tone.swift */; };
 		EFC01AE1AD943E39E2FFD346 /* DraftRightKeyboardCore in Frameworks */ = {isa = PBXBuildFile; productRef = B3960B39CF8EDD32C93D5585 /* DraftRightKeyboardCore */; };
+		F2ED85BC7C74F0FF15C3FACB /* CandidateBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C1FD7933E61D9B1B5C7456F /* CandidateBarView.swift */; };
 		FA1B2C3D4E5F6A7B8C9D0E1F /* QwertyKeyboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1B2C3D4E5F6A7B8C9D0E10 /* QwertyKeyboardView.swift */; };
 /* End PBXBuildFile section */
 
@@ -104,6 +106,7 @@
 		97C146FD1CF9000F007C117D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		97C147001CF9000F007C117D /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		97C147021CF9000F007C117D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		9C1FD7933E61D9B1B5C7456F /* CandidateBarView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CandidateBarView.swift; sourceTree = "<group>"; };
 		A07D316FE4FE99EDD5922F96 /* SharedKeychain.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SharedKeychain.swift; sourceTree = "<group>"; };
 		A818A5E32592D3C0802EC608 /* KBUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = KBUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		AAE43508063932C07D91C4CA /* AccentPopupView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AccentPopupView.swift; sourceTree = "<group>"; };
@@ -116,6 +119,7 @@
 		CEEEFA1BC689D4869B3D6809 /* Pods-Runner.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"; sourceTree = "<group>"; };
 		D66F100645BE5037154B98F0 /* KeyboardEnableHelper.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = KeyboardEnableHelper.swift; sourceTree = "<group>"; };
 		DFD7354A43EFA54973F52B7C /* DiffSheetView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DiffSheetView.swift; sourceTree = "<group>"; };
+		E057ECD64116FCFDDA971A7D /* BrandColor.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BrandColor.swift; sourceTree = "<group>"; };
 		E6162B60414F275F2767AEBB /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		F52E61497CDC2BCE4E673A21 /* SharedSettings.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SharedSettings.swift; sourceTree = "<group>"; };
 		FA1B2C3D4E5F6A7B8C9D0E10 /* QwertyKeyboardView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = QwertyKeyboardView.swift; sourceTree = "<group>"; };
@@ -215,6 +219,8 @@
 				FA1B2C3D4E5F6A7B8C9D0E10 /* QwertyKeyboardView.swift */,
 				6A9A59276D900A83374CF747 /* Info.plist */,
 				AAE43508063932C07D91C4CA /* AccentPopupView.swift */,
+				E057ECD64116FCFDDA971A7D /* BrandColor.swift */,
+				9C1FD7933E61D9B1B5C7456F /* CandidateBarView.swift */,
 			);
 			path = DraftRightKeyboard;
 			sourceTree = "<group>";
@@ -735,6 +741,8 @@
 				FA1B2C3D4E5F6A7B8C9D0E1F /* QwertyKeyboardView.swift in Sources */,
 				99D8F15864ECBAFF6B1DE724 /* SharedKeychain.swift in Sources */,
 				AAA3603D8BC3B6B17F18EE3F /* AccentPopupView.swift in Sources */,
+				222B81F3122A0F9215D39C5F /* BrandColor.swift in Sources */,
+				F2ED85BC7C74F0FF15C3FACB /* CandidateBarView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -938,7 +946,7 @@
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = DraftRightAction/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -967,7 +975,7 @@
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = DraftRightKeyboard/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -996,7 +1004,7 @@
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = DraftRightAction/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -1269,7 +1277,7 @@
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = DraftRightKeyboard/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -1299,7 +1307,7 @@
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = DraftRightKeyboard/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -1328,7 +1336,7 @@
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = DraftRightAction/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
