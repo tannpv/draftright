@@ -88,11 +88,43 @@ final class BackendClient {
                 return
             }
             do {
+                // Grammar Check returns {"grammar":{score,issues[]}} instead of
+                // rewritten_text — format it to readable text (mirrors Android).
+                let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+                if tone == .grammarCheck, let grammar = obj?["grammar"] as? [String: Any] {
+                    completion(.success(Self.formatGrammar(grammar)))
+                    return
+                }
+                if let rewritten = obj?["rewritten_text"] as? String {
+                    completion(.success(rewritten.trimmingCharacters(in: .whitespacesAndNewlines)))
+                    return
+                }
                 let decoded = try JSONDecoder().decode(RewriteResponse.self, from: data)
                 completion(.success(decoded.rewritten_text.trimmingCharacters(in: .whitespacesAndNewlines)))
             } catch {
                 completion(.failure(error))
             }
         }.resume()
+    }
+
+    /// Render the grammar-check payload `{score, issues[]}` as readable text.
+    /// Same wording as Android's BackendClient so both keyboards match.
+    static func formatGrammar(_ grammar: [String: Any]) -> String {
+        let score = (grammar["score"] as? NSNumber)?.intValue ?? 0
+        var out = "Score: \(score)/100"
+        let issues = grammar["issues"] as? [[String: Any]] ?? []
+        if issues.isEmpty {
+            out += "\n\nNo issues found. Your text looks great!"
+        } else {
+            out += "\n\nIssues:"
+            for issue in issues {
+                let original = issue["original"] as? String ?? ""
+                let suggestion = issue["suggestion"] as? String ?? ""
+                let reason = issue["reason"] as? String ?? ""
+                out += "\n• \"\(original)\" → \"\(suggestion)\""
+                if !reason.isEmpty { out += " (\(reason))" }
+            }
+        }
+        return out
     }
 }
