@@ -136,6 +136,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.dispose();
   }
 
+  void _saveBackendUrl(SettingsService settings, String value) {
+    final url = value.trim();
+    if (url.isEmpty || url == settings.backendUrl) return;
+    settings.setBackendUrl(url);
+    context.read<AuthService>().setBaseUrl(url);
+    _backendUrlController.text = settings.backendUrl; // reflect any normalization
+    FocusScope.of(context).unfocus();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Backend → ${settings.backendUrl}')),
+    );
+  }
+
   Future<void> _setBubble(SettingsService settings, bool enable) async {
     final messenger = ScaffoldMessenger.of(context);
     if (!enable) {
@@ -294,19 +306,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 controller: _backendUrlController,
                 keyboardType: TextInputType.url,
                 autocorrect: false,
-                decoration: const InputDecoration(
+                // Persist on every commit path — submit (Go key), focus loss
+                // (tap outside), and the explicit Save button — so the URL can't
+                // silently fail to stick (it used to save only on Go).
+                onSubmitted: (value) => _saveBackendUrl(settings, value),
+                onEditingComplete: () => _saveBackendUrl(settings, _backendUrlController.text),
+                onTapOutside: (_) {
+                  if (_backendUrlController.text != settings.backendUrl) {
+                    _saveBackendUrl(settings, _backendUrlController.text);
+                  }
+                },
+                decoration: InputDecoration(
                   labelText: 'Backend URL',
                   helperText: 'Prod: api.draftright.info  ·  Dev: api.dev.draftright.info',
-                  border: OutlineInputBorder(),
+                  border: const OutlineInputBorder(),
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.save_outlined),
+                    tooltip: 'Save backend URL',
+                    onPressed: () => _saveBackendUrl(settings, _backendUrlController.text),
+                  ),
                 ),
-                onSubmitted: (value) {
-                  if (value.isEmpty) return;
-                  settings.setBackendUrl(value);
-                  context.read<AuthService>().setBaseUrl(value);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Backend → $value')),
-                  );
-                },
               ),
 
               const SizedBox(height: 24),
