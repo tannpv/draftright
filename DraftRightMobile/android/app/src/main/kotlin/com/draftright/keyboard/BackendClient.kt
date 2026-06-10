@@ -14,6 +14,8 @@ class BackendClient {
         const val MAX_INPUT_CHARS = 3000
         /** Shown when the backend gives no usable user-facing message. */
         const val GENERIC_ERROR = "Rewrite service is temporarily unavailable. Please try again."
+        /** Shown on 401 — the keyboard's saved token expired; re-login in the app. */
+        const val AUTH_ERROR = "Session expired — open DraftRight and log in again."
 
         /**
          * Pull the backend's user-facing `error` field out of an error
@@ -73,10 +75,14 @@ class BackendClient {
                     val responseCode = conn.responseCode
                     if (responseCode >= 400) {
                         val errorBody = conn.errorStream?.bufferedReader()?.use { it.readText() }
-                        // Surface only the backend's user-facing `error` field.
-                        // Never render the raw body — it can carry provider
-                        // internals (API key prefixes, upstream JSON, request ids).
-                        val message = parseErrorMessage(errorBody) ?: GENERIC_ERROR
+                        // 401 = the keyboard's token is expired/invalid. The
+                        // keyboard can't show a login screen, so point the user
+                        // to the app instead of a bare "invalid token".
+                        val message = if (responseCode == 401) AUTH_ERROR
+                            // Surface only the backend's user-facing `error` field.
+                            // Never render the raw body — it can carry provider
+                            // internals (API key prefixes, upstream JSON, request ids).
+                            else parseErrorMessage(errorBody) ?: GENERIC_ERROR
                         onResult(Result.failure(Exception(message)))
                         return@thread
                     }
