@@ -3,11 +3,11 @@ import { ImePacksService } from './ime-packs.service';
 describe('ImePacksService — language container catalog', () => {
   const svc = new ImePacksService();
 
-  it('lists Japanese as a downloadable candidate (rime) pack', () => {
+  it('lists Japanese as a downloadable candidate (dictionary) pack', () => {
     const ja = svc.catalog().find((m) => m.id === 'ja');
     expect(ja).toBeDefined();
     expect(ja!.inputMethod).toBe('candidate');
-    expect(ja!.engine).toBe('rime');
+    expect(ja!.engine).toBe('dictionary');
     expect(ja!.bundled).toBe(false);
     expect(ja!.pack).toMatchObject({
       url: expect.stringContaining('.pack'),
@@ -29,7 +29,7 @@ describe('ImePacksService — language container catalog', () => {
       expect(typeof m.id).toBe('string');
       expect(typeof m.displayName).toBe('string');
       expect(['composition', 'candidate', 'passthrough']).toContain(m.inputMethod);
-      expect(['composition', 'rime', 'none']).toContain(m.engine);
+      expect(['composition', 'dictionary', 'none']).toContain(m.engine);
       expect(typeof m.bundled).toBe('boolean');
       // candidate languages must carry a downloadable pack; bundled ones must not
       if (m.inputMethod === 'candidate') expect(m.bundled).toBe(false);
