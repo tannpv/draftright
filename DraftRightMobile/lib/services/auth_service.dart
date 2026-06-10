@@ -38,6 +38,24 @@ class AuthService extends ChangeNotifier {
   bool get isLoggedIn => _accessToken != null && _accessToken!.isNotEmpty;
   String? get accessToken => _accessToken;
 
+  /// One-shot flag: set when a request 401s and the refresh token is also
+  /// invalid/expired (true session expiry). The login screen reads it to show
+  /// a "session expired" notice, then clears it via [consumeSessionExpired].
+  bool _sessionExpired = false;
+  bool get sessionExpired => _sessionExpired;
+
+  /// Called when an authed call gets a 401 that refresh couldn't recover.
+  /// Signs the user out (→ the auth gate routes to the login screen) and flags
+  /// the reason so the UI can say "your session expired, please log in again"
+  /// instead of a raw "invalid token".
+  Future<void> markSessionExpired() async {
+    if (!isLoggedIn) return; // already signed out — nothing to announce
+    _sessionExpired = true;
+    await logout(); // clears creds + notifyListeners → gate shows LoginScreen
+  }
+
+  void consumeSessionExpired() => _sessionExpired = false;
+
   /// Called by SettingsService when backendUrl changes.
   void setBaseUrl(String url) {
     _baseUrl = url;
