@@ -1,0 +1,53 @@
+import Foundation
+
+/// Hand-curated ~200-entry French frequency list. Mirror of
+/// `res/raw/wordlist_fr.tsv` on Android — keep in sync until both
+/// sides consume the downloadable pack.
+enum FrenchBootstrapWordList {
+    static let entries: [(word: String, freq: Int)] = [
+        ("le", 200000), ("de", 180000), ("un", 150000), ("être", 140000), ("et", 135000),
+        ("à", 130000), ("il", 125000), ("avoir", 120000), ("ne", 115000), ("je", 110000),
+        ("son", 105000), ("que", 100000), ("se", 95000), ("qui", 92000), ("ce", 90000),
+        ("dans", 88000), ("en", 85000), ("du", 82000), ("elle", 80000), ("au", 78000),
+        ("pour", 70000), ("pas", 68000), ("vous", 64000), ("par", 62000), ("sur", 60000),
+        ("faire", 58000), ("plus", 56000), ("dire", 54000), ("me", 52000), ("on", 50000),
+        ("mon", 48000), ("lui", 46000), ("nous", 44000), ("comme", 42000), ("mais", 40000),
+        ("pouvoir", 39000), ("avec", 38000), ("tout", 37000), ("y", 36000), ("aller", 35000),
+        ("voir", 34000), ("bien", 32000), ("où", 31000), ("sans", 30000), ("tu", 29000),
+        ("ou", 28000), ("leur", 27000), ("homme", 26000), ("si", 25000), ("deux", 24000),
+        ("moi", 22000), ("vouloir", 21000), ("te", 20000), ("femme", 19500), ("venir", 19000),
+        ("quand", 18500), ("grand", 18000), ("celui", 17500), ("notre", 16500), ("devoir", 16000),
+        ("là", 15500), ("jour", 15000), ("prendre", 14500), ("même", 14000), ("votre", 13500),
+        ("rien", 13000), ("sa", 12500), ("fois", 12000), ("oui", 11500), ("quelque", 11000),
+        ("falloir", 10500), ("encore", 10000), ("non", 9800), ("chez", 9600), ("vie", 9400),
+        ("trouver", 9200), ("donner", 9000), ("parler", 8800), ("demander", 8600), ("aimer", 8400),
+        ("attendre", 8200), ("trop", 8000), ("peu", 7800), ("moins", 7500), ("mettre", 7400),
+        ("porter", 7300), ("beau", 7200), ("laisser", 7100), ("trois", 7000), ("chose", 6900),
+        ("penser", 6800), ("chacun", 6700), ("manger", 6500), ("boire", 6400), ("maison", 6300),
+        ("école", 6200), ("ami", 6100), ("famille", 5900), ("père", 5800), ("mère", 5700),
+        ("enfant", 5600), ("fils", 5500), ("fille", 5400), ("ville", 5300), ("pays", 5200),
+        ("monde", 5100), ("ans", 5000), ("temps", 4900), ("heure", 4800), ("minute", 4700),
+        ("semaine", 4500), ("mois", 4400), ("année", 4300), ("matin", 4200), ("soir", 4100),
+        ("nuit", 4000), ("midi", 3900), ("hier", 3800), ("aujourd'hui", 3700), ("demain", 3600),
+        ("lundi", 3500), ("mardi", 3400), ("mercredi", 3300), ("jeudi", 3200), ("vendredi", 3100),
+        ("samedi", 3000), ("dimanche", 2950), ("peut-être", 2800), ("merci", 2750), ("pardon", 2700),
+        ("salut", 2650), ("bonjour", 2600), ("bonsoir", 2550), ("adieu", 2500), ("travail", 2450),
+        ("université", 2350), ("livre", 2300), ("crayon", 2250), ("papier", 2200), ("chambre", 2150),
+        ("cuisine", 2100), ("salle", 2050), ("porte", 2000), ("fenêtre", 1950), ("table", 1900),
+        ("chaise", 1850), ("lit", 1800), ("chien", 1750), ("chat", 1700), ("oiseau", 1650),
+        ("poisson", 1600), ("arbre", 1550), ("fleur", 1500), ("fruit", 1450), ("légume", 1400),
+        ("pain", 1350), ("fromage", 1300), ("viande", 1250), ("eau", 1200), ("lait", 1150),
+        ("vin", 1100), ("café", 1050), ("thé", 1000), ("sucre", 980), ("sel", 960),
+        ("poivre", 940), ("rouge", 920), ("bleu", 900), ("vert", 880), ("jaune", 860),
+        ("noir", 840), ("blanc", 820), ("gris", 800), ("chaud", 780), ("froid", 760),
+        ("joli", 720), ("moche", 700), ("petit", 680), ("gros", 660), ("mince", 640),
+        ("fort", 620), ("faible", 600), ("heureux", 580), ("triste", 560), ("content", 540),
+        ("fatigué", 520), ("malade", 500), ("sain", 480), ("riche", 460), ("pauvre", 440),
+        ("nouveau", 420), ("vieux", 400), ("jeune", 380), ("ancien", 360), ("moderne", 340),
+        ("facile", 320), ("difficile", 300), ("possible", 280), ("impossible", 260), ("vrai", 240),
+        ("faux", 220), ("bon", 200), ("mauvais", 180), ("super", 160), ("génial", 140),
+        ("ouais", 120),
+    ]
+
+    static let wordList: InMemoryWordList = InMemoryWordList(words: entries)
+}

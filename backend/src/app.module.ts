@@ -23,6 +23,7 @@ import { LemonsqueezyModule } from './lemonsqueezy/lemonsqueezy.module';
 import { ErrorsModule } from './errors/errors.module';
 import { BugReportsModule } from './bug-reports/bug-reports.module';
 import { ExtractionModule } from './extraction/extraction.module';
+import { ImePacksModule } from './ime-packs/ime-packs.module';
 
 @Module({
   imports: [
@@ -60,6 +61,7 @@ import { ExtractionModule } from './extraction/extraction.module';
     ErrorsModule,
     BugReportsModule,
     ExtractionModule,
+    ImePacksModule,
     MetricsModule,
   ],
   providers: [

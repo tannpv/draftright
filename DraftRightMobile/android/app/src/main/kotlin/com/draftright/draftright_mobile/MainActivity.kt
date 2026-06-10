@@ -132,6 +132,11 @@ class MainActivity : FlutterFragmentActivity() {
                     moveTaskToBack(true)
                     result.success(null)
                 }
+                "sharedPackDir" -> {
+                    // App files dir — shared with the IME (same package), so
+                    // downloaded language packs are readable by the keyboard.
+                    result.success(filesDir.absolutePath)
+                }
                 else -> result.notImplemented()
             }
         }

@@ -26,8 +26,8 @@ final class EnglishLanguagePackTests: XCTestCase {
         XCTAssertEqual(home.count, 9)
     }
 
-    func test_composerFactoryReturnsNil() {
-        XCTAssertNil(EnglishLanguagePack().makeComposer())
+    func test_composerFactoryReturnsPassthrough() {
+        XCTAssertTrue(EnglishLanguagePack().makeComposer() is PassthroughComposer)
     }
 
     func test_longPressAccentsIsEmpty() {

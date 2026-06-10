@@ -91,14 +91,54 @@ public final class TelexComposer: Composer {
         }
         guard let last = buf.last else { return nil }
         let lastLow = Character(last.lowercased())
+        // Immediate: last char is the marked vowel → retype cancels to base + literal.
         if lastLow == replacement {
             let mapped: Character = last.isUppercase ? Character(low.uppercased()) : low
             return String(buf.dropLast()) + String(mapped) + String(incoming)
         }
-        guard lastLow == low else { return nil }
-        let upper = incoming.isUppercase || last.isUppercase
-        let mapped: Character = upper ? Character(replacement.uppercased()) : replacement
-        return String(buf.dropLast()) + String(mapped)
+        // Immediate: last char is the plain vowel → apply circumflex.
+        if lastLow == low {
+            let upper = incoming.isUppercase || last.isUppercase
+            let mapped: Character = upper ? Character(replacement.uppercased()) : replacement
+            return String(buf.dropLast()) + String(mapped)
+        }
+        // Lookback through up to maxTrailingCons trailing consonants — lets the
+        // a/e/o doubling apply after the syllable's coda, matching Android:
+        // "nguyen"+e → nguyên, "viet"+e → viêt.
+        let chars = Array(buf)
+        guard let idx = findLastVowelThroughConsonants(chars) else { return nil }
+        let target = chars[idx]
+        let targetLow = Character(target.lowercased())
+        if targetLow == replacement {
+            let mapped: Character = target.isUppercase ? Character(low.uppercased()) : low
+            var nc = chars
+            nc[idx] = mapped
+            return String(nc) + String(incoming)
+        }
+        if targetLow == low {
+            let upper = incoming.isUppercase || target.isUppercase
+            let mapped: Character = upper ? Character(replacement.uppercased()) : replacement
+            var nc = chars
+            nc[idx] = mapped
+            return String(nc)
+        }
+        return nil
+    }
+
+    /// Maximum trailing-consonant count the a/e/o/w modifier rules scan past
+    /// when looking for their target vowel (2 covers every Vietnamese coda).
+    private static let maxTrailingCons = 2
+
+    /// Index of the last vowel-like char, if at most maxTrailingCons consonants
+    /// trail it. Lets modifiers apply after the syllable's coda.
+    private static func findLastVowelThroughConsonants(_ chars: [Character]) -> Int? {
+        var cons = 0
+        for i in stride(from: chars.count - 1, through: 0, by: -1) {
+            if TelexState.isVowelLike(chars[i]) { return i }
+            cons += 1
+            if cons > maxTrailingCons { return nil }
+        }
+        return nil
     }
 
     private static func bufferHasTonableVowel(_ buf: String) -> Bool {

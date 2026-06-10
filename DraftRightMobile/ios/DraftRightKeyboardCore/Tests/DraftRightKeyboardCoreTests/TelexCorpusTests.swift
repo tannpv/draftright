@@ -39,6 +39,15 @@ final class TelexCorpusTests: XCTestCase {
             ("huouw", "hươu"),
             ("nguoiwf", "người"),
             ("muonwj", "mượn"),
+            // Flexible modifier after trailing consonants (salvaged from the
+            // superseded telex-circumflex branch).
+            ("nguyeexn", "nguyễn"),
+            ("nguyenex", "nguyễn"),
+            ("nguyene", "nguyên"),
+            ("vietej", "việt"),
+            ("kae", "kae"),
+            ("bee", "bê"),
+            ("beee", "bee"),
         ]
         let failures = cases.compactMap { (keys, expected) -> String? in
             let got = type(keys)

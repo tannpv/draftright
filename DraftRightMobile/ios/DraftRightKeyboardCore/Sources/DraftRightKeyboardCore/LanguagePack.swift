@@ -34,8 +34,20 @@ public protocol LanguagePack {
     var symbols2Rows: [[KeyDef]] { get }
     var longPressAccents: [Character: [Character]] { get }
     func makeComposer() -> Composer?
+
+    /// Suggestion engine shown in the candidate bar — Telex-aware trigram
+    /// for Vietnamese, prefix-trigram for Latin scripts, RIME adapter for
+    /// JP/ZH/KO, nil to render no bar at all (the default).
+    ///
+    /// Mirror of Kotlin `LanguagePack.candidateEngine()`. Returning the
+    /// engine lazily means downloadable packs (RIME schemas, big word
+    /// lists) can be installed AFTER the keyboard's first paint without
+    /// a registry rebuild — the next syllable gets the new candidates.
+    func makeCandidateEngine() -> CandidateEngine?
 }
 
 public extension LanguagePack {
-    func makeComposer() -> Composer? { nil }
+    /// Default: no composition (Latin packs type directly). JP/VI override.
+    func makeComposer() -> Composer? { PassthroughComposer() }
+    func makeCandidateEngine() -> CandidateEngine? { nil }
 }

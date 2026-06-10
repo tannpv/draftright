@@ -35,8 +35,8 @@ class EnglishLanguagePackTest {
     }
 
     @Test
-    fun `composer factory returns null`() {
-        assertNull(EnglishLanguagePack.composer())
+    fun `composer factory returns passthrough`() {
+        assertTrue(EnglishLanguagePack.composer() is com.draftright.keyboard.composer.PassthroughComposer)
     }
 
     @Test

@@ -24,13 +24,19 @@ const shell = (title: string, body: string) => `<!doctype html>
 export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
   {
     key: 'verification',
-    label: 'Email verification',
-    subject: 'Verify your DraftRight email',
+    label: 'Welcome + email verification',
+    subject: 'Welcome to DraftRight — confirm your email',
     variables: ['name', 'code'],
-    html: shell('Welcome to DraftRight, {{name}}',
-      `<p style="color:#444;line-height:1.5;margin:0 0 16px;">Your verification code is:</p>
-    <p style="font-size:28px;font-weight:700;letter-spacing:4px;color:#5b3df6;margin:0 0 16px;">{{code}}</p>
-    <p style="color:#444;line-height:1.5;margin:0 0 16px;">Enter it in the app to finish setting up your account. It expires in 15 minutes.</p>`),
+    // Single signup email (real-world standard): a warm welcome whose primary
+    // call-to-action is activating the account. A richer onboarding email can
+    // follow *after* the address is verified.
+    html: shell('Welcome to DraftRight, {{name}} 👋',
+      `<p style="color:#444;line-height:1.6;margin:0 0 16px;">Thanks for joining DraftRight — your AI writing companion. Select any text, pick a tone, and get a polished rewrite in a tap, right from the keyboard, the apps, or the web playground.</p>
+    <p style="color:#444;line-height:1.6;margin:0 0 8px;">One quick step to activate your account — enter this code in the app:</p>
+    <p style="font-size:30px;font-weight:700;letter-spacing:6px;color:#5b3df6;background:#f3f0ff;border-radius:10px;text-align:center;padding:14px 0;margin:0 0 8px;">{{code}}</p>
+    <p style="color:#888;font-size:13px;line-height:1.5;margin:0 0 20px;">The code expires in 15 minutes. If you didn't create a DraftRight account, you can safely ignore this email.</p>
+    <p style="color:#444;line-height:1.6;margin:0 0 4px;">Once you're in, try the tones — Simple, Polished, Concise, Natural and more.</p>
+    <p style="color:#444;line-height:1.6;margin:0;">Questions? Just reply to this email.</p>`),
   },
   {
     key: 'password-reset',

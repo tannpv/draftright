@@ -32,6 +32,9 @@ class LanguageRegistry(private val packs: List<LanguagePack>) {
                     com.draftright.keyboard.lang.GermanLanguagePack,
                     com.draftright.keyboard.lang.ItalianLanguagePack,
                     com.draftright.keyboard.lang.PortugueseLanguagePack,
+                    com.draftright.keyboard.lang.JapaneseLanguagePack,
+                    com.draftright.keyboard.lang.KoreanLanguagePack,
+                    com.draftright.keyboard.lang.ChineseLanguagePack,
                 ),
             )
         }
