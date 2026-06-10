@@ -160,8 +160,13 @@ class BackendClient {
     try {
       return await call(token);
     } on ApiException catch (e) {
-      if (e.statusCode == 401 && await _auth.tryRefresh()) {
-        return await call(await _auth.getAccessToken());
+      if (e.statusCode == 401) {
+        if (await _auth.tryRefresh()) {
+          return await call(await _auth.getAccessToken());
+        }
+        // Refresh also failed → the session is truly expired. Sign out + flag
+        // it so the app routes to login with a clear notice (not "invalid token").
+        await _auth.markSessionExpired();
       }
       rethrow;
     }

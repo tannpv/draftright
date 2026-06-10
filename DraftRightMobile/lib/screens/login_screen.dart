@@ -23,6 +23,25 @@ class _LoginScreenState extends State<LoginScreen> {
   String? _error;
 
   @override
+  void initState() {
+    super.initState();
+    // If we landed here because a request 401'd with an unrecoverable token,
+    // tell the user why (instead of silently dropping them on login).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final auth = context.read<AuthService>();
+      if (!auth.sessionExpired) return;
+      auth.consumeSessionExpired();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Your session expired. Please log in again.'),
+          duration: Duration(seconds: 4),
+        ),
+      );
+    });
+  }
+
+  @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();

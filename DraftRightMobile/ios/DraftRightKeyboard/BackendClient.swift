@@ -81,10 +81,19 @@ final class BackendClient {
                 return
             }
             if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode >= 400 {
-                let bodyText = String(data: data, encoding: .utf8) ?? "Unknown error"
+                // 401 = the keyboard's token expired/invalid. The keyboard can't
+                // show a login screen, so point the user to the app instead of a
+                // raw "HTTP 401: invalid token".
+                let message: String
+                if httpResponse.statusCode == 401 {
+                    message = "Session expired — open DraftRight and log in again."
+                } else {
+                    let bodyText = String(data: data, encoding: .utf8) ?? "Unknown error"
+                    message = "HTTP \(httpResponse.statusCode): \(bodyText)"
+                }
                 completion(.failure(NSError(
                     domain: "BackendClient", code: httpResponse.statusCode,
-                    userInfo: [NSLocalizedDescriptionKey: "HTTP \(httpResponse.statusCode): \(bodyText)"])))
+                    userInfo: [NSLocalizedDescriptionKey: message])))
                 return
             }
             do {
