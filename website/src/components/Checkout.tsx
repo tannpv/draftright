@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import GoogleSignInButton from './GoogleSignInButton';
-
-const API =
-  (import.meta.env.PUBLIC_API_URL as string | undefined) || 'http://localhost:3000';
+import { API_URL as API } from '../lib/api';
 
 type PlanId = string;
 

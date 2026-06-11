@@ -1,8 +1,6 @@
 import { useState } from 'react';
+import { API_URL } from '../lib/api';
 
-const API_URL =
-  (typeof import.meta !== 'undefined' && (import.meta as any).env?.PUBLIC_API_URL) ||
-  'https://api.draftright.info';
 const BOARD_URL = 'https://draftright.info/feedback';
 
 const PLATFORMS: Array<{ value: string; label: string }> = [

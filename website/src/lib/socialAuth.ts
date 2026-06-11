@@ -3,7 +3,7 @@
 // `/auth/social` exchange — reused by the login, signup, and checkout
 // flows so none of them re-implement (or drift from) the others.
 
-const API = (import.meta.env.PUBLIC_API_URL as string | undefined) || 'https://api.draftright.info';
+import { API_URL as API } from './api';
 
 /** Google OAuth web client id. Override per-env via PUBLIC_GOOGLE_CLIENT_ID. */
 export const GOOGLE_CLIENT_ID =
