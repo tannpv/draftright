@@ -171,6 +171,37 @@ class AuthService:
         self._save(data)
         return data
 
+    def refresh_session(self) -> bool:
+        """Exchange the stored refresh token for a fresh access token.
+
+        Wired into ``APIClient.on_unauthorized`` so an expired access token
+        recovers silently mid-request. Returns ``True`` on success. On any
+        failure the session is cleared (``logout``) so the tray/status falls
+        back to the logged-out state instead of looping on a dead token.
+        """
+        if not self._refresh_token:
+            return False
+        try:
+            data = self._api.refresh(self._refresh_token)
+        except Exception as exc:  # network error or refresh token rejected
+            log.info("Token refresh failed (%s); signing out.", exc)
+            self.logout()
+            return False
+
+        access = data.get("access_token")
+        if not access:
+            self.logout()
+            return False
+        self._access_token = access
+        self._refresh_token = data.get("refresh_token") or self._refresh_token
+        self._api.set_token(self._access_token)
+        ok = _store_secret("access", self._access_token or "")
+        ok = _store_secret("refresh", self._refresh_token or "") and ok
+        if not ok:
+            _store_file(self._access_token, self._refresh_token)
+        log.info("Access token refreshed.")
+        return True
+
     def logout(self) -> None:
         """Clear tokens from memory and storage."""
         self._access_token = None

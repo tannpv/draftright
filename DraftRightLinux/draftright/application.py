@@ -71,6 +71,9 @@ class DraftRightApplication(Adw.Application):
             self.api_client = APIClient(self.settings_service.backend_url)
         if self.auth_service is None:
             self.auth_service = AuthService(self.api_client)
+        # Let the API client recover from a 401 by refreshing the session,
+        # mirroring the macOS / Windows / mobile behaviour (issue #22).
+        self.api_client.on_unauthorized = self.auth_service.refresh_session
 
         # Load CSS
         self._load_css()
