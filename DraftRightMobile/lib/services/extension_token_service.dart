@@ -98,14 +98,23 @@ class ExtensionTokenService {
     // extension token instead of falling back to the expiring access JWT.
     final method = value == null ? 'deleteKeychain' : 'setKeychain';
     final args = value == null ? {'key': key} : {'key': key, 'value': value};
+    Object? lastError;
     for (var attempt = 0; attempt < 6; attempt++) {
       try {
         await _channel.invokeMethod(method, args);
         return;
-      } catch (_) {
+      } catch (e) {
+        lastError = e;
         await Future.delayed(const Duration(milliseconds: 500));
       }
     }
+    // All retries exhausted. Don't fail silently: without this sync the iOS
+    // keyboard never receives the long-lived extension token and falls back to
+    // the expiring access JWT, surfacing as "Session expired" after ~15 min.
+    DRLogger.error(
+      'Extension-token keychain $method failed after 6 attempts: $lastError',
+      category: 'AUTH',
+    );
   }
 
   String _deviceName() {
