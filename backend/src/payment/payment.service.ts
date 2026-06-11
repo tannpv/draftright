@@ -86,6 +86,34 @@ export class PaymentService {
     }
   }
 
+  /** Method keys that actually have a registered strategy (i.e. can check out). */
+  registeredMethods(): string[] {
+    return [...this.strategies.keys()];
+  }
+
+  /**
+   * Validate a `payment_methods_enabled` CSV before it's saved: every method
+   * must have a registered strategy, otherwise enabling it (e.g. `paypal`,
+   * `momo` — enum values with no strategy) would let the storefront advertise
+   * a method that 400s at checkout. Throws BadRequestException listing the
+   * offenders. Empty / blank input is allowed (falls back to the default).
+   */
+  assertMethodsRegisterable(csv: string): void {
+    const registered = new Set(this.registeredMethods());
+    const unknown = csv
+      .toLowerCase()
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .filter((m) => !registered.has(m));
+    if (unknown.length > 0) {
+      throw new BadRequestException(
+        `Cannot enable payment method(s) with no backend strategy: ${unknown.join(', ')}. ` +
+          `Registered methods: ${[...registered].join(', ')}.`,
+      );
+    }
+  }
+
   // --- Generic: get strategy by method ---
 
   private getStrategy(method: string): BasePaymentStrategy {

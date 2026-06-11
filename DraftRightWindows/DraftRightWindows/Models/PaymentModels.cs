@@ -18,6 +18,8 @@ public enum PaymentMethodKind
     VietQr,
     BankTransfer,
     PayPal,
+    ApplePay,
+    GooglePay,
 }
 
 public static class PaymentMethodKindExtensions
@@ -29,6 +31,8 @@ public static class PaymentMethodKindExtensions
         PaymentMethodKind.VietQr       => "vietqr",
         PaymentMethodKind.BankTransfer => "bank_transfer",
         PaymentMethodKind.PayPal       => "paypal",
+        PaymentMethodKind.ApplePay     => "apple_pay",
+        PaymentMethodKind.GooglePay    => "google_pay",
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 
@@ -44,6 +48,8 @@ public static class PaymentMethodKindExtensions
         "vietqr"        => PaymentMethodKind.VietQr,
         "bank_transfer" => PaymentMethodKind.BankTransfer,
         "paypal"        => PaymentMethodKind.PayPal,
+        "apple_pay"     => PaymentMethodKind.ApplePay,
+        "google_pay"    => PaymentMethodKind.GooglePay,
         _               => null,
     };
 }
@@ -101,7 +107,7 @@ public sealed record PaymentMethodDescriptor(
     {
         PaymentMethodKind.LemonSqueezy => new(kind,
             "Credit / Debit Card",
-            "Visa, Mastercard, Apple Pay (via Lemon Squeezy)"),
+            "Visa, Mastercard, and more via Lemon Squeezy"),
         PaymentMethodKind.Stripe => new(kind,
             "Stripe",
             "Credit card via Stripe"),
@@ -114,6 +120,12 @@ public sealed record PaymentMethodDescriptor(
         PaymentMethodKind.PayPal => new(kind,
             "PayPal",
             "Pay with PayPal balance or card"),
+        PaymentMethodKind.ApplePay => new(kind,
+            "Apple Pay",
+            "Pay with Apple Pay (via Stripe)"),
+        PaymentMethodKind.GooglePay => new(kind,
+            "Google Pay",
+            "Pay with Google Pay (via Stripe)"),
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 }
