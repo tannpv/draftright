@@ -2,6 +2,7 @@ using System.Net.Http;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Diagnostics;
+using System.Security.Cryptography;
 using DraftRightWindows.Helpers;
 
 namespace DraftRightWindows.Services;
@@ -19,6 +20,9 @@ public class UpdateInfo
 
     [JsonPropertyName("linux_url")]
     public string LinuxUrl { get; set; } = "";
+
+    [JsonPropertyName("windows_sha256")]
+    public string WindowsSha256 { get; set; } = "";
 
     [JsonPropertyName("release_notes")]
     public string ReleaseNotes { get; set; } = "";
@@ -45,6 +49,9 @@ public class PlatformRelease
 
     [JsonPropertyName("url")]
     public string Url { get; set; } = "";
+
+    [JsonPropertyName("sha256")]
+    public string Sha256 { get; set; } = "";
 
     [JsonPropertyName("notes")]
     public string Notes { get; set; } = "";
@@ -267,7 +274,7 @@ public class UpdateService : IUpdateService
         else
         {
             DRLogger.Log($"StartInstall {info.Version}: not staged, falling back to download-then-install from {info.WindowsUrl}", DRLogger.Category.APP);
-            _ = DownloadAndInstallAsync(info.WindowsUrl, info.Version);
+            _ = DownloadAndInstallAsync(info.WindowsUrl, info.Version, ResolveWindowsSha256(info));
         }
     }
 
@@ -324,7 +331,7 @@ public class UpdateService : IUpdateService
                 // Staging completed without producing a usable file (download
                 // failed). Fall back to the retrying download-then-install path.
                 DRLogger.Log($"AwaitStagingThenInstall {info.Version}: staging ended without a staged file — downloading directly", DRLogger.Category.APP);
-                await DownloadAndInstallAsync(info.WindowsUrl, info.Version);
+                await DownloadAndInstallAsync(info.WindowsUrl, info.Version, ResolveWindowsSha256(info));
             }
         }
         catch (Exception ex)
@@ -349,7 +356,7 @@ public class UpdateService : IUpdateService
     {
         try
         {
-            var path = await TryDownloadInstallerAsync(info.WindowsUrl, info.Version);
+            var path = await TryDownloadInstallerAsync(info.WindowsUrl, info.Version, expectedSha256: ResolveWindowsSha256(info));
             if (path == null) return;
             // Guard against AvailableUpdate having changed while we downloaded.
             if (AvailableUpdate?.Version != info.Version)
@@ -382,7 +389,28 @@ public class UpdateService : IUpdateService
     /// trips, the retry loop exits immediately, the partial file is deleted,
     /// and we return null without logging it as a failure.
     /// </summary>
-    internal async Task<string?> TryDownloadInstallerAsync(string url, string version, UpdateProgressUI? ui = null, int attempts = 3, System.Threading.CancellationToken externalCt = default)
+    /// <summary>
+    /// Effective Windows artifact hash from the manifest: the per-platform
+    /// entry wins, falling back to the legacy top-level field. Lowercased;
+    /// empty when the release predates hash publishing.
+    /// </summary>
+    internal static string ResolveWindowsSha256(UpdateInfo info)
+    {
+        var fromPlatform = info.Platforms != null
+            && info.Platforms.TryGetValue("windows", out var pin) && pin != null
+            ? pin.Sha256 : null;
+        var hash = !string.IsNullOrEmpty(fromPlatform) ? fromPlatform : info.WindowsSha256;
+        return (hash ?? "").Trim().ToLowerInvariant();
+    }
+
+    private static string Sha256OfFile(string path)
+    {
+        using var sha = SHA256.Create();
+        using var fs = File.OpenRead(path);
+        return Convert.ToHexString(sha.ComputeHash(fs)).ToLowerInvariant();
+    }
+
+    internal async Task<string?> TryDownloadInstallerAsync(string url, string version, UpdateProgressUI? ui = null, int attempts = 3, System.Threading.CancellationToken externalCt = default, string? expectedSha256 = null)
     {
         var name = Path.GetFileName(new Uri(url).LocalPath);
         if (string.IsNullOrEmpty(name)) name = $"DraftRight-{version}-setup.exe";
@@ -427,6 +455,26 @@ public class UpdateService : IUpdateService
                 }
                 var actual = new FileInfo(dest).Length;
                 DRLogger.Log($"Update download attempt {attempt}: wrote {actual} bytes to {dest}", DRLogger.Category.APP);
+
+                // Integrity check: when the manifest published a hash, the
+                // downloaded installer must match before we ever execute it.
+                // A mismatch means a corrupted or tampered artifact — delete it
+                // and fail the attempt (retry), never run it.
+                if (!string.IsNullOrEmpty(expectedSha256))
+                {
+                    var got = Sha256OfFile(dest);
+                    if (!string.Equals(got, expectedSha256, StringComparison.OrdinalIgnoreCase))
+                    {
+                        DRLogger.Error($"Update integrity check FAILED on attempt {attempt}: expected {expectedSha256}, got {got}. Discarding.", DRLogger.Category.APP);
+                        try { File.Delete(dest); } catch { }
+                        continue;
+                    }
+                    DRLogger.Log($"Update integrity check passed (sha256 match) for {dest}", DRLogger.Category.APP);
+                }
+                else
+                {
+                    DRLogger.Warn($"No sha256 published for {version} — installing unverified.", DRLogger.Category.APP);
+                }
                 return dest;
             }
             catch (OperationCanceledException) when (externalCt.IsCancellationRequested)
@@ -564,6 +612,7 @@ public class UpdateService : IUpdateService
         {
             Version = pin.Version,
             WindowsUrl = !string.IsNullOrEmpty(pin.Url) ? pin.Url : raw.WindowsUrl,
+            WindowsSha256 = !string.IsNullOrEmpty(pin.Sha256) ? pin.Sha256 : raw.WindowsSha256,
             MacUrl = raw.MacUrl,
             LinuxUrl = raw.LinuxUrl,
             ReleaseNotes = !string.IsNullOrEmpty(pin.Notes) ? pin.Notes : raw.ReleaseNotes,
@@ -608,7 +657,7 @@ public class UpdateService : IUpdateService
         }
     }
 
-    private async Task DownloadAndInstallAsync(string url, string version)
+    private async Task DownloadAndInstallAsync(string url, string version, string? expectedSha256 = null)
     {
         // The progress form must live on a thread that has a WinForms message
         // pump. The caller of this method (the update check) runs on a
@@ -637,7 +686,7 @@ public class UpdateService : IUpdateService
             // its own untimed/unretried copy of this loop — that's how 2.2.6
             // users got the second "Downloading DraftRight" hang even after
             // 2.2.5 hardened staging.
-            var tempPath = await TryDownloadInstallerAsync(url, version, ui, externalCt: backgroundCts.Token);
+            var tempPath = await TryDownloadInstallerAsync(url, version, ui, externalCt: backgroundCts.Token, expectedSha256: expectedSha256);
 
             if (backgroundCts.IsCancellationRequested)
             {
