@@ -1,13 +1,14 @@
 import { IsString, IsOptional, IsIn } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { TONE_IDS } from '../tones';
 
 export class RewriteDto {
   @ApiProperty({ example: 'This is some text to rewrite' })
   @IsString()
   text: string;
 
-  @ApiProperty({ example: 'polished', enum: ['simple', 'natural', 'polished', 'concise', 'technical', 'claude', 'grammar_check', 'translate'] })
-  @IsIn(['simple', 'natural', 'polished', 'concise', 'technical', 'claude', 'grammar_check', 'translate'])
+  @ApiProperty({ example: 'polished', enum: TONE_IDS })
+  @IsIn(TONE_IDS)
   tone: string;
 
   @ApiPropertyOptional({ example: 'Vietnamese' })
