@@ -35,19 +35,28 @@ object JapaneseLanguagePack : LanguagePack {
     private const val PACK_ID_PREFIX = "draftright-ime-ja"
 
     /**
-     * Cached engine — candidateEngine() is called on EVERY keystroke, and the
-     * dictionary is 700k+ entries (~27 MB). Parse the pack once per IME session,
-     * not per keystroke (that was the Japanese lag). Same lazy double-check
-     * pattern as EnglishLanguagePack.
+     * Cached engine + the pack identity it was built from. candidateEngine() is
+     * called on EVERY keystroke and the dictionary is 700k+ entries (~27 MB), so
+     * keep the parsed engine across keystrokes — but key the cache on the
+     * resolved pack file (its name encodes the version) so a pack installed
+     * mid-session rebuilds instead of serving the stale dict (issue #10). The
+     * 27 MB parse still happens only on an actual pack change, not per key.
      */
     @Volatile
     private var cachedEngine: CandidateEngine? = null
+    @Volatile
+    private var cachedKey: String? = null
 
     override fun candidateEngine(): CandidateEngine {
-        cachedEngine?.let { return it }
+        val ctx = ImeContext.appOrNull()
+        val key = if (ctx != null) {
+            DictPackResolver.resolvedPackFile(ctx, PACK_ID_PREFIX)?.path ?: "seed"
+        } else {
+            "seed"
+        }
+        cachedEngine?.let { if (key == cachedKey) return it }
         synchronized(this) {
-            cachedEngine?.let { return it }
-            val ctx = ImeContext.appOrNull()
+            cachedEngine?.let { if (key == cachedKey) return it }
             val dict = if (ctx != null) {
                 DictPackResolver.loadOrFallback(ctx, PACK_ID_PREFIX) { JapaneseSeedDictionary.dict }
             } else {
@@ -55,6 +64,7 @@ object JapaneseLanguagePack : LanguagePack {
             }
             val engine = DictionaryCandidateEngine(dict)
             cachedEngine = engine
+            cachedKey = key
             return engine
         }
     }
