@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-const API = (import.meta.env.PUBLIC_API_URL as string | undefined) || 'https://api.draftright.info';
+import { API_URL as API } from '../lib/api';
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
 const ACCEPTED_MIME = ['image/png', 'image/jpeg'];
 

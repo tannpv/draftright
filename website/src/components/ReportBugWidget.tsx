@@ -1,8 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-
-const API_URL =
-  (typeof import.meta !== 'undefined' && import.meta.env?.PUBLIC_API_URL) ||
-  'https://api.draftright.info';
+import { API_URL } from '../lib/api';
 
 const APP_VERSION = 'playground-1.0.0';
 const MAX_SCREENSHOT_BYTES = 5 * 1024 * 1024; // 5 MB

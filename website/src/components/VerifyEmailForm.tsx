@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { safeNextPath } from '../lib/redirect';
 
-const API = (import.meta.env.PUBLIC_API_URL as string | undefined) || 'https://api.draftright.info';
+import { API_URL as API } from '../lib/api';
 
 export default function VerifyEmailForm() {
   const [email, setEmail] = useState('');

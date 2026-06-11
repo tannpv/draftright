@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import ReportBugWidget from './ReportBugWidget';
 import SuggestFeatureWidget from './SuggestFeatureWidget';
-
-const API_URL = (typeof import.meta !== 'undefined' && import.meta.env?.PUBLIC_API_URL) || 'https://api.draftright.info';
+import { API_URL } from '../lib/api';
 
 const TONES = [
   { value: 'simple', label: 'Simple', icon: '✎' },
@@ -10,6 +9,7 @@ const TONES = [
   { value: 'polished', label: 'Polished', icon: '✨' },
   { value: 'concise', label: 'Concise', icon: '⊖' },
   { value: 'technical', label: 'Technical', icon: '🔧' },
+  { value: 'claude', label: 'Claude', icon: '✦' },
   { value: 'translate', label: 'Translate', icon: '🌐' },
 ];
 
