@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import * as bcrypt from 'bcryptjs';
+import { hashPassword, verifyPassword } from '../common/password-hash.util';
 import { AdminUser } from './entities/admin-user.entity';
 import { EnvSchema } from '../config/env.schema';
 
@@ -40,7 +40,7 @@ export class AdminAuthService {
       .getOne();
     if (!admin) throw new UnauthorizedException('Invalid credentials');
 
-    const valid = await bcrypt.compare(password, admin.password_hash);
+    const valid = await verifyPassword(password, admin.password_hash);
     if (!valid) throw new UnauthorizedException('Invalid credentials');
 
     if (!admin.is_active) throw new UnauthorizedException('Account disabled');
@@ -53,10 +53,10 @@ export class AdminAuthService {
     const admin = await this.adminUserRepo.findOne({ where: { id: adminId } });
     if (!admin) throw new UnauthorizedException();
 
-    const valid = await bcrypt.compare(currentPassword, admin.password_hash);
+    const valid = await verifyPassword(currentPassword, admin.password_hash);
     if (!valid) throw new UnauthorizedException('Current password is incorrect');
 
-    const password_hash = await bcrypt.hash(newPassword, 10);
+    const password_hash = await hashPassword(newPassword);
     await this.adminUserRepo.update(adminId, { password_hash });
     return { success: true };
   }

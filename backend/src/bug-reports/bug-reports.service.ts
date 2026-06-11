@@ -8,6 +8,7 @@ import * as path from 'path';
 import { BugReport } from './entities/bug-report.entity';
 import { CreateBugReportDto, UpdateBugReportDto } from './dto/create-bug-report.dto';
 import { FeatureVote } from './entities/feature-vote.entity';
+import { User } from '../users/entities/user.entity';
 import { CreateFeedbackDto, TARGET_PLATFORMS } from './dto/create-feedback.dto';
 import { applyListQuery, ListQuery } from '../common/list-query';
 import { AiProvidersService } from '../ai-providers/ai-providers.service';
@@ -37,10 +38,24 @@ export class BugReportsService {
     private readonly repo: Repository<BugReport>,
     @InjectRepository(FeatureVote)
     private readonly votes: Repository<FeatureVote>,
+    @InjectRepository(User)
+    private readonly users: Repository<User>,
     private readonly aiProviders: AiProvidersService,
     cfg: ConfigService<EnvSchema, true>,
   ) {
     this.storageRoot = cfg.get('BUG_REPORTS_DIR', { infer: true });
+  }
+
+  /**
+   * Resolve a caller-supplied user id to one that actually exists, returning
+   * null otherwise. A JWT can outlive its user (account deleted), and the
+   * `user_id` FK would make `save()` throw a 500 on an orphan id — nulling it
+   * keeps the report (it still carries `user_email`) instead of erroring.
+   */
+  private async resolveUserId(userId: string | null): Promise<string | null> {
+    if (!userId) return null;
+    const exists = await this.users.findOne({ where: { id: userId }, select: { id: true } });
+    return exists ? userId : null;
   }
 
   /**
@@ -94,7 +109,7 @@ export class BugReportsService {
       screenshot_filename: screenshotFilename,
       app_version: dto.app_version ? dto.app_version.slice(0, 50) : null,
       os_info: dto.os_info ? dto.os_info.slice(0, 100) : null,
-      user_id: userId,
+      user_id: await this.resolveUserId(userId),
       user_email: dto.user_email ? dto.user_email.slice(0, 255) : null,
       context: parsedContext,
       status: 'new',
@@ -145,7 +160,7 @@ export class BugReportsService {
       screenshot_filename: null,
       app_version: dto.app_version ? dto.app_version.slice(0, 50) : null,
       os_info: dto.os_info ? dto.os_info.slice(0, 100) : null,
-      user_id: userId,
+      user_id: await this.resolveUserId(userId),
       user_email: dto.user_email ? dto.user_email.slice(0, 255) : null,
       context: null,
       status: 'new',
