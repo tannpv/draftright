@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -269,8 +269,11 @@ export class StripeStrategy extends BasePaymentStrategy {
     try {
       event = stripe.webhooks.constructEvent(payload, sig, webhookSecret);
     } catch (err: any) {
+      // A present-but-invalid signature is a hard failure: respond 400 so
+      // Stripe retries (and the dashboard surfaces it) instead of treating a
+      // forged/misconfigured delivery as a silently-accepted "ignored" event.
       this.logger.error(`Stripe webhook signature verification failed: ${err.message}`);
-      return { type: 'ignored' };
+      throw new BadRequestException('Invalid Stripe webhook signature');
     }
 
     this.logger.log(`Stripe webhook event: ${event.type} (id=${event.id})`);
