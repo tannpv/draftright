@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import * as bcrypt from 'bcryptjs';
+import { hashPassword, verifyPassword } from '../common/password-hash.util';
 import * as jwt from 'jsonwebtoken';
 import { createPublicKey, randomInt } from 'node:crypto';
 
@@ -81,7 +81,7 @@ export class AuthService {
     const existing = await this.usersService.findByEmail(normalizedEmail);
     if (existing) throw new ConflictException('Email already registered');
 
-    const password_hash = await bcrypt.hash(password, 10);
+    const password_hash = await hashPassword(password);
     const code = this.generateVerificationCode();
     const expires = new Date(Date.now() + EMAIL_CODE_TTL_MS);
 
@@ -202,7 +202,7 @@ export class AuthService {
       );
       throw new BadRequestException('Invalid or expired reset code');
     }
-    const password_hash = await bcrypt.hash(newPassword, 10);
+    const password_hash = await hashPassword(newPassword);
     await this.usersService.update(user.id, {
       password_hash,
       password_reset_code: null,
@@ -217,7 +217,7 @@ export class AuthService {
     if (!user) throw new UnauthorizedException('Invalid credentials');
 
     // Social-only accounts (Google / Facebook / Apple sign-up) have
-    // no password_hash.  Calling bcrypt.compare(pw, null) throws
+    // no password_hash.  Calling verifyPassword(pw, null) throws
     // "Illegal arguments: string, object" — surface a friendlier
     // message that tells the user which provider to use instead.
     if (!user.password_hash) {
@@ -229,7 +229,7 @@ export class AuthService {
       );
     }
 
-    const valid = await bcrypt.compare(password, user.password_hash);
+    const valid = await verifyPassword(password, user.password_hash);
     if (!valid) throw new UnauthorizedException('Invalid credentials');
 
     if (!user.is_active) throw new UnauthorizedException('Account disabled');
@@ -499,10 +499,10 @@ export class AuthService {
     const user = await this.usersService.findById(userId);
     if (!user) throw new UnauthorizedException();
 
-    const valid = await bcrypt.compare(currentPassword, user.password_hash);
+    const valid = await verifyPassword(currentPassword, user.password_hash);
     if (!valid) throw new UnauthorizedException('Current password is incorrect');
 
-    const password_hash = await bcrypt.hash(newPassword, 10);
+    const password_hash = await hashPassword(newPassword);
     await this.usersService.update(userId, { password_hash });
     return { success: true };
   }

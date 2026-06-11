@@ -6,7 +6,7 @@ import { AiProviderType } from './ai-providers/entities/ai-provider.entity';
 import { BillingPeriod } from './plans/entities/plan.entity';
 import { AdminUser } from './admin/entities/admin-user.entity';
 import { DataSource } from 'typeorm';
-import * as bcrypt from 'bcryptjs';
+import { hashPassword } from './common/password-hash.util';
 
 async function seed() {
   const app = await NestFactory.createApplicationContext(AppModule);
@@ -37,7 +37,7 @@ async function seed() {
   const adminUserRepo = dataSource.getRepository(AdminUser);
   const existingAdmin = await adminUserRepo.findOne({ where: { email: adminEmail } });
   if (!existingAdmin) {
-    const password_hash = await bcrypt.hash(adminPassword, 10);
+    const password_hash = await hashPassword(adminPassword);
     const admin = adminUserRepo.create({
       email: adminEmail,
       password_hash,
