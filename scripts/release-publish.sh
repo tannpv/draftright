@@ -76,12 +76,21 @@ if [ -z "$META" ]; then
   esac
 fi
 
+# ── Artifact SHA-256 (integrity — desktop updaters verify against this) ────
+# Portable: sha256sum on Linux, shasum on macOS.
+if command -v sha256sum >/dev/null 2>&1; then
+  SHA256=$(sha256sum "$LOCAL" | awk '{print $1}')
+else
+  SHA256=$(shasum -a 256 "$LOCAL" | awk '{print $1}')
+fi
+
 echo "==> Publishing"
 echo "    platform: $PLATFORM"
 echo "    version:  $VERSION"
 echo "    file:     $LOCAL"
 echo "    remote:   $REMOTE_NAME"
 echo "    meta:     $META"
+echo "    sha256:   $SHA256"
 echo
 
 # ── 1. Upload artifact ─────────────────────────────────────────────────────
@@ -154,13 +163,14 @@ if [ -n "$DB_PLATFORM" ]; then
   SQL=$(cat <<SQLEOF
 -- Always writes the 'direct' channel row. Store-channel rows are managed
 -- via the admin Versions page (POST /admin/releases with channel=store).
-INSERT INTO app_releases (platform, channel, version, download_url, release_notes, required, enabled)
-VALUES ('$DB_PLATFORM', 'direct', '$VERSION', '$SQL_URL', \$drnote\$
+INSERT INTO app_releases (platform, channel, version, download_url, sha256, release_notes, required, enabled)
+VALUES ('$DB_PLATFORM', 'direct', '$VERSION', '$SQL_URL', '$SHA256', \$drnote\$
 $NOTES
 \$drnote\$, false, true)
 ON CONFLICT (platform, channel) DO UPDATE SET
   version = EXCLUDED.version,
   download_url = EXCLUDED.download_url,
+  sha256 = EXCLUDED.sha256,
   release_notes = EXCLUDED.release_notes,
   updated_at = now();
 SQLEOF
@@ -190,6 +200,7 @@ d = json.load(sys.stdin)
 p = d.get('platforms', {}).get('$DB_PLATFORM')
 if p:
     print(f'    /updates/: $DB_PLATFORM v{p[\"version\"]} → {p[\"url\"]}')
+    print(f'    sha256:    {p.get(\"sha256\") or \"(none — unverified)\"}')
 "
 fi
 echo
