@@ -165,7 +165,7 @@ class DraftRightApplication(Adw.Application):
     def sign_out(self):
         """Clear auth session and notify the user."""
         if self.auth_service:
-            self.auth_service.clear_session()
+            self.auth_service.logout()
 
         notification = Gio.Notification.new("DraftRight")
         notification.set_body("You have been signed out.")
