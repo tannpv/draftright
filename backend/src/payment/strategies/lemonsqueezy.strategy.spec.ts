@@ -1,4 +1,5 @@
 import { createHmac } from 'crypto';
+import { BadRequestException } from '@nestjs/common';
 import { LemonSqueezyStrategy } from './lemonsqueezy.strategy';
 
 /**
@@ -95,10 +96,11 @@ describe('LemonSqueezyStrategy.verifyWebhook', () => {
     });
   });
 
-  it('rejects a forged/invalid signature', async () => {
+  it('rejects a forged/invalid signature with a 400', async () => {
     const raw = event('subscription_payment_success', { ref: 'DR-PRO-ABC', subId: 'sub_123' });
-    const action = await strat.verifyWebhook(Buffer.from(raw), { 'x-signature': 'deadbeef' });
-    expect(action).toEqual({ type: 'ignored' });
+    await expect(
+      strat.verifyWebhook(Buffer.from(raw), { 'x-signature': 'deadbeef' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('ignores when signing secret is unset', async () => {
