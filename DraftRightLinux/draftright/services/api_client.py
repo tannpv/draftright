@@ -6,6 +6,7 @@ GLib.idle_add callbacks forwarding results to the GTK main loop.
 """
 
 import threading
+from typing import Callable, Optional
 import requests
 
 
@@ -26,6 +27,12 @@ class APIClient:
         self._base_url = backend_url.rstrip("/")
         self._token: str | None = None
         self._lock = threading.Lock()
+        # Invoked when an authed call gets a 401. Should attempt a token
+        # refresh and return True if the caller may retry. Wired by the
+        # application to AuthService.refresh_session. Mirrors the macOS /
+        # Windows / mobile "refresh-then-retry" behaviour so an expired
+        # access token recovers silently instead of stranding the user.
+        self.on_unauthorized: Optional[Callable[[], bool]] = None
 
     # ------------------------------------------------------------------
     # Token management
@@ -51,6 +58,29 @@ class APIClient:
 
     def _url(self, path: str) -> str:
         return f"{self._base_url}/{path.lstrip('/')}"
+
+    def _authed(self, do_request: Callable[[], dict]) -> dict:
+        """Run an authed request; on 401, attempt one token refresh via
+        ``on_unauthorized`` and retry once. Re-raises the original error if
+        refresh is unavailable or fails."""
+        try:
+            return do_request()
+        except APIError as exc:
+            if exc.status_code == 401 and self.on_unauthorized is not None:
+                if self.on_unauthorized():
+                    return do_request()
+            raise
+
+    def refresh(self, refresh_token: str) -> dict:
+        """POST /auth/refresh — exchange a refresh token for a new pair.
+        Returns {access_token, refresh_token}."""
+        resp = requests.post(
+            self._url("/auth/refresh"),
+            json={"refresh_token": refresh_token},
+            headers=self._headers(),
+            timeout=self.TIMEOUT,
+        )
+        return self._handle_response(resp)
 
     @staticmethod
     def _handle_response(resp: requests.Response) -> dict:
@@ -106,22 +136,30 @@ class APIClient:
         payload: dict = {"text": text, "tone": tone}
         if target_language is not None:
             payload["target_language"] = target_language
-        resp = requests.post(
-            self._url("/rewrite"),
-            json=payload,
-            headers=self._headers(auth=True),
-            timeout=self.TIMEOUT,
-        )
-        return self._handle_response(resp)
+
+        def _do() -> dict:
+            resp = requests.post(
+                self._url("/rewrite"),
+                json=payload,
+                headers=self._headers(auth=True),
+                timeout=self.TIMEOUT,
+            )
+            return self._handle_response(resp)
+
+        return self._authed(_do)
 
     def get_subscription(self) -> dict:
         """GET /subscription — returns {plan, status, usage_today}."""
-        resp = requests.get(
-            self._url("/subscription"),
-            headers=self._headers(auth=True),
-            timeout=self.TIMEOUT,
-        )
-        return self._handle_response(resp)
+
+        def _do() -> dict:
+            resp = requests.get(
+                self._url("/subscription"),
+                headers=self._headers(auth=True),
+                timeout=self.TIMEOUT,
+            )
+            return self._handle_response(resp)
+
+        return self._authed(_do)
 
     # ------------------------------------------------------------------
     # Payment
@@ -153,13 +191,16 @@ class APIClient:
 
         Caller wraps with :meth:`models.payment.CheckoutResult.from_json`.
         """
-        resp = requests.post(
-            self._url("/payment/checkout"),
-            json={"plan_id": plan_id, "method": method},
-            headers=self._headers(auth=True),
-            timeout=self.TIMEOUT,
-        )
-        return self._handle_response(resp)
+        def _do() -> dict:
+            resp = requests.post(
+                self._url("/payment/checkout"),
+                json={"plan_id": plan_id, "method": method},
+                headers=self._headers(auth=True),
+                timeout=self.TIMEOUT,
+            )
+            return self._handle_response(resp)
+
+        return self._authed(_do)
 
     def get_payment_status(self, reference_code: str) -> dict:
         """GET /payment/status/:ref — one status snapshot."""
@@ -177,12 +218,15 @@ class APIClient:
         (Lemon Squeezy / Stripe).  VietQR / bank / admin-granted have
         no self-service portal and return 404.
         """
-        resp = requests.get(
-            self._url("/payment/portal"),
-            headers=self._headers(auth=True),
-            timeout=self.TIMEOUT,
-        )
-        body = self._handle_response(resp)
+        def _do() -> dict:
+            resp = requests.get(
+                self._url("/payment/portal"),
+                headers=self._headers(auth=True),
+                timeout=self.TIMEOUT,
+            )
+            return self._handle_response(resp)
+
+        body = self._authed(_do)
         url = body.get("url")
         if not url:
             raise APIError("Backend did not return a portal URL")
