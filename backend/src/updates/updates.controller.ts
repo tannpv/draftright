@@ -62,6 +62,13 @@ export class UpdatesController {
       linux_url: all.linux?.download_url ?? '',
       android_url: all.android?.download_url ?? '',
       ios_url: all.ios?.download_url ?? '',
+      // Per-platform artifact hashes (empty when unrecorded). Desktop updaters
+      // verify the downloaded file against these before executing it.
+      mac_sha256: all.mac?.sha256 ?? '',
+      windows_sha256: all.windows?.sha256 ?? '',
+      linux_sha256: all.linux?.sha256 ?? '',
+      android_sha256: all.android?.sha256 ?? '',
+      ios_sha256: all.ios?.sha256 ?? '',
       release_notes: envelope.release_notes,
       required: envelope.required,
       // Per-platform expansion — always present so smart clients can pin to
@@ -73,6 +80,7 @@ export class UpdatesController {
           .map(([k, v]) => [k, {
             version: v!.version,
             url: v!.download_url,
+            sha256: v!.sha256 ?? '',
             notes: v!.release_notes,
             required: v!.required,
             channel: v!.channel,
