@@ -15,14 +15,24 @@ public struct ChineseLanguagePack: LanguagePack {
     /// Matches the backend manifest's pack URL prefix (zh pack ships later).
     private static let packIdPrefix = "draftright-ime-zh"
     /// Cached engine — parse the pinyin pack once per session, not per keystroke.
+    /// Cached engine + the pack identity it was built from. Parsing the pack is
+    /// expensive, so keep the engine across keystrokes — but key the cache on
+    /// the resolved pack URL (its filename encodes the version) so installing a
+    /// newer pack mid-session rebuilds instead of serving the stale seed/dict
+    /// (issue #10). Per-keystroke cost is one small directory scan.
     private static var cachedEngine: CandidateEngine?
+    private static var cachedKey: String?
 
     public init() {}
 
     public func makeComposer() -> Composer? { PinyinComposer() }
 
     public func makeCandidateEngine() -> CandidateEngine? {
-        if let cached = Self.cachedEngine { return cached }
+        let key = DictPackResolver.resolvedPackURL(
+            appGroupContainer: Self.appGroupContainer,
+            packIdPrefix: Self.packIdPrefix
+        )?.path ?? "seed"
+        if key == Self.cachedKey, let cached = Self.cachedEngine { return cached }
         let dict = DictPackResolver.loadOrFallback(
             appGroupContainer: Self.appGroupContainer,
             packIdPrefix: Self.packIdPrefix,
@@ -30,6 +40,7 @@ public struct ChineseLanguagePack: LanguagePack {
         )
         let engine = DictionaryCandidateEngine(dictionary: dict)
         Self.cachedEngine = engine
+        Self.cachedKey = key
         return engine
     }
 
