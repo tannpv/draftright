@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { safeNextPath } from '../lib/redirect';
 
 const API = (import.meta.env.PUBLIC_API_URL as string | undefined) || 'https://api.draftright.info';
 
@@ -61,7 +62,7 @@ export default function VerifyEmailForm() {
   };
 
   if (done) {
-    const next = new URLSearchParams(window.location.search).get('next');
+    const next = safeNextPath();
     if (next) {
       window.location.href = next;
       return null;

@@ -255,14 +255,10 @@ public class App : Application
         // Wire up the hotkey handler
         Hotkey.HotkeyPressed += async (_, _) => await HandleHotkeyAsync();
 
-        // Restore saved session or auto-login for testing
+        // Restore saved session; otherwise the user logs in via Settings.
         if (Auth.RestoreSession())
         {
             Api.SetToken(Auth.AccessToken!);
-        }
-        else
-        {
-            _ = AutoLoginAsync();
         }
 
         // Create the loading indicator on the WinUI UI thread before starting the tray thread.
@@ -641,23 +637,6 @@ public class App : Application
         catch
         {
             // Silently fail — next health check will retry
-        }
-    }
-
-    private async Task AutoLoginAsync()
-    {
-        try
-        {
-            var result = await Api.LoginAsync("test@test.com", "password123");
-            if (!string.IsNullOrEmpty(result.AccessToken))
-            {
-                Auth.SaveTokens(result.AccessToken, result.RefreshToken, result.User?.Email);
-                Api.SetToken(result.AccessToken);
-            }
-        }
-        catch
-        {
-            // Silently fail — user can login manually via Settings
         }
     }
 
