@@ -5,7 +5,7 @@ import UserNotifications
 final class ServiceProvider: NSObject {
     let appModel: AppModel
 
-    private let aiClient = BackendClient()
+    private var aiClient: BackendClient { appModel.backendClient }
     private let diffWindow = DiffWindow.shared
 
     init(appModel: AppModel) {

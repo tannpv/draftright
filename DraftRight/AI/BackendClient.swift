@@ -70,6 +70,7 @@ enum BackendClientError: LocalizedError {
     case emptyResponse
     case httpError(Int, String)
     case timeout
+    case invalidResponse(String)
 
     var errorDescription: String? {
         switch self {
@@ -78,6 +79,7 @@ enum BackendClientError: LocalizedError {
         case .emptyResponse: return "No text returned from server."
         case .httpError(let code, let body): return "HTTP \(code): \(body)"
         case .timeout: return "Request timed out."
+        case .invalidResponse(let why): return "Unexpected server response: \(why)"
         }
     }
 }
@@ -189,9 +191,17 @@ final class BackendClient {
             throw BackendClientError.httpError(httpResponse.statusCode, bodyText)
         }
 
-        // Check if this is a grammar check response
-        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let grammarDict = json["grammar"] {
+        // Grammar Check returns {"grammar":{score,issues[]}}; every other tone
+        // returns a rewrite payload. Branch on the REQUESTED tone, not on
+        // response-shape sniffing: if grammar was asked for but the body lacks
+        // the grammar key, surface the contract violation instead of silently
+        // decoding it as a rewrite (which would hand back garbage as a "result").
+        if tone == .grammarCheck {
+            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let grammarDict = json["grammar"] else {
+                DRLogger.error("grammarCheck response missing 'grammar' key (HTTP \(httpStatus))", category: .api)
+                throw BackendClientError.invalidResponse("grammar check returned no grammar data")
+            }
             let grammarData = try JSONSerialization.data(withJSONObject: grammarDict)
             let jsonString = String(data: grammarData, encoding: .utf8) ?? "{}"
             DRLogger.log("rewrite SUCCESS: HTTP \(httpStatus) grammarCheck resultLen=\(jsonString.count)", category: .api)
