@@ -18,6 +18,21 @@ final class BackendClient {
         static let maxInputChars = 3000
         /// Request timeout for the /rewrite call (seconds).
         static let timeoutSeconds: TimeInterval = 15
+        /// Shown when the backend gives no usable user-facing message.
+        static let genericError = "Rewrite service is temporarily unavailable. Please try again."
+    }
+
+    /// Pull the backend's user-facing `error` field out of an error response
+    /// body. Returns nil when the body is missing, isn't JSON, or has no
+    /// non-blank `error` — callers fall back to `Config.genericError`. Never
+    /// returns the raw body, which can carry provider internals (mirrors the
+    /// Android keyboard's parseErrorMessage).
+    private static func parseErrorMessage(_ data: Data) -> String? {
+        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let error = obj["error"] as? String,
+              !error.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else { return nil }
+        return error
     }
 
     func rewrite(
@@ -88,8 +103,9 @@ final class BackendClient {
                 if httpResponse.statusCode == 401 {
                     message = "Session expired — open DraftRight and log in again."
                 } else {
-                    let bodyText = String(data: data, encoding: .utf8) ?? "Unknown error"
-                    message = "HTTP \(httpResponse.statusCode): \(bodyText)"
+                    // Surface only the backend's user-facing `error` field, never
+                    // the raw body (it can leak provider internals / key prefixes).
+                    message = Self.parseErrorMessage(data) ?? Config.genericError
                 }
                 completion(.failure(NSError(
                     domain: "BackendClient", code: httpResponse.statusCode,
