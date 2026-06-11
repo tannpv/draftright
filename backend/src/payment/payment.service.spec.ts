@@ -61,6 +61,15 @@ describe('PaymentService — enabled methods', () => {
     expect(await svc.getEnabledMethods()).toEqual(['stripe']);
   });
 
+  it('assertMethodsRegisterable rejects a method with no strategy (paypal)', () => {
+    expect(() => svc.assertMethodsRegisterable('stripe,paypal')).toThrow(/paypal/);
+  });
+
+  it('assertMethodsRegisterable accepts registered methods + blank input', () => {
+    expect(() => svc.assertMethodsRegisterable('stripe,vietqr,lemonsqueezy')).not.toThrow();
+    expect(() => svc.assertMethodsRegisterable('')).not.toThrow();
+  });
+
   it('createCheckout rejects a method that is not enabled', async () => {
     findOneSettings.mockResolvedValue({ payment_methods_enabled: 'vietqr' });
     plansService.findById.mockResolvedValue({ id: 'p1', price_cents: 99000, currency: 'VND' });

@@ -440,6 +440,12 @@ export class AdminController {
 
   @Patch('settings')
   async updateSettings(@Body() body: Partial<AppSettings>) {
+    // Reject enabling a payment method that has no backend strategy (e.g.
+    // paypal/momo) — otherwise the storefront advertises a tile that 400s
+    // at checkout.
+    if (body.payment_methods_enabled !== undefined) {
+      this.paymentService.assertMethodsRegisterable(body.payment_methods_enabled);
+    }
     let settings = await this.settingsRepo.findOne({ where: {} });
     if (!settings) {
       settings = this.settingsRepo.create();
