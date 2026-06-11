@@ -30,6 +30,15 @@ export class AppRelease {
   @Column({ type: 'text', name: 'download_url' })
   download_url: string;
 
+  /**
+   * Hex SHA-256 of the artifact at `download_url`. Empty when the publisher
+   * didn't record one (older rows). Desktop updaters verify the downloaded
+   * file against this before executing it; an empty value means "unverified"
+   * (the client logs a warning but still installs, for backwards-compat).
+   */
+  @Column({ type: 'varchar', length: 64, default: '', name: 'sha256' })
+  sha256: string;
+
   @Column({ type: 'text', default: '', name: 'release_notes' })
   release_notes: string;
 

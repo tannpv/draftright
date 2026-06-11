@@ -335,6 +335,7 @@ export class AdminController {
     channel?: string;
     version: string;
     download_url: string;
+    sha256?: string;
     release_notes?: string;
     required?: boolean;
     enabled?: boolean;
