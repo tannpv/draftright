@@ -327,6 +327,19 @@ public sealed class SubscriptionTab : WinForms.UserControl, IPaymentSheetPresent
             {
                 await _payments.OpenCustomerPortalAsync();
             }
+            catch (ApiException api) when (api.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                // A 404 from /payment/portal means this subscription's source
+                // (admin-granted, VietQR, bank transfer) has no self-service
+                // billing portal. Explain it plainly instead of dumping the
+                // raw "API 404 Not Found: {json}" body into the user's face.
+                WinForms.MessageBox.Show(this,
+                    "This plan has no self-service billing portal — it was granted by an "
+                    + "administrator or paid via QR code / bank transfer. Please contact "
+                    + "support to change or cancel it.",
+                    "Manage subscription",
+                    WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Information);
+            }
             catch (Exception e)
             {
                 WinForms.MessageBox.Show(this, e.Message, "Could not open portal",

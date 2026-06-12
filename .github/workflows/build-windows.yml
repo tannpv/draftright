@@ -52,10 +52,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup .NET 8
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '8.0.x'
 
@@ -110,7 +110,7 @@ jobs:
           Add-Content -Path $env:GITHUB_ENV -Value "ARTIFACT_NAME=$name"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: DraftRight-Windows-${{ matrix.runtime }}
           path: DraftRightWindows/DraftRightWindows/publish/${{ env.ARTIFACT_NAME }}
@@ -175,7 +175,7 @@ jobs:
           Add-Content -Path $env:GITHUB_ENV -Value "INSTALLER_NAME=$stamped"
 
       - name: Upload installer
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: DraftRight-Setup-${{ matrix.runtime }}
           path: DraftRightWindows/installer/Output/${{ env.INSTALLER_NAME }}
@@ -210,10 +210,10 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout (for CHANGELOG release notes)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Download x64 installer artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: DraftRight-Setup-win-x64
           path: dist
@@ -375,10 +375,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup .NET 8
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '8.0.x'
 
@@ -448,7 +448,7 @@ jobs:
           Add-Content -Path $env:GITHUB_ENV -Value "MSIX_PATH=DraftRightWindows/DraftRightWindows/AppPackages/DraftRight-Store-$shortSha.msixupload"
 
       - name: Upload MSIX bundle
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: DraftRight-MSIX-Store
           path: ${{ env.MSIX_PATH }}
