@@ -23,6 +23,14 @@ A Windows-only line under `### Windows` will never appear in the macOS
 If a version needs the user to *do* something after updating, say so
 explicitly under an **Action needed:** line inside the relevant sub-section.
 
+## 2.3.22 — 2026-06-12
+### Windows
+- New **Subscription** tab in Settings: see your current plan and upgrade, renew, or manage billing without leaving the app. Pay by card, QR code, or bank transfer, with live payment status shown right in the window.
+- Added a **yearly billing** option so you can switch between monthly and annual pricing.
+- Updates are now verified by **SHA-256 checksum** before the installer runs — a corrupted or tampered download is rejected instead of being launched.
+- Sign-in now validates your email + password before sending, and login errors show the server's actual reason ("Invalid credentials", etc.) instead of a raw stack trace. (Carried over from the unreleased 2.3.15.)
+- Security: removed a leftover hardcoded test login that could auto-sign-in in some builds.
+
 ## 2.3.21 — 2026-05-30
 ### macOS
 - Internal: server-controlled rollout now decides which `/rewrite` backend the macOS app talks to (NestJS or the new Go service). Default routing is unchanged; rollout is staged via the server-side `GO_BACKEND_RAMP_PERCENT` knob.
