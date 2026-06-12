@@ -18,7 +18,7 @@ DOWNLOADS_PATH="$REMOTE_PATH/downloads"
 # Known-good sentinel binary that must keep serving a real DMG after deploy.
 # Update this when the macOS line moves; the file just needs to exist in
 # /var/www/draftright/downloads/ so the post-check has something to verify.
-SENTINEL_URL="https://draftright.info/downloads/DraftRight-macOS-2.2.5.dmg"
+SENTINEL_URL="https://draftright.info/downloads/DraftRight-macOS-2.3.21.dmg"
 
 cd "$(dirname "$0")/../website"
 
