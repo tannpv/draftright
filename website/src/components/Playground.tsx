@@ -1,15 +1,20 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import ReportBugWidget from './ReportBugWidget';
 import SuggestFeatureWidget from './SuggestFeatureWidget';
+import { API_URL } from '../lib/api';
 
-const API_URL = (typeof import.meta !== 'undefined' && import.meta.env?.PUBLIC_API_URL) || 'https://api.draftright.info';
+type ToneOption = { value: string; label: string; icon: string };
 
-const TONES = [
+// Fallback used until GET /rewrite/tones responds (or if it fails). Grammar
+// Check is intentionally excluded: the playground only renders rewritten_text,
+// not the grammar issues payload.
+const FALLBACK_TONES: ToneOption[] = [
   { value: 'simple', label: 'Simple', icon: '✎' },
   { value: 'natural', label: 'Natural', icon: '💬' },
   { value: 'polished', label: 'Polished', icon: '✨' },
   { value: 'concise', label: 'Concise', icon: '⊖' },
   { value: 'technical', label: 'Technical', icon: '🔧' },
+  { value: 'claude', label: 'Claude', icon: '✦' },
   { value: 'translate', label: 'Translate', icon: '🌐' },
 ];
 
@@ -67,6 +72,34 @@ export default function Playground() {
   const [error, setError] = useState('');
   const [triesLeft, setTriesLeft] = useState(3);
   const [copied, setCopied] = useState(false);
+  const [tones, setTones] = useState<ToneOption[]>(FALLBACK_TONES);
+
+  // Render the tone list the backend actually supports (single source of
+  // truth: GET /rewrite/tones), so a newly added tone shows up without a
+  // site rebuild. Grammar-kind tones are skipped — the playground can't
+  // render their structured response. Falls back to FALLBACK_TONES on error.
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_URL}/rewrite/tones`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then((data) => {
+        const list = Array.isArray(data?.tones) ? data.tones : [];
+        const mapped: ToneOption[] = list
+          .filter((t: { kind?: string }) => t.kind !== 'grammar')
+          .map((t: { id: string; label: string; icon: string }) => ({
+            value: t.id,
+            label: t.label,
+            icon: t.icon,
+          }));
+        if (!cancelled && mapped.length > 0) setTones(mapped);
+      })
+      .catch(() => {
+        /* keep FALLBACK_TONES */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleRewrite = async () => {
     if (!text.trim() || loading) return;
@@ -146,7 +179,7 @@ export default function Playground() {
 
       {/* Tone Buttons */}
       <div className="flex flex-wrap gap-2 mb-6">
-        {TONES.map((t) => {
+        {tones.map((t) => {
           const sourceFlag = LANGUAGES.find(l => l.name === sourceLanguage)?.flag || '🔍';
           const targetFlag = LANGUAGES.find(l => l.name === targetLanguage)?.flag || '🌐';
           const icon = t.value === 'translate' ? sourceFlag : t.icon;

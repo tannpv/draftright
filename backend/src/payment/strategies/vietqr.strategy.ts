@@ -112,7 +112,7 @@ export class VietQRStrategy extends BasePaymentStrategy {
       throw new UnauthorizedException('VietQR webhooks not configured');
     }
 
-    if (!validKeys.includes(provided)) {
+    if (!validKeys.some((key) => this.timingSafeStrEqual(key, provided))) {
       this.logger.warn('VietQR webhook rejected: invalid API key.');
       throw new UnauthorizedException('Invalid webhook authorization');
     }

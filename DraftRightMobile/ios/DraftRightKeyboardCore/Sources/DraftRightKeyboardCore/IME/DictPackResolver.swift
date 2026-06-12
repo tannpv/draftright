@@ -32,6 +32,14 @@ public enum DictPackResolver {
         return fallback()
     }
 
+    /// The pack file `loadOrFallback` would load, or nil when none is
+    /// installed (→ seed). Used as a cache key so a language pack rebuilds its
+    /// engine when a newer pack is installed mid-session (the filename encodes
+    /// the version, so a new pack yields a different URL).
+    public static func resolvedPackURL(appGroupContainer: URL?, packIdPrefix: String) -> URL? {
+        findLatestInstalled(appGroupContainer: appGroupContainer, packIdPrefix: packIdPrefix)
+    }
+
     private static func findLatestInstalled(appGroupContainer: URL?, packIdPrefix: String) -> URL? {
         guard let container = appGroupContainer else { return nil }
         let packsDir = container.appendingPathComponent("packs", isDirectory: true)

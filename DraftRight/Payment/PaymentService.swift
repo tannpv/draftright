@@ -101,7 +101,7 @@ final class PaymentService {
     static func currency(for method: PaymentMethodKind) -> String {
         switch method {
         case .vietqr, .bankTransfer: return "VND"
-        case .lemonsqueezy, .stripe, .paypal: return "USD"
+        case .lemonsqueezy, .stripe, .paypal, .applePay, .googlePay: return "USD"
         }
     }
 

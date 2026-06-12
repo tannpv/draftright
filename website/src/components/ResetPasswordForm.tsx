@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import PasswordInput from './PasswordInput';
 
-const API = (import.meta.env.PUBLIC_API_URL as string | undefined) || 'https://api.draftright.info';
+import { API_URL as API } from '../lib/api';
 
 export default function ResetPasswordForm() {
   const [email, setEmail] = useState('');

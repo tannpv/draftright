@@ -11,6 +11,8 @@ enum PaymentMethodKind: String, CaseIterable {
     case vietqr
     case bankTransfer
     case paypal
+    case applePay
+    case googlePay
 
     var wireName: String {
         switch self {
@@ -19,6 +21,8 @@ enum PaymentMethodKind: String, CaseIterable {
         case .vietqr:       return "vietqr"
         case .bankTransfer: return "bank_transfer"
         case .paypal:       return "paypal"
+        case .applePay:     return "apple_pay"
+        case .googlePay:    return "google_pay"
         }
     }
 
@@ -44,7 +48,7 @@ struct PaymentMethodDescriptor {
             return .init(
                 kind: .lemonsqueezy,
                 displayName: "Credit / Debit Card",
-                description: "Visa, Mastercard, Apple Pay (via Lemon Squeezy)",
+                description: "Visa, Mastercard, and more via Lemon Squeezy",
                 symbolName: "creditcard"
             )
         case .stripe:
@@ -73,6 +77,20 @@ struct PaymentMethodDescriptor {
                 kind: .paypal,
                 displayName: "PayPal",
                 description: "Pay with PayPal balance or card",
+                symbolName: "wallet.pass"
+            )
+        case .applePay:
+            return .init(
+                kind: .applePay,
+                displayName: "Apple Pay",
+                description: "Pay with Apple Pay (via Stripe)",
+                symbolName: "applelogo"
+            )
+        case .googlePay:
+            return .init(
+                kind: .googlePay,
+                displayName: "Google Pay",
+                description: "Pay with Google Pay (via Stripe)",
                 symbolName: "wallet.pass"
             )
         }

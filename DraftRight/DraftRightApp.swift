@@ -176,7 +176,7 @@ struct DraftRightApp: App {
 
         let monitor = SelectionMonitor()
         monitor.hotkeyString = appModel.hotkeyString
-        let aiClient = BackendClient()
+        let aiClient = appModel.backendClient
         let diffWindow = DiffWindow.shared
 
         // Sync hotkey changes from settings to monitor

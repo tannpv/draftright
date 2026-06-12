@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-const API = (import.meta.env.PUBLIC_API_URL as string | undefined) || 'https://api.draftright.info';
+import { API_URL as API } from '../lib/api';
 
 export default function SubscribeButton() {
   const [loading, setLoading] = useState(false);

@@ -21,6 +21,8 @@ class PaymentMethodKind(Enum):
     VIETQR = "vietqr"
     BANK_TRANSFER = "bank_transfer"
     PAYPAL = "paypal"
+    APPLE_PAY = "apple_pay"
+    GOOGLE_PAY = "google_pay"
 
     @classmethod
     def from_wire(cls, value: str) -> Optional["PaymentMethodKind"]:
@@ -71,7 +73,7 @@ class PaymentMethodDescriptor:
     def for_kind(cls, kind: PaymentMethodKind) -> "PaymentMethodDescriptor":
         if kind == PaymentMethodKind.LEMONSQUEEZY:
             return cls(kind, "Credit / Debit Card",
-                       "Visa, Mastercard, Apple Pay (via Lemon Squeezy)",
+                       "Visa, Mastercard, and more via Lemon Squeezy",
                        "credit-card-symbolic")
         if kind == PaymentMethodKind.STRIPE:
             return cls(kind, "Stripe",
@@ -88,6 +90,14 @@ class PaymentMethodDescriptor:
         if kind == PaymentMethodKind.PAYPAL:
             return cls(kind, "PayPal",
                        "Pay with PayPal balance or card",
+                       "wallet2-symbolic")
+        if kind == PaymentMethodKind.APPLE_PAY:
+            return cls(kind, "Apple Pay",
+                       "Pay with Apple Pay (via Stripe)",
+                       "wallet2-symbolic")
+        if kind == PaymentMethodKind.GOOGLE_PAY:
+            return cls(kind, "Google Pay",
+                       "Pay with Google Pay (via Stripe)",
                        "wallet2-symbolic")
         raise ValueError(f"No descriptor for {kind!r}")
 

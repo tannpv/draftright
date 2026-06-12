@@ -21,16 +21,24 @@ public struct JapaneseLanguagePack: LanguagePack {
 
     public init() {}
 
-    /// Cached engine — makeCandidateEngine() is called on EVERY keystroke, and
-    /// the dictionary is 700k+ entries (~27 MB). Parse the pack once per IME
-    /// session, not per keystroke (that was the Japanese lag).
+    /// Cached engine + the pack identity it was built from. makeCandidateEngine()
+    /// is called on EVERY keystroke and the dictionary is 700k+ entries (~27 MB),
+    /// so we keep the parsed engine across keystrokes — but key the cache on the
+    /// resolved pack URL (its filename encodes the version) so installing a newer
+    /// pack mid-session rebuilds instead of serving the stale dict (issue #10).
+    /// The 27 MB parse still happens only on an actual pack change, not per key.
     private static var cachedEngine: CandidateEngine?
+    private static var cachedKey: String?
 
     /// Rōmaji→kana composer; its kana buffer drives the candidate engine.
     public func makeComposer() -> Composer? { RomajiKanaComposer() }
 
     public func makeCandidateEngine() -> CandidateEngine? {
-        if let cached = Self.cachedEngine { return cached }
+        let key = DictPackResolver.resolvedPackURL(
+            appGroupContainer: Self.appGroupContainer,
+            packIdPrefix: Self.packIdPrefix
+        )?.path ?? "seed"
+        if key == Self.cachedKey, let cached = Self.cachedEngine { return cached }
         let dict = DictPackResolver.loadOrFallback(
             appGroupContainer: Self.appGroupContainer,
             packIdPrefix: Self.packIdPrefix,
@@ -38,6 +46,7 @@ public struct JapaneseLanguagePack: LanguagePack {
         )
         let engine = DictionaryCandidateEngine(dictionary: dict)
         Self.cachedEngine = engine
+        Self.cachedKey = key
         return engine
     }
 

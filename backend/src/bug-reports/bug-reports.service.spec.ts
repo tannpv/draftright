@@ -5,6 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import { BugReportsService } from './bug-reports.service';
 import { BugReport } from './entities/bug-report.entity';
 import { FeatureVote } from './entities/feature-vote.entity';
+import { User } from '../users/entities/user.entity';
 import { AiProvidersService } from '../ai-providers/ai-providers.service';
 
 // In-memory fakes — enough to exercise the feature/vote logic without a DB.
@@ -39,15 +40,18 @@ describe('BugReportsService — feedback', () => {
   let svc: BugReportsService;
   let bugRepo: FakeRepo<BugReport>;
   let voteRepo: FakeRepo<FeatureVote>;
+  let userRepo: FakeRepo<User>;
 
   beforeEach(async () => {
     bugRepo = new FakeRepo<BugReport>();
     voteRepo = new FakeRepo<FeatureVote>();
+    userRepo = new FakeRepo<User>();
     const mod = await Test.createTestingModule({
       providers: [
         BugReportsService,
         { provide: getRepositoryToken(BugReport), useValue: bugRepo },
         { provide: getRepositoryToken(FeatureVote), useValue: voteRepo },
+        { provide: getRepositoryToken(User), useValue: userRepo },
         { provide: AiProvidersService, useValue: {} },
         // Service now reads BUG_REPORTS_DIR via ConfigService (S14).
         // Test doesn't write screenshots so the directory is unused;
@@ -74,6 +78,7 @@ describe('BugReportsService — feedback', () => {
   });
 
   it('createFeedback stores a feature row with vote_count 0, is_public true, status new', async () => {
+    userRepo.rows.push({ id: 'user-1' } as any);
     const row = await svc.createFeedback(
       { kind: 'feature', title: 'Add dark mode', target_platform: 'mac', description: 'please', source: 'web' } as any,
       'user-1',
@@ -85,6 +90,16 @@ describe('BugReportsService — feedback', () => {
     expect(row.is_public).toBe(true);
     expect(row.status).toBe('new');
     expect(row.user_id).toBe('user-1');
+  });
+
+  it('createFeedback nulls a user_id that no longer exists (orphan JWT)', async () => {
+    // No user seeded — the id points at a deleted account.
+    const row = await svc.createFeedback(
+      { kind: 'feature', title: 'Orphan', target_platform: 'mac', description: 'd', source: 'web', user_email: 'gone@x.com' } as any,
+      'deleted-user',
+    );
+    expect(row.user_id).toBeNull();
+    expect(row.user_email).toBe('gone@x.com');
   });
 
   it('createFeedback with kind=bug ignores title/target_platform', async () => {

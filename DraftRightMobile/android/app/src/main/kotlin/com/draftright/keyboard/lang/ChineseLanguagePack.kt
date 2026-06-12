@@ -34,15 +34,28 @@ object ChineseLanguagePack : LanguagePack {
     /** Matches the backend manifest's pack URL prefix (zh pack ships later). */
     private const val PACK_ID_PREFIX = "draftright-ime-zh"
 
-    /** Cached engine — parse the pinyin pack once per session, not per keystroke. */
+    /**
+     * Cached engine + the pack identity it was built from. Parsing the pack is
+     * expensive, so keep the engine across keystrokes — but key the cache on the
+     * resolved pack file (its name encodes the version) so a pack installed
+     * mid-session rebuilds instead of serving the stale seed/dict (issue #10).
+     * Per-keystroke cost is one small directory scan.
+     */
     @Volatile
     private var cachedEngine: CandidateEngine? = null
+    @Volatile
+    private var cachedKey: String? = null
 
     override fun candidateEngine(): CandidateEngine {
-        cachedEngine?.let { return it }
+        val ctx = ImeContext.appOrNull()
+        val key = if (ctx != null) {
+            DictPackResolver.resolvedPackFile(ctx, PACK_ID_PREFIX)?.path ?: "seed"
+        } else {
+            "seed"
+        }
+        cachedEngine?.let { if (key == cachedKey) return it }
         synchronized(this) {
-            cachedEngine?.let { return it }
-            val ctx = ImeContext.appOrNull()
+            cachedEngine?.let { if (key == cachedKey) return it }
             val dict = if (ctx != null) {
                 DictPackResolver.loadOrFallback(ctx, PACK_ID_PREFIX) { ChinesePinyinSeedDictionary.dict }
             } else {
@@ -50,6 +63,7 @@ object ChineseLanguagePack : LanguagePack {
             }
             val engine = DictionaryCandidateEngine(dict)
             cachedEngine = engine
+            cachedKey = key
             return engine
         }
     }

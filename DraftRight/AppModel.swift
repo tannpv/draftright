@@ -129,7 +129,9 @@ final class AppModel: ObservableObject {
     var cancellables = Set<AnyCancellable>()
 
     private let defaults = UserDefaults.standard
-    private let healthClient = BackendClient()
+    /// Single shared backend client (stateless; backend URL passed per call).
+    /// Reused by ServiceProvider + DraftRightApp so timeouts/config never drift.
+    let backendClient = BackendClient()
     private var healthTimer: Timer?
     var updateService: UpdateService?
 
@@ -334,7 +336,7 @@ final class AppModel: ObservableObject {
 
     private func performHealthCheck() async {
         guard !isRewriting else { return }
-        var status = await healthClient.checkHealth(
+        var status = await backendClient.checkHealth(
             backendUrl: backendUrl,
             accessToken: accessToken.isEmpty ? nil : accessToken
         )
@@ -345,11 +347,11 @@ final class AppModel: ObservableObject {
         // or 5xx must NOT destroy a valid 90-day token.
         if status == .notLoggedIn && !refreshToken.isEmpty {
             DRLogger.log("Access token rejected — attempting silent refresh", category: .auth)
-            switch await healthClient.refreshTokens(refreshToken: refreshToken, backendUrl: backendUrl) {
+            switch await backendClient.refreshTokens(refreshToken: refreshToken, backendUrl: backendUrl) {
             case .success(let access, let refresh):
                 storeTokens(access: access, refresh: refresh)
                 sessionExpired = false
-                status = await healthClient.checkHealth(
+                status = await backendClient.checkHealth(
                     backendUrl: backendUrl,
                     accessToken: access
                 )
@@ -433,7 +435,7 @@ final class AppModel: ObservableObject {
     /// health tick re-tries. Idempotent: re-running with the same
     /// server state produces zero @Published churn.
     private func refreshFeatureFlags() async {
-        guard let me = await healthClient.fetchAuthMe(backendUrl: backendUrl, accessToken: accessToken) else {
+        guard let me = await backendClient.fetchAuthMe(backendUrl: backendUrl, accessToken: accessToken) else {
             return
         }
         let next = me.flags?.use_go_backend ?? false

@@ -20,7 +20,7 @@ import { EmailTemplate } from '../email/entities/email-template.entity';
 import { EMAIL_TEMPLATES, EMAIL_TEMPLATE_MAP } from '../email/email-templates';
 import { AdminUser } from './entities/admin-user.entity';
 import { PaymentService } from '../payment/payment.service';
-import * as bcrypt from 'bcryptjs';
+import { hashPassword } from '../common/password-hash.util';
 import { GrantSubscriptionDto } from './dto/grant-subscription.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { ReleasesService } from '../updates/releases.service';
@@ -335,6 +335,7 @@ export class AdminController {
     channel?: string;
     version: string;
     download_url: string;
+    sha256?: string;
     release_notes?: string;
     required?: boolean;
     enabled?: boolean;
@@ -440,6 +441,12 @@ export class AdminController {
 
   @Patch('settings')
   async updateSettings(@Body() body: Partial<AppSettings>) {
+    // Reject enabling a payment method that has no backend strategy (e.g.
+    // paypal/momo) — otherwise the storefront advertises a tile that 400s
+    // at checkout.
+    if (body.payment_methods_enabled !== undefined) {
+      this.paymentService.assertMethodsRegisterable(body.payment_methods_enabled);
+    }
     let settings = await this.settingsRepo.findOne({ where: {} });
     if (!settings) {
       settings = this.settingsRepo.create();
@@ -738,7 +745,7 @@ export class AdminController {
     const existing = await this.adminUserRepo.findOne({ where: { email: body.email } });
     if (existing) throw new BadRequestException('Email already exists');
 
-    const password_hash = await bcrypt.hash(body.password, 10);
+    const password_hash = await hashPassword(body.password);
     const user = this.adminUserRepo.create({
       email: body.email,
       password_hash,
@@ -757,7 +764,7 @@ export class AdminController {
     if (body.email !== undefined) update.email = body.email;
     if (body.role !== undefined) update.role = body.role;
     if (body.is_active !== undefined) update.is_active = body.is_active;
-    if (body.password) update.password_hash = await bcrypt.hash(body.password, 10);
+    if (body.password) update.password_hash = await hashPassword(body.password);
 
     await this.adminUserRepo.update(id, update);
     const user = await this.adminUserRepo.findOneOrFail({ where: { id } });

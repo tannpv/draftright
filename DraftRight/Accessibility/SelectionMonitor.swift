@@ -189,7 +189,7 @@ final class SelectionMonitor {
 
         // Grab selected text via AX or Cmd+C fallback
         if let text = axService.readSelectedText(), !text.isEmpty {
-            DRLogger.log("Hotkey AX got: '\(text.prefix(30))'", category: .monitor)
+            DRLogger.log("Hotkey AX got: \(text.count) chars", category: .monitor)
             DiffWindow.shared.anchorPoint = NSEvent.mouseLocation
             onTextSelected?(text)
             return
@@ -213,7 +213,7 @@ final class SelectionMonitor {
             if pasteboard.changeCount != savedChangeCount {
                 let text = (pasteboard.string(forType: .string) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
                 if !text.isEmpty {
-                    DRLogger.log("Hotkey clipboard got: '\(text.prefix(30))'", category: .monitor)
+                    DRLogger.log("Hotkey clipboard got: \(text.count) chars", category: .monitor)
                     DiffWindow.shared.anchorPoint = NSEvent.mouseLocation
                     self.onTextSelected?(text)
                     return
@@ -336,7 +336,7 @@ final class SelectionMonitor {
 
         // Strategy 1: AX API
         if let text = axService.readSelectedText(), !text.isEmpty {
-            DRLogger.log("Pre-capture AX got: '\(text.prefix(30))'", category: .monitor)
+            DRLogger.log("Pre-capture AX got: \(text.count) chars", category: .monitor)
             cachedSelectedText = text
             return
         }
@@ -360,7 +360,7 @@ final class SelectionMonitor {
             if pasteboard.changeCount != savedChangeCount {
                 let text = (pasteboard.string(forType: .string) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
                 if !text.isEmpty {
-                    DRLogger.log("Pre-capture clipboard got: '\(text.prefix(30))'", category: .monitor)
+                    DRLogger.log("Pre-capture clipboard got: \(text.count) chars", category: .monitor)
                     self.cachedSelectedText = text
                 } else {
                     DRLogger.log("Pre-capture clipboard empty", category: .monitor)
@@ -377,7 +377,7 @@ final class SelectionMonitor {
 
         // Use pre-captured text (captured when pencil was shown, before click disrupted selection)
         if let text = cachedSelectedText, !text.isEmpty {
-            DRLogger.log("Using pre-captured text: '\(text.prefix(30))'", category: .monitor)
+            DRLogger.log("Using pre-captured text: \(text.count) chars", category: .monitor)
             cachedSelectedText = nil
             onTextSelected?(text)
             return
@@ -385,7 +385,7 @@ final class SelectionMonitor {
 
         // Last resort: try AX (unlikely to work after click)
         if let text = axService.readSelectedText(), !text.isEmpty {
-            DRLogger.log("AX got text (fallback): \(text.prefix(30))", category: .monitor)
+            DRLogger.log("AX got text (fallback): \(text.count) chars", category: .monitor)
             onTextSelected?(text)
             return
         }

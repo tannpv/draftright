@@ -1,5 +1,6 @@
 """Auto-update service for DraftRight Linux."""
 
+import hashlib
 import json
 import logging
 import os
@@ -16,12 +17,29 @@ logger = logging.getLogger(__name__)
 CHECK_INTERVAL = 86400  # 24 hours
 
 
+def _sha256_of(path: str) -> str:
+    """Hex SHA-256 of a file, read in chunks to bound memory."""
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 16), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
 class UpdateInfo:
     def __init__(self, data: dict):
         self.version = data.get("version", "")
         self.linux_url = data.get("linux_url", "")
         self.release_notes = data.get("release_notes", "")
         self.required = data.get("required", False)
+        # Hex SHA-256 the backend published for the Linux artifact. Prefer the
+        # per-platform entry; fall back to the legacy top-level field. Empty
+        # when the release predates hash publishing (treated as unverified).
+        platforms = data.get("platforms")
+        if isinstance(platforms, dict) and isinstance(platforms.get("linux"), dict):
+            self.linux_sha256 = (platforms["linux"].get("sha256") or "").lower()
+        else:
+            self.linux_sha256 = (data.get("linux_sha256") or "").lower()
 
 
 class UpdateService:
@@ -113,6 +131,26 @@ class UpdateService:
                         downloaded += len(chunk)
                         if total > 0 and progress_callback:
                             progress_callback(downloaded / total, f"Downloading... {downloaded * 100 // total}%")
+
+            # Integrity check: when the backend published a hash, the download
+            # must match it before we replace + execute the binary. A mismatch
+            # means a corrupted or tampered artifact — abort, never run it.
+            if info.linux_sha256:
+                actual = _sha256_of(temp_path)
+                if actual != info.linux_sha256:
+                    logger.error(
+                        "Update integrity check FAILED: expected %s, got %s. Aborting.",
+                        info.linux_sha256, actual,
+                    )
+                    shutil.rmtree(temp_dir, ignore_errors=True)
+                    if progress_callback:
+                        progress_callback(0.0, "Update failed: integrity check did not match.")
+                    return False
+                logger.info("Update integrity check passed (sha256 match).")
+            else:
+                logger.warning(
+                    "No sha256 published for this release — installing unverified."
+                )
 
             if progress_callback:
                 progress_callback(1.0, "Installing...")

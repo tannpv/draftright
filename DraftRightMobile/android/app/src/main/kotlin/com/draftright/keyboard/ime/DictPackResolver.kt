@@ -34,6 +34,15 @@ object DictPackResolver {
         return fallback()
     }
 
+    /**
+     * The pack file [loadOrFallback] would load, or null when none is installed
+     * (→ seed). Used as a cache key so a language pack rebuilds its engine when
+     * a newer pack is installed mid-session (the filename encodes the version,
+     * so a new pack yields a different file).
+     */
+    fun resolvedPackFile(context: Context, packIdPrefix: String): File? =
+        findLatestInstalled(context, packIdPrefix)
+
     private fun findLatestInstalled(context: Context, packIdPrefix: String): File? {
         val packsDir = File(context.filesDir, "packs")
         if (!packsDir.isDirectory) return null

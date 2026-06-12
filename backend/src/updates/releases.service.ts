@@ -81,6 +81,7 @@ export class ReleasesService {
     channel: string;
     version: string;
     download_url: string;
+    sha256?: string;
     release_notes?: string;
     required?: boolean;
     enabled?: boolean;
@@ -94,12 +95,19 @@ export class ReleasesService {
     if (!input.version || !input.download_url) {
       throw new BadRequestException('version and download_url are required');
     }
+    if (input.sha256 !== undefined && input.sha256 !== '' && !/^[0-9a-f]{64}$/i.test(input.sha256)) {
+      throw new BadRequestException('sha256 must be a 64-char hex string (or empty)');
+    }
+    const sha256 = input.sha256?.toLowerCase();
     const existing = await this.releaseRepo.findOne({
       where: { platform: input.platform, channel: input.channel },
     });
     if (existing) {
       existing.version = input.version;
       existing.download_url = input.download_url;
+      // A new artifact replaces the hash; if the publisher didn't supply one,
+      // clear the stale hash so we never verify a new file against an old hash.
+      existing.sha256 = sha256 ?? '';
       if (input.release_notes !== undefined) existing.release_notes = input.release_notes;
       if (input.required !== undefined) existing.required = input.required;
       if (input.enabled !== undefined) existing.enabled = input.enabled;
@@ -110,6 +118,7 @@ export class ReleasesService {
       channel: input.channel,
       version: input.version,
       download_url: input.download_url,
+      sha256: sha256 ?? '',
       release_notes: input.release_notes ?? '',
       required: input.required ?? false,
       enabled: input.enabled ?? true,

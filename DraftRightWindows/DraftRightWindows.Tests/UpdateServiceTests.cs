@@ -342,6 +342,50 @@ public class UpdateServiceTests
         Assert.Equal("https://x/installer-2.2.5.exe", n.WindowsUrl);
     }
 
+    // ── ResolveWindowsSha256: per-platform pin wins, lowercased ─────────────
+
+    [Fact]
+    public void ResolveWindowsSha256_PrefersPlatformEntry_Lowercased()
+    {
+        var info = new UpdateInfo
+        {
+            WindowsSha256 = "AAAA",
+            Platforms = new()
+            {
+                ["windows"] = new PlatformRelease { Version = "2.4.1", Url = "https://x/a.exe", Sha256 = "BBBB" },
+            },
+        };
+        Assert.Equal("bbbb", UpdateService.ResolveWindowsSha256(info));
+    }
+
+    [Fact]
+    public void ResolveWindowsSha256_FallsBackToTopLevel_WhenNoPlatformHash()
+    {
+        var info = new UpdateInfo { WindowsSha256 = "CcCc" };
+        Assert.Equal("cccc", UpdateService.ResolveWindowsSha256(info));
+    }
+
+    [Fact]
+    public void ResolveWindowsSha256_EmptyWhenUnpublished()
+    {
+        Assert.Equal("", UpdateService.ResolveWindowsSha256(new UpdateInfo()));
+    }
+
+    [Fact]
+    public void Normalize_CarriesWindowsSha256FromPin()
+    {
+        var raw = new UpdateInfo
+        {
+            Version = "2.3.1",
+            Platforms = new()
+            {
+                ["windows"] = new PlatformRelease { Version = "2.4.1", Url = "https://x/a.exe", Sha256 = "deadbeef" },
+            },
+        };
+        var n = UpdateService.NormalizeForPlatform(raw, "windows");
+        Assert.Equal("deadbeef", n.WindowsSha256);
+    }
+
     // ── End-to-end: phantom-update loop is closed ───────────────────────────
 
     [Fact]

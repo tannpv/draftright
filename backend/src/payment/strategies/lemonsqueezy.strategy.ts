@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -221,8 +221,10 @@ export class LemonSqueezyStrategy extends BasePaymentStrategy {
     const sigHeader = (headers['x-signature'] || headers['X-Signature'] || '').toString();
     const expected = createHmac('sha256', webhookSecret).update(raw).digest('hex');
     if (!this.signatureMatches(expected, sigHeader)) {
+      // Present-but-invalid signature → 400 so LS retries + the failure is
+      // visible, rather than silently accepting a forged/misconfigured body.
       this.logger.error('Lemon Squeezy webhook signature mismatch — rejected.');
-      return { type: 'ignored' };
+      throw new BadRequestException('Invalid Lemon Squeezy webhook signature');
     }
 
     let event: any;
