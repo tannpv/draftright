@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:draftright_mobile/services/auth_service.dart';
+import 'package:draftright_mobile/services/api_client.dart';
 import 'package:draftright_mobile/services/settings_service.dart';
 import 'package:draftright_mobile/screens/register_screen.dart';
 import 'package:draftright_mobile/widgets/social_login_buttons.dart';
@@ -67,16 +68,19 @@ class _LoginScreenState extends State<LoginScreen> {
       setState(() {
         _error = e.toString().replaceFirst('Exception: ', '');
       });
-      // Auto-submit to /errors for triage. Severity 'warning' because most
-      // failures here are expected ("Invalid credentials") — anomalies stand
-      // out by frequency, not severity. The on-screen banner above still
-      // shows the user-friendly message so this fires silently in the BG.
-      ErrorReporter.reportHandled(
-        e,
-        stack: stack,
-        severity: 'warning',
-        context: {'flow': 'login'},
-      );
+      // A 401 here is just a wrong email/password — expected user behaviour,
+      // not an anomaly worth a report (it was the dominant noise in /errors).
+      // The on-screen banner still shows the message. Everything else (network,
+      // 5xx, unexpected) still auto-submits for triage.
+      final isBadCredentials = e is ApiException && e.statusCode == 401;
+      if (!isBadCredentials) {
+        ErrorReporter.reportHandled(
+          e,
+          stack: stack,
+          severity: 'warning',
+          context: {'flow': 'login'},
+        );
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

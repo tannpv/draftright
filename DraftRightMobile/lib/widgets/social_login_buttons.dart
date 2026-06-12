@@ -36,6 +36,8 @@ class _SocialLoginButtonsState extends State<SocialLoginButtons> {
     setState(() => _loadingProvider = provider);
     try {
       await action();
+    } on SignInCancelledException {
+      // User backed out of the provider sheet — silent no-op, never reported.
     } catch (e, stack) {
       // Pipe the failure into ErrorReporter so it (a) auto-submits to
       // /errors with provider context for triage, and (b) raises
