@@ -23,6 +23,10 @@ A Windows-only line under `### Windows` will never appear in the macOS
 If a version needs the user to *do* something after updating, say so
 explicitly under an **Action needed:** line inside the relevant sub-section.
 
+## 2.3.23 — 2026-06-12
+### Windows
+- Fixed an error when opening **Manage subscription** on a plan that has no self-service billing portal (for example a plan granted by an administrator, or paid via QR code / bank transfer). Instead of a raw "API 404" error, the app now explains that the plan has no billing portal and to contact support.
+
 ## 2.3.22 — 2026-06-12
 ### Windows
 - New **Subscription** tab in Settings: see your current plan and upgrade, renew, or manage billing without leaving the app. Pay by card, QR code, or bank transfer, with live payment status shown right in the window.
