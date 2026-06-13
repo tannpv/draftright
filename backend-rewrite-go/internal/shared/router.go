@@ -59,7 +59,7 @@ func (r *Router) Build() http.Handler {
 	}
 	mux := chi.NewRouter()
 
-	mux.Use(middleware.RequestID)
+	mux.Use(RequestID)
 	mux.Use(middleware.RealIP)
 	mux.Use(middleware.Recoverer)
 	mux.Use(withRequestLogger(r.Log))
@@ -111,7 +111,7 @@ func structuredLogger(log *slog.Logger) func(http.Handler) http.Handler {
 				"duration_ms", time.Since(start).Milliseconds(),
 				"bytes", ww.BytesWritten(),
 				"remote", req.RemoteAddr,
-				"request_id", middleware.GetReqID(req.Context()),
+				"request_id", RequestIDFromContext(req.Context()),
 			)
 		})
 	}

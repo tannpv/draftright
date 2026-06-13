@@ -4,8 +4,6 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
-
-	"github.com/go-chi/chi/v5/middleware"
 )
 
 // Request-scoped logger plumbing. Every handler downstream of
@@ -28,7 +26,7 @@ func withRequestLogger(base *slog.Logger) func(http.Handler) http.Handler {
 	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			rid := middleware.GetReqID(r.Context())
+			rid := RequestIDFromContext(r.Context())
 			scoped := base.With("request_id", rid)
 			ctx := context.WithValue(r.Context(), loggerCtxKey{}, scoped)
 			next.ServeHTTP(w, r.WithContext(ctx))
