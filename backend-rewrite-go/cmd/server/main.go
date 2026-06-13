@@ -26,11 +26,13 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/tannpv/draftright-rewrite/internal/adapter/redislimit"
+	authpkg "github.com/tannpv/draftright-rewrite/internal/auth"
 	corepkg "github.com/tannpv/draftright-rewrite/internal/core"
 	"github.com/tannpv/draftright-rewrite/internal/platform/auth"
 	"github.com/tannpv/draftright-rewrite/internal/platform/config"
 	platformdb "github.com/tannpv/draftright-rewrite/internal/platform/db"
 	"github.com/tannpv/draftright-rewrite/internal/platform/metrics"
+	settingspkg "github.com/tannpv/draftright-rewrite/internal/platform/settings"
 	"github.com/tannpv/draftright-rewrite/internal/platform/tracing"
 	"github.com/tannpv/draftright-rewrite/internal/rewrite/adapter/anthropic"
 	"github.com/tannpv/draftright-rewrite/internal/rewrite/adapter/chain"
@@ -43,6 +45,9 @@ import (
 	"github.com/tannpv/draftright-rewrite/internal/rewrite/usecase"
 	"github.com/tannpv/draftright-rewrite/internal/shared"
 	sqlc "github.com/tannpv/draftright-rewrite/internal/shared/pg/sqlc"
+	subpkg "github.com/tannpv/draftright-rewrite/internal/subscription"
+	usagepkg "github.com/tannpv/draftright-rewrite/internal/usage"
+	userpkg "github.com/tannpv/draftright-rewrite/internal/user"
 )
 
 const (
@@ -119,6 +124,11 @@ func main() {
 			Deps: deps,
 			Log:  log,
 		},
+		Login:          core.login,
+		Refresh:        core.refresh,
+		ChangePassword: core.changePassword,
+		Account:        core.account,
+		DeleteAccount:  core.deleteAccount,
 	}).Build()
 
 	srv := &http.Server{
@@ -222,8 +232,26 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 	if pool != nil {
 		q := sqlc.New(pool)
 		core.health = corepkg.NewHealthHandler(corepkg.NewPgLogLevel(q), appVersion)
+
+		if cfg.JWTRefreshSecret == "" {
+			cleanup()
+			return usecase.RewriteDeps{}, coreHandlers{}, nil, errors.New("JWT_REFRESH_SECRET required when auth endpoints are enabled")
+		}
+		userRepo := userpkg.NewPgRepo(q, pool)
+		userSvc := userpkg.NewService(userRepo)
+		subReader := subpkg.NewReader(q)
+		usageCounter := usagepkg.NewCounter(q)
+		ttlReader := settingspkg.NewReader(q)
+		authSvc := authpkg.NewService(userSvc, subReader, usageCounter, ttlReader, cfg.JWTSecret, cfg.JWTRefreshSecret)
+		authHandler := authpkg.NewHandler(authSvc)
+		core.login = http.HandlerFunc(authHandler.Login)
+		core.refresh = http.HandlerFunc(authHandler.Refresh)
+		core.changePassword = http.HandlerFunc(authHandler.ChangePassword)
+		core.account = http.HandlerFunc(authHandler.Account)
+		core.deleteAccount = http.HandlerFunc(authHandler.DeleteAccount)
 	} else {
 		core.health = corepkg.NewHealthHandler(staticInfoReader{}, appVersion)
+		log.Warn("auth endpoints disabled", "reason", "no DATABASE_URL")
 	}
 
 	return usecase.RewriteDeps{
@@ -240,8 +268,13 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 // return them alongside the rewrite deps without widening the call site
 // into a long positional tuple.
 type coreHandlers struct {
-	health http.Handler // GET /health  (always set)
-	me     http.Handler // GET /auth/me (always set — JWT claims only, no DB)
+	health         http.Handler // GET /health  (always set)
+	me             http.Handler // GET /auth/me (always set — JWT claims only, no DB)
+	login          http.Handler // POST /auth/login (set when pool != nil)
+	refresh        http.Handler // POST /auth/refresh (set when pool != nil)
+	changePassword http.Handler // POST /auth/change-password (set when pool != nil)
+	account        http.Handler // GET /auth/account (set when pool != nil)
+	deleteAccount  http.Handler // DELETE /auth/account (set when pool != nil)
 }
 
 // staticInfoReader is the dev-fallback LogLevelReader used when no
