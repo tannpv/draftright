@@ -11,7 +11,7 @@ package metrics
 import (
 	"time"
 
-	"github.com/tannpv/draftright-rewrite/internal/domain"
+	"github.com/tannpv/draftright-rewrite/internal/rewrite/domain"
 )
 
 // Noop satisfies domain.Metrics with no side effects. Use when

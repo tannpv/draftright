@@ -7,7 +7,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.com/tannpv/draftright-rewrite/internal/domain"
+	"github.com/tannpv/draftright-rewrite/internal/rewrite/domain"
 )
 
 // Prometheus is the production domain.Metrics implementation.

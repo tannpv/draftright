@@ -28,7 +28,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"github.com/tannpv/draftright-rewrite/internal/domain"
+	"github.com/tannpv/draftright-rewrite/internal/rewrite/domain"
 )
 
 // Default budget. Mirrors NestJS @nestjs/throttler's per-minute limit

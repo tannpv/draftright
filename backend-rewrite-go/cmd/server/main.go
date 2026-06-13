@@ -24,21 +24,22 @@ import (
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 
-	"github.com/tannpv/draftright-rewrite/internal/adapter/anthropic"
-	"github.com/tannpv/draftright-rewrite/internal/adapter/chain"
-	"github.com/tannpv/draftright-rewrite/internal/adapter/memory"
-	"github.com/tannpv/draftright-rewrite/internal/adapter/ollama"
-	"github.com/tannpv/draftright-rewrite/internal/adapter/openai"
-	"github.com/tannpv/draftright-rewrite/internal/adapter/pg"
+	"github.com/tannpv/draftright-rewrite/internal/rewrite/adapter/anthropic"
+	"github.com/tannpv/draftright-rewrite/internal/rewrite/adapter/chain"
+	"github.com/tannpv/draftright-rewrite/internal/rewrite/adapter/memory"
+	"github.com/tannpv/draftright-rewrite/internal/rewrite/adapter/ollama"
+	"github.com/tannpv/draftright-rewrite/internal/rewrite/adapter/openai"
+	"github.com/tannpv/draftright-rewrite/internal/rewrite/adapter/pg"
 	"github.com/tannpv/draftright-rewrite/internal/adapter/redislimit"
-	"github.com/tannpv/draftright-rewrite/internal/domain"
-	internalhttp "github.com/tannpv/draftright-rewrite/internal/http"
+	"github.com/tannpv/draftright-rewrite/internal/rewrite/domain"
+	"github.com/tannpv/draftright-rewrite/internal/shared"
+	"github.com/tannpv/draftright-rewrite/internal/rewrite/transport"
 	"github.com/tannpv/draftright-rewrite/internal/platform/auth"
 	"github.com/tannpv/draftright-rewrite/internal/platform/config"
 	platformdb "github.com/tannpv/draftright-rewrite/internal/platform/db"
 	"github.com/tannpv/draftright-rewrite/internal/platform/metrics"
 	"github.com/tannpv/draftright-rewrite/internal/platform/tracing"
-	"github.com/tannpv/draftright-rewrite/internal/usecase"
+	"github.com/tannpv/draftright-rewrite/internal/rewrite/usecase"
 )
 
 const (
@@ -104,12 +105,12 @@ func main() {
 	}
 	defer cleanup()
 
-	router := (&internalhttp.Router{
+	router := (&shared.Router{
 		Log:            log,
 		Verifier:       auth.NewVerifier(cfg.JWTSecret),
 		MetricsHandler: metricsHTTP,
 		EnableTracing:  cfg.OtelEndpoint != "",
-		Rewrite: &internalhttp.RewriteHandler{
+		Rewrite: &transport.RewriteHandler{
 			Deps: deps,
 			Log:  log,
 		},
