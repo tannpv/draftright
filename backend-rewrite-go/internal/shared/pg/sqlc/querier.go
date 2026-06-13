@@ -19,6 +19,10 @@ type Querier interface {
 	// plan.daily_limit in the application layer (so the limit can come
 	// from a fallback when the user has no subscription).
 	CountTodayUsage(ctx context.Context, userID pgtype.UUID) (int64, error)
+	// Mirrors usageService.countTodayByUser: rows since local midnight.
+	// The caller passes the midnight boundary so timezone handling matches
+	// the Node process (new Date(); setHours(0,0,0,0)).
+	CountUsageToday(ctx context.Context, arg CountUsageTodayParams) (int64, error)
 	// Queries for the /rewrite microservice's Postgres adapter.
 	// sqlc compiles these against schema.sql at build time; mistakes are
 	// caught BEFORE the service ever boots (Rule #1 — compile-time over
@@ -37,6 +41,20 @@ type Querier interface {
 	// Filter on subscriptions.status = 'active' so cancelled subs don't
 	// still grant their old plan.
 	FindUserWithPlan(ctx context.Context, id pgtype.UUID) (FindUserWithPlanRow, error)
+	// Mirrors subscriptionsService.findActiveByUserId: newest ACTIVE
+	// subscription for the user, joined to its plan. ORDER BY created_at
+	// DESC + LIMIT 1 reproduces TypeORM order:{created_at:'DESC'} findOne.
+	GetActiveSubscriptionByUserID(ctx context.Context, userID pgtype.UUID) (GetActiveSubscriptionByUserIDRow, error)
+	// The single app_settings row's token lifetimes. No row → caller uses
+	// defaults (15 / 90), matching Node's `?? 15` / `?? 90`.
+	GetAuthTokenSettings(ctx context.Context) (GetAuthTokenSettingsRow, error)
+	// Phase 1a auth queries. Read the live NestJS-owned schema as-is.
+	// Full projection for /auth/login. password_hash is nullable
+	// (social-only accounts have none). No email normalization — Node's
+	// login passes the email through unchanged.
+	GetAuthUserByEmail(ctx context.Context, email string) (GetAuthUserByEmailRow, error)
+	// Same projection keyed by id — used by refresh, change-password, account.
+	GetAuthUserByID(ctx context.Context, id pgtype.UUID) (GetAuthUserByIDRow, error)
 	// The single app_settings row's client_log_level, surfaced by
 	// GET /health. There is exactly one settings row (Node does
 	// `findOne({ where: {} })`); LIMIT 1 matches that.
@@ -51,6 +69,7 @@ type Querier interface {
 	// Mirrors NestJS UsageService.log: same columns, same names, same
 	// precision so the two backends populate identical rows.
 	InsertUsageLog(ctx context.Context, arg InsertUsageLogParams) error
+	UpdateUserPasswordHash(ctx context.Context, arg UpdateUserPasswordHashParams) error
 }
 
 var _ Querier = (*Queries)(nil)

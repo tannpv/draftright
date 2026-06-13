@@ -1,0 +1,8 @@
+{
+  "name": "delete-account",
+  "method": "DELETE",
+  "path": "/auth/account",
+  "headers": { "Authorization": "Bearer REPLACE_WITH_DEV_NODE_TOKEN" },
+  "ignore_value_of": ["request_id"],
+  "_note": "Destructive — run last against a throwaway seeded user, or the operator restores the row after. Node returns {deleted:true} / Go returns {deleted:true}."
+}

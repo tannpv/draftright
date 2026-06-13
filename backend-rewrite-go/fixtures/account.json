@@ -1,0 +1,8 @@
+{
+  "name": "account",
+  "method": "GET",
+  "path": "/auth/account",
+  "headers": { "Authorization": "Bearer REPLACE_WITH_DEV_NODE_TOKEN" },
+  "ignore_value_of": ["request_id", "started_at", "expires_at"],
+  "_note": "started_at/expires_at ignored only until timestamp format is pinned against a captured Node /auth/account response (Task 10 RFC3339 risk). Once Go output matches byte-for-byte, REMOVE them from ignore_value_of so the gate verifies timestamps."
+}

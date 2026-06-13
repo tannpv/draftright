@@ -31,6 +31,10 @@ type Config struct {
 	// or every token rejects. Required.
 	JWTSecret string
 
+	// HS256 secret for REFRESH tokens. Mirrors the NestJS
+	// JWT_REFRESH_SECRET. Distinct from JWTSecret (access tokens).
+	JWTRefreshSecret string
+
 	// Postgres DSN. Required from Task 3 onward; permitted empty now so
 	// Task 2 tests run without spinning up Postgres.
 	DatabaseURL string
@@ -100,6 +104,7 @@ func Load() (*Config, error) {
 		Listen:               envOr("LISTEN_ADDR", ":3001"),
 		LogLevel:             envOr("LOG_LEVEL", "info"),
 		JWTSecret:            os.Getenv("JWT_SECRET"),
+		JWTRefreshSecret:     os.Getenv("JWT_REFRESH_SECRET"),
 		DatabaseURL:          os.Getenv("DATABASE_URL"),
 		RedisURL:             os.Getenv("REDIS_URL"),
 		OpenAIKey:            os.Getenv("OPENAI_API_KEY"),

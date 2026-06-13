@@ -40,6 +40,15 @@ type Router struct {
 	Health http.Handler // GET /health
 	Me     http.Handler // GET /auth/me (mounted inside the auth group)
 
+	// Phase 1a auth endpoints. Public: Login, Refresh. Auth-gated:
+	// ChangePassword, Account, DeleteAccount. All nil-guarded so the
+	// router stays functional when the auth stack is absent (no DB).
+	Login          http.Handler // POST /auth/login (public)
+	Refresh        http.Handler // POST /auth/refresh (public)
+	ChangePassword http.Handler // POST /auth/change-password (auth)
+	Account        http.Handler // GET /auth/account (auth)
+	DeleteAccount  http.Handler // DELETE /auth/account (auth)
+
 	// EnableTracing wraps the whole mux with otelhttp middleware so
 	// every request becomes a span. No-op when the global tracer
 	// provider is the default noop (i.e. tracing.Setup returned
@@ -86,11 +95,27 @@ func (r *Router) Build() http.Handler {
 		mux.Method(http.MethodGet, "/metrics", r.MetricsHandler)
 	}
 
+	if r.Login != nil {
+		mux.Method(http.MethodPost, "/auth/login", r.Login)
+	}
+	if r.Refresh != nil {
+		mux.Method(http.MethodPost, "/auth/refresh", r.Refresh)
+	}
+
 	mux.Group(func(api chi.Router) {
 		api.Use(RequireAuth(r.Verifier, r.Log))
 		api.Post("/v1/rewrite", r.Rewrite.ServeHTTP)
 		if r.Me != nil {
 			api.Method(http.MethodGet, "/auth/me", r.Me)
+		}
+		if r.ChangePassword != nil {
+			api.Method(http.MethodPost, "/auth/change-password", r.ChangePassword)
+		}
+		if r.Account != nil {
+			api.Method(http.MethodGet, "/auth/account", r.Account)
+		}
+		if r.DeleteAccount != nil {
+			api.Method(http.MethodDelete, "/auth/account", r.DeleteAccount)
 		}
 	})
 
