@@ -1,0 +1,8 @@
+{
+  "name": "login-valid",
+  "method": "POST",
+  "path": "/auth/login",
+  "headers": { "Content-Type": "application/json" },
+  "body": { "email": "REPLACE_WITH_DEV_SEED_EMAIL", "password": "REPLACE_WITH_DEV_SEED_PASSWORD" },
+  "ignore_value_of": ["request_id", "access_token", "refresh_token"]
+}
