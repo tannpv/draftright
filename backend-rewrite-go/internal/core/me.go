@@ -103,7 +103,7 @@ func (p pgUserReader) ByID(ctx context.Context, id string) (UserRow, error) {
 func parseUUIDParam(id string) pgtype.UUID {
 	var u pgtype.UUID
 	if err := u.Scan(id); err != nil {
-		return pgtype.UUID{} // unset -> query no-rows -> user-not-found
+		return pgtype.UUID{} // zero-UUID matches no real user row -> no-rows -> user-not-found
 	}
 	return u
 }

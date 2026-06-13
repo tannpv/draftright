@@ -3,9 +3,12 @@ package core
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/jackc/pgx/v5"
 
 	"github.com/tannpv/draftright-rewrite/internal/platform/auth"
 	"github.com/tannpv/draftright-rewrite/internal/shared"
@@ -60,5 +63,19 @@ func TestMe_UserNotFoundReturns401(t *testing.T) {
 
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401 (user-not-found)", rec.Code)
+	}
+}
+
+// TestMapUserErr exercises the real DB-error transformation the pg
+// adapter applies — the handler test stubs errUserNotFound directly, so
+// without this the pgx.ErrNoRows -> errUserNotFound mapping (the actual
+// no-rows path against Postgres) would be untested.
+func TestMapUserErr(t *testing.T) {
+	if got := mapUserErr(pgx.ErrNoRows); !errors.Is(got, errUserNotFound) {
+		t.Errorf("mapUserErr(pgx.ErrNoRows) = %v, want errUserNotFound", got)
+	}
+	other := errors.New("connection refused")
+	if got := mapUserErr(other); !errors.Is(got, other) {
+		t.Errorf("mapUserErr(other) = %v, want passthrough of %v", got, other)
 	}
 }
