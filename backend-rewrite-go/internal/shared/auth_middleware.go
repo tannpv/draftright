@@ -1,10 +1,10 @@
-// Package http hosts the HTTP transport layer — chi router setup,
-// handlers, and middleware. Per clean architecture, this layer is the
-// OUTERMOST: it depends on usecase + domain + platform, never the
-// other way round.
+// Package shared holds cross-cutting HTTP concerns reused by every
+// feature module — the chi router build, JWT auth middleware, request
+// logging, and the JSON render helper. It depends on platform + the
+// shared sqlc types, never on a feature module.
 //
-// Task 2 contribution: JWT extraction middleware. Handlers downstream
-// pull the verified claims out of context via ClaimsFromContext().
+// This file: JWT extraction middleware. Handlers downstream pull the
+// verified claims out of context via ClaimsFromContext().
 package shared
 
 import (
