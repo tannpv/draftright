@@ -37,6 +37,16 @@ type Querier interface {
 	// Filter on subscriptions.status = 'active' so cancelled subs don't
 	// still grant their old plan.
 	FindUserWithPlan(ctx context.Context, id pgtype.UUID) (FindUserWithPlanRow, error)
+	// The single app_settings row's client_log_level, surfaced by
+	// GET /health. There is exactly one settings row (Node does
+	// `findOne({ where: {} })`); LIMIT 1 matches that.
+	GetClientLogLevel(ctx context.Context) (string, error)
+	// Phase 0 core-endpoint queries (health + /auth/me). Kept separate
+	// from the rewrite module's queries.sql so the core package depends on
+	// the shared sqlc types only, never on a feature module.
+	// Minimal user projection for GET /auth/me — id, email, role. Mirrors
+	// the fields Node's /auth/me returns from the JWT-resolved user.
+	GetUserByID(ctx context.Context, id pgtype.UUID) (GetUserByIDRow, error)
 	// Records one /rewrite call for daily quota tracking + analytics.
 	// Mirrors NestJS UsageService.log: same columns, same names, same
 	// precision so the two backends populate identical rows.

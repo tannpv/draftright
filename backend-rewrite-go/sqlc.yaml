@@ -16,7 +16,9 @@
 version: "2"
 sql:
   - schema: "internal/platform/db/schema.sql"
-    queries: "internal/rewrite/adapter/pg/queries.sql"
+    queries:
+      - "internal/rewrite/adapter/pg/queries.sql"
+      - "internal/shared/pg/queries_core.sql"
     engine: "postgresql"
     gen:
       go:
