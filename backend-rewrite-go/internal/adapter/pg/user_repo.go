@@ -18,7 +18,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/tannpv/draftright-rewrite/internal/adapter/pg/sqlc"
+	"github.com/tannpv/draftright-rewrite/internal/shared/pg/sqlc"
 	"github.com/tannpv/draftright-rewrite/internal/domain"
 )
 
