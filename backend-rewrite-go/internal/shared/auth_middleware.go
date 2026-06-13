@@ -50,10 +50,17 @@ func RequireAuth(v *auth.Verifier, log *slog.Logger) func(http.Handler) http.Han
 				writeUnauthorized(w, friendlyAuthError(err))
 				return
 			}
-			ctx := context.WithValue(r.Context(), claimsKey, claims)
-			next.ServeHTTP(w, r.WithContext(ctx))
+			next.ServeHTTP(w, r.WithContext(ContextWithClaims(r.Context(), claims)))
 		})
 	}
+}
+
+// ContextWithClaims stamps verified claims onto a context under the
+// unexported claimsKey. The single writer of that key — RequireAuth
+// uses it, tests use it to simulate an authenticated request — so the
+// context wiring lives in exactly one place (Rule #1).
+func ContextWithClaims(ctx context.Context, c *auth.Claims) context.Context {
+	return context.WithValue(ctx, claimsKey, c)
 }
 
 // ClaimsFromContext returns the auth claims a previous RequireAuth
