@@ -18,7 +18,7 @@ type loggerCtxKey struct{}
 // request-scoped *slog.Logger (with request_id baked in) to the
 // request's context.
 //
-// Wire AFTER middleware.RequestID so the id is populated; wire
+// Wire AFTER the RequestID middleware so the id is populated; wire
 // BEFORE auth + handlers so they can use it.
 func withRequestLogger(base *slog.Logger) func(http.Handler) http.Handler {
 	if base == nil {

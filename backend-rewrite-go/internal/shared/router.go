@@ -97,7 +97,7 @@ func handleHealth(w http.ResponseWriter, _ *http.Request) {
 
 // structuredLogger is a chi-style middleware that emits one slog
 // access-log line per request. Captures method, path, status, ms,
-// remote, and the chi RequestID so we can grep by correlation id.
+// remote, and the RequestID so we can grep by correlation id.
 func structuredLogger(log *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
