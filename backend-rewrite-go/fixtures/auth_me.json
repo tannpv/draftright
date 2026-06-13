@@ -1,0 +1,7 @@
+{
+  "name": "auth_me",
+  "method": "GET",
+  "path": "/auth/me",
+  "headers": { "Authorization": "Bearer REPLACE_WITH_DEV_NODE_TOKEN" },
+  "ignore_value_of": ["request_id"]
+}

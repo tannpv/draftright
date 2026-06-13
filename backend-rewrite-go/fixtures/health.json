@@ -1,0 +1,6 @@
+{
+  "name": "health",
+  "method": "GET",
+  "path": "/health",
+  "ignore_value_of": []
+}
