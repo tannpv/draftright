@@ -72,10 +72,18 @@ draftright-rewrite/
 Foundation-first, then identity → entitlements → money → admin. Each phase is its
 own spec → plan → build → shadow-verify cycle. `rewrite` already ships.
 
-- **Phase 0 — Parity foundation:** sqlc over the live schema; error envelope +
-  status map; JWT compat (verify Node tokens, issue identical claims); typed
-  config from the same env; request-id middleware; **shadow-compare harness**
-  (mirror a request to Node + Go, diff responses).
+- **Phase 0 — Parity foundation:** ✅ **IMPLEMENTED** (2026-06-13, branch
+  `feature/go-backend-phase0-spec-20260613`). Modular layout (`rewrite`/`core`/
+  `shared`/`platform`); sqlc over the live schema; error envelope + status map
+  (reconciled to Node `httpStatusForCode` byte-for-byte); JWT compat (verify
+  Node tokens + `email` claim + `Signer` for Phase 1 login); typed config from
+  the same env; request-id middleware; proof endpoints `GET /health` +
+  `GET /auth/me` (`use_go_backend` bucket reproduces Node `GO_BACKEND_RAMP_PERCENT`
+  sha256→uint32BE→%100 bit-for-bit); **shadow-compare harness** `cmd/shadowdiff`
+  (replay fixtures at Node + Go, diff status + JSON, request_id present-only,
+  non-zero exit on diff). Unit + parity tests green. Live shadow gate against
+  dev Node is operator-pending (needs a dev token + Go server on the dev DB);
+  no production/Caddy change.
 - **Phase 1 — Identity & core:** `health`, `users`, `auth` (register/login/
   refresh/me/verify-email/forgot+reset/delete, social Google/Apple/Facebook),
   `ai_providers`, `usage`; fold in `rewrite`.
