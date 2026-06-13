@@ -83,6 +83,13 @@ func TestLogin_SocialOnlyAccount(t *testing.T) {
 	assertAuthErr(t, err, "This account was created with Google. Use the Google button to sign in.")
 }
 
+func TestLogin_SocialOnlyTikTok(t *testing.T) {
+	u := user.User{ID: "u1", Email: "t@b.com", IsActive: true, AuthProvider: "tiktok"} // no PasswordHash
+	svc := newSvc(t, stubUsers{byEmail: map[string]user.User{"t@b.com": u}})
+	_, err := svc.Login(context.Background(), "t@b.com", "x")
+	assertAuthErr(t, err, "This account was created with TikTok. Use the TikTok button to sign in.")
+}
+
 func TestLogin_WrongPassword(t *testing.T) {
 	hash, _ := shared.HashPassword("right")
 	u := user.User{ID: "u1", Email: "a@b.com", IsActive: true, PasswordHash: hash}

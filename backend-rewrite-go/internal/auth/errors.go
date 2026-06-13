@@ -20,6 +20,8 @@ func providerLabel(provider string) string {
 		return "Google"
 	case "facebook":
 		return "Facebook"
+	case "tiktok":
+		return "TikTok"
 	case "apple":
 		return "Apple"
 	default:
