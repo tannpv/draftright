@@ -213,13 +213,17 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 	// Share the Postgres pool with the UserRepo. When DATABASE_URL is
 	// unset (dev fallback) /health still serves via a static info
 	// reader, but /auth/me is disabled — it needs the real users table.
+	// appVersion is the value /health reports; matches Node's hardcoded
+	// "2.0.0" (health.controller.ts). One const so the two construction
+	// branches can't drift.
+	const appVersion = "2.0.0"
 	var core coreHandlers
 	if pool != nil {
 		q := sqlc.New(pool)
-		core.health = corepkg.NewHealthHandler(corepkg.NewPgLogLevel(q), "2.0.0")
+		core.health = corepkg.NewHealthHandler(corepkg.NewPgLogLevel(q), appVersion)
 		core.me = corepkg.NewMeHandler(corepkg.NewPgUserReader(q), cfg.GoBackendRampPercent)
 	} else {
-		core.health = corepkg.NewHealthHandler(staticInfoReader{}, "2.0.0")
+		core.health = corepkg.NewHealthHandler(staticInfoReader{}, appVersion)
 		core.me = nil
 		log.Warn("core handler disabled", "endpoint", "/auth/me", "reason", "DATABASE_URL unset — dev fallback")
 	}
