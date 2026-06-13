@@ -25,11 +25,11 @@ import (
 //
 // FindErr / LogErr let tests stub failure paths without separate mocks.
 type UserRepo struct {
-	mu         sync.Mutex
-	user       *domain.User
-	findErr    error
-	logErr     error
-	usageLogs  []domain.UsageLog
+	mu        sync.Mutex
+	user      *domain.User
+	findErr   error
+	logErr    error
+	usageLogs []domain.UsageLog
 }
 
 // NewUserRepo returns a fresh repo seeded with user. Pass nil to

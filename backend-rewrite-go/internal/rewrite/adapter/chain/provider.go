@@ -71,7 +71,7 @@ func (p *Provider) Name() string { return p.name }
 //   - Provider closes cleanly (with or without tokens) → success.
 //   - Context canceled at any point        → propagate ctx.Err().
 //   - All providers exhausted             → ErrProviderUnavailable
-//                                            wrapping the last error.
+//     wrapping the last error.
 //
 // Buffer trade-off: tokens channel is unbuffered so back-pressure
 // from a slow client propagates to the upstream provider's goroutine,

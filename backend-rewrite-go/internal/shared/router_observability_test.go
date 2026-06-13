@@ -12,12 +12,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tannpv/draftright-rewrite/internal/platform/auth"
+	"github.com/tannpv/draftright-rewrite/internal/platform/metrics"
 	"github.com/tannpv/draftright-rewrite/internal/rewrite/adapter/memory"
 	"github.com/tannpv/draftright-rewrite/internal/rewrite/domain"
 	"github.com/tannpv/draftright-rewrite/internal/rewrite/transport"
 	"github.com/tannpv/draftright-rewrite/internal/rewrite/usecase"
-	"github.com/tannpv/draftright-rewrite/internal/platform/auth"
-	"github.com/tannpv/draftright-rewrite/internal/platform/metrics"
 	"github.com/tannpv/draftright-rewrite/internal/shared"
 )
 

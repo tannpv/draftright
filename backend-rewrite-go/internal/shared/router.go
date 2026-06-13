@@ -33,6 +33,13 @@ type Router struct {
 	// passes the Prometheus handler; tests + dev can leave nil.
 	MetricsHandler http.Handler
 
+	// Core Phase 0 endpoints. Health is public; Me is auth-gated.
+	// Both nil-guarded: when Health is nil Build falls back to the
+	// stub handleHealth (keeps router tests that don't set it green);
+	// when Me is nil the /auth/me route is simply not mounted.
+	Health http.Handler // GET /health
+	Me     http.Handler // GET /auth/me (mounted inside the auth group)
+
 	// EnableTracing wraps the whole mux with otelhttp middleware so
 	// every request becomes a span. No-op when the global tracer
 	// provider is the default noop (i.e. tracing.Setup returned
@@ -45,9 +52,9 @@ type Router struct {
 //  1. RequestID         every downstream log line gets a correlation id.
 //  2. RealIP            puts the client IP into r.RemoteAddr behind a proxy.
 //  3. Recoverer         catches panics; without it, a panic in any handler
-//                       takes the whole process down.
+//     takes the whole process down.
 //  4. withRequestLogger attaches a request-scoped slog (with request_id)
-//                       to the context for handlers to pick up.
+//     to the context for handlers to pick up.
 //  5. structuredLogger  one access-log line per request.
 //  6. RequireAuth       scoped to authenticated routes only.
 //
@@ -65,7 +72,13 @@ func (r *Router) Build() http.Handler {
 	mux.Use(withRequestLogger(r.Log))
 	mux.Use(structuredLogger(r.Log))
 
-	mux.Get("/health", handleHealth)
+	// Prefer the wired core health handler (Node-parity body); fall
+	// back to the stub when unset so router tests stay green.
+	if r.Health != nil {
+		mux.Method(http.MethodGet, "/health", r.Health)
+	} else {
+		mux.Get("/health", handleHealth)
+	}
 
 	if r.MetricsHandler != nil {
 		// Don't run /metrics through structuredLogger / auth — Prom
@@ -76,6 +89,9 @@ func (r *Router) Build() http.Handler {
 	mux.Group(func(api chi.Router) {
 		api.Use(RequireAuth(r.Verifier, r.Log))
 		api.Post("/v1/rewrite", r.Rewrite.ServeHTTP)
+		if r.Me != nil {
+			api.Method(http.MethodGet, "/auth/me", r.Me)
+		}
 	})
 
 	if r.EnableTracing {

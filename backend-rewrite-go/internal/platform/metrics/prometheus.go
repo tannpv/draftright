@@ -18,10 +18,10 @@ import (
 // free-form user input as a label value (cardinality explosion is
 // the single biggest Prometheus footgun).
 type Prometheus struct {
-	rewriteCounter  *prometheus.CounterVec
-	rewriteHist     *prometheus.HistogramVec
-	tokensStreamed  *prometheus.CounterVec
-	registry        *prometheus.Registry
+	rewriteCounter *prometheus.CounterVec
+	rewriteHist    *prometheus.HistogramVec
+	tokensStreamed *prometheus.CounterVec
+	registry       *prometheus.Registry
 }
 
 // NewPrometheus builds + registers every metric on a fresh Registry.

@@ -18,8 +18,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/tannpv/draftright-rewrite/internal/shared/pg/sqlc"
 	"github.com/tannpv/draftright-rewrite/internal/rewrite/domain"
+	"github.com/tannpv/draftright-rewrite/internal/shared/pg/sqlc"
 )
 
 // UserRepo is the Postgres-backed implementation of domain.UserRepo.

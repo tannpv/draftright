@@ -32,10 +32,11 @@ type UserRepo interface {
 // upstream is done. ctx cancellation must abort the in-flight call.
 //
 // Implementations:
-//   adapter/openai     — OpenAI chat completions (Task 6)
-//   adapter/anthropic  — Anthropic messages (Task 8)
-//   adapter/ollama     — local Ollama (Task 8)
-//   adapter/memory     — deterministic fake for unit tests
+//
+//	adapter/openai     — OpenAI chat completions (Task 6)
+//	adapter/anthropic  — Anthropic messages (Task 8)
+//	adapter/ollama     — local Ollama (Task 8)
+//	adapter/memory     — deterministic fake for unit tests
 type AiProvider interface {
 	// Stream takes a validated request, returns a token channel + an
 	// error channel. Caller MUST consume both until they close, or

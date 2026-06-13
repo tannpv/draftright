@@ -68,6 +68,11 @@ type Config struct {
 	// "use the memory stub" (dev convenience).
 	AIProviders string
 
+	// GoBackendRampPercent is the percentage of users bucketed onto the
+	// Go backend, surfaced via /auth/me flags.use_go_backend. Mirrors the
+	// Node GO_BACKEND_RAMP_PERCENT env var. Default 0 (no ramp).
+	GoBackendRampPercent int
+
 	// App environment label (development | staging | production).
 	// Drives a few startup checks + the log output format choice.
 	AppEnv string
@@ -92,19 +97,20 @@ type Config struct {
 // operator can fix all of them in one shot instead of one-error-at-a-time.
 func Load() (*Config, error) {
 	c := &Config{
-		Listen:       envOr("LISTEN_ADDR", ":3001"),
-		LogLevel:     envOr("LOG_LEVEL", "info"),
-		JWTSecret:    os.Getenv("JWT_SECRET"),
-		DatabaseURL:  os.Getenv("DATABASE_URL"),
-		RedisURL:     os.Getenv("REDIS_URL"),
-		OpenAIKey:           os.Getenv("OPENAI_API_KEY"),
-		AnthropicKey:        os.Getenv("ANTHROPIC_API_KEY"),
-		OpenAIProviderID:    os.Getenv("OPENAI_PROVIDER_ID"),
-		AnthropicProviderID: os.Getenv("ANTHROPIC_PROVIDER_ID"),
-		OllamaProviderID:    os.Getenv("OLLAMA_PROVIDER_ID"),
-		OllamaURL:           os.Getenv("OLLAMA_URL"),
-		AIProviders:         os.Getenv("AI_PROVIDERS"),
-		AppEnv:              envOr("APP_ENV", "development"),
+		Listen:               envOr("LISTEN_ADDR", ":3001"),
+		LogLevel:             envOr("LOG_LEVEL", "info"),
+		JWTSecret:            os.Getenv("JWT_SECRET"),
+		DatabaseURL:          os.Getenv("DATABASE_URL"),
+		RedisURL:             os.Getenv("REDIS_URL"),
+		OpenAIKey:            os.Getenv("OPENAI_API_KEY"),
+		AnthropicKey:         os.Getenv("ANTHROPIC_API_KEY"),
+		OpenAIProviderID:     os.Getenv("OPENAI_PROVIDER_ID"),
+		AnthropicProviderID:  os.Getenv("ANTHROPIC_PROVIDER_ID"),
+		OllamaProviderID:     os.Getenv("OLLAMA_PROVIDER_ID"),
+		OllamaURL:            os.Getenv("OLLAMA_URL"),
+		AIProviders:          os.Getenv("AI_PROVIDERS"),
+		GoBackendRampPercent: envInt("GO_BACKEND_RAMP_PERCENT", 0),
+		AppEnv:               envOr("APP_ENV", "development"),
 
 		MetricsEnabled:  envBool("METRICS_ENABLED", false),
 		OtelEndpoint:    os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
@@ -164,6 +170,19 @@ func envBool(key string, fallback bool) bool {
 	default:
 		return fallback
 	}
+}
+
+// envInt parses an int env var; returns fallback on unset/parse error.
+func envInt(key string, fallback int) int {
+	v := strings.TrimSpace(os.Getenv(key))
+	if v == "" {
+		return fallback
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return fallback
+	}
+	return n
 }
 
 // envFloat parses a float64 env var; returns fallback on parse error.

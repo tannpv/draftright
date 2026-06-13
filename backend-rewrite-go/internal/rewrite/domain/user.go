@@ -41,11 +41,11 @@ func (p Plan) DailyLimitOrUnlimited() bool {
 // Fetched in one Postgres round-trip via the FindUserWithPlan query
 // (see internal/adapter/pg/queries.sql).
 type User struct {
-	ID         UserID
-	Email      string
-	Role       string
-	Plan       Plan // zero value when no active subscription
-	UsedToday  int64 // count of usage_logs rows for today
+	ID        UserID
+	Email     string
+	Role      string
+	Plan      Plan  // zero value when no active subscription
+	UsedToday int64 // count of usage_logs rows for today
 }
 
 // CheckQuota returns ErrQuotaExceeded if the user has hit their daily

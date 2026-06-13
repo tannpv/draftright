@@ -26,7 +26,7 @@ const (
 //
 //   - platform/metrics/Prometheus  — production
 //   - platform/metrics/Noop        — default, used in tests + when
-//                                    PROMETHEUS_ENABLED is unset
+//     PROMETHEUS_ENABLED is unset
 //
 // Domain doesn't depend on Prometheus directly — that would drag a
 // vendor lib into the innermost layer. The port stays here; the

@@ -18,11 +18,12 @@ import "errors"
 // error categorisation).
 //
 // HTTP mapping (in transport/http/errors.go later):
-//   ErrQuotaExceeded      → 429 Too Many Requests
-//   ErrUserNotFound       → 404 (or 401 if we want to leak less)
-//   ErrInvalidInput       → 400 Bad Request
-//   ErrProviderUnavailable → 503 Service Unavailable
-//   ErrProviderFailed     → 502 Bad Gateway
+//
+//	ErrQuotaExceeded      → 429 Too Many Requests
+//	ErrUserNotFound       → 404 (or 401 if we want to leak less)
+//	ErrInvalidInput       → 400 Bad Request
+//	ErrProviderUnavailable → 503 Service Unavailable
+//	ErrProviderFailed     → 502 Bad Gateway
 var (
 	ErrQuotaExceeded       = errors.New("domain: quota exceeded")
 	ErrUserNotFound        = errors.New("domain: user not found")

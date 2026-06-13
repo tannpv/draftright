@@ -50,12 +50,12 @@ const (
 // Client is the OpenAI provider. Construct once at startup; safe for
 // concurrent use (it owns no per-request state).
 type Client struct {
-	id         uuid.UUID
-	apiKey     string
-	endpoint   string
-	model      string
-	http       *http.Client
-	systemFmt  func(domain.Tone) string
+	id        uuid.UUID
+	apiKey    string
+	endpoint  string
+	model     string
+	http      *http.Client
+	systemFmt func(domain.Tone) string
 }
 
 // Option configures the Client; canonical functional-options pattern

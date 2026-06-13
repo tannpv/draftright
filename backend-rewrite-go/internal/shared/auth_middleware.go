@@ -26,10 +26,10 @@ type ctxKey int
 const claimsKey ctxKey = 1
 
 // RequireAuth returns a middleware that:
-//   1. Extracts the Bearer token from the Authorization header
-//   2. Verifies via the shared auth.Verifier
-//   3. Injects the verified Claims into the request context
-//   4. On any failure: writes a 401 with a JSON error body and stops the chain
+//  1. Extracts the Bearer token from the Authorization header
+//  2. Verifies via the shared auth.Verifier
+//  3. Injects the verified Claims into the request context
+//  4. On any failure: writes a 401 with a JSON error body and stops the chain
 //
 // Reusable across every authenticated route — wire once in main.go,
 // apply to whichever chi groups need auth (Rule #1).
