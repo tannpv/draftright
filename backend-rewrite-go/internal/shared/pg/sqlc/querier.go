@@ -19,6 +19,7 @@ type Querier interface {
 	// plan.daily_limit in the application layer (so the limit can come
 	// from a fallback when the user has no subscription).
 	CountTodayUsage(ctx context.Context, userID pgtype.UUID) (int64, error)
+	CountUsageToday(ctx context.Context, arg CountUsageTodayParams) (int64, error)
 	// Queries for the /rewrite microservice's Postgres adapter.
 	// sqlc compiles these against schema.sql at build time; mistakes are
 	// caught BEFORE the service ever boots (Rule #1 — compile-time over
@@ -37,6 +38,11 @@ type Querier interface {
 	// Filter on subscriptions.status = 'active' so cancelled subs don't
 	// still grant their old plan.
 	FindUserWithPlan(ctx context.Context, id pgtype.UUID) (FindUserWithPlanRow, error)
+	GetActiveSubscriptionByUserID(ctx context.Context, userID pgtype.UUID) (GetActiveSubscriptionByUserIDRow, error)
+	GetAuthTokenSettings(ctx context.Context) (GetAuthTokenSettingsRow, error)
+	// Phase 1a auth queries. Read the live NestJS-owned schema as-is.
+	GetAuthUserByEmail(ctx context.Context, email string) (GetAuthUserByEmailRow, error)
+	GetAuthUserByID(ctx context.Context, id pgtype.UUID) (GetAuthUserByIDRow, error)
 	// The single app_settings row's client_log_level, surfaced by
 	// GET /health. There is exactly one settings row (Node does
 	// `findOne({ where: {} })`); LIMIT 1 matches that.
@@ -51,6 +57,7 @@ type Querier interface {
 	// Mirrors NestJS UsageService.log: same columns, same names, same
 	// precision so the two backends populate identical rows.
 	InsertUsageLog(ctx context.Context, arg InsertUsageLogParams) error
+	UpdateUserPasswordHash(ctx context.Context, arg UpdateUserPasswordHashParams) error
 }
 
 var _ Querier = (*Queries)(nil)
