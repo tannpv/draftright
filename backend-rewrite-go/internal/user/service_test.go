@@ -51,6 +51,17 @@ func TestService_ByEmail_HitAndMiss(t *testing.T) {
 	}
 }
 
+func TestService_ByID_HitAndMiss(t *testing.T) {
+	r := &fakeRepo{byEmail: map[string]user.User{"a@b.com": {ID: "u1", Email: "a@b.com"}}}
+	s := user.NewService(r)
+	if u, err := s.ByID(context.Background(), "u1"); err != nil || u.Email != "a@b.com" {
+		t.Fatalf("hit failed: %v %v", u, err)
+	}
+	if _, err := s.ByID(context.Background(), "nope"); err != user.ErrNotFound {
+		t.Fatalf("want ErrNotFound, got %v", err)
+	}
+}
+
 func TestService_UpdatePasswordHash(t *testing.T) {
 	r := &fakeRepo{byEmail: map[string]user.User{}}
 	s := user.NewService(r)
