@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DraftRight Backend — Go Clean Architecture</title>
+<style>
+  :root{
+    --bg:#0f172a; --bg2:#0b1220; --card:#1e293b; --card2:#172033;
+    --border:#334155; --muted:#94a3b8; --text:#e2e8f0;
+    --brand:#5d87ff; --brand2:#93aeff; --brand-d:#3861e6; --brand-bg:#162b6e;
+    --green:#10b981; --amber:#f59e0b; --red:#ef4444; --violet:#a78bfa;
+    --mono:'SF Mono',ui-monospace,'Cascadia Code','JetBrains Mono',Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1200px 600px at 70% -10%,#16244d 0%,var(--bg) 55%);
+       color:var(--text);font-family:'Plus Jakarta Sans',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+       line-height:1.55;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1180px;margin:0 auto;padding:48px 28px 96px}
+  h1{font-size:40px;line-height:1.1;margin:0 0 6px;letter-spacing:-.02em;font-weight:800}
+  h1 .g{background:linear-gradient(90deg,var(--brand2),var(--brand));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{color:var(--muted);font-size:17px;max-width:760px}
+  .pill{display:inline-flex;gap:8px;align-items:center;border:1px solid var(--border);
+        background:#11203f;border-radius:999px;padding:5px 13px;font-size:12.5px;color:var(--brand2);margin-bottom:22px}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--brand);box-shadow:0 0 0 4px rgba(93,135,255,.18)}
+  section{margin-top:46px}
+  .kicker{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--brand);font-weight:700;margin-bottom:10px}
+  h2{font-size:25px;margin:0 0 6px;letter-spacing:-.01em}
+  .lead{color:var(--muted);margin:0 0 20px;max-width:820px}
+  .card{background:linear-gradient(180deg,var(--card) 0%,var(--card2) 100%);
+        border:1px solid var(--border);border-radius:16px;padding:22px}
+  .grid{display:grid;gap:14px}
+  code,.mono{font-family:var(--mono)}
+  .tag{font-family:var(--mono);font-size:11px;padding:2px 7px;border-radius:6px;border:1px solid var(--border);color:var(--muted)}
+  .tag.done{color:var(--green);border-color:#1f5e49;background:#0c2a22}
+  .tag.next{color:var(--brand2);border-color:#2a3f7a;background:#13224a}
+  .tag.risk{color:var(--amber);border-color:#5e4a1f;background:#2a230c}
+
+  /* footprint bars */
+  .foot{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:720px){.foot{grid-template-columns:1fr}.layers{flex-direction:column}}
+  .bar{height:46px;border-radius:10px;display:flex;align-items:center;padding:0 14px;font-weight:700;color:#fff;position:relative;overflow:hidden}
+  .bar small{position:absolute;right:14px;font-weight:500;opacity:.85}
+  .bar.node{background:linear-gradient(90deg,#7a3b3b,#b14a4a);width:100%}
+  .bar.go{background:linear-gradient(90deg,#1f5e49,var(--green));width:23%;min-width:120px}
+
+  /* layered architecture */
+  .layers{display:flex;gap:0;align-items:stretch;border:1px solid var(--border);border-radius:14px;overflow:hidden}
+  .layer{flex:1;padding:18px 16px;border-right:1px solid var(--border);background:var(--card2)}
+  .layer:last-child{border-right:0}
+  .layer h4{margin:0 0 4px;font-size:14px}
+  .layer .p{font-family:var(--mono);font-size:11.5px;color:var(--brand2)}
+  .layer ul{margin:8px 0 0;padding-left:16px;color:var(--muted);font-size:12.5px}
+  .layer.dom{background:#13224a}
+  .deprule{display:flex;align-items:center;gap:10px;justify-content:center;margin-top:12px;color:var(--muted);font-size:13px}
+  .arrow{color:var(--brand);font-weight:800}
+
+  /* tree */
+  pre.tree{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:20px;
+           overflow:auto;font-size:12.6px;line-height:1.75;margin:0;color:#cbd5e1}
+  pre.tree b{color:var(--brand2)} pre.tree .c{color:#64748b} pre.tree .d{color:var(--green)}
+
+  /* flow */
+  .flow{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+  .node{background:var(--card2);border:1px solid var(--border);border-radius:11px;padding:11px 13px;min-width:118px;text-align:center}
+  .node .t{font-weight:700;font-size:13px} .node .s{font-size:11px;color:var(--muted);font-family:var(--mono)}
+  .node.in{border-color:#2a3f7a} .node.core{border-color:#1f5e49}
+  .chev{color:var(--brand);font-size:20px;font-weight:800}
+
+  /* phases */
+  .phase{border:1px solid var(--border);border-radius:14px;overflow:hidden}
+  .phase + .phase{margin-top:12px}
+  .phead{display:flex;align-items:center;gap:12px;padding:14px 18px;background:var(--card2);cursor:default}
+  .pnum{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;font-weight:800;font-size:13px;
+        background:var(--brand-bg);color:var(--brand2);border:1px solid #2a3f7a;flex:none}
+  .phead h4{margin:0;font-size:16px;flex:1}
+  .pbody{padding:14px 18px;display:flex;flex-wrap:wrap;gap:8px;background:#10192e}
+  .mod{font-family:var(--mono);font-size:12px;background:#0c1426;border:1px solid var(--border);
+       border-radius:8px;padding:5px 10px;color:#cbd5e1}
+  .mod.hi{border-color:#1f5e49;color:#bbf7d0}
+  .mod.warn{border-color:#5e4a1f;color:#fde68a}
+
+  /* cutover */
+  .cut{display:grid;grid-template-columns:1fr auto 1fr;gap:14px;align-items:center}
+  @media(max-width:720px){.cut{grid-template-columns:1fr}}
+  .caddy{background:#13224a;border:1px solid #2a3f7a;border-radius:12px;padding:14px;text-align:center}
+  .stacklane{display:grid;gap:8px}
+  .lane{border:1px solid var(--border);border-radius:10px;padding:11px 13px;background:var(--card2);font-size:13px}
+  .lane.node{border-color:#5e3b3b}.lane.go{border-color:#1f5e49}
+  .shadow{font-size:12px;color:var(--muted);text-align:center;margin-top:10px}
+  .legend{display:flex;gap:18px;flex-wrap:wrap;color:var(--muted);font-size:12.5px;margin-top:14px}
+  .sw{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+
+  .rule{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+  .rule .card{padding:16px}
+  .rule h5{margin:0 0 5px;font-size:14px;color:var(--brand2)}
+  .rule p{margin:0;font-size:13px;color:var(--muted)}
+  .foot-note{margin-top:34px;color:#64748b;font-size:12.5px;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="pill"><span class="dot"></span> Design artifact · brainstorming phase · not yet implemented</div>
+  <h1>DraftRight Backend — <span class="g">Go Clean Architecture</span></h1>
+  <p class="sub">A drop-in Go replacement for the NestJS backend, grown inside the existing <code>draftright-rewrite</code> service. Identical API, same Postgres schema, same JWT — cut over behind Caddy once shadow-compared to parity.</p>
+
+  <!-- FOOTPRINT -->
+  <section>
+    <div class="kicker">Why</div>
+    <h2>Footprint: 653 MB → ~40 MB</h2>
+    <p class="lead">The Node image ships a 279 MB <code>node_modules</code>. A statically-linked Go binary on distroless is ~16× smaller, with lower memory and instant cold start.</p>
+    <div class="foot">
+      <div><div class="bar node">Node / NestJS image <small>653 MB</small></div></div>
+      <div><div class="bar go">Go / distroless <small>40 MB</small></div></div>
+    </div>
+  </section>
+
+  <!-- MODULAR + LAYERS -->
+  <section>
+    <div class="kicker">The shape</div>
+    <h2>Modular — clean architecture <em>inside each module</em></h2>
+    <p class="lead">Top level is sliced <b>by feature</b> (one package per NestJS module), not by layer. Inside every module the dependency rule still holds: <b>domain</b> at the center, <b>handler / repo</b> on the outside, dependencies point inward. A module is self-contained and maps 1:1 to a NestJS module — so the strangler-fig port lifts one folder at a time.</p>
+    <div class="layers">
+      <div class="layer dom">
+        <h4>domain.go</h4><div class="p">the core</div>
+        <ul><li>Entities + business rules</li><li>Ports (interfaces) it needs</li><li>Zero framework imports</li></ul>
+      </div>
+      <div class="layer">
+        <h4>usecase.go</h4><div class="p">application</div>
+        <ul><li>Register, CreateCheckout…</li><li>Orchestrates domain + ports</li><li>Transaction boundaries</li></ul>
+      </div>
+      <div class="layer">
+        <h4>repo_pg.go</h4><div class="p">data adapter</div>
+        <ul><li>Implements a domain port</li><li>sqlc on the live schema</li><li>Swappable / in-memory for tests</li></ul>
+      </div>
+      <div class="layer">
+        <h4>adapter/*</h4><div class="p">external</div>
+        <ul><li>stripe / sepay / resend…</li><li>One package per provider</li><li>Behind a domain interface</li></ul>
+      </div>
+      <div class="layer">
+        <h4>handler.go</h4><div class="p">delivery</div>
+        <ul><li>chi routes for this module</li><li>DTO ⇄ domain mapping</li><li>Shared mw + error envelope</li></ul>
+      </div>
+    </div>
+    <div class="deprule"><span>handler / repo / adapter</span><span class="arrow">→</span><span>usecase</span><span class="arrow">→</span><span>domain</span><span style="margin-left:8px">(per module · never the reverse)</span></div>
+  </section>
+
+  <!-- TREE -->
+  <section>
+    <div class="kicker">On disk</div>
+    <h2>Directory layout — modular (package-by-feature)</h2>
+    <p class="lead">Top level is one package per feature (= one NestJS module). Each owns its full clean-arch stack; shared plumbing lives in <code>platform/</code> and <code>shared/</code>. <span class="d">green = already exists in rewrite-go</span>.</p>
+<pre class="tree">draftright-rewrite/
+├── <b>cmd/server</b>/main.go        <span class="c"># composition root — wire modules here</span>
+├── <b>internal/</b>
+│   ├── <span class="d">rewrite</span>/                <span class="c"># ✓ done — the template every module follows</span>
+│   │     domain.go  usecase.go  handler.go  adapter/{<span class="d">anthropic,openai,ollama,chain</span>}
+│   ├── auth/                   <span class="c"># register/login/refresh/me/verify/reset/social</span>
+│   │     domain.go  usecase.go  handler.go  repo_pg.go  adapter/{google,apple,facebook}
+│   ├── user/   plan/   usage/   ai_providers/
+│   ├── subscription/          <span class="c"># + expiry/nudge cron</span>
+│   ├── extension_token/       <span class="c"># dr_ext_* mint/verify</span>
+│   ├── payment/               <span class="c"># self-contained money module</span>
+│   │     domain.go  usecase.go  handler.go  registry.go
+│   │     adapter/{stripe,lemonsqueezy,sepay,paypal,banktransfer}
+│   │     webhook.go            <span class="c"># sig verify + idempotency</span>
+│   ├── admin/   bug_reports/   email/   errors/   updates/   ime_packs/   extraction/
+│   ├── <b>platform/</b>  <span class="d">config db redis</span> <span class="d">auth</span> <span class="d">logger metrics tracing</span>  scheduler   <span class="c"># shared plumbing</span>
+│   └── <b>shared/</b>   errenvelope.go  middleware.go  requestid.go  <span class="d">pg/sqlc</span>   <span class="c"># cross-cutting</span>
+</pre>
+  </section>
+
+  <!-- REQUEST FLOW -->
+  <section>
+    <div class="kicker">At runtime</div>
+    <h2>Request lifecycle</h2>
+    <p class="lead">Example: <code class="mono">POST /payment/checkout</code> — every arrow crosses one layer boundary through an interface.</p>
+    <div class="flow">
+      <div class="node in"><div class="t">Caddy</div><div class="s">path route</div></div><span class="chev">›</span>
+      <div class="node in"><div class="t">chi router</div><div class="s">+ middleware</div></div><span class="chev">›</span>
+      <div class="node"><div class="t">auth mw</div><div class="s">verify JWT</div></div><span class="chev">›</span>
+      <div class="node"><div class="t">handler</div><div class="s">http/</div></div><span class="chev">›</span>
+      <div class="node core"><div class="t">usecase</div><div class="s">CreateCheckout</div></div><span class="chev">›</span>
+      <div class="node core"><div class="t">domain port</div><div class="s">PaymentStrategy</div></div><span class="chev">›</span>
+      <div class="node"><div class="t">adapter</div><div class="s">stripe / pg</div></div><span class="chev">›</span>
+      <div class="node"><div class="t">Postgres / Stripe</div><div class="s">live schema / API</div></div>
+    </div>
+  </section>
+
+  <!-- MODULE / PHASE MAP -->
+  <section>
+    <div class="kicker">The work</div>
+    <h2>Module decomposition — 5 phases</h2>
+    <p class="lead">Built foundation-first, then identity → entitlements → money → admin. Each phase is its own spec → plan → build → shadow-verify. <span class="tag done">done</span> ships already.</p>
+
+    <div class="phase">
+      <div class="phead"><div class="pnum">0</div><h4>Parity foundation</h4><span class="tag next">first spec</span></div>
+      <div class="pbody">
+        <span class="mod">sqlc · live schema</span><span class="mod">error envelope {error,code,request_id}</span>
+        <span class="mod">JWT compat (HS256)</span><span class="mod">typed config (env.schema)</span>
+        <span class="mod">request-id mw</span><span class="mod">shadow-compare harness</span>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="phead"><div class="pnum">1</div><h4>Identity &amp; core</h4><span class="tag">low risk</span></div>
+      <div class="pbody">
+        <span class="mod hi">rewrite ✓</span><span class="mod">health</span><span class="mod">users</span>
+        <span class="mod">auth · register/login/refresh/me</span><span class="mod">verify-email · reset</span>
+        <span class="mod">social · Google/Apple/Facebook</span><span class="mod">ai-providers</span><span class="mod">usage</span>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="phead"><div class="pnum">2</div><h4>Entitlements</h4><span class="tag">+ cron</span></div>
+      <div class="pbody">
+        <span class="mod">plans · currency-aware</span><span class="mod">subscriptions</span>
+        <span class="mod warn">expiry cron + nudges</span><span class="mod">extension-tokens · dr_ext_*</span>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="phead"><div class="pnum">3</div><h4>Payment</h4><span class="tag risk">highest risk</span></div>
+      <div class="pbody">
+        <span class="mod">payment core · registry</span><span class="mod">stripe</span><span class="mod">lemonsqueezy</span>
+        <span class="mod">vietqr / sepay</span><span class="mod">paypal</span><span class="mod">bank-transfer</span>
+        <span class="mod warn">webhooks · sig verify + idempotency</span><span class="mod">portal · cancel</span>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="phead"><div class="pnum">4</div><h4>Admin &amp; ancillary</h4><span class="tag">breadth</span></div>
+      <div class="pbody">
+        <span class="mod">admin · CRUD + analytics + settings</span><span class="mod">bug-reports / feedback</span>
+        <span class="mod warn">AI fix-proposal cron</span><span class="mod">email · Resend + templates + webhook</span>
+        <span class="mod">errors</span><span class="mod">updates · /updates/latest + sha256</span><span class="mod">ime-packs</span><span class="mod">extraction</span>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="phead"><div class="pnum">5</div><h4>Cutover</h4><span class="tag next">the flip</span></div>
+      <div class="pbody">
+        <span class="mod">Caddy routes all → Go</span><span class="mod hi">parity green everywhere</span><span class="mod">decommission Node</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- CUTOVER -->
+  <section>
+    <div class="kicker">De-risking the big bang</div>
+    <h2>Strangler-fig cutover via Caddy</h2>
+    <p class="lead">Go runs <b>alongside</b> Node. Each path is mirrored to both and response-diffed until clean, then its Caddy route flips. A bad flip is reverted by editing one Caddy block — no redeploy.</p>
+    <div class="cut">
+      <div class="stacklane">
+        <div class="lane node">🟥 <b>NestJS</b> :3000 — serves every path not yet flipped</div>
+        <div class="lane go">🟩 <b>Go</b> :3001 — serves <code>/v1/rewrite</code> today; grows path by path</div>
+      </div>
+      <div class="caddy"><b>Caddy</b><div class="s mono" style="color:var(--muted);font-size:11px;margin-top:6px">path → upstream<br>+ shadow mirror</div></div>
+      <div class="stacklane">
+        <div class="lane">📱 7 clients — <b>unchanged</b><div class="s" style="color:var(--muted);font-size:12px">macOS · iOS · Android · Windows · Linux · web · admin</div></div>
+        <div class="lane">🗄️ <b>One Postgres</b> — shared live schema, sqlc-typed</div>
+      </div>
+    </div>
+    <div class="shadow">shadow-compare: same request → Node <span class="arrow">+</span> Go → diff JSON/status → fix → flip when clean</div>
+    <div class="legend">
+      <span><span class="sw" style="background:var(--green)"></span>on Go now</span>
+      <span><span class="sw" style="background:#b14a4a"></span>still on Node</span>
+      <span><span class="sw" style="background:var(--brand)"></span>Caddy decides per path</span>
+    </div>
+  </section>
+
+  <!-- RULES -->
+  <section>
+    <div class="kicker">Guardrails</div>
+    <h2>How it honors Rule #1</h2>
+    <div class="rule">
+      <div class="card"><h5>Drop-in contract</h5><p>Identical routes, JSON, status codes, JWT. Clients don't change; parity is testable.</p></div>
+      <div class="card"><h5>Reuse, don't fork</h5><p>Extend the working Go service + its adapters. Strategy pattern → Go interfaces, 1:1 with the backend.</p></div>
+      <div class="card"><h5>No hardcoding</h5><p>Same <code>.env</code> via typed config; provider keys, URLs, limits stay config-driven.</p></div>
+      <div class="card"><h5>Extensible</h5><p>New payment method / LLM provider = one adapter package behind an existing port. No handler edits.</p></div>
+      <div class="card"><h5>Testable in isolation</h5><p>domain + usecase unit-tested with in-memory adapters (already the pattern in rewrite-go).</p></div>
+      <div class="card"><h5>Small, focused units</h5><p>One folder per module per layer; files stay readable and independently reviewable.</p></div>
+    </div>
+  </section>
+
+  <p class="foot-note">DraftRight · Go backend architecture · design draft 2026-06-13 · next step: write the Phase 0 spec</p>
+</div>
+</body>
+</html>
