@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/tannpv/draftright-rewrite/internal/shared"
+	"github.com/tannpv/draftright-rewrite/internal/subscription"
 	"github.com/tannpv/draftright-rewrite/internal/user"
 )
 
@@ -39,8 +40,18 @@ func (stubTTL) TokenTTLs(context.Context) (time.Duration, time.Duration, error) 
 
 func newSvc(t *testing.T, users UserService) *Service {
 	t.Helper()
-	return NewService(users, stubTTL{}, "access-secret", "refresh-secret")
+	return NewService(users, stubSubs{}, stubUsage{}, stubTTL{}, "access-secret", "refresh-secret")
 }
+
+type stubSubs struct{ sub *subscription.AccountSub }
+
+func (s stubSubs) ActiveByUser(context.Context, string) (*subscription.AccountSub, error) {
+	return s.sub, nil
+}
+
+type stubUsage struct{ n int }
+
+func (u stubUsage) CountToday(context.Context, string) (int, error) { return u.n, nil }
 
 func TestLogin_HappyPath(t *testing.T) {
 	hash, _ := shared.HashPassword("pw123")

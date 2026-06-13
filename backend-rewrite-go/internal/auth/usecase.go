@@ -11,6 +11,7 @@ import (
 
 	platauth "github.com/tannpv/draftright-rewrite/internal/platform/auth"
 	"github.com/tannpv/draftright-rewrite/internal/shared"
+	"github.com/tannpv/draftright-rewrite/internal/subscription"
 	"github.com/tannpv/draftright-rewrite/internal/user"
 )
 
@@ -35,10 +36,22 @@ type TTLReader interface {
 	TokenTTLs(ctx context.Context) (access, refresh time.Duration, err error)
 }
 
+// SubReader is the subscription-module subset (read-only).
+type SubReader interface {
+	ActiveByUser(ctx context.Context, userID string) (*subscription.AccountSub, error)
+}
+
+// UsageCounter is the usage-module subset.
+type UsageCounter interface {
+	CountToday(ctx context.Context, userID string) (int, error)
+}
+
 // Service orchestrates auth flows. Holds two signers (access/refresh
 // secrets) + a refresh verifier.
 type Service struct {
 	users      UserService
+	subs       SubReader
+	usage      UsageCounter
 	ttl        TTLReader
 	access     *platauth.Signer
 	refresh    *platauth.Signer
@@ -47,9 +60,11 @@ type Service struct {
 
 // NewService wires dependencies. accessSecret signs/verifies access
 // tokens; refreshSecret signs/verifies refresh tokens.
-func NewService(users UserService, ttl TTLReader, accessSecret, refreshSecret string) *Service {
+func NewService(users UserService, subs SubReader, usage UsageCounter, ttl TTLReader, accessSecret, refreshSecret string) *Service {
 	return &Service{
 		users:      users,
+		subs:       subs,
+		usage:      usage,
 		ttl:        ttl,
 		access:     platauth.NewSigner(accessSecret),
 		refresh:    platauth.NewSigner(refreshSecret),
@@ -119,4 +134,105 @@ func (s *Service) Login(ctx context.Context, email, password string) (LoginResul
 		return LoginResult{}, err
 	}
 	return LoginResult{Tokens: toks, User: UserPayload{ID: u.ID, Email: u.Email, Name: u.Name}}, nil
+}
+
+// Refresh ports auth.service.refresh: verify the refresh token with the
+// refresh secret, reload the user, require is_active, re-mint. Any
+// failure → "Invalid refresh token".
+func (s *Service) Refresh(ctx context.Context, refreshToken string) (Tokens, error) {
+	claims, err := s.refreshVer.Verify(refreshToken)
+	if err != nil {
+		return Tokens{}, unauthorized(msgInvalidRefresh)
+	}
+	u, err := s.users.ByID(ctx, claims.Sub)
+	if err != nil || !u.IsActive {
+		return Tokens{}, unauthorized(msgInvalidRefresh)
+	}
+	return s.generateTokens(ctx, u)
+}
+
+// ChangePassword ports auth.service.changePassword: verify current,
+// hash new, persist.
+func (s *Service) ChangePassword(ctx context.Context, userID, current, next string) error {
+	u, err := s.users.ByID(ctx, userID)
+	if err != nil {
+		return unauthorized("") // Node bare UnauthorizedException → "Unauthorized" (handler maps "")
+	}
+	ok, err := shared.VerifyPassword(current, u.PasswordHash)
+	if err != nil || !ok {
+		return unauthorized(msgCurrentPwWrong)
+	}
+	hash, err := shared.HashPassword(next)
+	if err != nil {
+		return err
+	}
+	return s.users.UpdatePasswordHash(ctx, userID, hash)
+}
+
+// AccountView is the /auth/account response (nil → JSON null).
+type AccountView struct {
+	ID                      string          `json:"id"`
+	Email                   string          `json:"email"`
+	Name                    string          `json:"name"`
+	EmailVerified           bool            `json:"email_verified"`
+	HasLemonsqueezyCustomer bool            `json:"has_lemonsqueezy_customer"`
+	Subscription            *AccountSubView `json:"subscription"`
+}
+
+// AccountSubView is the nested subscription object.
+type AccountSubView struct {
+	PlanName   string  `json:"plan_name"`
+	Status     string  `json:"status"`
+	StoreType  string  `json:"store_type"`
+	StartedAt  string  `json:"started_at"`
+	ExpiresAt  *string `json:"expires_at"`
+	DailyLimit int     `json:"daily_limit"`
+	UsageToday int     `json:"usage_today"`
+}
+
+// Account ports auth.controller.account: user + active sub + usage. nil
+// (→ JSON null) when the user row is gone. Timestamp format (RFC3339) is
+// a known parity risk — the shadow gate pins it against the real Node
+// response.
+func (s *Service) Account(ctx context.Context, userID string) (*AccountView, error) {
+	u, err := s.users.ByID(ctx, userID)
+	if errors.Is(err, user.ErrNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	sub, err := s.subs.ActiveByUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	usageToday, err := s.usage.CountToday(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	view := &AccountView{
+		ID: u.ID, Email: u.Email, Name: u.Name,
+		EmailVerified:           u.EmailVerified,
+		HasLemonsqueezyCustomer: u.LemonsqueezyCustomer != "",
+	}
+	if sub != nil {
+		view.Subscription = &AccountSubView{
+			PlanName:   sub.PlanName,
+			Status:     sub.Status,
+			StoreType:  sub.StoreType,
+			StartedAt:  sub.StartedAt.Format(time.RFC3339),
+			DailyLimit: sub.DailyLimit,
+			UsageToday: usageToday,
+		}
+		if sub.ExpiresAt != nil {
+			e := sub.ExpiresAt.Format(time.RFC3339)
+			view.Subscription.ExpiresAt = &e
+		}
+	}
+	return view, nil
+}
+
+// DeleteAccount ports the cascade delete.
+func (s *Service) DeleteAccount(ctx context.Context, userID string) error {
+	return s.users.DeleteAccount(ctx, userID)
 }
