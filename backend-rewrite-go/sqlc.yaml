@@ -9,19 +9,21 @@
 #      column types against the schema, and emits a typed Go function
 #      per query. A typo'd column name or wrong placeholder type =
 #      sqlc build fail.
-#   3. Generated Go lives under internal/adapter/pg/sqlc/. Committed to
+#   3. Generated Go lives under internal/shared/pg/sqlc/. Committed to
 #      the repo so consumers don't need sqlc installed to build. CI
 #      gate (scripts/sqlc-check.sh) re-runs generate + fails if the
 #      diff is non-empty (catches schema drift early).
 version: "2"
 sql:
   - schema: "internal/platform/db/schema.sql"
-    queries: "internal/adapter/pg/queries.sql"
+    queries:
+      - "internal/rewrite/adapter/pg/queries.sql"
+      - "internal/shared/pg/queries_core.sql"
     engine: "postgresql"
     gen:
       go:
         package: "sqlc"
-        out: "internal/adapter/pg/sqlc"
+        out: "internal/shared/pg/sqlc"
         sql_package: "pgx/v5"
         emit_json_tags: true
         emit_db_tags: true

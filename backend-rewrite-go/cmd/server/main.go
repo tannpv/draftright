@@ -22,23 +22,27 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
-	"github.com/tannpv/draftright-rewrite/internal/adapter/anthropic"
-	"github.com/tannpv/draftright-rewrite/internal/adapter/chain"
-	"github.com/tannpv/draftright-rewrite/internal/adapter/memory"
-	"github.com/tannpv/draftright-rewrite/internal/adapter/ollama"
-	"github.com/tannpv/draftright-rewrite/internal/adapter/openai"
-	"github.com/tannpv/draftright-rewrite/internal/adapter/pg"
 	"github.com/tannpv/draftright-rewrite/internal/adapter/redislimit"
-	"github.com/tannpv/draftright-rewrite/internal/domain"
-	internalhttp "github.com/tannpv/draftright-rewrite/internal/http"
+	corepkg "github.com/tannpv/draftright-rewrite/internal/core"
 	"github.com/tannpv/draftright-rewrite/internal/platform/auth"
 	"github.com/tannpv/draftright-rewrite/internal/platform/config"
 	platformdb "github.com/tannpv/draftright-rewrite/internal/platform/db"
 	"github.com/tannpv/draftright-rewrite/internal/platform/metrics"
 	"github.com/tannpv/draftright-rewrite/internal/platform/tracing"
-	"github.com/tannpv/draftright-rewrite/internal/usecase"
+	"github.com/tannpv/draftright-rewrite/internal/rewrite/adapter/anthropic"
+	"github.com/tannpv/draftright-rewrite/internal/rewrite/adapter/chain"
+	"github.com/tannpv/draftright-rewrite/internal/rewrite/adapter/memory"
+	"github.com/tannpv/draftright-rewrite/internal/rewrite/adapter/ollama"
+	"github.com/tannpv/draftright-rewrite/internal/rewrite/adapter/openai"
+	"github.com/tannpv/draftright-rewrite/internal/rewrite/adapter/pg"
+	"github.com/tannpv/draftright-rewrite/internal/rewrite/domain"
+	"github.com/tannpv/draftright-rewrite/internal/rewrite/transport"
+	"github.com/tannpv/draftright-rewrite/internal/rewrite/usecase"
+	"github.com/tannpv/draftright-rewrite/internal/shared"
+	sqlc "github.com/tannpv/draftright-rewrite/internal/shared/pg/sqlc"
 )
 
 const (
@@ -84,8 +88,8 @@ func main() {
 	// Metrics: build the Prometheus sink (or noop) BEFORE composeDeps
 	// so the use case picks it up via RewriteDeps.Metrics.
 	var (
-		metricsSink   domain.Metrics
-		metricsHTTP   http.Handler
+		metricsSink domain.Metrics
+		metricsHTTP http.Handler
 	)
 	if cfg.MetricsEnabled {
 		prom := metrics.NewPrometheus()
@@ -97,19 +101,21 @@ func main() {
 		log.Info("observability", "metrics", "noop (METRICS_ENABLED unset)")
 	}
 
-	deps, cleanup, err := composeDeps(context.Background(), cfg, log, metricsSink)
+	deps, core, cleanup, err := composeDeps(context.Background(), cfg, log, metricsSink)
 	if err != nil {
 		log.Error("dependency wiring failed", "err", err.Error())
 		os.Exit(1)
 	}
 	defer cleanup()
 
-	router := (&internalhttp.Router{
+	router := (&shared.Router{
 		Log:            log,
 		Verifier:       auth.NewVerifier(cfg.JWTSecret),
 		MetricsHandler: metricsHTTP,
 		EnableTracing:  cfg.OtelEndpoint != "",
-		Rewrite: &internalhttp.RewriteHandler{
+		Health:         core.health,
+		Me:             core.me,
+		Rewrite: &transport.RewriteHandler{
 			Deps: deps,
 			Log:  log,
 		},
@@ -155,7 +161,7 @@ func main() {
 //
 // Returns (deps, cleanup, err). Caller MUST invoke cleanup before exit
 // even on the happy path — owns the Postgres pool + Redis client.
-func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m domain.Metrics) (usecase.RewriteDeps, func(), error) {
+func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m domain.Metrics) (usecase.RewriteDeps, coreHandlers, func(), error) {
 	var cleanups []func()
 	cleanup := func() {
 		for i := len(cleanups) - 1; i >= 0; i-- {
@@ -164,13 +170,17 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 	}
 
 	// --- UserRepo --------------------------------------------------
+	// pool is captured here so the Phase 0 core handlers (/health,
+	// /auth/me) can share the same Postgres pool as the UserRepo.
+	var pool *pgxpool.Pool
 	var users domain.UserRepo
 	if cfg.DatabaseURL != "" {
-		pool, err := platformdb.NewPool(ctx, cfg.DatabaseURL)
+		p, err := platformdb.NewPool(ctx, cfg.DatabaseURL)
 		if err != nil {
 			cleanup()
-			return usecase.RewriteDeps{}, nil, fmt.Errorf("postgres pool: %w", err)
+			return usecase.RewriteDeps{}, coreHandlers{}, nil, fmt.Errorf("postgres pool: %w", err)
 		}
+		pool = p
 		cleanups = append(cleanups, pool.Close)
 		users = pg.NewUserRepo(pool)
 		log.Info("adapter selected", "port", "users", "impl", "postgres")
@@ -185,7 +195,7 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 		opts, err := redis.ParseURL(cfg.RedisURL)
 		if err != nil {
 			cleanup()
-			return usecase.RewriteDeps{}, nil, fmt.Errorf("parse REDIS_URL: %w", err)
+			return usecase.RewriteDeps{}, coreHandlers{}, nil, fmt.Errorf("parse REDIS_URL: %w", err)
 		}
 		client := redis.NewClient(opts)
 		cleanups = append(cleanups, func() { _ = client.Close() })
@@ -199,6 +209,23 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 	// --- AiProvider ------------------------------------------------
 	provider := buildProviderChain(cfg, log)
 
+	// --- Core Phase 0 handlers (/health, /auth/me) -----------------
+	// /auth/me reads only verified JWT claims, so it needs no DB and is
+	// always available. /health falls back to a static info reader
+	// without a DB (it still needs the pool's client_log_level when one
+	// exists). appVersion is the value /health reports; matches Node's
+	// hardcoded "2.0.0" (health.controller.ts). One const so the two
+	// construction branches can't drift.
+	const appVersion = "2.0.0"
+	var core coreHandlers
+	core.me = corepkg.NewMeHandler(cfg.GoBackendRampPercent)
+	if pool != nil {
+		q := sqlc.New(pool)
+		core.health = corepkg.NewHealthHandler(corepkg.NewPgLogLevel(q), appVersion)
+	} else {
+		core.health = corepkg.NewHealthHandler(staticInfoReader{}, appVersion)
+	}
+
 	return usecase.RewriteDeps{
 		Users:     users,
 		Provider:  provider,
@@ -206,8 +233,23 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 		Metrics:   m,
 		Now:       time.Now,
 		Log:       log,
-	}, cleanup, nil
+	}, core, cleanup, nil
 }
+
+// coreHandlers bundles the Phase 0 proof endpoints so composeDeps can
+// return them alongside the rewrite deps without widening the call site
+// into a long positional tuple.
+type coreHandlers struct {
+	health http.Handler // GET /health  (always set)
+	me     http.Handler // GET /auth/me (always set — JWT claims only, no DB)
+}
+
+// staticInfoReader is the dev-fallback LogLevelReader used when no
+// Postgres pool exists. It always reports "info" so /health stays
+// healthy without a database.
+type staticInfoReader struct{}
+
+func (staticInfoReader) ClientLogLevel(context.Context) (string, error) { return "info", nil }
 
 // buildProviderChain reads cfg.AIProviders (comma-separated priority
 // list) and assembles a chain.Provider. Filtering rules:
