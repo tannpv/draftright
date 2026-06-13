@@ -21,6 +21,9 @@ type CountUsageTodayParams struct {
 	CreatedAt pgtype.Timestamp `db:"created_at" json:"created_at"`
 }
 
+// Mirrors usageService.countTodayByUser: rows since local midnight.
+// The caller passes the midnight boundary so timezone handling matches
+// the Node process (new Date(); setHours(0,0,0,0)).
 func (q *Queries) CountUsageToday(ctx context.Context, arg CountUsageTodayParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countUsageToday, arg.UserID, arg.CreatedAt)
 	var count int64
@@ -47,6 +50,9 @@ type GetActiveSubscriptionByUserIDRow struct {
 	DailyLimit int32                      `db:"daily_limit" json:"daily_limit"`
 }
 
+// Mirrors subscriptionsService.findActiveByUserId: newest ACTIVE
+// subscription for the user, joined to its plan. ORDER BY created_at
+// DESC + LIMIT 1 reproduces TypeORM order:{created_at:'DESC'} findOne.
 func (q *Queries) GetActiveSubscriptionByUserID(ctx context.Context, userID pgtype.UUID) (GetActiveSubscriptionByUserIDRow, error) {
 	row := q.db.QueryRow(ctx, getActiveSubscriptionByUserID, userID)
 	var i GetActiveSubscriptionByUserIDRow
@@ -72,6 +78,8 @@ type GetAuthTokenSettingsRow struct {
 	RefreshTokenExpiryDays int32 `db:"refresh_token_expiry_days" json:"refresh_token_expiry_days"`
 }
 
+// The single app_settings row's token lifetimes. No row → caller uses
+// defaults (15 / 90), matching Node's `?? 15` / `?? 90`.
 func (q *Queries) GetAuthTokenSettings(ctx context.Context) (GetAuthTokenSettingsRow, error) {
 	row := q.db.QueryRow(ctx, getAuthTokenSettings)
 	var i GetAuthTokenSettingsRow
@@ -101,6 +109,9 @@ type GetAuthUserByEmailRow struct {
 }
 
 // Phase 1a auth queries. Read the live NestJS-owned schema as-is.
+// Full projection for /auth/login. password_hash is nullable
+// (social-only accounts have none). No email normalization — Node's
+// login passes the email through unchanged.
 func (q *Queries) GetAuthUserByEmail(ctx context.Context, email string) (GetAuthUserByEmailRow, error) {
 	row := q.db.QueryRow(ctx, getAuthUserByEmail, email)
 	var i GetAuthUserByEmailRow
@@ -138,6 +149,7 @@ type GetAuthUserByIDRow struct {
 	LemonsqueezyCustomerID *string               `db:"lemonsqueezy_customer_id" json:"lemonsqueezy_customer_id"`
 }
 
+// Same projection keyed by id — used by refresh, change-password, account.
 func (q *Queries) GetAuthUserByID(ctx context.Context, id pgtype.UUID) (GetAuthUserByIDRow, error) {
 	row := q.db.QueryRow(ctx, getAuthUserByID, id)
 	var i GetAuthUserByIDRow
