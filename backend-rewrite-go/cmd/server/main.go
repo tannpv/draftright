@@ -210,22 +210,20 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 	provider := buildProviderChain(cfg, log)
 
 	// --- Core Phase 0 handlers (/health, /auth/me) -----------------
-	// Share the Postgres pool with the UserRepo. When DATABASE_URL is
-	// unset (dev fallback) /health still serves via a static info
-	// reader, but /auth/me is disabled — it needs the real users table.
-	// appVersion is the value /health reports; matches Node's hardcoded
-	// "2.0.0" (health.controller.ts). One const so the two construction
-	// branches can't drift.
+	// /auth/me reads only verified JWT claims, so it needs no DB and is
+	// always available. /health falls back to a static info reader
+	// without a DB (it still needs the pool's client_log_level when one
+	// exists). appVersion is the value /health reports; matches Node's
+	// hardcoded "2.0.0" (health.controller.ts). One const so the two
+	// construction branches can't drift.
 	const appVersion = "2.0.0"
 	var core coreHandlers
+	core.me = corepkg.NewMeHandler(cfg.GoBackendRampPercent)
 	if pool != nil {
 		q := sqlc.New(pool)
 		core.health = corepkg.NewHealthHandler(corepkg.NewPgLogLevel(q), appVersion)
-		core.me = corepkg.NewMeHandler(corepkg.NewPgUserReader(q), cfg.GoBackendRampPercent)
 	} else {
 		core.health = corepkg.NewHealthHandler(staticInfoReader{}, appVersion)
-		core.me = nil
-		log.Warn("core handler disabled", "endpoint", "/auth/me", "reason", "DATABASE_URL unset — dev fallback")
 	}
 
 	return usecase.RewriteDeps{
@@ -243,7 +241,7 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 // into a long positional tuple.
 type coreHandlers struct {
 	health http.Handler // GET /health  (always set)
-	me     http.Handler // GET /auth/me (nil in DB-less dev fallback)
+	me     http.Handler // GET /auth/me (always set — JWT claims only, no DB)
 }
 
 // staticInfoReader is the dev-fallback LogLevelReader used when no

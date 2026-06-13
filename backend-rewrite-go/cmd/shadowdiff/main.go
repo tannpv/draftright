@@ -5,8 +5,9 @@
 // checked in (no production launch yet, so no real stream exists).
 //
 // Usage:
-//   shadowdiff --node=https://api.dev.draftright.info \
-//              --go=http://localhost:3001 --fixtures=./fixtures
+//
+//	shadowdiff --node=https://api.dev.draftright.info \
+//	           --go=http://localhost:3001 --fixtures=./fixtures
 package main
 
 import (

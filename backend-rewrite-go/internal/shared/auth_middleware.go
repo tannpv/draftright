@@ -9,8 +9,6 @@ package shared
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -38,16 +36,17 @@ func RequireAuth(v *auth.Verifier, log *slog.Logger) func(http.Handler) http.Han
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			tok, ok := extractBearer(r.Header.Get("Authorization"))
 			if !ok {
-				writeUnauthorized(w, "missing or malformed Authorization header")
+				writeUnauthorized(w, r)
 				return
 			}
 			claims, err := v.Verify(tok)
 			if err != nil {
 				// Log at debug — auth failures are normal at scale (expired
-				// tokens, refresh races). Surface details to the caller via
-				// a generic message; never echo the raw token to logs.
+				// tokens, refresh races). The response body stays generic
+				// ("Unauthorized") so an attacker can't probe which check
+				// failed; never echo the raw token to logs.
 				log.Debug("auth: token rejected", "err", err.Error())
-				writeUnauthorized(w, friendlyAuthError(err))
+				writeUnauthorized(w, r)
 				return
 			}
 			next.ServeHTTP(w, r.WithContext(ContextWithClaims(r.Context(), claims)))
@@ -86,28 +85,13 @@ func extractBearer(header string) (string, bool) {
 	return tok, true
 }
 
-// friendlyAuthError maps internal auth error sentinels to a single
-// user-facing message. We don't tell the client which specific
-// validation failed (expired vs invalid vs malformed) so an attacker
-// can't probe for valid-shape-wrong-signature.
-func friendlyAuthError(err error) string {
-	switch {
-	case errors.Is(err, auth.ErrTokenExpired):
-		return "token expired"
-	case errors.Is(err, auth.ErrMissingSubject):
-		return "token missing subject claim"
-	default:
-		return "invalid token"
-	}
-}
-
-// writeUnauthorized writes a 401 with a JSON error body. Single helper
-// so middleware and handlers don't drift on the body shape.
-func writeUnauthorized(w http.ResponseWriter, msg string) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.Header().Set("WWW-Authenticate", `Bearer realm="rewrite-go"`)
-	w.WriteHeader(http.StatusUnauthorized)
-	_ = json.NewEncoder(w).Encode(map[string]string{
-		"error": msg,
-	})
+// writeUnauthorized emits the canonical error envelope for any auth
+// rejection: { error: "Unauthorized", code: "invalid-token",
+// request_id }, status 401 — byte-for-byte the Node global filter's
+// output for a JwtAuthGuard rejection (UnauthorizedException →
+// inferCode(401)="invalid-token", message="Unauthorized"). Routes
+// through shared.WriteError so every error body stays on one contract
+// (Rule #1).
+func writeUnauthorized(w http.ResponseWriter, r *http.Request) {
+	WriteError(w, r, "invalid-token", "Unauthorized")
 }
