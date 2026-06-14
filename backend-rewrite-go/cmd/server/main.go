@@ -242,7 +242,11 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 		subReader := subpkg.NewReader(q)
 		usageCounter := usagepkg.NewCounter(q)
 		ttlReader := settingspkg.NewReader(q)
-		authSvc := authpkg.NewService(userSvc, subReader, usageCounter, ttlReader, cfg.JWTSecret, cfg.JWTRefreshSecret)
+		// TODO(A14): wire plans/subWriter/email/social — Phase 1b lifecycle
+		// + social handlers aren't mounted yet, so the four nil ports are
+		// never dereferenced (all interface types, nil-able).
+		authSvc := authpkg.NewService(userSvc, subReader, usageCounter, ttlReader, cfg.JWTSecret, cfg.JWTRefreshSecret,
+			nil, nil, nil, nil)
 		authHandler := authpkg.NewHandler(authSvc)
 		core.login = http.HandlerFunc(authHandler.Login)
 		core.refresh = http.HandlerFunc(authHandler.Refresh)

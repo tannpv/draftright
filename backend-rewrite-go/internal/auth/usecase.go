@@ -9,6 +9,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/tannpv/draftright-rewrite/internal/plans"
 	platauth "github.com/tannpv/draftright-rewrite/internal/platform/auth"
 	"github.com/tannpv/draftright-rewrite/internal/shared"
 	"github.com/tannpv/draftright-rewrite/internal/subscription"
@@ -29,6 +30,32 @@ type UserService interface {
 	ByID(ctx context.Context, id string) (user.User, error)
 	UpdatePasswordHash(ctx context.Context, id, hash string) error
 	DeleteAccount(ctx context.Context, id string) error
+	Create(ctx context.Context, in user.NewUser) (user.User, error)
+	Update(ctx context.Context, id string, p user.UserPatch) error
+	FindBySocialId(ctx context.Context, provider, socialID string) (user.User, error)
+	AuthState(ctx context.Context, email string) (user.AuthState, error)
+}
+
+// FreePlanReader is the plans-module subset (free-plan lookup on signup).
+type FreePlanReader interface {
+	FindFreePlan(ctx context.Context) (plans.Plan, error)
+}
+
+// FreeSubWriter is the subscription-module subset (free grant on signup).
+type FreeSubWriter interface {
+	CreateFree(ctx context.Context, userID, planID string) error
+}
+
+// EmailSender is the email-module subset. Both methods fire-and-forget.
+type EmailSender interface {
+	SendVerification(ctx context.Context, to, name, code string)
+	SendPasswordReset(ctx context.Context, to, name, code string)
+}
+
+// SocialVerifier verifies a provider id_token → SocialProfile.
+// (SocialProfile + InboundProfile are declared in Part B's social.go.)
+type SocialVerifier interface {
+	Verify(ctx context.Context, provider, idToken string, profile InboundProfile) (SocialProfile, error)
 }
 
 // TTLReader resolves token lifetimes (platform/settings.Reader).
@@ -56,11 +83,19 @@ type Service struct {
 	access     *platauth.Signer
 	refresh    *platauth.Signer
 	refreshVer *platauth.Verifier
+	plans      FreePlanReader
+	subWriter  FreeSubWriter
+	email      EmailSender
+	social     SocialVerifier
 }
 
 // NewService wires dependencies. accessSecret signs/verifies access
-// tokens; refreshSecret signs/verifies refresh tokens.
-func NewService(users UserService, subs SubReader, usage UsageCounter, ttl TTLReader, accessSecret, refreshSecret string) *Service {
+// tokens; refreshSecret signs/verifies refresh tokens. The Phase 1b
+// collaborators (plansReader/subWriter/emailSvc/socialVer) are appended
+// after the Phase 1a deps so existing call sites only grow.
+func NewService(users UserService, subs SubReader, usage UsageCounter, ttl TTLReader,
+	accessSecret, refreshSecret string,
+	plansReader FreePlanReader, subWriter FreeSubWriter, emailSvc EmailSender, socialVer SocialVerifier) *Service {
 	return &Service{
 		users:      users,
 		subs:       subs,
@@ -69,6 +104,10 @@ func NewService(users UserService, subs SubReader, usage UsageCounter, ttl TTLRe
 		access:     platauth.NewSigner(accessSecret),
 		refresh:    platauth.NewSigner(refreshSecret),
 		refreshVer: platauth.NewVerifier(refreshSecret),
+		plans:      plansReader,
+		subWriter:  subWriter,
+		email:      emailSvc,
+		social:     socialVer,
 	}
 }
 

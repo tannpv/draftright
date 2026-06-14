@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/tannpv/draftright-rewrite/internal/plans"
 	"github.com/tannpv/draftright-rewrite/internal/shared"
 	"github.com/tannpv/draftright-rewrite/internal/subscription"
 	"github.com/tannpv/draftright-rewrite/internal/user"
@@ -31,6 +32,14 @@ func (s stubUsers) ByID(_ context.Context, id string) (user.User, error) {
 }
 func (s stubUsers) UpdatePasswordHash(context.Context, string, string) error { return nil }
 func (s stubUsers) DeleteAccount(context.Context, string) error              { return nil }
+func (s stubUsers) Create(context.Context, user.NewUser) (user.User, error)  { return user.User{}, nil }
+func (s stubUsers) Update(context.Context, string, user.UserPatch) error     { return nil }
+func (s stubUsers) FindBySocialId(context.Context, string, string) (user.User, error) {
+	return user.User{}, user.ErrNotFound
+}
+func (s stubUsers) AuthState(context.Context, string) (user.AuthState, error) {
+	return user.AuthState{}, user.ErrNotFound
+}
 
 type stubTTL struct{}
 
@@ -40,7 +49,29 @@ func (stubTTL) TokenTTLs(context.Context) (time.Duration, time.Duration, error) 
 
 func newSvc(t *testing.T, users UserService) *Service {
 	t.Helper()
-	return NewService(users, stubSubs{}, stubUsage{}, stubTTL{}, "access-secret", "refresh-secret")
+	return NewService(users, stubSubs{}, stubUsage{}, stubTTL{}, "access-secret", "refresh-secret",
+		stubPlans{}, stubSubWriter{}, stubEmail{}, stubSocial{})
+}
+
+type stubPlans struct{}
+
+func (stubPlans) FindFreePlan(context.Context) (plans.Plan, error) {
+	return plans.Plan{ID: "free-plan", Name: "Free", DailyLimit: 10}, nil
+}
+
+type stubSubWriter struct{}
+
+func (stubSubWriter) CreateFree(context.Context, string, string) error { return nil }
+
+type stubEmail struct{}
+
+func (stubEmail) SendVerification(context.Context, string, string, string)  {}
+func (stubEmail) SendPasswordReset(context.Context, string, string, string) {}
+
+type stubSocial struct{}
+
+func (stubSocial) Verify(context.Context, string, string, InboundProfile) (SocialProfile, error) {
+	return SocialProfile{}, nil
 }
 
 type stubSubs struct{ sub *subscription.AccountSub }

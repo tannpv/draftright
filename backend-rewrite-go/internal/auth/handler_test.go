@@ -35,6 +35,14 @@ func (s users) ByID(_ context.Context, id string) (user.User, error) {
 }
 func (s users) UpdatePasswordHash(context.Context, string, string) error { return nil }
 func (s users) DeleteAccount(context.Context, string) error              { return nil }
+func (s users) Create(context.Context, user.NewUser) (user.User, error)  { return user.User{}, nil }
+func (s users) Update(context.Context, string, user.UserPatch) error     { return nil }
+func (s users) FindBySocialId(context.Context, string, string) (user.User, error) {
+	return user.User{}, user.ErrNotFound
+}
+func (s users) AuthState(context.Context, string) (user.AuthState, error) {
+	return user.AuthState{}, user.ErrNotFound
+}
 
 type subs struct{ s *subscription.AccountSub }
 
@@ -57,6 +65,7 @@ func TestLoginHandler_201AndBody(t *testing.T) {
 	svc := auth.NewService(
 		users{u: map[string]user.User{"a@b.com": {ID: "u1", Email: "a@b.com", Name: "Al", IsActive: true, PasswordHash: hash}}},
 		subs{}, usg{}, realTTL{}, "access", "refresh",
+		nil, nil, nil, nil,
 	)
 	h := auth.NewHandler(svc)
 	body, _ := json.Marshal(map[string]string{"email": "a@b.com", "password": "pw"})
@@ -83,7 +92,7 @@ func TestLoginHandler_201AndBody(t *testing.T) {
 }
 
 func TestLoginHandler_401Envelope(t *testing.T) {
-	svc := auth.NewService(users{u: map[string]user.User{}}, subs{}, usg{}, realTTL{}, "access", "refresh")
+	svc := auth.NewService(users{u: map[string]user.User{}}, subs{}, usg{}, realTTL{}, "access", "refresh", nil, nil, nil, nil)
 	h := auth.NewHandler(svc)
 	body, _ := json.Marshal(map[string]string{"email": "no@b.com", "password": "x"})
 	req := httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewReader(body))
@@ -106,6 +115,7 @@ func TestAccountHandler_Shape(t *testing.T) {
 	svc := auth.NewService(
 		users{byID: map[string]user.User{"u1": {ID: "u1", Email: "a@b.com", Name: "Al", EmailVerified: true}}},
 		subs{}, usg{n: 3}, realTTL{}, "access", "refresh",
+		nil, nil, nil, nil,
 	)
 	h := auth.NewHandler(svc)
 	req := httptest.NewRequest(http.MethodGet, "/auth/account", nil)
@@ -130,6 +140,7 @@ func TestDeleteAccountHandler_200(t *testing.T) {
 	svc := auth.NewService(
 		users{byID: map[string]user.User{"u1": {ID: "u1"}}},
 		subs{}, usg{}, realTTL{}, "access", "refresh",
+		nil, nil, nil, nil,
 	)
 	h := auth.NewHandler(svc)
 	req := httptest.NewRequest(http.MethodDelete, "/auth/account", nil)
