@@ -328,6 +328,61 @@ func (s *Service) Register(ctx context.Context, email, password, name string) (R
 	}}, nil
 }
 
+// VerifyEmail ports auth.service.verifyEmail: look up the auth-state by
+// normalized email, require a present, matching, unexpired 6-digit code,
+// then mark verified + NULL the code/expiry. Every failure path returns
+// the same byte-identical "Invalid or expired verification code".
+func (s *Service) VerifyEmail(ctx context.Context, email, code string) error {
+	st, err := s.users.AuthState(ctx, normalizeEmail(email))
+	if errors.Is(err, user.ErrNotFound) {
+		return badRequest(msgInvalidVerifyCode)
+	}
+	if err != nil {
+		return err
+	}
+	if st.EmailVerificationCode == "" || st.EmailVerificationExpires == nil {
+		return badRequest(msgInvalidVerifyCode)
+	}
+	if st.EmailVerificationCode != code {
+		return badRequest(msgInvalidVerifyCode)
+	}
+	if st.EmailVerificationExpires.Before(nowUTC()) {
+		return badRequest(msgInvalidVerifyCode)
+	}
+	on := true
+	return s.users.Update(ctx, st.ID, user.UserPatch{
+		EmailVerified:            &on,
+		EmailVerificationCode:    user.NullableString{Set: true, Value: nil},
+		EmailVerificationExpires: user.NullableTime{Set: true, Value: nil},
+	})
+}
+
+// ResendVerification ports auth.service.resendVerification: silent no-op
+// for unknown or already-verified users; otherwise set a fresh code +
+// expiry and fire-and-forget the verification email.
+func (s *Service) ResendVerification(ctx context.Context, email string) error {
+	st, err := s.users.AuthState(ctx, normalizeEmail(email))
+	if errors.Is(err, user.ErrNotFound) {
+		return nil // silent
+	}
+	if err != nil {
+		return err
+	}
+	if st.EmailVerified {
+		return nil // silent
+	}
+	code := generateCode()
+	expires := nowUTC().Add(emailCodeTTL)
+	if err := s.users.Update(ctx, st.ID, user.UserPatch{
+		EmailVerificationCode:    user.NullableString{Set: true, Value: &code},
+		EmailVerificationExpires: user.NullableTime{Set: true, Value: &expires},
+	}); err != nil {
+		return err
+	}
+	s.email.SendVerification(ctx, st.Email, st.Name, code)
+	return nil
+}
+
 // DeleteAccount ports the cascade delete.
 func (s *Service) DeleteAccount(ctx context.Context, userID string) error {
 	return s.users.DeleteAccount(ctx, userID)

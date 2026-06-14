@@ -13,13 +13,18 @@ import (
 )
 
 type stubUsers struct {
-	byEmail map[string]user.User
-	byID    map[string]user.User
-	created bool
-	lastNew user.NewUser
+	byEmail      map[string]user.User
+	byID         map[string]user.User
+	created      bool
+	lastNew      user.NewUser
+	state        map[string]user.AuthState
+	lastPatch    user.UserPatch
+	updateCalled bool
 }
 
-func newStubUsers() *stubUsers { return &stubUsers{byEmail: map[string]user.User{}} }
+func newStubUsers() *stubUsers {
+	return &stubUsers{byEmail: map[string]user.User{}, state: map[string]user.AuthState{}}
+}
 
 func (s *stubUsers) ByEmail(_ context.Context, e string) (user.User, error) {
 	u, ok := s.byEmail[e]
@@ -42,12 +47,20 @@ func (s *stubUsers) Create(_ context.Context, in user.NewUser) (user.User, error
 	s.lastNew = in
 	return user.User{ID: "new", Email: in.Email, Name: in.Name}, nil
 }
-func (s *stubUsers) Update(context.Context, string, user.UserPatch) error { return nil }
+func (s *stubUsers) Update(_ context.Context, _ string, p user.UserPatch) error {
+	s.updateCalled = true
+	s.lastPatch = p
+	return nil
+}
 func (s *stubUsers) FindBySocialId(context.Context, string, string) (user.User, error) {
 	return user.User{}, user.ErrNotFound
 }
-func (s *stubUsers) AuthState(context.Context, string) (user.AuthState, error) {
-	return user.AuthState{}, user.ErrNotFound
+func (s *stubUsers) AuthState(_ context.Context, email string) (user.AuthState, error) {
+	st, ok := s.state[email]
+	if !ok {
+		return user.AuthState{}, user.ErrNotFound
+	}
+	return st, nil
 }
 
 type stubTTL struct{}
@@ -154,6 +167,17 @@ func assertConflict(t *testing.T, err error, wantMsg string) {
 	}
 	if ce.Message != wantMsg {
 		t.Fatalf("msg = %q, want %q", ce.Message, wantMsg)
+	}
+}
+
+func assertBadReq(t *testing.T, err error, wantMsg string) {
+	t.Helper()
+	var be *BadRequestError
+	if !errors.As(err, &be) {
+		t.Fatalf("want *BadRequestError, got %T: %v", err, err)
+	}
+	if be.Message != wantMsg {
+		t.Fatalf("msg = %q, want %q", be.Message, wantMsg)
 	}
 }
 
