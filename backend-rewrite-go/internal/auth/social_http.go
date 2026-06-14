@@ -86,11 +86,6 @@ func (v *httpVerifier) Verify(ctx context.Context, provider, idToken string, pro
 	return SocialProfile{}, badRequest("Unsupported provider")
 }
 
-// verifyApple is a temporary stub until Task B5 implements JWKS/RS256.
-func (v *httpVerifier) verifyApple(ctx context.Context, idToken string, profile InboundProfile) (SocialProfile, error) {
-	return SocialProfile{}, unauthorized("Invalid Apple token")
-}
-
 // truthy matches Node's `x === true || x === 'true'` (tokeninfo returns
 // the string "true"; some payloads a bool).
 func truthy(v any) bool {
