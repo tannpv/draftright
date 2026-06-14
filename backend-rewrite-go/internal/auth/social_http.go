@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"time"
 )
 
 // httpVerifier verifies Google/Facebook/Apple tokens via real HTTP. URLs
@@ -15,6 +16,26 @@ type httpVerifier struct {
 	facebookURL string // "...me?fields=...&access_token="
 	appleKeyURL string
 	appleAuds   []string
+}
+
+// Compile-time assertion: httpVerifier satisfies SocialVerifier.
+var _ SocialVerifier = (*httpVerifier)(nil)
+
+// NewHTTPSocialVerifier builds the production verifier with Google/Facebook/
+// Apple endpoints. appleAudsCSV is a comma-separated list of accepted Apple
+// audiences; empty falls back to appleDefaultAuds.
+func NewHTTPSocialVerifier(appleAudsCSV string) *httpVerifier {
+	auds := splitAuds(appleAudsCSV)
+	if len(auds) == 0 {
+		auds = splitAuds(appleDefaultAuds)
+	}
+	return &httpVerifier{
+		http:        &http.Client{Timeout: 10 * time.Second},
+		googleURL:   "https://oauth2.googleapis.com/tokeninfo?id_token=",
+		facebookURL: "https://graph.facebook.com/me?fields=id,name,email,picture.type(large)&access_token=",
+		appleKeyURL: "https://appleid.apple.com/auth/keys",
+		appleAuds:   auds,
+	}
 }
 
 func (v *httpVerifier) verifyGoogle(ctx context.Context, idToken string) (SocialProfile, error) {
