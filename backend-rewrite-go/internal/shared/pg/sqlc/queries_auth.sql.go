@@ -124,6 +124,154 @@ func (q *Queries) FindFreePlan(ctx context.Context) (FindFreePlanRow, error) {
 	return i, err
 }
 
+const findUserByAppleId = `-- name: FindUserByAppleId :one
+SELECT id, email, password_hash, name, is_active, role, auth_provider,
+       email_verified, lemonsqueezy_customer_id, avatar_url
+FROM users WHERE apple_id = $1 LIMIT 1
+`
+
+type FindUserByAppleIdRow struct {
+	ID                     pgtype.UUID           `db:"id" json:"id"`
+	Email                  string                `db:"email" json:"email"`
+	PasswordHash           *string               `db:"password_hash" json:"password_hash"`
+	Name                   string                `db:"name" json:"name"`
+	IsActive               bool                  `db:"is_active" json:"is_active"`
+	Role                   UsersRoleEnum         `db:"role" json:"role"`
+	AuthProvider           UsersAuthProviderEnum `db:"auth_provider" json:"auth_provider"`
+	EmailVerified          bool                  `db:"email_verified" json:"email_verified"`
+	LemonsqueezyCustomerID *string               `db:"lemonsqueezy_customer_id" json:"lemonsqueezy_customer_id"`
+	AvatarUrl              *string               `db:"avatar_url" json:"avatar_url"`
+}
+
+func (q *Queries) FindUserByAppleId(ctx context.Context, appleID *string) (FindUserByAppleIdRow, error) {
+	row := q.db.QueryRow(ctx, findUserByAppleId, appleID)
+	var i FindUserByAppleIdRow
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.PasswordHash,
+		&i.Name,
+		&i.IsActive,
+		&i.Role,
+		&i.AuthProvider,
+		&i.EmailVerified,
+		&i.LemonsqueezyCustomerID,
+		&i.AvatarUrl,
+	)
+	return i, err
+}
+
+const findUserByFacebookId = `-- name: FindUserByFacebookId :one
+SELECT id, email, password_hash, name, is_active, role, auth_provider,
+       email_verified, lemonsqueezy_customer_id, avatar_url
+FROM users WHERE facebook_id = $1 LIMIT 1
+`
+
+type FindUserByFacebookIdRow struct {
+	ID                     pgtype.UUID           `db:"id" json:"id"`
+	Email                  string                `db:"email" json:"email"`
+	PasswordHash           *string               `db:"password_hash" json:"password_hash"`
+	Name                   string                `db:"name" json:"name"`
+	IsActive               bool                  `db:"is_active" json:"is_active"`
+	Role                   UsersRoleEnum         `db:"role" json:"role"`
+	AuthProvider           UsersAuthProviderEnum `db:"auth_provider" json:"auth_provider"`
+	EmailVerified          bool                  `db:"email_verified" json:"email_verified"`
+	LemonsqueezyCustomerID *string               `db:"lemonsqueezy_customer_id" json:"lemonsqueezy_customer_id"`
+	AvatarUrl              *string               `db:"avatar_url" json:"avatar_url"`
+}
+
+func (q *Queries) FindUserByFacebookId(ctx context.Context, facebookID *string) (FindUserByFacebookIdRow, error) {
+	row := q.db.QueryRow(ctx, findUserByFacebookId, facebookID)
+	var i FindUserByFacebookIdRow
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.PasswordHash,
+		&i.Name,
+		&i.IsActive,
+		&i.Role,
+		&i.AuthProvider,
+		&i.EmailVerified,
+		&i.LemonsqueezyCustomerID,
+		&i.AvatarUrl,
+	)
+	return i, err
+}
+
+const findUserByGoogleId = `-- name: FindUserByGoogleId :one
+SELECT id, email, password_hash, name, is_active, role, auth_provider,
+       email_verified, lemonsqueezy_customer_id, avatar_url
+FROM users WHERE google_id = $1 LIMIT 1
+`
+
+type FindUserByGoogleIdRow struct {
+	ID                     pgtype.UUID           `db:"id" json:"id"`
+	Email                  string                `db:"email" json:"email"`
+	PasswordHash           *string               `db:"password_hash" json:"password_hash"`
+	Name                   string                `db:"name" json:"name"`
+	IsActive               bool                  `db:"is_active" json:"is_active"`
+	Role                   UsersRoleEnum         `db:"role" json:"role"`
+	AuthProvider           UsersAuthProviderEnum `db:"auth_provider" json:"auth_provider"`
+	EmailVerified          bool                  `db:"email_verified" json:"email_verified"`
+	LemonsqueezyCustomerID *string               `db:"lemonsqueezy_customer_id" json:"lemonsqueezy_customer_id"`
+	AvatarUrl              *string               `db:"avatar_url" json:"avatar_url"`
+}
+
+func (q *Queries) FindUserByGoogleId(ctx context.Context, googleID *string) (FindUserByGoogleIdRow, error) {
+	row := q.db.QueryRow(ctx, findUserByGoogleId, googleID)
+	var i FindUserByGoogleIdRow
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.PasswordHash,
+		&i.Name,
+		&i.IsActive,
+		&i.Role,
+		&i.AuthProvider,
+		&i.EmailVerified,
+		&i.LemonsqueezyCustomerID,
+		&i.AvatarUrl,
+	)
+	return i, err
+}
+
+const findUserByTiktokId = `-- name: FindUserByTiktokId :one
+SELECT id, email, password_hash, name, is_active, role, auth_provider,
+       email_verified, lemonsqueezy_customer_id, avatar_url
+FROM users WHERE tiktok_id = $1 LIMIT 1
+`
+
+type FindUserByTiktokIdRow struct {
+	ID                     pgtype.UUID           `db:"id" json:"id"`
+	Email                  string                `db:"email" json:"email"`
+	PasswordHash           *string               `db:"password_hash" json:"password_hash"`
+	Name                   string                `db:"name" json:"name"`
+	IsActive               bool                  `db:"is_active" json:"is_active"`
+	Role                   UsersRoleEnum         `db:"role" json:"role"`
+	AuthProvider           UsersAuthProviderEnum `db:"auth_provider" json:"auth_provider"`
+	EmailVerified          bool                  `db:"email_verified" json:"email_verified"`
+	LemonsqueezyCustomerID *string               `db:"lemonsqueezy_customer_id" json:"lemonsqueezy_customer_id"`
+	AvatarUrl              *string               `db:"avatar_url" json:"avatar_url"`
+}
+
+func (q *Queries) FindUserByTiktokId(ctx context.Context, tiktokID *string) (FindUserByTiktokIdRow, error) {
+	row := q.db.QueryRow(ctx, findUserByTiktokId, tiktokID)
+	var i FindUserByTiktokIdRow
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.PasswordHash,
+		&i.Name,
+		&i.IsActive,
+		&i.Role,
+		&i.AuthProvider,
+		&i.EmailVerified,
+		&i.LemonsqueezyCustomerID,
+		&i.AvatarUrl,
+	)
+	return i, err
+}
+
 const getActiveSubscriptionByUserID = `-- name: GetActiveSubscriptionByUserID :one
 SELECT s.status, s.store_type, s.started_at, s.expires_at,
        p.name AS plan_name, p.daily_limit
@@ -373,6 +521,70 @@ func (q *Queries) IsEmailSuppressed(ctx context.Context, email string) (bool, er
 	var column_1 bool
 	err := row.Scan(&column_1)
 	return column_1, err
+}
+
+const linkSocialApple = `-- name: LinkSocialApple :exec
+UPDATE users SET apple_id = $2, avatar_url = $3, email_verified = true,
+  updated_at = now() WHERE id = $1
+`
+
+type LinkSocialAppleParams struct {
+	ID        pgtype.UUID `db:"id" json:"id"`
+	AppleID   *string     `db:"apple_id" json:"apple_id"`
+	AvatarUrl *string     `db:"avatar_url" json:"avatar_url"`
+}
+
+func (q *Queries) LinkSocialApple(ctx context.Context, arg LinkSocialAppleParams) error {
+	_, err := q.db.Exec(ctx, linkSocialApple, arg.ID, arg.AppleID, arg.AvatarUrl)
+	return err
+}
+
+const linkSocialFacebook = `-- name: LinkSocialFacebook :exec
+UPDATE users SET facebook_id = $2, avatar_url = $3, email_verified = true,
+  updated_at = now() WHERE id = $1
+`
+
+type LinkSocialFacebookParams struct {
+	ID         pgtype.UUID `db:"id" json:"id"`
+	FacebookID *string     `db:"facebook_id" json:"facebook_id"`
+	AvatarUrl  *string     `db:"avatar_url" json:"avatar_url"`
+}
+
+func (q *Queries) LinkSocialFacebook(ctx context.Context, arg LinkSocialFacebookParams) error {
+	_, err := q.db.Exec(ctx, linkSocialFacebook, arg.ID, arg.FacebookID, arg.AvatarUrl)
+	return err
+}
+
+const linkSocialGoogle = `-- name: LinkSocialGoogle :exec
+UPDATE users SET google_id = $2, avatar_url = $3, email_verified = true,
+  updated_at = now() WHERE id = $1
+`
+
+type LinkSocialGoogleParams struct {
+	ID        pgtype.UUID `db:"id" json:"id"`
+	GoogleID  *string     `db:"google_id" json:"google_id"`
+	AvatarUrl *string     `db:"avatar_url" json:"avatar_url"`
+}
+
+func (q *Queries) LinkSocialGoogle(ctx context.Context, arg LinkSocialGoogleParams) error {
+	_, err := q.db.Exec(ctx, linkSocialGoogle, arg.ID, arg.GoogleID, arg.AvatarUrl)
+	return err
+}
+
+const linkSocialTiktok = `-- name: LinkSocialTiktok :exec
+UPDATE users SET tiktok_id = $2, avatar_url = $3, email_verified = true,
+  updated_at = now() WHERE id = $1
+`
+
+type LinkSocialTiktokParams struct {
+	ID        pgtype.UUID `db:"id" json:"id"`
+	TiktokID  *string     `db:"tiktok_id" json:"tiktok_id"`
+	AvatarUrl *string     `db:"avatar_url" json:"avatar_url"`
+}
+
+func (q *Queries) LinkSocialTiktok(ctx context.Context, arg LinkSocialTiktokParams) error {
+	_, err := q.db.Exec(ctx, linkSocialTiktok, arg.ID, arg.TiktokID, arg.AvatarUrl)
+	return err
 }
 
 const resetPasswordHash = `-- name: ResetPasswordHash :exec

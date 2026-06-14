@@ -26,6 +26,10 @@ type Querier interface {
 	CreateFreeSubscription(ctx context.Context, arg CreateFreeSubscriptionParams) error
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
 	FindFreePlan(ctx context.Context) (FindFreePlanRow, error)
+	FindUserByAppleId(ctx context.Context, appleID *string) (FindUserByAppleIdRow, error)
+	FindUserByFacebookId(ctx context.Context, facebookID *string) (FindUserByFacebookIdRow, error)
+	FindUserByGoogleId(ctx context.Context, googleID *string) (FindUserByGoogleIdRow, error)
+	FindUserByTiktokId(ctx context.Context, tiktokID *string) (FindUserByTiktokIdRow, error)
 	// Queries for the /rewrite microservice's Postgres adapter.
 	// sqlc compiles these against schema.sql at build time; mistakes are
 	// caught BEFORE the service ever boots (Rule #1 — compile-time over
@@ -81,6 +85,10 @@ type Querier interface {
 	InsertUsageLog(ctx context.Context, arg InsertUsageLogParams) error
 	// Lowercased-email suppression check (bounce/complaint list).
 	IsEmailSuppressed(ctx context.Context, email string) (bool, error)
+	LinkSocialApple(ctx context.Context, arg LinkSocialAppleParams) error
+	LinkSocialFacebook(ctx context.Context, arg LinkSocialFacebookParams) error
+	LinkSocialGoogle(ctx context.Context, arg LinkSocialGoogleParams) error
+	LinkSocialTiktok(ctx context.Context, arg LinkSocialTiktokParams) error
 	ResetPasswordHash(ctx context.Context, arg ResetPasswordHashParams) error
 	SetEmailVerificationCode(ctx context.Context, arg SetEmailVerificationCodeParams) error
 	SetPasswordResetAttempts(ctx context.Context, arg SetPasswordResetAttemptsParams) error

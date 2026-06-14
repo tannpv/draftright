@@ -108,3 +108,39 @@ SELECT resend_api_key, email_from FROM app_settings LIMIT 1;
 -- name: GetEmailTemplateByKey :one
 -- DB template override. PK column is template_key (not key).
 SELECT subject, html FROM email_templates WHERE template_key = $1 LIMIT 1;
+
+-- name: FindUserByGoogleId :one
+SELECT id, email, password_hash, name, is_active, role, auth_provider,
+       email_verified, lemonsqueezy_customer_id, avatar_url
+FROM users WHERE google_id = $1 LIMIT 1;
+
+-- name: FindUserByFacebookId :one
+SELECT id, email, password_hash, name, is_active, role, auth_provider,
+       email_verified, lemonsqueezy_customer_id, avatar_url
+FROM users WHERE facebook_id = $1 LIMIT 1;
+
+-- name: FindUserByTiktokId :one
+SELECT id, email, password_hash, name, is_active, role, auth_provider,
+       email_verified, lemonsqueezy_customer_id, avatar_url
+FROM users WHERE tiktok_id = $1 LIMIT 1;
+
+-- name: FindUserByAppleId :one
+SELECT id, email, password_hash, name, is_active, role, auth_provider,
+       email_verified, lemonsqueezy_customer_id, avatar_url
+FROM users WHERE apple_id = $1 LIMIT 1;
+
+-- name: LinkSocialGoogle :exec
+UPDATE users SET google_id = $2, avatar_url = $3, email_verified = true,
+  updated_at = now() WHERE id = $1;
+
+-- name: LinkSocialFacebook :exec
+UPDATE users SET facebook_id = $2, avatar_url = $3, email_verified = true,
+  updated_at = now() WHERE id = $1;
+
+-- name: LinkSocialTiktok :exec
+UPDATE users SET tiktok_id = $2, avatar_url = $3, email_verified = true,
+  updated_at = now() WHERE id = $1;
+
+-- name: LinkSocialApple :exec
+UPDATE users SET apple_id = $2, avatar_url = $3, email_verified = true,
+  updated_at = now() WHERE id = $1;

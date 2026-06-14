@@ -22,6 +22,14 @@ type pgQuerier interface {
 	SetPasswordResetCode(ctx context.Context, arg sqlc.SetPasswordResetCodeParams) error
 	SetPasswordResetAttempts(ctx context.Context, arg sqlc.SetPasswordResetAttemptsParams) error
 	ResetPasswordHash(ctx context.Context, arg sqlc.ResetPasswordHashParams) error
+	FindUserByGoogleId(ctx context.Context, googleID *string) (sqlc.FindUserByGoogleIdRow, error)
+	FindUserByFacebookId(ctx context.Context, facebookID *string) (sqlc.FindUserByFacebookIdRow, error)
+	FindUserByTiktokId(ctx context.Context, tiktokID *string) (sqlc.FindUserByTiktokIdRow, error)
+	FindUserByAppleId(ctx context.Context, appleID *string) (sqlc.FindUserByAppleIdRow, error)
+	LinkSocialGoogle(ctx context.Context, arg sqlc.LinkSocialGoogleParams) error
+	LinkSocialFacebook(ctx context.Context, arg sqlc.LinkSocialFacebookParams) error
+	LinkSocialTiktok(ctx context.Context, arg sqlc.LinkSocialTiktokParams) error
+	LinkSocialApple(ctx context.Context, arg sqlc.LinkSocialAppleParams) error
 }
 
 // PgRepo implements Repo over Postgres. The delete-cascade txn needs the
@@ -155,14 +163,89 @@ func (r *PgRepo) Update(ctx context.Context, id string, p UserPatch) error {
 	return nil
 }
 
-// FindBySocialId stays a panic stub until Part B (B1) implements it.
+// FindBySocialId looks a user up by one of the four social provider id
+// columns. Unknown provider or no row → ErrNotFound.
 func (r *PgRepo) FindBySocialId(ctx context.Context, provider, socialID string) (User, error) {
-	panic("not implemented: B1")
+	switch provider {
+	case "google":
+		row, err := r.q.FindUserByGoogleId(ctx, ptr(socialID))
+		if errors.Is(err, pgx.ErrNoRows) {
+			return User{}, ErrNotFound
+		}
+		if err != nil {
+			return User{}, err
+		}
+		return socialRowToUser(row.ID, row.Email, row.PasswordHash, row.Name, row.IsActive,
+			string(row.Role), string(row.AuthProvider), row.EmailVerified,
+			row.LemonsqueezyCustomerID, row.AvatarUrl), nil
+	case "facebook":
+		row, err := r.q.FindUserByFacebookId(ctx, ptr(socialID))
+		if errors.Is(err, pgx.ErrNoRows) {
+			return User{}, ErrNotFound
+		}
+		if err != nil {
+			return User{}, err
+		}
+		return socialRowToUser(row.ID, row.Email, row.PasswordHash, row.Name, row.IsActive,
+			string(row.Role), string(row.AuthProvider), row.EmailVerified,
+			row.LemonsqueezyCustomerID, row.AvatarUrl), nil
+	case "tiktok":
+		row, err := r.q.FindUserByTiktokId(ctx, ptr(socialID))
+		if errors.Is(err, pgx.ErrNoRows) {
+			return User{}, ErrNotFound
+		}
+		if err != nil {
+			return User{}, err
+		}
+		return socialRowToUser(row.ID, row.Email, row.PasswordHash, row.Name, row.IsActive,
+			string(row.Role), string(row.AuthProvider), row.EmailVerified,
+			row.LemonsqueezyCustomerID, row.AvatarUrl), nil
+	case "apple":
+		row, err := r.q.FindUserByAppleId(ctx, ptr(socialID))
+		if errors.Is(err, pgx.ErrNoRows) {
+			return User{}, ErrNotFound
+		}
+		if err != nil {
+			return User{}, err
+		}
+		return socialRowToUser(row.ID, row.Email, row.PasswordHash, row.Name, row.IsActive,
+			string(row.Role), string(row.AuthProvider), row.EmailVerified,
+			row.LemonsqueezyCustomerID, row.AvatarUrl), nil
+	default:
+		return User{}, ErrNotFound
+	}
 }
 
-// linkSocial is a temporary stub; Part B (B1) implements social linking.
+// socialRowToUser maps the (column-identical) social-lookup row projection
+// to a domain User. All four FindUserBy*Id rows share these field types.
+func socialRowToUser(id pgtype.UUID, email string, passwordHash *string, name string, isActive bool, role, authProvider string, emailVerified bool, lemon, avatar *string) User {
+	return User{
+		ID: uuidStr(id), Email: email, PasswordHash: strOrEmpty(passwordHash),
+		Name: name, IsActive: isActive, Role: role, AuthProvider: authProvider,
+		EmailVerified: emailVerified, LemonsqueezyCustomer: strOrEmpty(lemon),
+		AvatarURL: strOrEmpty(avatar),
+	}
+}
+
+// linkSocial stamps the social id + avatar onto an existing user and marks
+// the email verified (social emails are provider-verified). Unknown
+// provider → no-op nil. A missing/empty avatar writes NULL.
 func (r *PgRepo) linkSocial(ctx context.Context, uid pgtype.UUID, p UserPatch) error {
-	panic("not implemented: B1")
+	avatar := ptr("")
+	if p.AvatarURL != nil {
+		avatar = ptr(*p.AvatarURL)
+	}
+	switch p.SocialProvider {
+	case "google":
+		return r.q.LinkSocialGoogle(ctx, sqlc.LinkSocialGoogleParams{ID: uid, GoogleID: ptr(p.SocialID), AvatarUrl: avatar})
+	case "facebook":
+		return r.q.LinkSocialFacebook(ctx, sqlc.LinkSocialFacebookParams{ID: uid, FacebookID: ptr(p.SocialID), AvatarUrl: avatar})
+	case "tiktok":
+		return r.q.LinkSocialTiktok(ctx, sqlc.LinkSocialTiktokParams{ID: uid, TiktokID: ptr(p.SocialID), AvatarUrl: avatar})
+	case "apple":
+		return r.q.LinkSocialApple(ctx, sqlc.LinkSocialAppleParams{ID: uid, AppleID: ptr(p.SocialID), AvatarUrl: avatar})
+	}
+	return nil
 }
 
 // AuthState reads the verification/reset projection for an email.

@@ -15,6 +15,7 @@ type fakeRepo struct {
 	lastPatch    user.UserPatch
 	created      []user.NewUser
 	state        map[string]user.AuthState
+	bySocial     map[string]user.User
 	updateCalled bool
 }
 
@@ -53,8 +54,12 @@ func (f *fakeRepo) Update(_ context.Context, _ string, p user.UserPatch) error {
 	f.lastPatch = p
 	return nil
 }
-func (f *fakeRepo) FindBySocialId(_ context.Context, _, _ string) (user.User, error) {
-	return user.User{}, user.ErrNotFound
+func (f *fakeRepo) FindBySocialId(_ context.Context, provider, socialID string) (user.User, error) {
+	u, ok := f.bySocial[provider+"|"+socialID]
+	if !ok {
+		return user.User{}, user.ErrNotFound
+	}
+	return u, nil
 }
 func (f *fakeRepo) AuthState(_ context.Context, email string) (user.AuthState, error) {
 	st, ok := f.state[email]
@@ -104,6 +109,18 @@ func TestService_Update_Passthrough(t *testing.T) {
 	}
 	if r.lastPatch.EmailVerified == nil || !*r.lastPatch.EmailVerified {
 		t.Fatal("patch not forwarded")
+	}
+}
+
+func TestService_FindBySocialId(t *testing.T) {
+	r := &fakeRepo{bySocial: map[string]user.User{"google|sid1": {ID: "u1", Email: "g@b.com"}}}
+	s := user.NewService(r)
+	u, err := s.FindBySocialId(context.Background(), "google", "sid1")
+	if err != nil || u.ID != "u1" {
+		t.Fatalf("got %v %v", u, err)
+	}
+	if _, err := s.FindBySocialId(context.Background(), "google", "nope"); err != user.ErrNotFound {
+		t.Fatalf("want ErrNotFound, got %v", err)
 	}
 }
 
