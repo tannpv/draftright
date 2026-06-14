@@ -15,6 +15,7 @@ import (
 type stubUsers struct {
 	byEmail      map[string]user.User
 	byID         map[string]user.User
+	bySocial     map[string]user.User
 	created      bool
 	lastNew      user.NewUser
 	state        map[string]user.AuthState
@@ -23,7 +24,7 @@ type stubUsers struct {
 }
 
 func newStubUsers() *stubUsers {
-	return &stubUsers{byEmail: map[string]user.User{}, state: map[string]user.AuthState{}}
+	return &stubUsers{byEmail: map[string]user.User{}, byID: map[string]user.User{}, bySocial: map[string]user.User{}, state: map[string]user.AuthState{}}
 }
 
 func (s *stubUsers) ByEmail(_ context.Context, e string) (user.User, error) {
@@ -45,15 +46,19 @@ func (s *stubUsers) DeleteAccount(context.Context, string) error              { 
 func (s *stubUsers) Create(_ context.Context, in user.NewUser) (user.User, error) {
 	s.created = true
 	s.lastNew = in
-	return user.User{ID: "new", Email: in.Email, Name: in.Name}, nil
+	return user.User{ID: "new", Email: in.Email, Name: in.Name, IsActive: true}, nil
 }
 func (s *stubUsers) Update(_ context.Context, _ string, p user.UserPatch) error {
 	s.updateCalled = true
 	s.lastPatch = p
 	return nil
 }
-func (s *stubUsers) FindBySocialId(context.Context, string, string) (user.User, error) {
-	return user.User{}, user.ErrNotFound
+func (s *stubUsers) FindBySocialId(_ context.Context, provider, socialID string) (user.User, error) {
+	u, ok := s.bySocial[provider+"|"+socialID]
+	if !ok {
+		return user.User{}, user.ErrNotFound
+	}
+	return u, nil
 }
 func (s *stubUsers) AuthState(_ context.Context, email string) (user.AuthState, error) {
 	st, ok := s.state[email]

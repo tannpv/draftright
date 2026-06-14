@@ -453,6 +453,101 @@ func (s *Service) ResetPassword(ctx context.Context, email, code, newPassword st
 	return s.users.Update(ctx, st.ID, user.UserPatch{PasswordHash: &hash})
 }
 
+// SocialResult is the social-login return: tokens + trimmed user.
+type SocialResult struct {
+	Tokens
+	User UserPayload
+}
+
+// SocialLogin verifies a provider token then links to an existing account,
+// creates a new one, or guards a password-account takeover — mirroring the
+// NestJS auth.service social flow.
+func (s *Service) SocialLogin(ctx context.Context, provider, idToken string, profile InboundProfile) (SocialResult, error) {
+	prov, err := toAuthProvider(provider)
+	if err != nil {
+		return SocialResult{}, err // *BadRequestError "Unsupported provider: ..."
+	}
+	sp, err := s.social.Verify(ctx, prov, idToken, profile)
+	if err != nil {
+		return SocialResult{}, err // verifier returns *AuthError (401)
+	}
+	if sp.Email == "" {
+		return SocialResult{}, badRequest(msgEmailRequired)
+	}
+
+	u, err := s.users.FindBySocialId(ctx, prov, sp.SocialID)
+	found := err == nil
+	if err != nil && !errors.Is(err, user.ErrNotFound) {
+		return SocialResult{}, err
+	}
+
+	if !found {
+		byEmail, e := s.users.ByEmail(ctx, sp.Email)
+		switch {
+		case e == nil:
+			// link path — existing local account by email
+			if !sp.EmailVerified {
+				return SocialResult{}, unauthorized(msgEmailRegisteredSocial)
+			}
+			avatar := sp.AvatarURL
+			if avatar == "" {
+				avatar = byEmail.AvatarURL
+			}
+			on := true
+			if uerr := s.users.Update(ctx, byEmail.ID, user.UserPatch{
+				SocialProvider: prov, SocialID: sp.SocialID,
+				AvatarURL: &avatar, EmailVerified: &on,
+			}); uerr != nil {
+				return SocialResult{}, uerr
+			}
+			u, err = s.users.ByID(ctx, byEmail.ID)
+			if err != nil {
+				return SocialResult{}, err
+			}
+		case errors.Is(e, user.ErrNotFound):
+			// create path — brand new social user
+			name := sp.Name
+			if name == "" {
+				name = emailLocalPart(sp.Email)
+			}
+			u, err = s.users.Create(ctx, user.NewUser{
+				Email: sp.Email, Name: name, AuthProvider: prov,
+				SocialProvider: prov, SocialID: sp.SocialID,
+				AvatarURL: sp.AvatarURL, EmailVerified: sp.EmailVerified,
+			})
+			if err != nil {
+				return SocialResult{}, err
+			}
+			free, ferr := s.plans.FindFreePlan(ctx)
+			if ferr != nil {
+				return SocialResult{}, ferr
+			}
+			if serr := s.subWriter.CreateFree(ctx, u.ID, free.ID); serr != nil {
+				return SocialResult{}, serr
+			}
+		default:
+			return SocialResult{}, e
+		}
+	}
+
+	if !u.IsActive {
+		return SocialResult{}, unauthorized(msgAccountDisabled)
+	}
+	toks, err := s.generateTokens(ctx, u)
+	if err != nil {
+		return SocialResult{}, err
+	}
+	return SocialResult{Tokens: toks, User: UserPayload{ID: u.ID, Email: u.Email, Name: u.Name}}, nil
+}
+
+// emailLocalPart returns the part before '@', or the whole string if none.
+func emailLocalPart(e string) string {
+	if i := strings.IndexByte(e, '@'); i >= 0 {
+		return e[:i]
+	}
+	return e
+}
+
 // DeleteAccount ports the cascade delete.
 func (s *Service) DeleteAccount(ctx context.Context, userID string) error {
 	return s.users.DeleteAccount(ctx, userID)
