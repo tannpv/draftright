@@ -39,6 +39,18 @@ func (f *fakeRepo) DeleteAccount(_ context.Context, id string) error {
 	f.deleted = append(f.deleted, id)
 	return nil
 }
+func (f *fakeRepo) Create(_ context.Context, _ user.NewUser) (user.User, error) {
+	return user.User{}, nil
+}
+func (f *fakeRepo) Update(_ context.Context, _ string, _ user.UserPatch) error {
+	return nil
+}
+func (f *fakeRepo) FindBySocialId(_ context.Context, _, _ string) (user.User, error) {
+	return user.User{}, nil
+}
+func (f *fakeRepo) AuthState(_ context.Context, _ string) (user.AuthState, error) {
+	return user.AuthState{}, nil
+}
 
 func TestService_ByEmail_HitAndMiss(t *testing.T) {
 	r := &fakeRepo{byEmail: map[string]user.User{"a@b.com": {ID: "u1", Email: "a@b.com"}}}

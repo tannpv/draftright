@@ -23,6 +23,7 @@ type Querier interface {
 	// The caller passes the midnight boundary so timezone handling matches
 	// the Node process (new Date(); setHours(0,0,0,0)).
 	CountUsageToday(ctx context.Context, arg CountUsageTodayParams) (int64, error)
+	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
 	// Queries for the /rewrite microservice's Postgres adapter.
 	// sqlc compiles these against schema.sql at build time; mistakes are
 	// caught BEFORE the service ever boots (Rule #1 — compile-time over
@@ -59,6 +60,7 @@ type Querier interface {
 	// GET /health. There is exactly one settings row (Node does
 	// `findOne({ where: {} })`); LIMIT 1 matches that.
 	GetClientLogLevel(ctx context.Context) (string, error)
+	GetUserAuthState(ctx context.Context, email string) (GetUserAuthStateRow, error)
 	// Phase 0 core-endpoint queries (health + /auth/me). Kept separate
 	// from the rewrite module's queries.sql so the core package depends on
 	// the shared sqlc types only, never on a feature module.
@@ -69,7 +71,12 @@ type Querier interface {
 	// Mirrors NestJS UsageService.log: same columns, same names, same
 	// precision so the two backends populate identical rows.
 	InsertUsageLog(ctx context.Context, arg InsertUsageLogParams) error
+	ResetPasswordHash(ctx context.Context, arg ResetPasswordHashParams) error
+	SetEmailVerificationCode(ctx context.Context, arg SetEmailVerificationCodeParams) error
+	SetPasswordResetAttempts(ctx context.Context, arg SetPasswordResetAttemptsParams) error
+	SetPasswordResetCode(ctx context.Context, arg SetPasswordResetCodeParams) error
 	UpdateUserPasswordHash(ctx context.Context, arg UpdateUserPasswordHashParams) error
+	UpdateUserVerification(ctx context.Context, arg UpdateUserVerificationParams) error
 }
 
 var _ Querier = (*Queries)(nil)

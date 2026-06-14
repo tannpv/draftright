@@ -47,3 +47,37 @@ WHERE user_id = $1 AND created_at >= $2;
 SELECT token_expiry_minutes, refresh_token_expiry_days
 FROM app_settings
 LIMIT 1;
+
+-- name: CreateUser :one
+INSERT INTO users (
+  email, password_hash, name, auth_provider, avatar_url, email_verified,
+  email_verification_code, email_verification_expires,
+  google_id, facebook_id, tiktok_id, apple_id
+) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+RETURNING id, email, name, avatar_url, email_verified;
+
+-- name: GetUserAuthState :one
+SELECT id, email, name, password_hash, auth_provider, is_active,
+       email_verified, email_verification_code, email_verification_expires,
+       password_reset_code, password_reset_expires, password_reset_attempts
+FROM users WHERE email = $1 LIMIT 1;
+
+-- name: UpdateUserVerification :exec
+UPDATE users SET email_verified = $2, email_verification_code = $3,
+  email_verification_expires = $4, updated_at = now() WHERE id = $1;
+
+-- name: SetEmailVerificationCode :exec
+UPDATE users SET email_verification_code = $2, email_verification_expires = $3,
+  updated_at = now() WHERE id = $1;
+
+-- name: SetPasswordResetCode :exec
+UPDATE users SET password_reset_code = $2, password_reset_expires = $3,
+  password_reset_attempts = $4, updated_at = now() WHERE id = $1;
+
+-- name: SetPasswordResetAttempts :exec
+UPDATE users SET password_reset_attempts = $2, updated_at = now() WHERE id = $1;
+
+-- name: ResetPasswordHash :exec
+UPDATE users SET password_hash = $2, password_reset_code = null,
+  password_reset_expires = null, password_reset_attempts = 0,
+  updated_at = now() WHERE id = $1;

@@ -72,6 +72,25 @@ func (r *PgRepo) UpdatePasswordHash(ctx context.Context, id, hash string) error 
 	})
 }
 
+// Create / Update / FindBySocialId / AuthState are the Phase 1b write +
+// lifecycle methods. A3 replaces these stubs with real sqlc-backed impls;
+// they exist here only so *PgRepo satisfies Repo and the package builds.
+func (r *PgRepo) Create(ctx context.Context, in NewUser) (User, error) {
+	panic("not implemented: A3")
+}
+
+func (r *PgRepo) Update(ctx context.Context, id string, p UserPatch) error {
+	panic("not implemented: A3")
+}
+
+func (r *PgRepo) FindBySocialId(ctx context.Context, provider, socialID string) (User, error) {
+	panic("not implemented: A3")
+}
+
+func (r *PgRepo) AuthState(ctx context.Context, email string) (AuthState, error) {
+	panic("not implemented: A3")
+}
+
 func strOrEmpty(p *string) string {
 	if p == nil {
 		return ""

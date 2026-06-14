@@ -31,6 +31,64 @@ func (q *Queries) CountUsageToday(ctx context.Context, arg CountUsageTodayParams
 	return count, err
 }
 
+const createUser = `-- name: CreateUser :one
+INSERT INTO users (
+  email, password_hash, name, auth_provider, avatar_url, email_verified,
+  email_verification_code, email_verification_expires,
+  google_id, facebook_id, tiktok_id, apple_id
+) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+RETURNING id, email, name, avatar_url, email_verified
+`
+
+type CreateUserParams struct {
+	Email                    string                `db:"email" json:"email"`
+	PasswordHash             *string               `db:"password_hash" json:"password_hash"`
+	Name                     string                `db:"name" json:"name"`
+	AuthProvider             UsersAuthProviderEnum `db:"auth_provider" json:"auth_provider"`
+	AvatarUrl                *string               `db:"avatar_url" json:"avatar_url"`
+	EmailVerified            bool                  `db:"email_verified" json:"email_verified"`
+	EmailVerificationCode    *string               `db:"email_verification_code" json:"email_verification_code"`
+	EmailVerificationExpires pgtype.Timestamptz    `db:"email_verification_expires" json:"email_verification_expires"`
+	GoogleID                 *string               `db:"google_id" json:"google_id"`
+	FacebookID               *string               `db:"facebook_id" json:"facebook_id"`
+	TiktokID                 *string               `db:"tiktok_id" json:"tiktok_id"`
+	AppleID                  *string               `db:"apple_id" json:"apple_id"`
+}
+
+type CreateUserRow struct {
+	ID            pgtype.UUID `db:"id" json:"id"`
+	Email         string      `db:"email" json:"email"`
+	Name          string      `db:"name" json:"name"`
+	AvatarUrl     *string     `db:"avatar_url" json:"avatar_url"`
+	EmailVerified bool        `db:"email_verified" json:"email_verified"`
+}
+
+func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error) {
+	row := q.db.QueryRow(ctx, createUser,
+		arg.Email,
+		arg.PasswordHash,
+		arg.Name,
+		arg.AuthProvider,
+		arg.AvatarUrl,
+		arg.EmailVerified,
+		arg.EmailVerificationCode,
+		arg.EmailVerificationExpires,
+		arg.GoogleID,
+		arg.FacebookID,
+		arg.TiktokID,
+		arg.AppleID,
+	)
+	var i CreateUserRow
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Name,
+		&i.AvatarUrl,
+		&i.EmailVerified,
+	)
+	return i, err
+}
+
 const getActiveSubscriptionByUserID = `-- name: GetActiveSubscriptionByUserID :one
 SELECT s.status, s.store_type, s.started_at, s.expires_at,
        p.name AS plan_name, p.daily_limit
@@ -167,6 +225,116 @@ func (q *Queries) GetAuthUserByID(ctx context.Context, id pgtype.UUID) (GetAuthU
 	return i, err
 }
 
+const getUserAuthState = `-- name: GetUserAuthState :one
+SELECT id, email, name, password_hash, auth_provider, is_active,
+       email_verified, email_verification_code, email_verification_expires,
+       password_reset_code, password_reset_expires, password_reset_attempts
+FROM users WHERE email = $1 LIMIT 1
+`
+
+type GetUserAuthStateRow struct {
+	ID                       pgtype.UUID           `db:"id" json:"id"`
+	Email                    string                `db:"email" json:"email"`
+	Name                     string                `db:"name" json:"name"`
+	PasswordHash             *string               `db:"password_hash" json:"password_hash"`
+	AuthProvider             UsersAuthProviderEnum `db:"auth_provider" json:"auth_provider"`
+	IsActive                 bool                  `db:"is_active" json:"is_active"`
+	EmailVerified            bool                  `db:"email_verified" json:"email_verified"`
+	EmailVerificationCode    *string               `db:"email_verification_code" json:"email_verification_code"`
+	EmailVerificationExpires pgtype.Timestamptz    `db:"email_verification_expires" json:"email_verification_expires"`
+	PasswordResetCode        *string               `db:"password_reset_code" json:"password_reset_code"`
+	PasswordResetExpires     pgtype.Timestamptz    `db:"password_reset_expires" json:"password_reset_expires"`
+	PasswordResetAttempts    int32                 `db:"password_reset_attempts" json:"password_reset_attempts"`
+}
+
+func (q *Queries) GetUserAuthState(ctx context.Context, email string) (GetUserAuthStateRow, error) {
+	row := q.db.QueryRow(ctx, getUserAuthState, email)
+	var i GetUserAuthStateRow
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Name,
+		&i.PasswordHash,
+		&i.AuthProvider,
+		&i.IsActive,
+		&i.EmailVerified,
+		&i.EmailVerificationCode,
+		&i.EmailVerificationExpires,
+		&i.PasswordResetCode,
+		&i.PasswordResetExpires,
+		&i.PasswordResetAttempts,
+	)
+	return i, err
+}
+
+const resetPasswordHash = `-- name: ResetPasswordHash :exec
+UPDATE users SET password_hash = $2, password_reset_code = null,
+  password_reset_expires = null, password_reset_attempts = 0,
+  updated_at = now() WHERE id = $1
+`
+
+type ResetPasswordHashParams struct {
+	ID           pgtype.UUID `db:"id" json:"id"`
+	PasswordHash *string     `db:"password_hash" json:"password_hash"`
+}
+
+func (q *Queries) ResetPasswordHash(ctx context.Context, arg ResetPasswordHashParams) error {
+	_, err := q.db.Exec(ctx, resetPasswordHash, arg.ID, arg.PasswordHash)
+	return err
+}
+
+const setEmailVerificationCode = `-- name: SetEmailVerificationCode :exec
+UPDATE users SET email_verification_code = $2, email_verification_expires = $3,
+  updated_at = now() WHERE id = $1
+`
+
+type SetEmailVerificationCodeParams struct {
+	ID                       pgtype.UUID        `db:"id" json:"id"`
+	EmailVerificationCode    *string            `db:"email_verification_code" json:"email_verification_code"`
+	EmailVerificationExpires pgtype.Timestamptz `db:"email_verification_expires" json:"email_verification_expires"`
+}
+
+func (q *Queries) SetEmailVerificationCode(ctx context.Context, arg SetEmailVerificationCodeParams) error {
+	_, err := q.db.Exec(ctx, setEmailVerificationCode, arg.ID, arg.EmailVerificationCode, arg.EmailVerificationExpires)
+	return err
+}
+
+const setPasswordResetAttempts = `-- name: SetPasswordResetAttempts :exec
+UPDATE users SET password_reset_attempts = $2, updated_at = now() WHERE id = $1
+`
+
+type SetPasswordResetAttemptsParams struct {
+	ID                    pgtype.UUID `db:"id" json:"id"`
+	PasswordResetAttempts int32       `db:"password_reset_attempts" json:"password_reset_attempts"`
+}
+
+func (q *Queries) SetPasswordResetAttempts(ctx context.Context, arg SetPasswordResetAttemptsParams) error {
+	_, err := q.db.Exec(ctx, setPasswordResetAttempts, arg.ID, arg.PasswordResetAttempts)
+	return err
+}
+
+const setPasswordResetCode = `-- name: SetPasswordResetCode :exec
+UPDATE users SET password_reset_code = $2, password_reset_expires = $3,
+  password_reset_attempts = $4, updated_at = now() WHERE id = $1
+`
+
+type SetPasswordResetCodeParams struct {
+	ID                    pgtype.UUID        `db:"id" json:"id"`
+	PasswordResetCode     *string            `db:"password_reset_code" json:"password_reset_code"`
+	PasswordResetExpires  pgtype.Timestamptz `db:"password_reset_expires" json:"password_reset_expires"`
+	PasswordResetAttempts int32              `db:"password_reset_attempts" json:"password_reset_attempts"`
+}
+
+func (q *Queries) SetPasswordResetCode(ctx context.Context, arg SetPasswordResetCodeParams) error {
+	_, err := q.db.Exec(ctx, setPasswordResetCode,
+		arg.ID,
+		arg.PasswordResetCode,
+		arg.PasswordResetExpires,
+		arg.PasswordResetAttempts,
+	)
+	return err
+}
+
 const updateUserPasswordHash = `-- name: UpdateUserPasswordHash :exec
 UPDATE users SET password_hash = $2, updated_at = now()
 WHERE id = $1
@@ -179,5 +347,27 @@ type UpdateUserPasswordHashParams struct {
 
 func (q *Queries) UpdateUserPasswordHash(ctx context.Context, arg UpdateUserPasswordHashParams) error {
 	_, err := q.db.Exec(ctx, updateUserPasswordHash, arg.ID, arg.PasswordHash)
+	return err
+}
+
+const updateUserVerification = `-- name: UpdateUserVerification :exec
+UPDATE users SET email_verified = $2, email_verification_code = $3,
+  email_verification_expires = $4, updated_at = now() WHERE id = $1
+`
+
+type UpdateUserVerificationParams struct {
+	ID                       pgtype.UUID        `db:"id" json:"id"`
+	EmailVerified            bool               `db:"email_verified" json:"email_verified"`
+	EmailVerificationCode    *string            `db:"email_verification_code" json:"email_verification_code"`
+	EmailVerificationExpires pgtype.Timestamptz `db:"email_verification_expires" json:"email_verification_expires"`
+}
+
+func (q *Queries) UpdateUserVerification(ctx context.Context, arg UpdateUserVerificationParams) error {
+	_, err := q.db.Exec(ctx, updateUserVerification,
+		arg.ID,
+		arg.EmailVerified,
+		arg.EmailVerificationCode,
+		arg.EmailVerificationExpires,
+	)
 	return err
 }
