@@ -3,6 +3,7 @@ package user
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -14,6 +15,13 @@ type pgQuerier interface {
 	GetAuthUserByEmail(ctx context.Context, email string) (sqlc.GetAuthUserByEmailRow, error)
 	GetAuthUserByID(ctx context.Context, id pgtype.UUID) (sqlc.GetAuthUserByIDRow, error)
 	UpdateUserPasswordHash(ctx context.Context, arg sqlc.UpdateUserPasswordHashParams) error
+	CreateUser(ctx context.Context, arg sqlc.CreateUserParams) (sqlc.CreateUserRow, error)
+	GetUserAuthState(ctx context.Context, email string) (sqlc.GetUserAuthStateRow, error)
+	UpdateUserVerification(ctx context.Context, arg sqlc.UpdateUserVerificationParams) error
+	SetEmailVerificationCode(ctx context.Context, arg sqlc.SetEmailVerificationCodeParams) error
+	SetPasswordResetCode(ctx context.Context, arg sqlc.SetPasswordResetCodeParams) error
+	SetPasswordResetAttempts(ctx context.Context, arg sqlc.SetPasswordResetAttemptsParams) error
+	ResetPasswordHash(ctx context.Context, arg sqlc.ResetPasswordHashParams) error
 }
 
 // PgRepo implements Repo over Postgres. The delete-cascade txn needs the
@@ -72,23 +80,137 @@ func (r *PgRepo) UpdatePasswordHash(ctx context.Context, id, hash string) error 
 	})
 }
 
-// Create / Update / FindBySocialId / AuthState are the Phase 1b write +
-// lifecycle methods. A3 replaces these stubs with real sqlc-backed impls;
-// they exist here only so *PgRepo satisfies Repo and the package builds.
+// Create inserts a new user. AuthProvider defaults to "local"; exactly one
+// social *_id column is set based on SocialProvider.
 func (r *PgRepo) Create(ctx context.Context, in NewUser) (User, error) {
-	panic("not implemented: A3")
+	ap := in.AuthProvider
+	if ap == "" {
+		ap = "local"
+	}
+	args := sqlc.CreateUserParams{
+		Email: in.Email, PasswordHash: ptr(in.PasswordHash), Name: in.Name,
+		AuthProvider: sqlc.UsersAuthProviderEnum(ap), AvatarUrl: ptr(in.AvatarURL),
+		EmailVerified:            in.EmailVerified,
+		EmailVerificationCode:    ptr(in.EmailVerificationCode),
+		EmailVerificationExpires: ts(in.EmailVerificationExpires),
+	}
+	switch in.SocialProvider {
+	case "google":
+		args.GoogleID = ptr(in.SocialID)
+	case "facebook":
+		args.FacebookID = ptr(in.SocialID)
+	case "tiktok":
+		args.TiktokID = ptr(in.SocialID)
+	case "apple":
+		args.AppleID = ptr(in.SocialID)
+	}
+	row, err := r.q.CreateUser(ctx, args)
+	if err != nil {
+		return User{}, err
+	}
+	return User{ID: uuidStr(row.ID), Email: row.Email, Name: row.Name,
+		AvatarURL: strOrEmpty(row.AvatarUrl), EmailVerified: row.EmailVerified}, nil
 }
 
+// Update applies a partial patch, dispatching to the narrowest sqlc query
+// that covers the set fields.
 func (r *PgRepo) Update(ctx context.Context, id string, p UserPatch) error {
-	panic("not implemented: A3")
+	uid, err := parseUUID(id)
+	if err != nil {
+		return ErrNotFound
+	}
+	switch {
+	case p.EmailVerified != nil && p.EmailVerificationCode.Set:
+		return r.q.UpdateUserVerification(ctx, sqlc.UpdateUserVerificationParams{
+			ID: uid, EmailVerified: *p.EmailVerified,
+			EmailVerificationCode:    p.EmailVerificationCode.Value,
+			EmailVerificationExpires: ts(p.EmailVerificationExpires.Value),
+		})
+	case p.EmailVerificationCode.Set:
+		return r.q.SetEmailVerificationCode(ctx, sqlc.SetEmailVerificationCodeParams{
+			ID: uid, EmailVerificationCode: p.EmailVerificationCode.Value,
+			EmailVerificationExpires: ts(p.EmailVerificationExpires.Value),
+		})
+	case p.PasswordResetCode.Set:
+		var att int32
+		if p.PasswordResetAttempts != nil {
+			att = int32(*p.PasswordResetAttempts)
+		}
+		return r.q.SetPasswordResetCode(ctx, sqlc.SetPasswordResetCodeParams{
+			ID: uid, PasswordResetCode: p.PasswordResetCode.Value,
+			PasswordResetExpires:  ts(p.PasswordResetExpires.Value),
+			PasswordResetAttempts: att,
+		})
+	case p.PasswordResetAttempts != nil:
+		return r.q.SetPasswordResetAttempts(ctx, sqlc.SetPasswordResetAttemptsParams{
+			ID: uid, PasswordResetAttempts: int32(*p.PasswordResetAttempts),
+		})
+	case p.PasswordHash != nil:
+		return r.q.ResetPasswordHash(ctx, sqlc.ResetPasswordHashParams{
+			ID: uid, PasswordHash: p.PasswordHash,
+		})
+	case p.SocialProvider != "":
+		return r.linkSocial(ctx, uid, p) // implemented in Part B
+	}
+	return nil
 }
 
+// FindBySocialId stays a panic stub until Part B (B1) implements it.
 func (r *PgRepo) FindBySocialId(ctx context.Context, provider, socialID string) (User, error) {
-	panic("not implemented: A3")
+	panic("not implemented: B1")
 }
 
+// linkSocial is a temporary stub; Part B (B1) implements social linking.
+func (r *PgRepo) linkSocial(ctx context.Context, uid pgtype.UUID, p UserPatch) error {
+	panic("not implemented: B1")
+}
+
+// AuthState reads the verification/reset projection for an email.
 func (r *PgRepo) AuthState(ctx context.Context, email string) (AuthState, error) {
-	panic("not implemented: A3")
+	row, err := r.q.GetUserAuthState(ctx, email)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return AuthState{}, ErrNotFound
+	}
+	if err != nil {
+		return AuthState{}, err
+	}
+	return AuthState{
+		ID: uuidStr(row.ID), Email: row.Email, Name: row.Name,
+		PasswordHash: strOrEmpty(row.PasswordHash), AuthProvider: string(row.AuthProvider),
+		IsActive: row.IsActive, EmailVerified: row.EmailVerified,
+		EmailVerificationCode:    strOrEmpty(row.EmailVerificationCode),
+		EmailVerificationExpires: tsValue(row.EmailVerificationExpires),
+		PasswordResetCode:        strOrEmpty(row.PasswordResetCode),
+		PasswordResetExpires:     tsValue(row.PasswordResetExpires),
+		PasswordResetAttempts:    int(row.PasswordResetAttempts),
+	}, nil
+}
+
+// ptr returns nil for "" (NULL column) else a pointer to s.
+func ptr(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+// ts maps a *time.Time to pgtype.Timestamptz (nil → NULL).
+func ts(t *time.Time) pgtype.Timestamptz {
+	var v pgtype.Timestamptz
+	if t != nil {
+		v.Time = *t
+		v.Valid = true
+	}
+	return v
+}
+
+// tsValue maps a pgtype.Timestamptz back to *time.Time (NULL → nil).
+func tsValue(v pgtype.Timestamptz) *time.Time {
+	if !v.Valid {
+		return nil
+	}
+	t := v.Time
+	return &t
 }
 
 func strOrEmpty(p *string) string {
