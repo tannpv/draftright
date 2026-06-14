@@ -83,6 +83,15 @@ type Querier interface {
 	// updated_at of the user's most-recently expired subscription (free-tier
 	// just_expired banner). No row → caller treats as nil.
 	GetLastExpiredAt(ctx context.Context, userID pgtype.UUID) (pgtype.Timestamp, error)
+	// internal/shared/pg/queries_payment.sql
+	// Payment persistence (read paths for Phase 3a). Table public.payments is
+	// owned by the live NestJS-managed schema; mirror PaymentService read
+	// semantics exactly. Timestamps are "without time zone".
+	// getStatus(referenceCode): the pending/settled payment plus the plan name the
+	// controller surfaces as plan_name. LEFT JOIN so a payment whose plan row was
+	// deleted still returns (plan_name NULL), matching TypeORM relations:['plan']
+	// with a possibly-null relation.
+	GetPaymentByReference(ctx context.Context, referenceCode string) (GetPaymentByReferenceRow, error)
 	GetUserAuthState(ctx context.Context, email string) (GetUserAuthStateRow, error)
 	// Phase 0 core-endpoint queries (health + /auth/me). Kept separate
 	// from the rewrite module's queries.sql so the core package depends on
@@ -111,6 +120,9 @@ type Querier interface {
 	// list(): active tokens for the user, newest first
 	// (TypeORM where:{user_id, revoked_at:IsNull()} order:{created_at:'DESC'}).
 	ListActiveTokens(ctx context.Context, userID pgtype.UUID) ([]ListActiveTokensRow, error)
+	// findByUser(userId): the user's 20 most-recent payments, newest first, each
+	// with its plan (TypeORM relations:['plan'] order:{created_at:'DESC'} take:20).
+	ListPaymentsByUser(ctx context.Context, userID pgtype.UUID) ([]ListPaymentsByUserRow, error)
 	ResetPasswordHash(ctx context.Context, arg ResetPasswordHashParams) error
 	// Extension-token persistence (dr_ext_* keyboard/share tokens).
 	// Read the live NestJS-owned schema as-is; mirror ExtensionTokenService
