@@ -91,3 +91,20 @@ LIMIT 1;
 INSERT INTO subscriptions (user_id, plan_id, status, store_type, started_at, expires_at)
 VALUES ($1, $2, 'active'::subscriptions_status_enum,
         'admin_granted'::subscriptions_store_type_enum, now(), null);
+
+-- name: IsEmailSuppressed :one
+-- Lowercased-email suppression check (bounce/complaint list).
+SELECT COUNT(*) > 0 FROM email_suppressions WHERE email = $1;
+
+-- name: InsertEmailLog :exec
+-- Audit row for every deliver attempt (suppressed/skipped/sent/failed).
+INSERT INTO email_logs (to_email, email_type, subject, status, provider_id, error)
+VALUES ($1, $2, $3, $4, $5, $6);
+
+-- name: GetEmailSettings :one
+-- app_settings creds: both columns are NOT NULL (default '').
+SELECT resend_api_key, email_from FROM app_settings LIMIT 1;
+
+-- name: GetEmailTemplateByKey :one
+-- DB template override. PK column is template_key (not key).
+SELECT subject, html FROM email_templates WHERE template_key = $1 LIMIT 1;

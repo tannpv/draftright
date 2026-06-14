@@ -260,6 +260,40 @@ func (q *Queries) GetAuthUserByID(ctx context.Context, id pgtype.UUID) (GetAuthU
 	return i, err
 }
 
+const getEmailSettings = `-- name: GetEmailSettings :one
+SELECT resend_api_key, email_from FROM app_settings LIMIT 1
+`
+
+type GetEmailSettingsRow struct {
+	ResendApiKey string `db:"resend_api_key" json:"resend_api_key"`
+	EmailFrom    string `db:"email_from" json:"email_from"`
+}
+
+// app_settings creds: both columns are NOT NULL (default ”).
+func (q *Queries) GetEmailSettings(ctx context.Context) (GetEmailSettingsRow, error) {
+	row := q.db.QueryRow(ctx, getEmailSettings)
+	var i GetEmailSettingsRow
+	err := row.Scan(&i.ResendApiKey, &i.EmailFrom)
+	return i, err
+}
+
+const getEmailTemplateByKey = `-- name: GetEmailTemplateByKey :one
+SELECT subject, html FROM email_templates WHERE template_key = $1 LIMIT 1
+`
+
+type GetEmailTemplateByKeyRow struct {
+	Subject string `db:"subject" json:"subject"`
+	Html    string `db:"html" json:"html"`
+}
+
+// DB template override. PK column is template_key (not key).
+func (q *Queries) GetEmailTemplateByKey(ctx context.Context, templateKey string) (GetEmailTemplateByKeyRow, error) {
+	row := q.db.QueryRow(ctx, getEmailTemplateByKey, templateKey)
+	var i GetEmailTemplateByKeyRow
+	err := row.Scan(&i.Subject, &i.Html)
+	return i, err
+}
+
 const getUserAuthState = `-- name: GetUserAuthState :one
 SELECT id, email, name, password_hash, auth_provider, is_active,
        email_verified, email_verification_code, email_verification_expires,
@@ -300,6 +334,45 @@ func (q *Queries) GetUserAuthState(ctx context.Context, email string) (GetUserAu
 		&i.PasswordResetAttempts,
 	)
 	return i, err
+}
+
+const insertEmailLog = `-- name: InsertEmailLog :exec
+INSERT INTO email_logs (to_email, email_type, subject, status, provider_id, error)
+VALUES ($1, $2, $3, $4, $5, $6)
+`
+
+type InsertEmailLogParams struct {
+	ToEmail    string  `db:"to_email" json:"to_email"`
+	EmailType  string  `db:"email_type" json:"email_type"`
+	Subject    string  `db:"subject" json:"subject"`
+	Status     string  `db:"status" json:"status"`
+	ProviderID *string `db:"provider_id" json:"provider_id"`
+	Error      *string `db:"error" json:"error"`
+}
+
+// Audit row for every deliver attempt (suppressed/skipped/sent/failed).
+func (q *Queries) InsertEmailLog(ctx context.Context, arg InsertEmailLogParams) error {
+	_, err := q.db.Exec(ctx, insertEmailLog,
+		arg.ToEmail,
+		arg.EmailType,
+		arg.Subject,
+		arg.Status,
+		arg.ProviderID,
+		arg.Error,
+	)
+	return err
+}
+
+const isEmailSuppressed = `-- name: IsEmailSuppressed :one
+SELECT COUNT(*) > 0 FROM email_suppressions WHERE email = $1
+`
+
+// Lowercased-email suppression check (bounce/complaint list).
+func (q *Queries) IsEmailSuppressed(ctx context.Context, email string) (bool, error) {
+	row := q.db.QueryRow(ctx, isEmailSuppressed, email)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const resetPasswordHash = `-- name: ResetPasswordHash :exec
