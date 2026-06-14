@@ -133,6 +133,7 @@ func main() {
 		ResendVerification: core.resendVerification,
 		ForgotPassword:     core.forgotPassword,
 		ResetPassword:      core.resetPassword,
+		Social:             core.social,
 		ChangePassword:     core.changePassword,
 		Account:            core.account,
 		DeleteAccount:      core.deleteAccount,
@@ -259,8 +260,9 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 			EnvAPIKey: cfg.ResendAPIKey,
 			EnvFrom:   cfg.EmailFrom,
 		})
+		socialVer := authpkg.NewHTTPSocialVerifier(cfg.AppleAudiences)
 		authSvc := authpkg.NewService(userSvc, subReader, usageCounter, ttlReader, cfg.JWTSecret, cfg.JWTRefreshSecret,
-			plansReader, subWriter, emailSvc, nil) // social verifier wired in B9
+			plansReader, subWriter, emailSvc, socialVer)
 		authHandler := authpkg.NewHandler(authSvc)
 		core.login = http.HandlerFunc(authHandler.Login)
 		core.refresh = http.HandlerFunc(authHandler.Refresh)
@@ -269,6 +271,7 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 		core.resendVerification = http.HandlerFunc(authHandler.ResendVerification)
 		core.forgotPassword = http.HandlerFunc(authHandler.ForgotPassword)
 		core.resetPassword = http.HandlerFunc(authHandler.ResetPassword)
+		core.social = http.HandlerFunc(authHandler.Social)
 		core.changePassword = http.HandlerFunc(authHandler.ChangePassword)
 		core.account = http.HandlerFunc(authHandler.Account)
 		core.deleteAccount = http.HandlerFunc(authHandler.DeleteAccount)
@@ -302,6 +305,7 @@ type coreHandlers struct {
 	resendVerification http.Handler // POST /auth/resend-verification
 	forgotPassword     http.Handler // POST /auth/forgot-password
 	resetPassword      http.Handler // POST /auth/reset-password
+	social             http.Handler // POST /auth/social
 
 	changePassword http.Handler // POST /auth/change-password (set when pool != nil)
 	account        http.Handler // GET /auth/account (set when pool != nil)

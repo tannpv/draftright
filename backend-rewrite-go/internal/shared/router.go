@@ -55,6 +55,7 @@ type Router struct {
 	ResendVerification http.Handler // POST /auth/resend-verification (public)
 	ForgotPassword     http.Handler // POST /auth/forgot-password (public)
 	ResetPassword      http.Handler // POST /auth/reset-password (public)
+	Social             http.Handler // POST /auth/social (public)
 
 	ChangePassword http.Handler // POST /auth/change-password (auth)
 	Account        http.Handler // GET /auth/account (auth)
@@ -126,6 +127,9 @@ func (r *Router) Build() http.Handler {
 	}
 	if r.ResetPassword != nil {
 		mux.Method(http.MethodPost, "/auth/reset-password", r.ResetPassword)
+	}
+	if r.Social != nil {
+		mux.Method(http.MethodPost, "/auth/social", r.Social)
 	}
 
 	mux.Group(func(api chi.Router) {
