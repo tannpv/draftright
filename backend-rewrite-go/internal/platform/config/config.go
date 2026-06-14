@@ -64,6 +64,18 @@ type Config struct {
 	// canonical local dev value.
 	OllamaURL string
 
+	// Resend transactional-email creds. Empty key = email disabled
+	// (sends are logged + skipped, never error the request). Mirrors
+	// the NestJS RESEND_API_KEY / EMAIL_FROM; app_settings overrides
+	// both at request time (admin portal).
+	ResendAPIKey string
+	EmailFrom    string
+
+	// APPLE_AUDIENCES — comma-separated allowed `aud` values for Apple
+	// id_token verification. Empty → the two-app default applied in the
+	// verifier. Mirrors the NestJS APPLE_AUDIENCES.
+	AppleAudiences string
+
 	// AIProviders is an ordered, comma-separated provider priority
 	// list — used by the failover chain in composeDeps. Example:
 	//   AI_PROVIDERS=openai,anthropic,ollama
@@ -113,6 +125,9 @@ func Load() (*Config, error) {
 		AnthropicProviderID:  os.Getenv("ANTHROPIC_PROVIDER_ID"),
 		OllamaProviderID:     os.Getenv("OLLAMA_PROVIDER_ID"),
 		OllamaURL:            os.Getenv("OLLAMA_URL"),
+		ResendAPIKey:         os.Getenv("RESEND_API_KEY"),
+		EmailFrom:            os.Getenv("EMAIL_FROM"),
+		AppleAudiences:       os.Getenv("APPLE_AUDIENCES"),
 		AIProviders:          os.Getenv("AI_PROVIDERS"),
 		GoBackendRampPercent: envInt("GO_BACKEND_RAMP_PERCENT", 0),
 		AppEnv:               envOr("APP_ENV", "development"),
