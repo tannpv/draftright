@@ -1,0 +1,8 @@
+{
+  "name": "ext-list",
+  "method": "GET",
+  "path": "/auth/extension-tokens",
+  "headers": { "Authorization": "Bearer REPLACE_WITH_DEV_NODE_TOKEN" },
+  "ignore_value_of": ["request_id", "id", "created_at", "last_used_at"],
+  "_note": "Authed. Top-level JSON array of active tokens (revoked_at IS NULL), each row = {id, scopes, device_id, device_name, created_at, last_used_at, revoked_at} with token_hash + user_id stripped by the controller. Per-row id/created_at/last_used_at are non-deterministic → ignored (checked present+non-empty in EACH element by the recursive comparator). revoked_at is NOT ignored: it is null on every active row, so a plain null==null compare passes — and it MUST stay un-ignored because the ignored-key path requires present+non-empty, which a null value would false-fail. Deterministic per row: scopes=['rewrite'], device_id, device_name, revoked_at=null. ORDER BY created_at DESC — if the operator minted exactly one token (ext_mint) the array has length 1 and ordering is moot; for a stable multi-row compare seed devices in a fixed order."
+}
