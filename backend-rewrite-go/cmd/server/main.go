@@ -279,7 +279,7 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 		core.changePassword = http.HandlerFunc(authHandler.ChangePassword)
 		core.account = http.HandlerFunc(authHandler.Account)
 		core.deleteAccount = http.HandlerFunc(authHandler.DeleteAccount)
-		subHandler := subpkg.NewHandler(subpkg.NewService(subReader, usageCounter))
+		subHandler := subpkg.NewHandler(subpkg.NewService(subReader, usageCounter, plansReader))
 		core.subscription = http.HandlerFunc(subHandler.Get)
 		core.verifyReceipt = http.HandlerFunc(subHandler.VerifyReceipt)
 	} else {

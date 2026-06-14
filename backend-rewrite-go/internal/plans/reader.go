@@ -4,8 +4,10 @@ package plans
 
 import (
 	"context"
+	"errors"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	sqlc "github.com/tannpv/draftright-rewrite/internal/shared/pg/sqlc"
 )
@@ -40,6 +42,22 @@ func (r *Reader) FindFreePlan(ctx context.Context) (Plan, error) {
 	// row.ID.String() == user.uuidStr: canonical lowercase hyphenated UUID,
 	// round-trips through pgtype.UUID.Scan (subscription.CreateFree reparses it).
 	return Plan{ID: row.ID.String(), Name: row.Name, DailyLimit: int(row.DailyLimit)}, nil
+}
+
+// FreePlanDailyLimit returns the Free plan's daily_limit (Node:
+// findFreePlan().daily_limit). found=false when the Free plan row is
+// missing (pgx.ErrNoRows) so the caller degrades to its own floor
+// rather than 500ing — mirrors Node's try/catch in resolveEntitlement.
+// Satisfies subscription.FreePlanReader structurally (no import either way).
+func (r *Reader) FreePlanDailyLimit(ctx context.Context) (int, bool, error) {
+	row, err := r.q.FindFreePlan(ctx)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, false, nil
+		}
+		return 0, false, err
+	}
+	return int(row.DailyLimit), true, nil
 }
 
 // ListActive returns every active plan, cheapest first, as raw entities
