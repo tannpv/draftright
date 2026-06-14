@@ -272,6 +272,40 @@ func (q *Queries) FindUserByTiktokId(ctx context.Context, tiktokID *string) (Fin
 	return i, err
 }
 
+const getActiveSubWithPlan = `-- name: GetActiveSubWithPlan :one
+SELECT s.status, s.expires_at,
+       p.name AS plan_name, p.daily_limit, p.billing_period
+FROM subscriptions s
+JOIN plans p ON p.id = s.plan_id
+WHERE s.user_id = $1 AND s.status = 'active'::subscriptions_status_enum
+ORDER BY s.created_at DESC
+LIMIT 1
+`
+
+type GetActiveSubWithPlanRow struct {
+	Status        SubscriptionsStatusEnum `db:"status" json:"status"`
+	ExpiresAt     pgtype.Timestamp        `db:"expires_at" json:"expires_at"`
+	PlanName      string                  `db:"plan_name" json:"plan_name"`
+	DailyLimit    int32                   `db:"daily_limit" json:"daily_limit"`
+	BillingPeriod PlansBillingPeriodEnum  `db:"billing_period" json:"billing_period"`
+}
+
+// GET /subscription: newest active sub + plan fields incl billing_period.
+// Distinct from GetActiveSubscriptionByUserID (which omits billing_period
+// and is pinned for /auth/account).
+func (q *Queries) GetActiveSubWithPlan(ctx context.Context, userID pgtype.UUID) (GetActiveSubWithPlanRow, error) {
+	row := q.db.QueryRow(ctx, getActiveSubWithPlan, userID)
+	var i GetActiveSubWithPlanRow
+	err := row.Scan(
+		&i.Status,
+		&i.ExpiresAt,
+		&i.PlanName,
+		&i.DailyLimit,
+		&i.BillingPeriod,
+	)
+	return i, err
+}
+
 const getActiveSubscriptionByUserID = `-- name: GetActiveSubscriptionByUserID :one
 SELECT s.status, s.store_type, s.started_at, s.expires_at,
        p.name AS plan_name, p.daily_limit
@@ -440,6 +474,22 @@ func (q *Queries) GetEmailTemplateByKey(ctx context.Context, templateKey string)
 	var i GetEmailTemplateByKeyRow
 	err := row.Scan(&i.Subject, &i.Html)
 	return i, err
+}
+
+const getLastExpiredAt = `-- name: GetLastExpiredAt :one
+SELECT updated_at FROM subscriptions
+WHERE user_id = $1 AND status = 'expired'::subscriptions_status_enum
+ORDER BY updated_at DESC
+LIMIT 1
+`
+
+// updated_at of the user's most-recently expired subscription (free-tier
+// just_expired banner). No row → caller treats as nil.
+func (q *Queries) GetLastExpiredAt(ctx context.Context, userID pgtype.UUID) (pgtype.Timestamp, error) {
+	row := q.db.QueryRow(ctx, getLastExpiredAt, userID)
+	var updated_at pgtype.Timestamp
+	err := row.Scan(&updated_at)
+	return updated_at, err
 }
 
 const getUserAuthState = `-- name: GetUserAuthState :one

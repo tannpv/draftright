@@ -34,6 +34,26 @@ WHERE s.user_id = $1 AND s.status = 'active'::subscriptions_status_enum
 ORDER BY s.created_at DESC
 LIMIT 1;
 
+-- name: GetActiveSubWithPlan :one
+-- GET /subscription: newest active sub + plan fields incl billing_period.
+-- Distinct from GetActiveSubscriptionByUserID (which omits billing_period
+-- and is pinned for /auth/account).
+SELECT s.status, s.expires_at,
+       p.name AS plan_name, p.daily_limit, p.billing_period
+FROM subscriptions s
+JOIN plans p ON p.id = s.plan_id
+WHERE s.user_id = $1 AND s.status = 'active'::subscriptions_status_enum
+ORDER BY s.created_at DESC
+LIMIT 1;
+
+-- name: GetLastExpiredAt :one
+-- updated_at of the user's most-recently expired subscription (free-tier
+-- just_expired banner). No row → caller treats as nil.
+SELECT updated_at FROM subscriptions
+WHERE user_id = $1 AND status = 'expired'::subscriptions_status_enum
+ORDER BY updated_at DESC
+LIMIT 1;
+
 -- name: CountUsageToday :one
 -- Mirrors usageService.countTodayByUser: rows since local midnight.
 -- The caller passes the midnight boundary so timezone handling matches

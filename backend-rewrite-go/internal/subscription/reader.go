@@ -24,9 +24,11 @@ type AccountSub struct {
 	DailyLimit int
 }
 
-// Querier is the one-method sqlc subset.
+// Querier is the sqlc subset this reader needs.
 type Querier interface {
 	GetActiveSubscriptionByUserID(ctx context.Context, id pgtype.UUID) (sqlc.GetActiveSubscriptionByUserIDRow, error)
+	GetActiveSubWithPlan(ctx context.Context, userID pgtype.UUID) (sqlc.GetActiveSubWithPlanRow, error)
+	GetLastExpiredAt(ctx context.Context, userID pgtype.UUID) (pgtype.Timestamp, error)
 }
 
 // Reader resolves the active subscription.
@@ -61,4 +63,59 @@ func (r *Reader) ActiveByUser(ctx context.Context, userID string) (*AccountSub, 
 		s.ExpiresAt = &t
 	}
 	return s, nil
+}
+
+// SubView is the active-sub projection GET /subscription needs.
+type SubView struct {
+	Status        string
+	ExpiresAt     *time.Time
+	PlanName      string
+	DailyLimit    int
+	BillingPeriod string
+}
+
+// ActiveWithPlan returns the newest active sub + plan, or (nil,nil) when none.
+func (r *Reader) ActiveWithPlan(ctx context.Context, userID string) (*SubView, error) {
+	var uid pgtype.UUID
+	if err := uid.Scan(userID); err != nil {
+		return nil, nil
+	}
+	row, err := r.q.GetActiveSubWithPlan(ctx, uid)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	v := &SubView{
+		Status:        string(row.Status),
+		PlanName:      row.PlanName,
+		DailyLimit:    int(row.DailyLimit),
+		BillingPeriod: string(row.BillingPeriod),
+	}
+	if row.ExpiresAt.Valid {
+		t := row.ExpiresAt.Time
+		v.ExpiresAt = &t
+	}
+	return v, nil
+}
+
+// LastExpiredAt returns updated_at of the newest expired sub, or (nil,nil).
+func (r *Reader) LastExpiredAt(ctx context.Context, userID string) (*time.Time, error) {
+	var uid pgtype.UUID
+	if err := uid.Scan(userID); err != nil {
+		return nil, nil
+	}
+	ts, err := r.q.GetLastExpiredAt(ctx, uid)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if !ts.Valid {
+		return nil, nil
+	}
+	t := ts.Time
+	return &t, nil
 }

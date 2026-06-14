@@ -48,6 +48,10 @@ type Querier interface {
 	// Filter on subscriptions.status = 'active' so cancelled subs don't
 	// still grant their old plan.
 	FindUserWithPlan(ctx context.Context, id pgtype.UUID) (FindUserWithPlanRow, error)
+	// GET /subscription: newest active sub + plan fields incl billing_period.
+	// Distinct from GetActiveSubscriptionByUserID (which omits billing_period
+	// and is pinned for /auth/account).
+	GetActiveSubWithPlan(ctx context.Context, userID pgtype.UUID) (GetActiveSubWithPlanRow, error)
 	// Mirrors subscriptionsService.findActiveByUserId: newest ACTIVE
 	// subscription for the user, joined to its plan. ORDER BY created_at
 	// DESC + LIMIT 1 reproduces TypeORM order:{created_at:'DESC'} findOne.
@@ -70,6 +74,9 @@ type Querier interface {
 	GetEmailSettings(ctx context.Context) (GetEmailSettingsRow, error)
 	// DB template override. PK column is template_key (not key).
 	GetEmailTemplateByKey(ctx context.Context, templateKey string) (GetEmailTemplateByKeyRow, error)
+	// updated_at of the user's most-recently expired subscription (free-tier
+	// just_expired banner). No row → caller treats as nil.
+	GetLastExpiredAt(ctx context.Context, userID pgtype.UUID) (pgtype.Timestamp, error)
 	GetUserAuthState(ctx context.Context, email string) (GetUserAuthStateRow, error)
 	// Phase 0 core-endpoint queries (health + /auth/me). Kept separate
 	// from the rewrite module's queries.sql so the core package depends on
