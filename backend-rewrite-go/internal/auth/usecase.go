@@ -7,6 +7,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/tannpv/draftright-rewrite/internal/plans"
@@ -271,7 +272,67 @@ func (s *Service) Account(ctx context.Context, userID string) (*AccountView, err
 	return view, nil
 }
 
+// RegisterResult is register's return — tokens + the trimmed user with
+// the literal email_verified:false (Node returns the literal, not the col).
+type RegisterResult struct {
+	Tokens
+	User RegisterUser
+}
+
+// RegisterUser is the trimmed user echoed by register.
+type RegisterUser struct {
+	ID            string
+	Email         string
+	Name          string
+	EmailVerified bool
+}
+
+// Register ports auth.service.register exactly (order matters): reject
+// duplicate email (409), hash, create with a 6-digit verification code,
+// grant the free plan + free sub, fire-and-forget the verification email
+// (after the sub, before tokens), then mint tokens.
+func (s *Service) Register(ctx context.Context, email, password, name string) (RegisterResult, error) {
+	norm := normalizeEmail(email)
+	if _, err := s.users.ByEmail(ctx, norm); err == nil {
+		return RegisterResult{}, conflict(msgEmailRegistered)
+	} else if !errors.Is(err, user.ErrNotFound) {
+		return RegisterResult{}, err
+	}
+	hash, err := shared.HashPassword(password)
+	if err != nil {
+		return RegisterResult{}, err
+	}
+	code := generateCode()
+	expires := nowUTC().Add(emailCodeTTL)
+	u, err := s.users.Create(ctx, user.NewUser{
+		Email: norm, PasswordHash: hash, Name: name,
+		EmailVerificationCode: code, EmailVerificationExpires: &expires,
+	})
+	if err != nil {
+		return RegisterResult{}, err
+	}
+	free, err := s.plans.FindFreePlan(ctx)
+	if err != nil {
+		return RegisterResult{}, err
+	}
+	if err := s.subWriter.CreateFree(ctx, u.ID, free.ID); err != nil {
+		return RegisterResult{}, err
+	}
+	s.email.SendVerification(ctx, norm, name, code) // fire-and-forget
+	toks, err := s.generateTokens(ctx, u)
+	if err != nil {
+		return RegisterResult{}, err
+	}
+	return RegisterResult{Tokens: toks, User: RegisterUser{
+		ID: u.ID, Email: u.Email, Name: u.Name, EmailVerified: false,
+	}}, nil
+}
+
 // DeleteAccount ports the cascade delete.
 func (s *Service) DeleteAccount(ctx context.Context, userID string) error {
 	return s.users.DeleteAccount(ctx, userID)
 }
+
+func normalizeEmail(e string) string { return strings.ToLower(strings.TrimSpace(e)) }
+
+func nowUTC() time.Time { return time.Now().UTC() }

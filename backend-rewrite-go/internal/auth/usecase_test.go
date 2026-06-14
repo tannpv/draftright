@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -14,30 +15,38 @@ import (
 type stubUsers struct {
 	byEmail map[string]user.User
 	byID    map[string]user.User
+	created bool
+	lastNew user.NewUser
 }
 
-func (s stubUsers) ByEmail(_ context.Context, e string) (user.User, error) {
+func newStubUsers() *stubUsers { return &stubUsers{byEmail: map[string]user.User{}} }
+
+func (s *stubUsers) ByEmail(_ context.Context, e string) (user.User, error) {
 	u, ok := s.byEmail[e]
 	if !ok {
 		return user.User{}, user.ErrNotFound
 	}
 	return u, nil
 }
-func (s stubUsers) ByID(_ context.Context, id string) (user.User, error) {
+func (s *stubUsers) ByID(_ context.Context, id string) (user.User, error) {
 	u, ok := s.byID[id]
 	if !ok {
 		return user.User{}, user.ErrNotFound
 	}
 	return u, nil
 }
-func (s stubUsers) UpdatePasswordHash(context.Context, string, string) error { return nil }
-func (s stubUsers) DeleteAccount(context.Context, string) error              { return nil }
-func (s stubUsers) Create(context.Context, user.NewUser) (user.User, error)  { return user.User{}, nil }
-func (s stubUsers) Update(context.Context, string, user.UserPatch) error     { return nil }
-func (s stubUsers) FindBySocialId(context.Context, string, string) (user.User, error) {
+func (s *stubUsers) UpdatePasswordHash(context.Context, string, string) error { return nil }
+func (s *stubUsers) DeleteAccount(context.Context, string) error              { return nil }
+func (s *stubUsers) Create(_ context.Context, in user.NewUser) (user.User, error) {
+	s.created = true
+	s.lastNew = in
+	return user.User{ID: "new", Email: in.Email, Name: in.Name}, nil
+}
+func (s *stubUsers) Update(context.Context, string, user.UserPatch) error { return nil }
+func (s *stubUsers) FindBySocialId(context.Context, string, string) (user.User, error) {
 	return user.User{}, user.ErrNotFound
 }
-func (s stubUsers) AuthState(context.Context, string) (user.AuthState, error) {
+func (s *stubUsers) AuthState(context.Context, string) (user.AuthState, error) {
 	return user.AuthState{}, user.ErrNotFound
 }
 
@@ -87,7 +96,7 @@ func (u stubUsage) CountToday(context.Context, string) (int, error) { return u.n
 func TestLogin_HappyPath(t *testing.T) {
 	hash, _ := shared.HashPassword("pw123")
 	u := user.User{ID: "u1", Email: "a@b.com", Name: "Al", Role: "user", IsActive: true, PasswordHash: hash}
-	svc := newSvc(t, stubUsers{byEmail: map[string]user.User{"a@b.com": u}})
+	svc := newSvc(t, &stubUsers{byEmail: map[string]user.User{"a@b.com": u}})
 
 	res, err := svc.Login(context.Background(), "a@b.com", "pw123")
 	if err != nil {
@@ -102,21 +111,21 @@ func TestLogin_HappyPath(t *testing.T) {
 }
 
 func TestLogin_UnknownEmail(t *testing.T) {
-	svc := newSvc(t, stubUsers{byEmail: map[string]user.User{}})
+	svc := newSvc(t, &stubUsers{byEmail: map[string]user.User{}})
 	_, err := svc.Login(context.Background(), "no@b.com", "x")
 	assertAuthErr(t, err, msgInvalidCredentials)
 }
 
 func TestLogin_SocialOnlyAccount(t *testing.T) {
 	u := user.User{ID: "u1", Email: "g@b.com", IsActive: true, AuthProvider: "google"} // no PasswordHash
-	svc := newSvc(t, stubUsers{byEmail: map[string]user.User{"g@b.com": u}})
+	svc := newSvc(t, &stubUsers{byEmail: map[string]user.User{"g@b.com": u}})
 	_, err := svc.Login(context.Background(), "g@b.com", "x")
 	assertAuthErr(t, err, "This account was created with Google. Use the Google button to sign in.")
 }
 
 func TestLogin_SocialOnlyTikTok(t *testing.T) {
 	u := user.User{ID: "u1", Email: "t@b.com", IsActive: true, AuthProvider: "tiktok"} // no PasswordHash
-	svc := newSvc(t, stubUsers{byEmail: map[string]user.User{"t@b.com": u}})
+	svc := newSvc(t, &stubUsers{byEmail: map[string]user.User{"t@b.com": u}})
 	_, err := svc.Login(context.Background(), "t@b.com", "x")
 	assertAuthErr(t, err, "This account was created with TikTok. Use the TikTok button to sign in.")
 }
@@ -124,7 +133,7 @@ func TestLogin_SocialOnlyTikTok(t *testing.T) {
 func TestLogin_WrongPassword(t *testing.T) {
 	hash, _ := shared.HashPassword("right")
 	u := user.User{ID: "u1", Email: "a@b.com", IsActive: true, PasswordHash: hash}
-	svc := newSvc(t, stubUsers{byEmail: map[string]user.User{"a@b.com": u}})
+	svc := newSvc(t, &stubUsers{byEmail: map[string]user.User{"a@b.com": u}})
 	_, err := svc.Login(context.Background(), "a@b.com", "wrong")
 	assertAuthErr(t, err, msgInvalidCredentials)
 }
@@ -132,9 +141,20 @@ func TestLogin_WrongPassword(t *testing.T) {
 func TestLogin_Disabled(t *testing.T) {
 	hash, _ := shared.HashPassword("pw")
 	u := user.User{ID: "u1", Email: "a@b.com", IsActive: false, PasswordHash: hash}
-	svc := newSvc(t, stubUsers{byEmail: map[string]user.User{"a@b.com": u}})
+	svc := newSvc(t, &stubUsers{byEmail: map[string]user.User{"a@b.com": u}})
 	_, err := svc.Login(context.Background(), "a@b.com", "pw")
 	assertAuthErr(t, err, msgAccountDisabled)
+}
+
+func assertConflict(t *testing.T, err error, wantMsg string) {
+	t.Helper()
+	var ce *ConflictError
+	if !errors.As(err, &ce) {
+		t.Fatalf("want *ConflictError, got %T: %v", err, err)
+	}
+	if ce.Message != wantMsg {
+		t.Fatalf("msg = %q, want %q", ce.Message, wantMsg)
+	}
 }
 
 func assertAuthErr(t *testing.T, err error, wantMsg string) {
