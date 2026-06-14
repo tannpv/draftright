@@ -24,6 +24,7 @@ type Querier interface {
 	// the Node process (new Date(); setHours(0,0,0,0)).
 	CountUsageToday(ctx context.Context, arg CountUsageTodayParams) (int64, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
+	FindFreePlan(ctx context.Context) (FindFreePlanRow, error)
 	// Queries for the /rewrite microservice's Postgres adapter.
 	// sqlc compiles these against schema.sql at build time; mistakes are
 	// caught BEFORE the service ever boots (Rule #1 — compile-time over

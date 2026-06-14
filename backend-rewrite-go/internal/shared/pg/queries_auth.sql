@@ -81,3 +81,8 @@ UPDATE users SET password_reset_attempts = $2, updated_at = now() WHERE id = $1;
 UPDATE users SET password_hash = $2, password_reset_code = null,
   password_reset_expires = null, password_reset_attempts = 0,
   updated_at = now() WHERE id = $1;
+
+-- name: FindFreePlan :one
+SELECT id, name, daily_limit FROM plans
+WHERE billing_period = 'none'::plans_billing_period_enum AND is_active = true
+LIMIT 1;

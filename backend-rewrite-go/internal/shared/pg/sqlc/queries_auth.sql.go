@@ -89,6 +89,25 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateU
 	return i, err
 }
 
+const findFreePlan = `-- name: FindFreePlan :one
+SELECT id, name, daily_limit FROM plans
+WHERE billing_period = 'none'::plans_billing_period_enum AND is_active = true
+LIMIT 1
+`
+
+type FindFreePlanRow struct {
+	ID         pgtype.UUID `db:"id" json:"id"`
+	Name       string      `db:"name" json:"name"`
+	DailyLimit int32       `db:"daily_limit" json:"daily_limit"`
+}
+
+func (q *Queries) FindFreePlan(ctx context.Context) (FindFreePlanRow, error) {
+	row := q.db.QueryRow(ctx, findFreePlan)
+	var i FindFreePlanRow
+	err := row.Scan(&i.ID, &i.Name, &i.DailyLimit)
+	return i, err
+}
+
 const getActiveSubscriptionByUserID = `-- name: GetActiveSubscriptionByUserID :one
 SELECT s.status, s.store_type, s.started_at, s.expires_at,
        p.name AS plan_name, p.daily_limit
