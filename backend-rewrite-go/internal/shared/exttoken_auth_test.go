@@ -198,10 +198,13 @@ func TestExtOrJWT_MalformedHeader_MissingBearerToken(t *testing.T) {
 	require.False(t, jwt.ran)
 }
 
-//  5. ExtVerifier nil + dr_ext_ token → rejected as invalid extension
-//     token (no service to verify against). JWT NOT invoked (a dr_ext_
-//     opaque string is never a valid JWT).
-func TestExtOrJWT_NilExt_ExtTokenRejected(t *testing.T) {
+//  5. ExtVerifier nil + dr_ext_ token → no ext service wired, so the
+//     dr_ext_ prefix branch is skipped (the `ext != nil` guard). The
+//     token falls through to the JWT path UNCHANGED, matching Node's
+//     super.canActivate fallthrough. The real JWT middleware would 401
+//     "Unauthorized" against the opaque string; here the fake JWT mw
+//     simply records that it ran.
+func TestExtOrJWT_NilExt_ExtTokenFallsThroughToJWT(t *testing.T) {
 	jwt := &recordingJWT{}
 	next := &sentinelNext{}
 
@@ -209,11 +212,64 @@ func TestExtOrJWT_NilExt_ExtTokenRejected(t *testing.T) {
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, newReq("Bearer dr_ext_whatever"))
 
-	require.Equal(t, stdhttp.StatusUnauthorized, rec.Code)
-	env := decodeEnvelope(t, rec.Body.Bytes())
-	require.Equal(t, "Invalid extension token", env["error"])
+	require.True(t, jwt.ran, "JWT path must run when ext is nil (prefix branch skipped)")
+	require.True(t, next.ran)
+}
+
+//  6. "Bearer " with an EMPTY token after the scheme → Node does NOT
+//     throw "Missing bearer token" (the header DOES start with
+//     "Bearer "); the empty slice is not a dr_ext_ token, so it falls
+//     through to super.canActivate (JwtAuthGuard) which 401s
+//     "Unauthorized". Parity: ext NOT called, JWT path runs.
+func TestExtOrJWT_EmptyTokenAfterBearer_FallsThroughToJWT(t *testing.T) {
+	ext := &fakeExt{}
+	jwt := &recordingJWT{}
+	next := &sentinelNext{}
+
+	h := shared.ExtOrJWT(ext, jwt.mw, slog.Default())(next)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, newReq("Bearer "))
+
+	require.False(t, ext.called, "ext must NOT be called for an empty token")
+	require.True(t, jwt.ran, "JWT path must run for an empty token (not 'Missing bearer token')")
+	require.True(t, next.ran)
+}
+
+//  7. "Bearer    " — only spaces after the scheme. The remainder is a
+//     non-empty whitespace string, not a dr_ext_ prefix → ext NOT
+//     called, JWT path runs. (Node never trims; the whitespace slice is
+//     handed to JwtAuthGuard.)
+func TestExtOrJWT_WhitespaceTokenAfterBearer_FallsThroughToJWT(t *testing.T) {
+	ext := &fakeExt{}
+	jwt := &recordingJWT{}
+	next := &sentinelNext{}
+
+	h := shared.ExtOrJWT(ext, jwt.mw, slog.Default())(next)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, newReq("Bearer    "))
+
+	require.False(t, ext.called, "ext must NOT be called for a whitespace-only token")
+	require.True(t, jwt.ran, "JWT path must run for a whitespace-only token")
+	require.True(t, next.ran)
+}
+
+//  8. Trailing-whitespace ext token "Bearer dr_ext_abc " → the verifier
+//     must receive the RAW remainder INCLUDING the trailing space
+//     ("dr_ext_abc "), matching Node's header.slice(7) which is hashed
+//     verbatim. NO TrimSpace.
+func TestExtOrJWT_ExtTokenTrailingSpace_PassedRawToVerifier(t *testing.T) {
+	ext := &fakeExt{uid: "user-9"}
+	jwt := &recordingJWT{}
+	next := &sentinelNext{}
+
+	h := shared.ExtOrJWT(ext, jwt.mw, slog.Default())(next)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, newReq("Bearer dr_ext_abc "))
+
+	require.True(t, ext.called, "ext.Verify must be called for a dr_ext_ token")
+	require.Equal(t, "dr_ext_abc ", ext.gotRaw, "verifier must receive the RAW remainder, trailing space intact")
+	require.True(t, next.ran)
 	require.False(t, jwt.ran)
-	require.False(t, next.ran)
 }
 
 // 5b. ExtVerifier nil + JWT token → falls through to JWT path unchanged.

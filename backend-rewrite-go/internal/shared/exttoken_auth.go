@@ -18,6 +18,20 @@ import (
 // exttoken.TokenPrefix; a domain_test in exttoken pins that value.
 const extTokenPrefix = "dr_ext_"
 
+// bearerScheme is the exact prefix Node's RewriteAuthGuard tests for
+// (`header.startsWith('Bearer ')`) and slices off (`header.slice(7)`).
+// Keep the trailing space — the raw remainder after it is hashed by the
+// ext verifier verbatim, so trimming here would diverge from Node.
+const bearerScheme = "Bearer "
+
+// missingBearerMsg mirrors exttoken.ErrMissingToken.Error() ==
+// "Missing bearer token". Declared locally because shared must never
+// import exttoken (import cycle). Node throws this verbatim from
+// RewriteAuthGuard when the header is absent or not a Bearer header,
+// BEFORE the ext/JWT split — so it is produced here, not delegated to
+// the JWT middleware (which would emit the generic "Unauthorized").
+const missingBearerMsg = "Missing bearer token"
+
 // ExtVerifier is the consumer-side port for extension-token
 // verification. Satisfied structurally by *exttoken.Service.Verify.
 // The returned error's Error() string is surfaced verbatim as the 401
@@ -31,21 +45,29 @@ type ExtVerifier interface {
 // ExtOrJWT guards /v1/rewrite with dual auth, mirroring Node's
 // RewriteAuthGuard exactly:
 //
-//  1. No "Bearer <token>" header → 401 "Missing bearer token". Node
-//     throws this from the guard itself BEFORE the ext/JWT split, so it
-//     is reproduced here (NOT delegated to the JWT middleware, which
-//     would emit the generic "Unauthorized"). When ext is non-nil this
-//     comes back as the verifier's ErrMissingToken (raw == ""); when
-//     ext is nil we emit the same message inline so the two mounts agree.
-//  2. Token prefixed dr_ext_ → verified as an extension token; on
-//     success the resolved owner is injected as auth.Claims{Sub: uid}
-//     under the same context key RequireAuth uses, so the rewrite
-//     handler is agnostic to which path authenticated. On failure the
-//     verifier's sentinel message is surfaced as a 401.
-//  3. Any other (JWT) token → delegated UNCHANGED to the jwt middleware
-//     (the RequireAuth-wrapped handler), preserving byte-identical JWT
-//     behavior — including its "Unauthorized" message on a bad/expired
-//     token.
+//  1. Header missing OR not prefixed "Bearer " → 401 "Missing bearer
+//     token". Node throws this from the guard itself BEFORE the ext/JWT
+//     split, so it is reproduced here (NOT delegated to the JWT
+//     middleware, which would emit the generic "Unauthorized"). The
+//     decision keys on the RAW header exactly like
+//     `header.startsWith('Bearer ')`.
+//  2. token := header[len("Bearer "):] — the RAW remainder, matching
+//     `header.slice('Bearer '.length)`. NO TrimSpace: a trailing-space
+//     ext token must reach the verifier with the space intact so its
+//     hash matches Node's (which hashes the raw slice).
+//  3. token prefixed dr_ext_ (and ext wired) → verified as an extension
+//     token; on success the resolved owner is injected as
+//     auth.Claims{Sub: uid} under the same context key RequireAuth
+//     uses, so the rewrite handler is agnostic to which path
+//     authenticated. On failure the verifier's sentinel message is
+//     surfaced as a 401.
+//  4. Any other token — INCLUDING empty "" or whitespace-only, or a
+//     dr_ext_ token when ext is nil — is delegated UNCHANGED to the jwt
+//     middleware (the RequireAuth-wrapped handler), preserving
+//     byte-identical JWT behavior: it 401s "Unauthorized" on a
+//     bad/empty/blank token. This mirrors Node's `super.canActivate`
+//     fallthrough, where an empty token after "Bearer " is handed to
+//     JwtAuthGuard and rejected as "Unauthorized".
 //
 // jwt is the already-built RequireAuth middleware value applied to next.
 func ExtOrJWT(ext ExtVerifier, jwt func(http.Handler) http.Handler, log *slog.Logger) func(http.Handler) http.Handler {
@@ -53,25 +75,19 @@ func ExtOrJWT(ext ExtVerifier, jwt func(http.Handler) http.Handler, log *slog.Lo
 		// The unchanged RequireAuth-wrapped handler for the JWT branch.
 		jwtPath := jwt(next)
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			raw, ok := extractBearer(r.Header.Get("Authorization"))
-			if !ok {
+			header := r.Header.Get("Authorization")
+			if !strings.HasPrefix(header, bearerScheme) {
 				// Node: no/!Bearer header → UnauthorizedException
 				// ('Missing bearer token'). code = inferCode(401) =
 				// invalid-token. Match it verbatim.
-				WriteError(w, r, "invalid-token", "Missing bearer token")
+				WriteError(w, r, "invalid-token", missingBearerMsg)
 				return
 			}
-			if strings.HasPrefix(raw, extTokenPrefix) {
-				if ext == nil {
-					// A dr_ext_ token arrived but no extension service is
-					// wired (no DB). Node would always have the service;
-					// the closest parity is to reject as an invalid
-					// extension token rather than try JWT (a dr_ext_
-					// opaque string is never a valid JWT).
-					WriteError(w, r, "invalid-token", "Invalid extension token")
-					return
-				}
-				uid, err := ext.Verify(r.Context(), raw)
+			// RAW remainder after "Bearer " — matches header.slice(7).
+			// Intentionally NOT trimmed (see bearerScheme doc).
+			token := header[len(bearerScheme):]
+			if ext != nil && strings.HasPrefix(token, extTokenPrefix) {
+				uid, err := ext.Verify(r.Context(), token)
 				if err != nil {
 					// 401 with the sentinel message verbatim; code is
 					// invalid-token (Node inferCode(401)). Logged at
@@ -88,7 +104,10 @@ func ExtOrJWT(ext ExtVerifier, jwt func(http.Handler) http.Handler, log *slog.Lo
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}
-			// Non-ext bearer token → identical JWT behavior.
+			// Non-ext token (incl. empty/blank, or a dr_ext_ token with
+			// no ext service wired) → identical JWT behavior. The JWT
+			// middleware rejects an empty/blank/opaque token as
+			// "Unauthorized", matching Node's super.canActivate.
 			jwtPath.ServeHTTP(w, r)
 		})
 	}
