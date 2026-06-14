@@ -11,6 +11,46 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const createPayment = `-- name: CreatePayment :one
+INSERT INTO payments (user_id, plan_id, amount, currency, method, status, reference_code, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, created_at, updated_at
+`
+
+type CreatePaymentParams struct {
+	UserID        pgtype.UUID      `db:"user_id" json:"user_id"`
+	PlanID        pgtype.UUID      `db:"plan_id" json:"plan_id"`
+	Amount        int32            `db:"amount" json:"amount"`
+	Currency      string           `db:"currency" json:"currency"`
+	Method        string           `db:"method" json:"method"`
+	Status        string           `db:"status" json:"status"`
+	ReferenceCode string           `db:"reference_code" json:"reference_code"`
+	ExpiresAt     pgtype.Timestamp `db:"expires_at" json:"expires_at"`
+}
+
+type CreatePaymentRow struct {
+	ID        pgtype.UUID      `db:"id" json:"id"`
+	CreatedAt pgtype.Timestamp `db:"created_at" json:"created_at"`
+	UpdatedAt pgtype.Timestamp `db:"updated_at" json:"updated_at"`
+}
+
+// Insert a pending payment. Defaults (id, created_at, updated_at) are returned.
+func (q *Queries) CreatePayment(ctx context.Context, arg CreatePaymentParams) (CreatePaymentRow, error) {
+	row := q.db.QueryRow(ctx, createPayment,
+		arg.UserID,
+		arg.PlanID,
+		arg.Amount,
+		arg.Currency,
+		arg.Method,
+		arg.Status,
+		arg.ReferenceCode,
+		arg.ExpiresAt,
+	)
+	var i CreatePaymentRow
+	err := row.Scan(&i.ID, &i.CreatedAt, &i.UpdatedAt)
+	return i, err
+}
+
 const getPaymentByReference = `-- name: GetPaymentByReference :one
 
 SELECT
@@ -71,6 +111,65 @@ func (q *Queries) GetPaymentByReference(ctx context.Context, referenceCode strin
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.PlanName,
+	)
+	return i, err
+}
+
+const getPlanForCheckout = `-- name: GetPlanForCheckout :one
+SELECT id, name, price_cents, currency, stripe_price_id, trial_days, billing_period
+FROM plans
+WHERE id = $1
+`
+
+type GetPlanForCheckoutRow struct {
+	ID            pgtype.UUID            `db:"id" json:"id"`
+	Name          string                 `db:"name" json:"name"`
+	PriceCents    int32                  `db:"price_cents" json:"price_cents"`
+	Currency      *string                `db:"currency" json:"currency"`
+	StripePriceID *string                `db:"stripe_price_id" json:"stripe_price_id"`
+	TrialDays     int32                  `db:"trial_days" json:"trial_days"`
+	BillingPeriod PlansBillingPeriodEnum `db:"billing_period" json:"billing_period"`
+}
+
+// Plan fields createCheckout needs (price_cents drives the free-plan guard +
+// payment.amount; the rest feed the strategy). No row → pgx.ErrNoRows.
+func (q *Queries) GetPlanForCheckout(ctx context.Context, id pgtype.UUID) (GetPlanForCheckoutRow, error) {
+	row := q.db.QueryRow(ctx, getPlanForCheckout, id)
+	var i GetPlanForCheckoutRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.PriceCents,
+		&i.Currency,
+		&i.StripePriceID,
+		&i.TrialDays,
+		&i.BillingPeriod,
+	)
+	return i, err
+}
+
+const getUserForCheckout = `-- name: GetUserForCheckout :one
+SELECT id, email, stripe_customer_id, lemonsqueezy_customer_id
+FROM users
+WHERE id = $1
+`
+
+type GetUserForCheckoutRow struct {
+	ID                     pgtype.UUID `db:"id" json:"id"`
+	Email                  string      `db:"email" json:"email"`
+	StripeCustomerID       *string     `db:"stripe_customer_id" json:"stripe_customer_id"`
+	LemonsqueezyCustomerID *string     `db:"lemonsqueezy_customer_id" json:"lemonsqueezy_customer_id"`
+}
+
+// User fields createCheckout / portal / cancel need. No row → pgx.ErrNoRows.
+func (q *Queries) GetUserForCheckout(ctx context.Context, id pgtype.UUID) (GetUserForCheckoutRow, error) {
+	row := q.db.QueryRow(ctx, getUserForCheckout, id)
+	var i GetUserForCheckoutRow
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.StripeCustomerID,
+		&i.LemonsqueezyCustomerID,
 	)
 	return i, err
 }
@@ -168,4 +267,32 @@ func (q *Queries) ListPaymentsByUser(ctx context.Context, userID pgtype.UUID) ([
 		return nil, err
 	}
 	return items, nil
+}
+
+const markPaymentFailed = `-- name: MarkPaymentFailed :exec
+UPDATE payments SET status = 'failed', notes = $2, updated_at = now() WHERE id = $1
+`
+
+type MarkPaymentFailedParams struct {
+	ID    pgtype.UUID `db:"id" json:"id"`
+	Notes *string     `db:"notes" json:"notes"`
+}
+
+func (q *Queries) MarkPaymentFailed(ctx context.Context, arg MarkPaymentFailedParams) error {
+	_, err := q.db.Exec(ctx, markPaymentFailed, arg.ID, arg.Notes)
+	return err
+}
+
+const updatePaymentQRData = `-- name: UpdatePaymentQRData :exec
+UPDATE payments SET qr_data = $2, updated_at = now() WHERE id = $1
+`
+
+type UpdatePaymentQRDataParams struct {
+	ID     pgtype.UUID `db:"id" json:"id"`
+	QrData *string     `db:"qr_data" json:"qr_data"`
+}
+
+func (q *Queries) UpdatePaymentQRData(ctx context.Context, arg UpdatePaymentQRDataParams) error {
+	_, err := q.db.Exec(ctx, updatePaymentQRData, arg.ID, arg.QrData)
+	return err
 }

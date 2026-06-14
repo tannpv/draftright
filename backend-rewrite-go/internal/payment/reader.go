@@ -18,6 +18,11 @@ import (
 type Querier interface {
 	GetPaymentByReference(ctx context.Context, referenceCode string) (sqlc.GetPaymentByReferenceRow, error)
 	ListPaymentsByUser(ctx context.Context, userID pgtype.UUID) ([]sqlc.ListPaymentsByUserRow, error)
+	GetPlanForCheckout(ctx context.Context, id pgtype.UUID) (sqlc.GetPlanForCheckoutRow, error)
+	GetUserForCheckout(ctx context.Context, id pgtype.UUID) (sqlc.GetUserForCheckoutRow, error)
+	CreatePayment(ctx context.Context, arg sqlc.CreatePaymentParams) (sqlc.CreatePaymentRow, error)
+	UpdatePaymentQRData(ctx context.Context, arg sqlc.UpdatePaymentQRDataParams) error
+	MarkPaymentFailed(ctx context.Context, arg sqlc.MarkPaymentFailedParams) error
 }
 
 // StatusRow is the GetByReference projection feeding the status endpoint.
@@ -147,6 +152,126 @@ func (r *Repo) ListByUser(ctx context.Context, userID string) ([]PaymentRow, err
 		out = append(out, pr)
 	}
 	return out, nil
+}
+
+// CheckoutPlan is the plan projection createCheckout needs (free-plan guard +
+// payment.amount + strategy inputs). Nullable columns flatten to "".
+type CheckoutPlan struct {
+	ID, Name      string
+	PriceCents    int
+	Currency      string // "" when NULL
+	StripePriceID string // "" when NULL
+	TrialDays     int
+	BillingPeriod string
+}
+
+// CheckoutUser is the user projection createCheckout / portal / cancel need.
+// Nullable provider customer ids flatten to "".
+type CheckoutUser struct {
+	ID, Email              string
+	StripeCustomerID       string // "" when NULL
+	LemonSqueezyCustomerID string // "" when NULL
+}
+
+// CreatedPayment is the RETURNING projection of CreatePayment (server defaults).
+type CreatedPayment struct {
+	ID        string
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+// PlanForCheckout loads the plan by id, or (nil,nil) when the id is malformed
+// or no row exists (Node throws NotFound → controller maps; callers treat nil
+// as "plan not found").
+func (r *Repo) PlanForCheckout(ctx context.Context, id string) (*CheckoutPlan, error) {
+	uid, ok := parseUUID(id)
+	if !ok {
+		return nil, nil
+	}
+	row, err := r.q.GetPlanForCheckout(ctx, uid)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &CheckoutPlan{
+		ID:            uuid.UUID(row.ID.Bytes).String(),
+		Name:          row.Name,
+		PriceCents:    int(row.PriceCents),
+		Currency:      derefStr(row.Currency),
+		StripePriceID: derefStr(row.StripePriceID),
+		TrialDays:     int(row.TrialDays),
+		BillingPeriod: string(row.BillingPeriod),
+	}, nil
+}
+
+// UserForCheckout loads the user by id, or (nil,nil) when the id is malformed
+// or no row exists.
+func (r *Repo) UserForCheckout(ctx context.Context, id string) (*CheckoutUser, error) {
+	uid, ok := parseUUID(id)
+	if !ok {
+		return nil, nil
+	}
+	row, err := r.q.GetUserForCheckout(ctx, uid)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &CheckoutUser{
+		ID:                     uuid.UUID(row.ID.Bytes).String(),
+		Email:                  row.Email,
+		StripeCustomerID:       derefStr(row.StripeCustomerID),
+		LemonSqueezyCustomerID: derefStr(row.LemonsqueezyCustomerID),
+	}, nil
+}
+
+// CreatePayment inserts a pending payment and returns the server-assigned id +
+// timestamps. method/status/currency are plain varchar columns (NOT enums).
+func (r *Repo) CreatePayment(ctx context.Context, userID, planID string, amount int, currency, method, status, ref string, expiresAt time.Time) (*CreatedPayment, error) {
+	uid, _ := parseUUID(userID)
+	pid, _ := parseUUID(planID)
+	row, err := r.q.CreatePayment(ctx, sqlc.CreatePaymentParams{
+		UserID:        uid,
+		PlanID:        pid,
+		Amount:        int32(amount),
+		Currency:      currency,
+		Method:        method,
+		Status:        status,
+		ReferenceCode: ref,
+		ExpiresAt:     pgtype.Timestamp{Time: expiresAt, Valid: true},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &CreatedPayment{
+		ID:        uuid.UUID(row.ID.Bytes).String(),
+		CreatedAt: row.CreatedAt.Time,
+		UpdatedAt: row.UpdatedAt.Time,
+	}, nil
+}
+
+// UpdateQRData stores the rendered QR payload on a pending payment.
+func (r *Repo) UpdateQRData(ctx context.Context, paymentID, qr string) error {
+	pid, _ := parseUUID(paymentID)
+	return r.q.UpdatePaymentQRData(ctx, sqlc.UpdatePaymentQRDataParams{ID: pid, QrData: &qr})
+}
+
+// MarkFailed flips a payment to status='failed' with the given notes.
+func (r *Repo) MarkFailed(ctx context.Context, paymentID, notes string) error {
+	pid, _ := parseUUID(paymentID)
+	return r.q.MarkPaymentFailed(ctx, sqlc.MarkPaymentFailedParams{ID: pid, Notes: &notes})
+}
+
+// parseUUID parses a string id into a pgtype.UUID; ok=false on a malformed id.
+func parseUUID(s string) (pgtype.UUID, bool) {
+	var u pgtype.UUID
+	if err := u.Scan(s); err != nil {
+		return pgtype.UUID{}, false
+	}
+	return u, true
 }
 
 // --- pgtype / pointer helpers --------------------------------------------

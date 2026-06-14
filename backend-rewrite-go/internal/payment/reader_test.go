@@ -11,10 +11,18 @@ import (
 )
 
 type fakeQ struct {
-	byRef    sqlc.GetPaymentByReferenceRow
-	byRefErr error
-	list     []sqlc.ListPaymentsByUserRow
-	listErr  error
+	byRef     sqlc.GetPaymentByReferenceRow
+	byRefErr  error
+	list      []sqlc.ListPaymentsByUserRow
+	listErr   error
+	plan      sqlc.GetPlanForCheckoutRow
+	planErr   error
+	user      sqlc.GetUserForCheckoutRow
+	userErr   error
+	created   sqlc.CreatePaymentRow
+	createErr error
+	qrErr     error
+	failErr   error
 }
 
 func (f fakeQ) GetPaymentByReference(ctx context.Context, ref string) (sqlc.GetPaymentByReferenceRow, error) {
@@ -22,6 +30,21 @@ func (f fakeQ) GetPaymentByReference(ctx context.Context, ref string) (sqlc.GetP
 }
 func (f fakeQ) ListPaymentsByUser(ctx context.Context, userID pgtype.UUID) ([]sqlc.ListPaymentsByUserRow, error) {
 	return f.list, f.listErr
+}
+func (f fakeQ) GetPlanForCheckout(ctx context.Context, id pgtype.UUID) (sqlc.GetPlanForCheckoutRow, error) {
+	return f.plan, f.planErr
+}
+func (f fakeQ) GetUserForCheckout(ctx context.Context, id pgtype.UUID) (sqlc.GetUserForCheckoutRow, error) {
+	return f.user, f.userErr
+}
+func (f fakeQ) CreatePayment(ctx context.Context, arg sqlc.CreatePaymentParams) (sqlc.CreatePaymentRow, error) {
+	return f.created, f.createErr
+}
+func (f fakeQ) UpdatePaymentQRData(ctx context.Context, arg sqlc.UpdatePaymentQRDataParams) error {
+	return f.qrErr
+}
+func (f fakeQ) MarkPaymentFailed(ctx context.Context, arg sqlc.MarkPaymentFailedParams) error {
+	return f.failErr
 }
 
 func uuidV(s string) pgtype.UUID { var u pgtype.UUID; _ = u.Scan(s); return u }

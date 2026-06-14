@@ -24,6 +24,8 @@ type Querier interface {
 	// the Node process (new Date(); setHours(0,0,0,0)).
 	CountUsageToday(ctx context.Context, arg CountUsageTodayParams) (int64, error)
 	CreateFreeSubscription(ctx context.Context, arg CreateFreeSubscriptionParams) error
+	// Insert a pending payment. Defaults (id, created_at, updated_at) are returned.
+	CreatePayment(ctx context.Context, arg CreatePaymentParams) (CreatePaymentRow, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
 	// Cron pass 2: flip active|cancelled subs past expiry to expired, returning
 	// the affected rows so the caller can email each. expires_at left untouched.
@@ -100,6 +102,9 @@ type Querier interface {
 	// (default ''); empty string means unconfigured → caller falls back to env
 	// then default. No row at all → pgx.ErrNoRows, mapped to found=false.
 	GetPaymentMethodsEnabled(ctx context.Context) (string, error)
+	// Plan fields createCheckout needs (price_cents drives the free-plan guard +
+	// payment.amount; the rest feed the strategy). No row → pgx.ErrNoRows.
+	GetPlanForCheckout(ctx context.Context, id pgtype.UUID) (GetPlanForCheckoutRow, error)
 	GetUserAuthState(ctx context.Context, email string) (GetUserAuthStateRow, error)
 	// Phase 0 core-endpoint queries (health + /auth/me). Kept separate
 	// from the rewrite module's queries.sql so the core package depends on
@@ -107,6 +112,8 @@ type Querier interface {
 	// Minimal user projection for GET /auth/me — id, email, role. Mirrors
 	// the fields Node's /auth/me returns from the JWT-resolved user.
 	GetUserByID(ctx context.Context, id pgtype.UUID) (GetUserByIDRow, error)
+	// User fields createCheckout / portal / cancel need. No row → pgx.ErrNoRows.
+	GetUserForCheckout(ctx context.Context, id pgtype.UUID) (GetUserForCheckoutRow, error)
 	// Audit row for every deliver attempt (suppressed/skipped/sent/failed).
 	InsertEmailLog(ctx context.Context, arg InsertEmailLogParams) error
 	// mint() insert. Returns the projection list() serializes (token_hash and
@@ -131,6 +138,7 @@ type Querier interface {
 	// findByUser(userId): the user's 20 most-recent payments, newest first, each
 	// with its plan (TypeORM relations:['plan'] order:{created_at:'DESC'} take:20).
 	ListPaymentsByUser(ctx context.Context, userID pgtype.UUID) ([]ListPaymentsByUserRow, error)
+	MarkPaymentFailed(ctx context.Context, arg MarkPaymentFailedParams) error
 	ResetPasswordHash(ctx context.Context, arg ResetPasswordHashParams) error
 	// Extension-token persistence (dr_ext_* keyboard/share tokens).
 	// Read the live NestJS-owned schema as-is; mirror ExtensionTokenService
@@ -154,6 +162,7 @@ type Querier interface {
 	// validate() write-behind: bump last_used_at. Failures non-fatal (caller
 	// ignores the error so the request still succeeds).
 	TouchTokenLastUsed(ctx context.Context, id pgtype.UUID) error
+	UpdatePaymentQRData(ctx context.Context, arg UpdatePaymentQRDataParams) error
 	UpdateUserPasswordHash(ctx context.Context, arg UpdateUserPasswordHashParams) error
 	UpdateUserVerification(ctx context.Context, arg UpdateUserVerificationParams) error
 }

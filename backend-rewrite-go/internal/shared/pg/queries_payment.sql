@@ -35,3 +35,28 @@ LEFT JOIN plans pl ON pl.id = p.plan_id
 WHERE p.user_id = $1
 ORDER BY p.created_at DESC
 LIMIT 20;
+
+-- name: GetPlanForCheckout :one
+-- Plan fields createCheckout needs (price_cents drives the free-plan guard +
+-- payment.amount; the rest feed the strategy). No row → pgx.ErrNoRows.
+SELECT id, name, price_cents, currency, stripe_price_id, trial_days, billing_period
+FROM plans
+WHERE id = $1;
+
+-- name: GetUserForCheckout :one
+-- User fields createCheckout / portal / cancel need. No row → pgx.ErrNoRows.
+SELECT id, email, stripe_customer_id, lemonsqueezy_customer_id
+FROM users
+WHERE id = $1;
+
+-- name: CreatePayment :one
+-- Insert a pending payment. Defaults (id, created_at, updated_at) are returned.
+INSERT INTO payments (user_id, plan_id, amount, currency, method, status, reference_code, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, created_at, updated_at;
+
+-- name: UpdatePaymentQRData :exec
+UPDATE payments SET qr_data = $2, updated_at = now() WHERE id = $1;
+
+-- name: MarkPaymentFailed :exec
+UPDATE payments SET status = 'failed', notes = $2, updated_at = now() WHERE id = $1;
