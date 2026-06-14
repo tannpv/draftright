@@ -34,6 +34,7 @@ import (
 	"github.com/tannpv/draftright-rewrite/internal/platform/config"
 	platformdb "github.com/tannpv/draftright-rewrite/internal/platform/db"
 	"github.com/tannpv/draftright-rewrite/internal/platform/metrics"
+	"github.com/tannpv/draftright-rewrite/internal/platform/scheduler"
 	settingspkg "github.com/tannpv/draftright-rewrite/internal/platform/settings"
 	"github.com/tannpv/draftright-rewrite/internal/platform/tracing"
 	"github.com/tannpv/draftright-rewrite/internal/rewrite/adapter/anthropic"
@@ -282,6 +283,19 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 		subHandler := subpkg.NewHandler(subpkg.NewService(subReader, usageCounter, plansReader))
 		core.subscription = http.HandlerFunc(subHandler.Get)
 		core.verifyReceipt = http.HandlerFunc(subHandler.VerifyReceipt)
+
+		// Daily subscription-expiry cron (ports NestJS @Cron("0 09 * * *")).
+		// Reuses the same subReader (it satisfies subpkg.CronRepo via
+		// DueForRenewal/ExpireLapsed) and the shared email sender. Fires once
+		// per day at 09:00 server-local. The goroutine is a background daemon
+		// scoped to ctx; it exits with the process.
+		expiryCron := subpkg.NewExpiryCron(subReader, subpkg.NewMailCronNotifier(emailSvc, log), log)
+		go scheduler.RunDaily(ctx, 9, 0, time.Local, time.Now, func(c context.Context, t time.Time) {
+			if err := expiryCron.RunOnce(c, t); err != nil {
+				log.Error("expiry cron failed", "err", err)
+			}
+		})
+		log.Info("scheduler started", "job", "subscription-expiry", "at", "09:00 local")
 	} else {
 		core.health = corepkg.NewHealthHandler(staticInfoReader{}, appVersion)
 		log.Warn("auth endpoints disabled", "reason", "no DATABASE_URL")
