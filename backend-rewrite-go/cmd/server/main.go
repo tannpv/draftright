@@ -117,7 +117,7 @@ func main() {
 	}
 	defer cleanup()
 
-	router := (&shared.Router{
+	rt := &shared.Router{
 		Log:            log,
 		Verifier:       auth.NewVerifier(cfg.JWTSecret),
 		MetricsHandler: metricsHTTP,
@@ -145,7 +145,15 @@ func main() {
 		MintExtToken:       core.mintExtToken,
 		ListExtTokens:      core.listExtTokens,
 		RevokeExtToken:     core.revokeExtToken,
-	}).Build()
+	}
+	// Enable dual auth on /v1/rewrite (dr_ext_ token OR JWT) only when the
+	// extension-token service is wired (DB present). Guarded so the field
+	// stays a nil INTERFACE when there's no service — a typed-nil
+	// *exttoken.Service in the interface would be non-nil and panic on Verify.
+	if core.extSvc != nil {
+		rt.ExtVerifier = core.extSvc
+	}
+	router := rt.Build()
 
 	srv := &http.Server{
 		Addr:         cfg.Listen,
