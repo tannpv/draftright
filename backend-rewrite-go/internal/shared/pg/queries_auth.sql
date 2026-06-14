@@ -144,3 +144,12 @@ UPDATE users SET tiktok_id = $2, avatar_url = $3, email_verified = true,
 -- name: LinkSocialApple :exec
 UPDATE users SET apple_id = $2, avatar_url = $3, email_verified = true,
   updated_at = now() WHERE id = $1;
+
+-- name: ListActivePlans :many
+-- Mirrors plansService.findAll(): every active plan, cheapest first.
+-- No tiebreaker beyond price_cents (matches TypeORM order:{price_cents:'ASC'}).
+SELECT id, name, daily_limit, price_cents, currency, stripe_price_id,
+       trial_days, billing_period, is_active, created_at, updated_at
+FROM plans
+WHERE is_active = true
+ORDER BY price_cents ASC;

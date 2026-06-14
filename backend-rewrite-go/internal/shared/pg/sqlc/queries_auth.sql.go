@@ -587,6 +587,62 @@ func (q *Queries) LinkSocialTiktok(ctx context.Context, arg LinkSocialTiktokPara
 	return err
 }
 
+const listActivePlans = `-- name: ListActivePlans :many
+SELECT id, name, daily_limit, price_cents, currency, stripe_price_id,
+       trial_days, billing_period, is_active, created_at, updated_at
+FROM plans
+WHERE is_active = true
+ORDER BY price_cents ASC
+`
+
+type ListActivePlansRow struct {
+	ID            pgtype.UUID            `db:"id" json:"id"`
+	Name          string                 `db:"name" json:"name"`
+	DailyLimit    int32                  `db:"daily_limit" json:"daily_limit"`
+	PriceCents    int32                  `db:"price_cents" json:"price_cents"`
+	Currency      *string                `db:"currency" json:"currency"`
+	StripePriceID *string                `db:"stripe_price_id" json:"stripe_price_id"`
+	TrialDays     int32                  `db:"trial_days" json:"trial_days"`
+	BillingPeriod PlansBillingPeriodEnum `db:"billing_period" json:"billing_period"`
+	IsActive      bool                   `db:"is_active" json:"is_active"`
+	CreatedAt     pgtype.Timestamp       `db:"created_at" json:"created_at"`
+	UpdatedAt     pgtype.Timestamp       `db:"updated_at" json:"updated_at"`
+}
+
+// Mirrors plansService.findAll(): every active plan, cheapest first.
+// No tiebreaker beyond price_cents (matches TypeORM order:{price_cents:'ASC'}).
+func (q *Queries) ListActivePlans(ctx context.Context) ([]ListActivePlansRow, error) {
+	rows, err := q.db.Query(ctx, listActivePlans)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListActivePlansRow{}
+	for rows.Next() {
+		var i ListActivePlansRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.DailyLimit,
+			&i.PriceCents,
+			&i.Currency,
+			&i.StripePriceID,
+			&i.TrialDays,
+			&i.BillingPeriod,
+			&i.IsActive,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const resetPasswordHash = `-- name: ResetPasswordHash :exec
 UPDATE users SET password_hash = $2, password_reset_code = null,
   password_reset_expires = null, password_reset_attempts = 0,

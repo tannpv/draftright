@@ -89,6 +89,9 @@ type Querier interface {
 	LinkSocialFacebook(ctx context.Context, arg LinkSocialFacebookParams) error
 	LinkSocialGoogle(ctx context.Context, arg LinkSocialGoogleParams) error
 	LinkSocialTiktok(ctx context.Context, arg LinkSocialTiktokParams) error
+	// Mirrors plansService.findAll(): every active plan, cheapest first.
+	// No tiebreaker beyond price_cents (matches TypeORM order:{price_cents:'ASC'}).
+	ListActivePlans(ctx context.Context) ([]ListActivePlansRow, error)
 	ResetPasswordHash(ctx context.Context, arg ResetPasswordHashParams) error
 	SetEmailVerificationCode(ctx context.Context, arg SetEmailVerificationCodeParams) error
 	SetPasswordResetAttempts(ctx context.Context, arg SetPasswordResetAttemptsParams) error
