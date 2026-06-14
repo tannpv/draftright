@@ -30,6 +30,7 @@ import (
 	corepkg "github.com/tannpv/draftright-rewrite/internal/core"
 	emailpkg "github.com/tannpv/draftright-rewrite/internal/email"
 	exttokenpkg "github.com/tannpv/draftright-rewrite/internal/exttoken"
+	paymentpkg "github.com/tannpv/draftright-rewrite/internal/payment"
 	planspkg "github.com/tannpv/draftright-rewrite/internal/plans"
 	"github.com/tannpv/draftright-rewrite/internal/platform/auth"
 	"github.com/tannpv/draftright-rewrite/internal/platform/config"
@@ -142,6 +143,9 @@ func main() {
 		DeleteAccount:      core.deleteAccount,
 		Subscription:       core.subscription,
 		VerifyReceipt:      core.verifyReceipt,
+		PaymentMethods:     core.paymentMethods,
+		PaymentStatus:      core.paymentStatus,
+		PaymentHistory:     core.paymentHistory,
 		MintExtToken:       core.mintExtToken,
 		ListExtTokens:      core.listExtTokens,
 		RevokeExtToken:     core.revokeExtToken,
@@ -307,6 +311,17 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 		core.listExtTokens = http.HandlerFunc(extHandler.List)
 		core.revokeExtToken = http.HandlerFunc(extHandler.Revoke)
 
+		// Payment read-side (Phase 3a): methods registry + status/history reads.
+		// Read-only; no provider secrets, no checkout. q satisfies both the
+		// payment Querier and the coreSettingsQuerier ports.
+		paymentRepo := paymentpkg.NewRepo(q)
+		paymentSettings := paymentpkg.NewSettingsAdapter(q)
+		paymentSvc := paymentpkg.NewService(paymentRepo, paymentSettings, cfg.PaymentEnabledMethods)
+		paymentHandler := paymentpkg.NewHandler(paymentSvc)
+		core.paymentMethods = http.HandlerFunc(paymentHandler.Methods)
+		core.paymentStatus = http.HandlerFunc(paymentHandler.Status)
+		core.paymentHistory = http.HandlerFunc(paymentHandler.History)
+
 		// Daily subscription-expiry cron (ports NestJS @Cron("0 09 * * *")).
 		// Reuses the same subReader (it satisfies subpkg.CronRepo via
 		// DueForRenewal/ExpireLapsed) and the shared email sender. Fires once
@@ -358,6 +373,11 @@ type coreHandlers struct {
 	deleteAccount  http.Handler // DELETE /auth/account (set when pool != nil)
 	subscription   http.Handler // GET /subscription (set when pool != nil)
 	verifyReceipt  http.Handler // POST /subscription/verify-receipt (set when pool != nil)
+
+	// Payment read-side (Phase 3a; set when pool != nil).
+	paymentMethods http.Handler // GET /payment/methods (public)
+	paymentStatus  http.Handler // GET /payment/status/{ref} (public)
+	paymentHistory http.Handler // GET /payment/history (auth)
 
 	// Extension-token handlers (set when pool != nil; all JWT-gated).
 	mintExtToken   http.Handler // POST   /auth/extension-tokens

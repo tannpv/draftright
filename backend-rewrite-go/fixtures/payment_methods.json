@@ -1,0 +1,8 @@
+{
+  "name": "payment-methods",
+  "method": "GET",
+  "path": "/payment/methods",
+  "headers": {},
+  "ignore_value_of": [],
+  "_note": "Public. {methods:[...]} — ORDER matters (insertion order; vietqr implies bank_transfer appended last). Deterministic from app_settings.payment_methods_enabled; nothing ignored. If Go and Node disagree on order the gate flags a real ordering-parity bug — do NOT add to ignore."
+}

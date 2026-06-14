@@ -84,6 +84,10 @@ type Config struct {
 	// "use the memory stub" (dev convenience).
 	AIProviders string
 
+	// PaymentEnabledMethods is the PAYMENT_ENABLED_METHODS env fallback
+	// (comma-separated). Used only when app_settings has no override.
+	PaymentEnabledMethods string
+
 	// GoBackendRampPercent is the percentage of users bucketed onto the
 	// Go backend, surfaced via /auth/me flags.use_go_backend. Mirrors the
 	// Node GO_BACKEND_RAMP_PERCENT env var. Default 0 (no ramp).
@@ -113,24 +117,25 @@ type Config struct {
 // operator can fix all of them in one shot instead of one-error-at-a-time.
 func Load() (*Config, error) {
 	c := &Config{
-		Listen:               envOr("LISTEN_ADDR", ":3001"),
-		LogLevel:             envOr("LOG_LEVEL", "info"),
-		JWTSecret:            os.Getenv("JWT_SECRET"),
-		JWTRefreshSecret:     os.Getenv("JWT_REFRESH_SECRET"),
-		DatabaseURL:          os.Getenv("DATABASE_URL"),
-		RedisURL:             os.Getenv("REDIS_URL"),
-		OpenAIKey:            os.Getenv("OPENAI_API_KEY"),
-		AnthropicKey:         os.Getenv("ANTHROPIC_API_KEY"),
-		OpenAIProviderID:     os.Getenv("OPENAI_PROVIDER_ID"),
-		AnthropicProviderID:  os.Getenv("ANTHROPIC_PROVIDER_ID"),
-		OllamaProviderID:     os.Getenv("OLLAMA_PROVIDER_ID"),
-		OllamaURL:            os.Getenv("OLLAMA_URL"),
-		ResendAPIKey:         os.Getenv("RESEND_API_KEY"),
-		EmailFrom:            os.Getenv("EMAIL_FROM"),
-		AppleAudiences:       os.Getenv("APPLE_AUDIENCES"),
-		AIProviders:          os.Getenv("AI_PROVIDERS"),
-		GoBackendRampPercent: envInt("GO_BACKEND_RAMP_PERCENT", 0),
-		AppEnv:               envOr("APP_ENV", "development"),
+		Listen:                envOr("LISTEN_ADDR", ":3001"),
+		LogLevel:              envOr("LOG_LEVEL", "info"),
+		JWTSecret:             os.Getenv("JWT_SECRET"),
+		JWTRefreshSecret:      os.Getenv("JWT_REFRESH_SECRET"),
+		DatabaseURL:           os.Getenv("DATABASE_URL"),
+		RedisURL:              os.Getenv("REDIS_URL"),
+		OpenAIKey:             os.Getenv("OPENAI_API_KEY"),
+		AnthropicKey:          os.Getenv("ANTHROPIC_API_KEY"),
+		OpenAIProviderID:      os.Getenv("OPENAI_PROVIDER_ID"),
+		AnthropicProviderID:   os.Getenv("ANTHROPIC_PROVIDER_ID"),
+		OllamaProviderID:      os.Getenv("OLLAMA_PROVIDER_ID"),
+		OllamaURL:             os.Getenv("OLLAMA_URL"),
+		ResendAPIKey:          os.Getenv("RESEND_API_KEY"),
+		EmailFrom:             os.Getenv("EMAIL_FROM"),
+		AppleAudiences:        os.Getenv("APPLE_AUDIENCES"),
+		AIProviders:           os.Getenv("AI_PROVIDERS"),
+		PaymentEnabledMethods: os.Getenv("PAYMENT_ENABLED_METHODS"),
+		GoBackendRampPercent:  envInt("GO_BACKEND_RAMP_PERCENT", 0),
+		AppEnv:                envOr("APP_ENV", "development"),
 
 		MetricsEnabled:  envBool("METRICS_ENABLED", false),
 		OtelEndpoint:    os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),

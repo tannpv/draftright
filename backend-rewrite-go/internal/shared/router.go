@@ -79,6 +79,10 @@ type Router struct {
 	ListExtTokens  http.Handler // GET    /auth/extension-tokens          (auth)
 	RevokeExtToken http.Handler // DELETE /auth/extension-tokens/{id}      (auth)
 
+	PaymentMethods http.Handler // GET /payment/methods       (public)
+	PaymentStatus  http.Handler // GET /payment/status/{ref}   (public)
+	PaymentHistory http.Handler // GET /payment/history        (auth)
+
 	// EnableTracing wraps the whole mux with otelhttp middleware so
 	// every request becomes a span. No-op when the global tracer
 	// provider is the default noop (i.e. tracing.Setup returned
@@ -152,6 +156,12 @@ func (r *Router) Build() http.Handler {
 	if r.Plans != nil {
 		mux.Method(http.MethodGet, "/plans", r.Plans)
 	}
+	if r.PaymentMethods != nil {
+		mux.Method(http.MethodGet, "/payment/methods", r.PaymentMethods)
+	}
+	if r.PaymentStatus != nil {
+		mux.Method(http.MethodGet, "/payment/status/{ref}", r.PaymentStatus)
+	}
 
 	// Build the JWT middleware once so /v1/rewrite (dual-auth) and the
 	// JWT-only group share the exact same RequireAuth instance.
@@ -199,6 +209,9 @@ func (r *Router) Build() http.Handler {
 		}
 		if r.RevokeExtToken != nil {
 			api.Method(http.MethodDelete, "/auth/extension-tokens/{id}", r.RevokeExtToken)
+		}
+		if r.PaymentHistory != nil {
+			api.Method(http.MethodGet, "/payment/history", r.PaymentHistory)
 		}
 	})
 

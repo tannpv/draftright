@@ -27,6 +27,20 @@ func (q *Queries) GetClientLogLevel(ctx context.Context) (string, error) {
 	return client_log_level, err
 }
 
+const getPaymentMethodsEnabled = `-- name: GetPaymentMethodsEnabled :one
+SELECT payment_methods_enabled FROM app_settings LIMIT 1
+`
+
+// payment_methods_enabled CSV from the singleton app_settings row. NOT NULL
+// (default ”); empty string means unconfigured → caller falls back to env
+// then default. No row at all → pgx.ErrNoRows, mapped to found=false.
+func (q *Queries) GetPaymentMethodsEnabled(ctx context.Context) (string, error) {
+	row := q.db.QueryRow(ctx, getPaymentMethodsEnabled)
+	var payment_methods_enabled string
+	err := row.Scan(&payment_methods_enabled)
+	return payment_methods_enabled, err
+}
+
 const getUserByID = `-- name: GetUserByID :one
 
 SELECT id, email, role

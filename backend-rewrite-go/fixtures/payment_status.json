@@ -1,0 +1,8 @@
+{
+  "name": "payment-status",
+  "method": "GET",
+  "path": "/payment/status/REPLACE_WITH_DEV_PAYMENT_REFERENCE",
+  "headers": {},
+  "ignore_value_of": ["completed_at", "expires_at"],
+  "_note": "Public. Substitute a real DR-PRO-* reference from a seeded payment row. For a non-existent ref both return {status:'not_found'} (also a valid parity check — point the path at DR-PRO-NOPE to test that branch). completed_at/expires_at ignored until ISOMillis format is pinned byte-for-byte (same timestamp risk as account.json); then REMOVE them. status/method/amount/currency/reference_code/plan_name are deterministic and must match."
+}
