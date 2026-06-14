@@ -47,3 +47,100 @@ WHERE user_id = $1 AND created_at >= $2;
 SELECT token_expiry_minutes, refresh_token_expiry_days
 FROM app_settings
 LIMIT 1;
+
+-- name: CreateUser :one
+INSERT INTO users (
+  email, password_hash, name, auth_provider, avatar_url, email_verified,
+  email_verification_code, email_verification_expires,
+  google_id, facebook_id, tiktok_id, apple_id
+) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+RETURNING id, email, name, avatar_url, email_verified;
+
+-- name: GetUserAuthState :one
+SELECT id, email, name, password_hash, auth_provider, is_active,
+       email_verified, email_verification_code, email_verification_expires,
+       password_reset_code, password_reset_expires, password_reset_attempts
+FROM users WHERE email = $1 LIMIT 1;
+
+-- name: UpdateUserVerification :exec
+UPDATE users SET email_verified = $2, email_verification_code = $3,
+  email_verification_expires = $4, updated_at = now() WHERE id = $1;
+
+-- name: SetEmailVerificationCode :exec
+UPDATE users SET email_verification_code = $2, email_verification_expires = $3,
+  updated_at = now() WHERE id = $1;
+
+-- name: SetPasswordResetCode :exec
+UPDATE users SET password_reset_code = $2, password_reset_expires = $3,
+  password_reset_attempts = $4, updated_at = now() WHERE id = $1;
+
+-- name: SetPasswordResetAttempts :exec
+UPDATE users SET password_reset_attempts = $2, updated_at = now() WHERE id = $1;
+
+-- name: ResetPasswordHash :exec
+UPDATE users SET password_hash = $2, password_reset_code = null,
+  password_reset_expires = null, password_reset_attempts = 0,
+  updated_at = now() WHERE id = $1;
+
+-- name: FindFreePlan :one
+SELECT id, name, daily_limit FROM plans
+WHERE billing_period = 'none'::plans_billing_period_enum AND is_active = true
+LIMIT 1;
+
+-- name: CreateFreeSubscription :exec
+INSERT INTO subscriptions (user_id, plan_id, status, store_type, started_at, expires_at)
+VALUES ($1, $2, 'active'::subscriptions_status_enum,
+        'admin_granted'::subscriptions_store_type_enum, now(), null);
+
+-- name: IsEmailSuppressed :one
+-- Lowercased-email suppression check (bounce/complaint list).
+SELECT COUNT(*) > 0 FROM email_suppressions WHERE email = $1;
+
+-- name: InsertEmailLog :exec
+-- Audit row for every deliver attempt (suppressed/skipped/sent/failed).
+INSERT INTO email_logs (to_email, email_type, subject, status, provider_id, error)
+VALUES ($1, $2, $3, $4, $5, $6);
+
+-- name: GetEmailSettings :one
+-- app_settings creds: both columns are NOT NULL (default '').
+SELECT resend_api_key, email_from FROM app_settings LIMIT 1;
+
+-- name: GetEmailTemplateByKey :one
+-- DB template override. PK column is template_key (not key).
+SELECT subject, html FROM email_templates WHERE template_key = $1 LIMIT 1;
+
+-- name: FindUserByGoogleId :one
+SELECT id, email, password_hash, name, is_active, role, auth_provider,
+       email_verified, lemonsqueezy_customer_id, avatar_url
+FROM users WHERE google_id = $1 LIMIT 1;
+
+-- name: FindUserByFacebookId :one
+SELECT id, email, password_hash, name, is_active, role, auth_provider,
+       email_verified, lemonsqueezy_customer_id, avatar_url
+FROM users WHERE facebook_id = $1 LIMIT 1;
+
+-- name: FindUserByTiktokId :one
+SELECT id, email, password_hash, name, is_active, role, auth_provider,
+       email_verified, lemonsqueezy_customer_id, avatar_url
+FROM users WHERE tiktok_id = $1 LIMIT 1;
+
+-- name: FindUserByAppleId :one
+SELECT id, email, password_hash, name, is_active, role, auth_provider,
+       email_verified, lemonsqueezy_customer_id, avatar_url
+FROM users WHERE apple_id = $1 LIMIT 1;
+
+-- name: LinkSocialGoogle :exec
+UPDATE users SET google_id = $2, avatar_url = $3, email_verified = true,
+  updated_at = now() WHERE id = $1;
+
+-- name: LinkSocialFacebook :exec
+UPDATE users SET facebook_id = $2, avatar_url = $3, email_verified = true,
+  updated_at = now() WHERE id = $1;
+
+-- name: LinkSocialTiktok :exec
+UPDATE users SET tiktok_id = $2, avatar_url = $3, email_verified = true,
+  updated_at = now() WHERE id = $1;
+
+-- name: LinkSocialApple :exec
+UPDATE users SET apple_id = $2, avatar_url = $3, email_verified = true,
+  updated_at = now() WHERE id = $1;

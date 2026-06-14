@@ -23,6 +23,13 @@ type Querier interface {
 	// The caller passes the midnight boundary so timezone handling matches
 	// the Node process (new Date(); setHours(0,0,0,0)).
 	CountUsageToday(ctx context.Context, arg CountUsageTodayParams) (int64, error)
+	CreateFreeSubscription(ctx context.Context, arg CreateFreeSubscriptionParams) error
+	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
+	FindFreePlan(ctx context.Context) (FindFreePlanRow, error)
+	FindUserByAppleId(ctx context.Context, appleID *string) (FindUserByAppleIdRow, error)
+	FindUserByFacebookId(ctx context.Context, facebookID *string) (FindUserByFacebookIdRow, error)
+	FindUserByGoogleId(ctx context.Context, googleID *string) (FindUserByGoogleIdRow, error)
+	FindUserByTiktokId(ctx context.Context, tiktokID *string) (FindUserByTiktokIdRow, error)
 	// Queries for the /rewrite microservice's Postgres adapter.
 	// sqlc compiles these against schema.sql at build time; mistakes are
 	// caught BEFORE the service ever boots (Rule #1 — compile-time over
@@ -59,17 +66,35 @@ type Querier interface {
 	// GET /health. There is exactly one settings row (Node does
 	// `findOne({ where: {} })`); LIMIT 1 matches that.
 	GetClientLogLevel(ctx context.Context) (string, error)
+	// app_settings creds: both columns are NOT NULL (default '').
+	GetEmailSettings(ctx context.Context) (GetEmailSettingsRow, error)
+	// DB template override. PK column is template_key (not key).
+	GetEmailTemplateByKey(ctx context.Context, templateKey string) (GetEmailTemplateByKeyRow, error)
+	GetUserAuthState(ctx context.Context, email string) (GetUserAuthStateRow, error)
 	// Phase 0 core-endpoint queries (health + /auth/me). Kept separate
 	// from the rewrite module's queries.sql so the core package depends on
 	// the shared sqlc types only, never on a feature module.
 	// Minimal user projection for GET /auth/me — id, email, role. Mirrors
 	// the fields Node's /auth/me returns from the JWT-resolved user.
 	GetUserByID(ctx context.Context, id pgtype.UUID) (GetUserByIDRow, error)
+	// Audit row for every deliver attempt (suppressed/skipped/sent/failed).
+	InsertEmailLog(ctx context.Context, arg InsertEmailLogParams) error
 	// Records one /rewrite call for daily quota tracking + analytics.
 	// Mirrors NestJS UsageService.log: same columns, same names, same
 	// precision so the two backends populate identical rows.
 	InsertUsageLog(ctx context.Context, arg InsertUsageLogParams) error
+	// Lowercased-email suppression check (bounce/complaint list).
+	IsEmailSuppressed(ctx context.Context, email string) (bool, error)
+	LinkSocialApple(ctx context.Context, arg LinkSocialAppleParams) error
+	LinkSocialFacebook(ctx context.Context, arg LinkSocialFacebookParams) error
+	LinkSocialGoogle(ctx context.Context, arg LinkSocialGoogleParams) error
+	LinkSocialTiktok(ctx context.Context, arg LinkSocialTiktokParams) error
+	ResetPasswordHash(ctx context.Context, arg ResetPasswordHashParams) error
+	SetEmailVerificationCode(ctx context.Context, arg SetEmailVerificationCodeParams) error
+	SetPasswordResetAttempts(ctx context.Context, arg SetPasswordResetAttemptsParams) error
+	SetPasswordResetCode(ctx context.Context, arg SetPasswordResetCodeParams) error
 	UpdateUserPasswordHash(ctx context.Context, arg UpdateUserPasswordHashParams) error
+	UpdateUserVerification(ctx context.Context, arg UpdateUserVerificationParams) error
 }
 
 var _ Querier = (*Queries)(nil)

@@ -31,6 +31,247 @@ func (q *Queries) CountUsageToday(ctx context.Context, arg CountUsageTodayParams
 	return count, err
 }
 
+const createFreeSubscription = `-- name: CreateFreeSubscription :exec
+INSERT INTO subscriptions (user_id, plan_id, status, store_type, started_at, expires_at)
+VALUES ($1, $2, 'active'::subscriptions_status_enum,
+        'admin_granted'::subscriptions_store_type_enum, now(), null)
+`
+
+type CreateFreeSubscriptionParams struct {
+	UserID pgtype.UUID `db:"user_id" json:"user_id"`
+	PlanID pgtype.UUID `db:"plan_id" json:"plan_id"`
+}
+
+func (q *Queries) CreateFreeSubscription(ctx context.Context, arg CreateFreeSubscriptionParams) error {
+	_, err := q.db.Exec(ctx, createFreeSubscription, arg.UserID, arg.PlanID)
+	return err
+}
+
+const createUser = `-- name: CreateUser :one
+INSERT INTO users (
+  email, password_hash, name, auth_provider, avatar_url, email_verified,
+  email_verification_code, email_verification_expires,
+  google_id, facebook_id, tiktok_id, apple_id
+) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+RETURNING id, email, name, avatar_url, email_verified
+`
+
+type CreateUserParams struct {
+	Email                    string                `db:"email" json:"email"`
+	PasswordHash             *string               `db:"password_hash" json:"password_hash"`
+	Name                     string                `db:"name" json:"name"`
+	AuthProvider             UsersAuthProviderEnum `db:"auth_provider" json:"auth_provider"`
+	AvatarUrl                *string               `db:"avatar_url" json:"avatar_url"`
+	EmailVerified            bool                  `db:"email_verified" json:"email_verified"`
+	EmailVerificationCode    *string               `db:"email_verification_code" json:"email_verification_code"`
+	EmailVerificationExpires pgtype.Timestamptz    `db:"email_verification_expires" json:"email_verification_expires"`
+	GoogleID                 *string               `db:"google_id" json:"google_id"`
+	FacebookID               *string               `db:"facebook_id" json:"facebook_id"`
+	TiktokID                 *string               `db:"tiktok_id" json:"tiktok_id"`
+	AppleID                  *string               `db:"apple_id" json:"apple_id"`
+}
+
+type CreateUserRow struct {
+	ID            pgtype.UUID `db:"id" json:"id"`
+	Email         string      `db:"email" json:"email"`
+	Name          string      `db:"name" json:"name"`
+	AvatarUrl     *string     `db:"avatar_url" json:"avatar_url"`
+	EmailVerified bool        `db:"email_verified" json:"email_verified"`
+}
+
+func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error) {
+	row := q.db.QueryRow(ctx, createUser,
+		arg.Email,
+		arg.PasswordHash,
+		arg.Name,
+		arg.AuthProvider,
+		arg.AvatarUrl,
+		arg.EmailVerified,
+		arg.EmailVerificationCode,
+		arg.EmailVerificationExpires,
+		arg.GoogleID,
+		arg.FacebookID,
+		arg.TiktokID,
+		arg.AppleID,
+	)
+	var i CreateUserRow
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Name,
+		&i.AvatarUrl,
+		&i.EmailVerified,
+	)
+	return i, err
+}
+
+const findFreePlan = `-- name: FindFreePlan :one
+SELECT id, name, daily_limit FROM plans
+WHERE billing_period = 'none'::plans_billing_period_enum AND is_active = true
+LIMIT 1
+`
+
+type FindFreePlanRow struct {
+	ID         pgtype.UUID `db:"id" json:"id"`
+	Name       string      `db:"name" json:"name"`
+	DailyLimit int32       `db:"daily_limit" json:"daily_limit"`
+}
+
+func (q *Queries) FindFreePlan(ctx context.Context) (FindFreePlanRow, error) {
+	row := q.db.QueryRow(ctx, findFreePlan)
+	var i FindFreePlanRow
+	err := row.Scan(&i.ID, &i.Name, &i.DailyLimit)
+	return i, err
+}
+
+const findUserByAppleId = `-- name: FindUserByAppleId :one
+SELECT id, email, password_hash, name, is_active, role, auth_provider,
+       email_verified, lemonsqueezy_customer_id, avatar_url
+FROM users WHERE apple_id = $1 LIMIT 1
+`
+
+type FindUserByAppleIdRow struct {
+	ID                     pgtype.UUID           `db:"id" json:"id"`
+	Email                  string                `db:"email" json:"email"`
+	PasswordHash           *string               `db:"password_hash" json:"password_hash"`
+	Name                   string                `db:"name" json:"name"`
+	IsActive               bool                  `db:"is_active" json:"is_active"`
+	Role                   UsersRoleEnum         `db:"role" json:"role"`
+	AuthProvider           UsersAuthProviderEnum `db:"auth_provider" json:"auth_provider"`
+	EmailVerified          bool                  `db:"email_verified" json:"email_verified"`
+	LemonsqueezyCustomerID *string               `db:"lemonsqueezy_customer_id" json:"lemonsqueezy_customer_id"`
+	AvatarUrl              *string               `db:"avatar_url" json:"avatar_url"`
+}
+
+func (q *Queries) FindUserByAppleId(ctx context.Context, appleID *string) (FindUserByAppleIdRow, error) {
+	row := q.db.QueryRow(ctx, findUserByAppleId, appleID)
+	var i FindUserByAppleIdRow
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.PasswordHash,
+		&i.Name,
+		&i.IsActive,
+		&i.Role,
+		&i.AuthProvider,
+		&i.EmailVerified,
+		&i.LemonsqueezyCustomerID,
+		&i.AvatarUrl,
+	)
+	return i, err
+}
+
+const findUserByFacebookId = `-- name: FindUserByFacebookId :one
+SELECT id, email, password_hash, name, is_active, role, auth_provider,
+       email_verified, lemonsqueezy_customer_id, avatar_url
+FROM users WHERE facebook_id = $1 LIMIT 1
+`
+
+type FindUserByFacebookIdRow struct {
+	ID                     pgtype.UUID           `db:"id" json:"id"`
+	Email                  string                `db:"email" json:"email"`
+	PasswordHash           *string               `db:"password_hash" json:"password_hash"`
+	Name                   string                `db:"name" json:"name"`
+	IsActive               bool                  `db:"is_active" json:"is_active"`
+	Role                   UsersRoleEnum         `db:"role" json:"role"`
+	AuthProvider           UsersAuthProviderEnum `db:"auth_provider" json:"auth_provider"`
+	EmailVerified          bool                  `db:"email_verified" json:"email_verified"`
+	LemonsqueezyCustomerID *string               `db:"lemonsqueezy_customer_id" json:"lemonsqueezy_customer_id"`
+	AvatarUrl              *string               `db:"avatar_url" json:"avatar_url"`
+}
+
+func (q *Queries) FindUserByFacebookId(ctx context.Context, facebookID *string) (FindUserByFacebookIdRow, error) {
+	row := q.db.QueryRow(ctx, findUserByFacebookId, facebookID)
+	var i FindUserByFacebookIdRow
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.PasswordHash,
+		&i.Name,
+		&i.IsActive,
+		&i.Role,
+		&i.AuthProvider,
+		&i.EmailVerified,
+		&i.LemonsqueezyCustomerID,
+		&i.AvatarUrl,
+	)
+	return i, err
+}
+
+const findUserByGoogleId = `-- name: FindUserByGoogleId :one
+SELECT id, email, password_hash, name, is_active, role, auth_provider,
+       email_verified, lemonsqueezy_customer_id, avatar_url
+FROM users WHERE google_id = $1 LIMIT 1
+`
+
+type FindUserByGoogleIdRow struct {
+	ID                     pgtype.UUID           `db:"id" json:"id"`
+	Email                  string                `db:"email" json:"email"`
+	PasswordHash           *string               `db:"password_hash" json:"password_hash"`
+	Name                   string                `db:"name" json:"name"`
+	IsActive               bool                  `db:"is_active" json:"is_active"`
+	Role                   UsersRoleEnum         `db:"role" json:"role"`
+	AuthProvider           UsersAuthProviderEnum `db:"auth_provider" json:"auth_provider"`
+	EmailVerified          bool                  `db:"email_verified" json:"email_verified"`
+	LemonsqueezyCustomerID *string               `db:"lemonsqueezy_customer_id" json:"lemonsqueezy_customer_id"`
+	AvatarUrl              *string               `db:"avatar_url" json:"avatar_url"`
+}
+
+func (q *Queries) FindUserByGoogleId(ctx context.Context, googleID *string) (FindUserByGoogleIdRow, error) {
+	row := q.db.QueryRow(ctx, findUserByGoogleId, googleID)
+	var i FindUserByGoogleIdRow
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.PasswordHash,
+		&i.Name,
+		&i.IsActive,
+		&i.Role,
+		&i.AuthProvider,
+		&i.EmailVerified,
+		&i.LemonsqueezyCustomerID,
+		&i.AvatarUrl,
+	)
+	return i, err
+}
+
+const findUserByTiktokId = `-- name: FindUserByTiktokId :one
+SELECT id, email, password_hash, name, is_active, role, auth_provider,
+       email_verified, lemonsqueezy_customer_id, avatar_url
+FROM users WHERE tiktok_id = $1 LIMIT 1
+`
+
+type FindUserByTiktokIdRow struct {
+	ID                     pgtype.UUID           `db:"id" json:"id"`
+	Email                  string                `db:"email" json:"email"`
+	PasswordHash           *string               `db:"password_hash" json:"password_hash"`
+	Name                   string                `db:"name" json:"name"`
+	IsActive               bool                  `db:"is_active" json:"is_active"`
+	Role                   UsersRoleEnum         `db:"role" json:"role"`
+	AuthProvider           UsersAuthProviderEnum `db:"auth_provider" json:"auth_provider"`
+	EmailVerified          bool                  `db:"email_verified" json:"email_verified"`
+	LemonsqueezyCustomerID *string               `db:"lemonsqueezy_customer_id" json:"lemonsqueezy_customer_id"`
+	AvatarUrl              *string               `db:"avatar_url" json:"avatar_url"`
+}
+
+func (q *Queries) FindUserByTiktokId(ctx context.Context, tiktokID *string) (FindUserByTiktokIdRow, error) {
+	row := q.db.QueryRow(ctx, findUserByTiktokId, tiktokID)
+	var i FindUserByTiktokIdRow
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.PasswordHash,
+		&i.Name,
+		&i.IsActive,
+		&i.Role,
+		&i.AuthProvider,
+		&i.EmailVerified,
+		&i.LemonsqueezyCustomerID,
+		&i.AvatarUrl,
+	)
+	return i, err
+}
+
 const getActiveSubscriptionByUserID = `-- name: GetActiveSubscriptionByUserID :one
 SELECT s.status, s.store_type, s.started_at, s.expires_at,
        p.name AS plan_name, p.daily_limit
@@ -167,6 +408,253 @@ func (q *Queries) GetAuthUserByID(ctx context.Context, id pgtype.UUID) (GetAuthU
 	return i, err
 }
 
+const getEmailSettings = `-- name: GetEmailSettings :one
+SELECT resend_api_key, email_from FROM app_settings LIMIT 1
+`
+
+type GetEmailSettingsRow struct {
+	ResendApiKey string `db:"resend_api_key" json:"resend_api_key"`
+	EmailFrom    string `db:"email_from" json:"email_from"`
+}
+
+// app_settings creds: both columns are NOT NULL (default ”).
+func (q *Queries) GetEmailSettings(ctx context.Context) (GetEmailSettingsRow, error) {
+	row := q.db.QueryRow(ctx, getEmailSettings)
+	var i GetEmailSettingsRow
+	err := row.Scan(&i.ResendApiKey, &i.EmailFrom)
+	return i, err
+}
+
+const getEmailTemplateByKey = `-- name: GetEmailTemplateByKey :one
+SELECT subject, html FROM email_templates WHERE template_key = $1 LIMIT 1
+`
+
+type GetEmailTemplateByKeyRow struct {
+	Subject string `db:"subject" json:"subject"`
+	Html    string `db:"html" json:"html"`
+}
+
+// DB template override. PK column is template_key (not key).
+func (q *Queries) GetEmailTemplateByKey(ctx context.Context, templateKey string) (GetEmailTemplateByKeyRow, error) {
+	row := q.db.QueryRow(ctx, getEmailTemplateByKey, templateKey)
+	var i GetEmailTemplateByKeyRow
+	err := row.Scan(&i.Subject, &i.Html)
+	return i, err
+}
+
+const getUserAuthState = `-- name: GetUserAuthState :one
+SELECT id, email, name, password_hash, auth_provider, is_active,
+       email_verified, email_verification_code, email_verification_expires,
+       password_reset_code, password_reset_expires, password_reset_attempts
+FROM users WHERE email = $1 LIMIT 1
+`
+
+type GetUserAuthStateRow struct {
+	ID                       pgtype.UUID           `db:"id" json:"id"`
+	Email                    string                `db:"email" json:"email"`
+	Name                     string                `db:"name" json:"name"`
+	PasswordHash             *string               `db:"password_hash" json:"password_hash"`
+	AuthProvider             UsersAuthProviderEnum `db:"auth_provider" json:"auth_provider"`
+	IsActive                 bool                  `db:"is_active" json:"is_active"`
+	EmailVerified            bool                  `db:"email_verified" json:"email_verified"`
+	EmailVerificationCode    *string               `db:"email_verification_code" json:"email_verification_code"`
+	EmailVerificationExpires pgtype.Timestamptz    `db:"email_verification_expires" json:"email_verification_expires"`
+	PasswordResetCode        *string               `db:"password_reset_code" json:"password_reset_code"`
+	PasswordResetExpires     pgtype.Timestamptz    `db:"password_reset_expires" json:"password_reset_expires"`
+	PasswordResetAttempts    int32                 `db:"password_reset_attempts" json:"password_reset_attempts"`
+}
+
+func (q *Queries) GetUserAuthState(ctx context.Context, email string) (GetUserAuthStateRow, error) {
+	row := q.db.QueryRow(ctx, getUserAuthState, email)
+	var i GetUserAuthStateRow
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Name,
+		&i.PasswordHash,
+		&i.AuthProvider,
+		&i.IsActive,
+		&i.EmailVerified,
+		&i.EmailVerificationCode,
+		&i.EmailVerificationExpires,
+		&i.PasswordResetCode,
+		&i.PasswordResetExpires,
+		&i.PasswordResetAttempts,
+	)
+	return i, err
+}
+
+const insertEmailLog = `-- name: InsertEmailLog :exec
+INSERT INTO email_logs (to_email, email_type, subject, status, provider_id, error)
+VALUES ($1, $2, $3, $4, $5, $6)
+`
+
+type InsertEmailLogParams struct {
+	ToEmail    string  `db:"to_email" json:"to_email"`
+	EmailType  string  `db:"email_type" json:"email_type"`
+	Subject    string  `db:"subject" json:"subject"`
+	Status     string  `db:"status" json:"status"`
+	ProviderID *string `db:"provider_id" json:"provider_id"`
+	Error      *string `db:"error" json:"error"`
+}
+
+// Audit row for every deliver attempt (suppressed/skipped/sent/failed).
+func (q *Queries) InsertEmailLog(ctx context.Context, arg InsertEmailLogParams) error {
+	_, err := q.db.Exec(ctx, insertEmailLog,
+		arg.ToEmail,
+		arg.EmailType,
+		arg.Subject,
+		arg.Status,
+		arg.ProviderID,
+		arg.Error,
+	)
+	return err
+}
+
+const isEmailSuppressed = `-- name: IsEmailSuppressed :one
+SELECT COUNT(*) > 0 FROM email_suppressions WHERE email = $1
+`
+
+// Lowercased-email suppression check (bounce/complaint list).
+func (q *Queries) IsEmailSuppressed(ctx context.Context, email string) (bool, error) {
+	row := q.db.QueryRow(ctx, isEmailSuppressed, email)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const linkSocialApple = `-- name: LinkSocialApple :exec
+UPDATE users SET apple_id = $2, avatar_url = $3, email_verified = true,
+  updated_at = now() WHERE id = $1
+`
+
+type LinkSocialAppleParams struct {
+	ID        pgtype.UUID `db:"id" json:"id"`
+	AppleID   *string     `db:"apple_id" json:"apple_id"`
+	AvatarUrl *string     `db:"avatar_url" json:"avatar_url"`
+}
+
+func (q *Queries) LinkSocialApple(ctx context.Context, arg LinkSocialAppleParams) error {
+	_, err := q.db.Exec(ctx, linkSocialApple, arg.ID, arg.AppleID, arg.AvatarUrl)
+	return err
+}
+
+const linkSocialFacebook = `-- name: LinkSocialFacebook :exec
+UPDATE users SET facebook_id = $2, avatar_url = $3, email_verified = true,
+  updated_at = now() WHERE id = $1
+`
+
+type LinkSocialFacebookParams struct {
+	ID         pgtype.UUID `db:"id" json:"id"`
+	FacebookID *string     `db:"facebook_id" json:"facebook_id"`
+	AvatarUrl  *string     `db:"avatar_url" json:"avatar_url"`
+}
+
+func (q *Queries) LinkSocialFacebook(ctx context.Context, arg LinkSocialFacebookParams) error {
+	_, err := q.db.Exec(ctx, linkSocialFacebook, arg.ID, arg.FacebookID, arg.AvatarUrl)
+	return err
+}
+
+const linkSocialGoogle = `-- name: LinkSocialGoogle :exec
+UPDATE users SET google_id = $2, avatar_url = $3, email_verified = true,
+  updated_at = now() WHERE id = $1
+`
+
+type LinkSocialGoogleParams struct {
+	ID        pgtype.UUID `db:"id" json:"id"`
+	GoogleID  *string     `db:"google_id" json:"google_id"`
+	AvatarUrl *string     `db:"avatar_url" json:"avatar_url"`
+}
+
+func (q *Queries) LinkSocialGoogle(ctx context.Context, arg LinkSocialGoogleParams) error {
+	_, err := q.db.Exec(ctx, linkSocialGoogle, arg.ID, arg.GoogleID, arg.AvatarUrl)
+	return err
+}
+
+const linkSocialTiktok = `-- name: LinkSocialTiktok :exec
+UPDATE users SET tiktok_id = $2, avatar_url = $3, email_verified = true,
+  updated_at = now() WHERE id = $1
+`
+
+type LinkSocialTiktokParams struct {
+	ID        pgtype.UUID `db:"id" json:"id"`
+	TiktokID  *string     `db:"tiktok_id" json:"tiktok_id"`
+	AvatarUrl *string     `db:"avatar_url" json:"avatar_url"`
+}
+
+func (q *Queries) LinkSocialTiktok(ctx context.Context, arg LinkSocialTiktokParams) error {
+	_, err := q.db.Exec(ctx, linkSocialTiktok, arg.ID, arg.TiktokID, arg.AvatarUrl)
+	return err
+}
+
+const resetPasswordHash = `-- name: ResetPasswordHash :exec
+UPDATE users SET password_hash = $2, password_reset_code = null,
+  password_reset_expires = null, password_reset_attempts = 0,
+  updated_at = now() WHERE id = $1
+`
+
+type ResetPasswordHashParams struct {
+	ID           pgtype.UUID `db:"id" json:"id"`
+	PasswordHash *string     `db:"password_hash" json:"password_hash"`
+}
+
+func (q *Queries) ResetPasswordHash(ctx context.Context, arg ResetPasswordHashParams) error {
+	_, err := q.db.Exec(ctx, resetPasswordHash, arg.ID, arg.PasswordHash)
+	return err
+}
+
+const setEmailVerificationCode = `-- name: SetEmailVerificationCode :exec
+UPDATE users SET email_verification_code = $2, email_verification_expires = $3,
+  updated_at = now() WHERE id = $1
+`
+
+type SetEmailVerificationCodeParams struct {
+	ID                       pgtype.UUID        `db:"id" json:"id"`
+	EmailVerificationCode    *string            `db:"email_verification_code" json:"email_verification_code"`
+	EmailVerificationExpires pgtype.Timestamptz `db:"email_verification_expires" json:"email_verification_expires"`
+}
+
+func (q *Queries) SetEmailVerificationCode(ctx context.Context, arg SetEmailVerificationCodeParams) error {
+	_, err := q.db.Exec(ctx, setEmailVerificationCode, arg.ID, arg.EmailVerificationCode, arg.EmailVerificationExpires)
+	return err
+}
+
+const setPasswordResetAttempts = `-- name: SetPasswordResetAttempts :exec
+UPDATE users SET password_reset_attempts = $2, updated_at = now() WHERE id = $1
+`
+
+type SetPasswordResetAttemptsParams struct {
+	ID                    pgtype.UUID `db:"id" json:"id"`
+	PasswordResetAttempts int32       `db:"password_reset_attempts" json:"password_reset_attempts"`
+}
+
+func (q *Queries) SetPasswordResetAttempts(ctx context.Context, arg SetPasswordResetAttemptsParams) error {
+	_, err := q.db.Exec(ctx, setPasswordResetAttempts, arg.ID, arg.PasswordResetAttempts)
+	return err
+}
+
+const setPasswordResetCode = `-- name: SetPasswordResetCode :exec
+UPDATE users SET password_reset_code = $2, password_reset_expires = $3,
+  password_reset_attempts = $4, updated_at = now() WHERE id = $1
+`
+
+type SetPasswordResetCodeParams struct {
+	ID                    pgtype.UUID        `db:"id" json:"id"`
+	PasswordResetCode     *string            `db:"password_reset_code" json:"password_reset_code"`
+	PasswordResetExpires  pgtype.Timestamptz `db:"password_reset_expires" json:"password_reset_expires"`
+	PasswordResetAttempts int32              `db:"password_reset_attempts" json:"password_reset_attempts"`
+}
+
+func (q *Queries) SetPasswordResetCode(ctx context.Context, arg SetPasswordResetCodeParams) error {
+	_, err := q.db.Exec(ctx, setPasswordResetCode,
+		arg.ID,
+		arg.PasswordResetCode,
+		arg.PasswordResetExpires,
+		arg.PasswordResetAttempts,
+	)
+	return err
+}
+
 const updateUserPasswordHash = `-- name: UpdateUserPasswordHash :exec
 UPDATE users SET password_hash = $2, updated_at = now()
 WHERE id = $1
@@ -179,5 +667,27 @@ type UpdateUserPasswordHashParams struct {
 
 func (q *Queries) UpdateUserPasswordHash(ctx context.Context, arg UpdateUserPasswordHashParams) error {
 	_, err := q.db.Exec(ctx, updateUserPasswordHash, arg.ID, arg.PasswordHash)
+	return err
+}
+
+const updateUserVerification = `-- name: UpdateUserVerification :exec
+UPDATE users SET email_verified = $2, email_verification_code = $3,
+  email_verification_expires = $4, updated_at = now() WHERE id = $1
+`
+
+type UpdateUserVerificationParams struct {
+	ID                       pgtype.UUID        `db:"id" json:"id"`
+	EmailVerified            bool               `db:"email_verified" json:"email_verified"`
+	EmailVerificationCode    *string            `db:"email_verification_code" json:"email_verification_code"`
+	EmailVerificationExpires pgtype.Timestamptz `db:"email_verification_expires" json:"email_verification_expires"`
+}
+
+func (q *Queries) UpdateUserVerification(ctx context.Context, arg UpdateUserVerificationParams) error {
+	_, err := q.db.Exec(ctx, updateUserVerification,
+		arg.ID,
+		arg.EmailVerified,
+		arg.EmailVerificationCode,
+		arg.EmailVerificationExpires,
+	)
 	return err
 }

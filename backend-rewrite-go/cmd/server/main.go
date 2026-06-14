@@ -28,6 +28,8 @@ import (
 	"github.com/tannpv/draftright-rewrite/internal/adapter/redislimit"
 	authpkg "github.com/tannpv/draftright-rewrite/internal/auth"
 	corepkg "github.com/tannpv/draftright-rewrite/internal/core"
+	emailpkg "github.com/tannpv/draftright-rewrite/internal/email"
+	planspkg "github.com/tannpv/draftright-rewrite/internal/plans"
 	"github.com/tannpv/draftright-rewrite/internal/platform/auth"
 	"github.com/tannpv/draftright-rewrite/internal/platform/config"
 	platformdb "github.com/tannpv/draftright-rewrite/internal/platform/db"
@@ -124,11 +126,17 @@ func main() {
 			Deps: deps,
 			Log:  log,
 		},
-		Login:          core.login,
-		Refresh:        core.refresh,
-		ChangePassword: core.changePassword,
-		Account:        core.account,
-		DeleteAccount:  core.deleteAccount,
+		Login:              core.login,
+		Refresh:            core.refresh,
+		Register:           core.register,
+		VerifyEmail:        core.verifyEmail,
+		ResendVerification: core.resendVerification,
+		ForgotPassword:     core.forgotPassword,
+		ResetPassword:      core.resetPassword,
+		Social:             core.social,
+		ChangePassword:     core.changePassword,
+		Account:            core.account,
+		DeleteAccount:      core.deleteAccount,
 	}).Build()
 
 	srv := &http.Server{
@@ -242,10 +250,28 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 		subReader := subpkg.NewReader(q)
 		usageCounter := usagepkg.NewCounter(q)
 		ttlReader := settingspkg.NewReader(q)
-		authSvc := authpkg.NewService(userSvc, subReader, usageCounter, ttlReader, cfg.JWTSecret, cfg.JWTRefreshSecret)
+		// Phase 1b lifecycle collaborators: free-plan reader + free-sub
+		// writer (register grant) + email sender (verify/reset). Social
+		// verifier stays nil — wired in B9 (Part B); the lifecycle handlers
+		// never dereference it.
+		plansReader := planspkg.NewReader(q)
+		subWriter := subpkg.NewWriter(q)
+		emailSvc := emailpkg.NewService(emailpkg.NewPgRepo(q), emailpkg.Config{
+			EnvAPIKey: cfg.ResendAPIKey,
+			EnvFrom:   cfg.EmailFrom,
+		})
+		socialVer := authpkg.NewHTTPSocialVerifier(cfg.AppleAudiences)
+		authSvc := authpkg.NewService(userSvc, subReader, usageCounter, ttlReader, cfg.JWTSecret, cfg.JWTRefreshSecret,
+			plansReader, subWriter, emailSvc, socialVer)
 		authHandler := authpkg.NewHandler(authSvc)
 		core.login = http.HandlerFunc(authHandler.Login)
 		core.refresh = http.HandlerFunc(authHandler.Refresh)
+		core.register = http.HandlerFunc(authHandler.Register)
+		core.verifyEmail = http.HandlerFunc(authHandler.VerifyEmail)
+		core.resendVerification = http.HandlerFunc(authHandler.ResendVerification)
+		core.forgotPassword = http.HandlerFunc(authHandler.ForgotPassword)
+		core.resetPassword = http.HandlerFunc(authHandler.ResetPassword)
+		core.social = http.HandlerFunc(authHandler.Social)
 		core.changePassword = http.HandlerFunc(authHandler.ChangePassword)
 		core.account = http.HandlerFunc(authHandler.Account)
 		core.deleteAccount = http.HandlerFunc(authHandler.DeleteAccount)
@@ -268,10 +294,19 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 // return them alongside the rewrite deps without widening the call site
 // into a long positional tuple.
 type coreHandlers struct {
-	health         http.Handler // GET /health  (always set)
-	me             http.Handler // GET /auth/me (always set — JWT claims only, no DB)
-	login          http.Handler // POST /auth/login (set when pool != nil)
-	refresh        http.Handler // POST /auth/refresh (set when pool != nil)
+	health  http.Handler // GET /health  (always set)
+	me      http.Handler // GET /auth/me (always set — JWT claims only, no DB)
+	login   http.Handler // POST /auth/login (set when pool != nil)
+	refresh http.Handler // POST /auth/refresh (set when pool != nil)
+
+	// Phase 1b lifecycle handlers (set when pool != nil; all public).
+	register           http.Handler // POST /auth/register
+	verifyEmail        http.Handler // POST /auth/verify-email
+	resendVerification http.Handler // POST /auth/resend-verification
+	forgotPassword     http.Handler // POST /auth/forgot-password
+	resetPassword      http.Handler // POST /auth/reset-password
+	social             http.Handler // POST /auth/social
+
 	changePassword http.Handler // POST /auth/change-password (set when pool != nil)
 	account        http.Handler // GET /auth/account (set when pool != nil)
 	deleteAccount  http.Handler // DELETE /auth/account (set when pool != nil)

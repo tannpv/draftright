@@ -11,6 +11,31 @@ const (
 	msgInvalidRefresh     = "Invalid refresh token"
 )
 
+// Phase 1b lifecycle/social messages (register, verify-email, reset,
+// social link). Byte-for-byte parity with the NestJS auth.service.
+const (
+	msgEmailRegistered       = "Email already registered"
+	msgInvalidVerifyCode     = "Invalid or expired verification code"
+	msgInvalidResetCode      = "Invalid or expired reset code"
+	msgPasswordTooShort      = "Password must be at least 8 characters"
+	msgEmailRequired         = "Email is required for social login"
+	msgEmailRegisteredSocial = "This email is registered. Sign in with your password to link this account."
+)
+
+// BadRequestError → 400, code "invalid-input". Carries the exact Node message.
+type BadRequestError struct{ Message string }
+
+func (e *BadRequestError) Error() string { return e.Message }
+
+func badRequest(msg string) *BadRequestError { return &BadRequestError{Message: msg} }
+
+// ConflictError → 409, code "conflict".
+type ConflictError struct{ Message string }
+
+func (e *ConflictError) Error() string { return e.Message }
+
+func conflict(msg string) *ConflictError { return &ConflictError{Message: msg} }
+
 // providerLabel maps the auth_provider enum to the human label Node uses
 // in the social-account login message. Returns "" for local/unknown
 // (caller falls back to msgSocialGeneric).

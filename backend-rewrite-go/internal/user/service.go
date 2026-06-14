@@ -15,6 +15,10 @@ type Repo interface {
 	ByID(ctx context.Context, id string) (User, error)
 	UpdatePasswordHash(ctx context.Context, id, hash string) error
 	DeleteAccount(ctx context.Context, id string) error
+	Create(ctx context.Context, in NewUser) (User, error)
+	Update(ctx context.Context, id string, p UserPatch) error
+	FindBySocialId(ctx context.Context, provider, socialID string) (User, error)
+	AuthState(ctx context.Context, email string) (AuthState, error)
 }
 
 // Service is the thin domain entry point. It adds no logic over the
@@ -36,4 +40,16 @@ func (s *Service) UpdatePasswordHash(ctx context.Context, id, hash string) error
 }
 func (s *Service) DeleteAccount(ctx context.Context, id string) error {
 	return s.repo.DeleteAccount(ctx, id)
+}
+func (s *Service) Create(ctx context.Context, in NewUser) (User, error) {
+	return s.repo.Create(ctx, in)
+}
+func (s *Service) Update(ctx context.Context, id string, p UserPatch) error {
+	return s.repo.Update(ctx, id, p)
+}
+func (s *Service) FindBySocialId(ctx context.Context, provider, socialID string) (User, error) {
+	return s.repo.FindBySocialId(ctx, provider, socialID)
+}
+func (s *Service) AuthState(ctx context.Context, email string) (AuthState, error) {
+	return s.repo.AuthState(ctx, email)
 }

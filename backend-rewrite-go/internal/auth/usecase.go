@@ -7,8 +7,10 @@ package auth
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
+	"github.com/tannpv/draftright-rewrite/internal/plans"
 	platauth "github.com/tannpv/draftright-rewrite/internal/platform/auth"
 	"github.com/tannpv/draftright-rewrite/internal/shared"
 	"github.com/tannpv/draftright-rewrite/internal/subscription"
@@ -29,6 +31,32 @@ type UserService interface {
 	ByID(ctx context.Context, id string) (user.User, error)
 	UpdatePasswordHash(ctx context.Context, id, hash string) error
 	DeleteAccount(ctx context.Context, id string) error
+	Create(ctx context.Context, in user.NewUser) (user.User, error)
+	Update(ctx context.Context, id string, p user.UserPatch) error
+	FindBySocialId(ctx context.Context, provider, socialID string) (user.User, error)
+	AuthState(ctx context.Context, email string) (user.AuthState, error)
+}
+
+// FreePlanReader is the plans-module subset (free-plan lookup on signup).
+type FreePlanReader interface {
+	FindFreePlan(ctx context.Context) (plans.Plan, error)
+}
+
+// FreeSubWriter is the subscription-module subset (free grant on signup).
+type FreeSubWriter interface {
+	CreateFree(ctx context.Context, userID, planID string) error
+}
+
+// EmailSender is the email-module subset. Both methods fire-and-forget.
+type EmailSender interface {
+	SendVerification(ctx context.Context, to, name, code string)
+	SendPasswordReset(ctx context.Context, to, name, code string)
+}
+
+// SocialVerifier verifies a provider id_token → SocialProfile.
+// (SocialProfile + InboundProfile are declared in Part B's social.go.)
+type SocialVerifier interface {
+	Verify(ctx context.Context, provider, idToken string, profile InboundProfile) (SocialProfile, error)
 }
 
 // TTLReader resolves token lifetimes (platform/settings.Reader).
@@ -56,11 +84,19 @@ type Service struct {
 	access     *platauth.Signer
 	refresh    *platauth.Signer
 	refreshVer *platauth.Verifier
+	plans      FreePlanReader
+	subWriter  FreeSubWriter
+	email      EmailSender
+	social     SocialVerifier
 }
 
 // NewService wires dependencies. accessSecret signs/verifies access
-// tokens; refreshSecret signs/verifies refresh tokens.
-func NewService(users UserService, subs SubReader, usage UsageCounter, ttl TTLReader, accessSecret, refreshSecret string) *Service {
+// tokens; refreshSecret signs/verifies refresh tokens. The Phase 1b
+// collaborators (plansReader/subWriter/emailSvc/socialVer) are appended
+// after the Phase 1a deps so existing call sites only grow.
+func NewService(users UserService, subs SubReader, usage UsageCounter, ttl TTLReader,
+	accessSecret, refreshSecret string,
+	plansReader FreePlanReader, subWriter FreeSubWriter, emailSvc EmailSender, socialVer SocialVerifier) *Service {
 	return &Service{
 		users:      users,
 		subs:       subs,
@@ -69,6 +105,10 @@ func NewService(users UserService, subs SubReader, usage UsageCounter, ttl TTLRe
 		access:     platauth.NewSigner(accessSecret),
 		refresh:    platauth.NewSigner(refreshSecret),
 		refreshVer: platauth.NewVerifier(refreshSecret),
+		plans:      plansReader,
+		subWriter:  subWriter,
+		email:      emailSvc,
+		social:     socialVer,
 	}
 }
 
@@ -232,7 +272,287 @@ func (s *Service) Account(ctx context.Context, userID string) (*AccountView, err
 	return view, nil
 }
 
+// RegisterResult is register's return — tokens + the trimmed user with
+// the literal email_verified:false (Node returns the literal, not the col).
+type RegisterResult struct {
+	Tokens
+	User RegisterUser
+}
+
+// RegisterUser is the trimmed user echoed by register.
+type RegisterUser struct {
+	ID            string
+	Email         string
+	Name          string
+	EmailVerified bool
+}
+
+// Register ports auth.service.register exactly (order matters): reject
+// duplicate email (409), hash, create with a 6-digit verification code,
+// grant the free plan + free sub, fire-and-forget the verification email
+// (after the sub, before tokens), then mint tokens.
+func (s *Service) Register(ctx context.Context, email, password, name string) (RegisterResult, error) {
+	norm := normalizeEmail(email)
+	if _, err := s.users.ByEmail(ctx, norm); err == nil {
+		return RegisterResult{}, conflict(msgEmailRegistered)
+	} else if !errors.Is(err, user.ErrNotFound) {
+		return RegisterResult{}, err
+	}
+	hash, err := shared.HashPassword(password)
+	if err != nil {
+		return RegisterResult{}, err
+	}
+	code := generateCode()
+	expires := nowUTC().Add(emailCodeTTL)
+	u, err := s.users.Create(ctx, user.NewUser{
+		Email: norm, PasswordHash: hash, Name: name,
+		EmailVerificationCode: code, EmailVerificationExpires: &expires,
+	})
+	if err != nil {
+		return RegisterResult{}, err
+	}
+	free, err := s.plans.FindFreePlan(ctx)
+	if err != nil {
+		return RegisterResult{}, err
+	}
+	if err := s.subWriter.CreateFree(ctx, u.ID, free.ID); err != nil {
+		return RegisterResult{}, err
+	}
+	s.email.SendVerification(ctx, norm, name, code) // fire-and-forget
+	toks, err := s.generateTokens(ctx, u)
+	if err != nil {
+		return RegisterResult{}, err
+	}
+	return RegisterResult{Tokens: toks, User: RegisterUser{
+		ID: u.ID, Email: u.Email, Name: u.Name, EmailVerified: false,
+	}}, nil
+}
+
+// VerifyEmail ports auth.service.verifyEmail: look up the auth-state by
+// normalized email, require a present, matching, unexpired 6-digit code,
+// then mark verified + NULL the code/expiry. Every failure path returns
+// the same byte-identical "Invalid or expired verification code".
+func (s *Service) VerifyEmail(ctx context.Context, email, code string) error {
+	st, err := s.users.AuthState(ctx, normalizeEmail(email))
+	if errors.Is(err, user.ErrNotFound) {
+		return badRequest(msgInvalidVerifyCode)
+	}
+	if err != nil {
+		return err
+	}
+	if st.EmailVerificationCode == "" || st.EmailVerificationExpires == nil {
+		return badRequest(msgInvalidVerifyCode)
+	}
+	if st.EmailVerificationCode != code {
+		return badRequest(msgInvalidVerifyCode)
+	}
+	if st.EmailVerificationExpires.Before(nowUTC()) {
+		return badRequest(msgInvalidVerifyCode)
+	}
+	on := true
+	return s.users.Update(ctx, st.ID, user.UserPatch{
+		EmailVerified:            &on,
+		EmailVerificationCode:    user.NullableString{Set: true, Value: nil},
+		EmailVerificationExpires: user.NullableTime{Set: true, Value: nil},
+	})
+}
+
+// ResendVerification ports auth.service.resendVerification: silent no-op
+// for unknown or already-verified users; otherwise set a fresh code +
+// expiry and fire-and-forget the verification email.
+func (s *Service) ResendVerification(ctx context.Context, email string) error {
+	st, err := s.users.AuthState(ctx, normalizeEmail(email))
+	if errors.Is(err, user.ErrNotFound) {
+		return nil // silent
+	}
+	if err != nil {
+		return err
+	}
+	if st.EmailVerified {
+		return nil // silent
+	}
+	code := generateCode()
+	expires := nowUTC().Add(emailCodeTTL)
+	if err := s.users.Update(ctx, st.ID, user.UserPatch{
+		EmailVerificationCode:    user.NullableString{Set: true, Value: &code},
+		EmailVerificationExpires: user.NullableTime{Set: true, Value: &expires},
+	}); err != nil {
+		return err
+	}
+	s.email.SendVerification(ctx, st.Email, st.Name, code)
+	return nil
+}
+
+// ForgotPassword ports auth.service.forgotPassword: silent no-op for
+// unknown OR social-only (non-local / no password) accounts; otherwise
+// set a fresh 6-digit reset code + expiry + attempts=0 and fire-and-forget
+// the reset email.
+func (s *Service) ForgotPassword(ctx context.Context, email string) error {
+	st, err := s.users.AuthState(ctx, normalizeEmail(email))
+	if errors.Is(err, user.ErrNotFound) {
+		return nil // silent
+	}
+	if err != nil {
+		return err
+	}
+	if st.AuthProvider != "local" || st.PasswordHash == "" {
+		return nil // silent for social-only accounts
+	}
+	code := generateCode()
+	expires := nowUTC().Add(emailCodeTTL)
+	zero := 0
+	if err := s.users.Update(ctx, st.ID, user.UserPatch{
+		PasswordResetCode:     user.NullableString{Set: true, Value: &code},
+		PasswordResetExpires:  user.NullableTime{Set: true, Value: &expires},
+		PasswordResetAttempts: &zero,
+	}); err != nil {
+		return err
+	}
+	s.email.SendPasswordReset(ctx, st.Email, st.Name, code) // fire-and-forget
+	return nil
+}
+
+// ResetPassword ports auth.service.resetPassword: reject short passwords
+// (400); validate the reset code (present + matches + not expired); on a
+// bad code, increment attempts and BURN the code (null it + reset attempts)
+// once attempts reach maxResetAttempts; on success, patch only PasswordHash
+// (the repo's ResetPasswordHash query clears code/expiry/attempts atomically).
+func (s *Service) ResetPassword(ctx context.Context, email, code, newPassword string) error {
+	if len(newPassword) < 8 {
+		return badRequest(msgPasswordTooShort)
+	}
+	st, err := s.users.AuthState(ctx, normalizeEmail(email))
+	if errors.Is(err, user.ErrNotFound) {
+		return badRequest(msgInvalidResetCode)
+	}
+	if err != nil {
+		return err
+	}
+	if st.PasswordResetCode == "" || st.PasswordResetExpires == nil {
+		return badRequest(msgInvalidResetCode)
+	}
+	badCode := st.PasswordResetCode != code || st.PasswordResetExpires.Before(nowUTC())
+	if badCode {
+		attempts := st.PasswordResetAttempts + 1
+		if attempts >= maxResetAttempts {
+			zero := 0
+			_ = s.users.Update(ctx, st.ID, user.UserPatch{
+				PasswordResetCode:     user.NullableString{Set: true, Value: nil},
+				PasswordResetExpires:  user.NullableTime{Set: true, Value: nil},
+				PasswordResetAttempts: &zero,
+			})
+		} else {
+			_ = s.users.Update(ctx, st.ID, user.UserPatch{PasswordResetAttempts: &attempts})
+		}
+		return badRequest(msgInvalidResetCode)
+	}
+	hash, err := shared.HashPassword(newPassword)
+	if err != nil {
+		return err
+	}
+	return s.users.Update(ctx, st.ID, user.UserPatch{PasswordHash: &hash})
+}
+
+// SocialResult is the social-login return: tokens + trimmed user.
+type SocialResult struct {
+	Tokens
+	User UserPayload
+}
+
+// SocialLogin verifies a provider token then links to an existing account,
+// creates a new one, or guards a password-account takeover — mirroring the
+// NestJS auth.service social flow.
+func (s *Service) SocialLogin(ctx context.Context, provider, idToken string, profile InboundProfile) (SocialResult, error) {
+	prov, err := toAuthProvider(provider)
+	if err != nil {
+		return SocialResult{}, err // *BadRequestError "Unsupported provider: ..."
+	}
+	sp, err := s.social.Verify(ctx, prov, idToken, profile)
+	if err != nil {
+		return SocialResult{}, err // verifier returns *AuthError (401)
+	}
+	if sp.Email == "" {
+		return SocialResult{}, badRequest(msgEmailRequired)
+	}
+
+	u, err := s.users.FindBySocialId(ctx, prov, sp.SocialID)
+	found := err == nil
+	if err != nil && !errors.Is(err, user.ErrNotFound) {
+		return SocialResult{}, err
+	}
+
+	if !found {
+		byEmail, e := s.users.ByEmail(ctx, sp.Email)
+		switch {
+		case e == nil:
+			// link path — existing local account by email
+			if !sp.EmailVerified {
+				return SocialResult{}, unauthorized(msgEmailRegisteredSocial)
+			}
+			avatar := sp.AvatarURL
+			if avatar == "" {
+				avatar = byEmail.AvatarURL
+			}
+			on := true
+			if uerr := s.users.Update(ctx, byEmail.ID, user.UserPatch{
+				SocialProvider: prov, SocialID: sp.SocialID,
+				AvatarURL: &avatar, EmailVerified: &on,
+			}); uerr != nil {
+				return SocialResult{}, uerr
+			}
+			u, err = s.users.ByID(ctx, byEmail.ID)
+			if err != nil {
+				return SocialResult{}, err
+			}
+		case errors.Is(e, user.ErrNotFound):
+			// create path — brand new social user
+			name := sp.Name
+			if name == "" {
+				name = emailLocalPart(sp.Email)
+			}
+			u, err = s.users.Create(ctx, user.NewUser{
+				Email: sp.Email, Name: name, AuthProvider: prov,
+				SocialProvider: prov, SocialID: sp.SocialID,
+				AvatarURL: sp.AvatarURL, EmailVerified: sp.EmailVerified,
+			})
+			if err != nil {
+				return SocialResult{}, err
+			}
+			free, ferr := s.plans.FindFreePlan(ctx)
+			if ferr != nil {
+				return SocialResult{}, ferr
+			}
+			if serr := s.subWriter.CreateFree(ctx, u.ID, free.ID); serr != nil {
+				return SocialResult{}, serr
+			}
+		default:
+			return SocialResult{}, e
+		}
+	}
+
+	if !u.IsActive {
+		return SocialResult{}, unauthorized(msgAccountDisabled)
+	}
+	toks, err := s.generateTokens(ctx, u)
+	if err != nil {
+		return SocialResult{}, err
+	}
+	return SocialResult{Tokens: toks, User: UserPayload{ID: u.ID, Email: u.Email, Name: u.Name}}, nil
+}
+
+// emailLocalPart returns the part before '@', or the whole string if none.
+func emailLocalPart(e string) string {
+	if i := strings.IndexByte(e, '@'); i >= 0 {
+		return e[:i]
+	}
+	return e
+}
+
 // DeleteAccount ports the cascade delete.
 func (s *Service) DeleteAccount(ctx context.Context, userID string) error {
 	return s.users.DeleteAccount(ctx, userID)
 }
+
+func normalizeEmail(e string) string { return strings.ToLower(strings.TrimSpace(e)) }
+
+func nowUTC() time.Time { return time.Now().UTC() }

@@ -43,8 +43,20 @@ type Router struct {
 	// Phase 1a auth endpoints. Public: Login, Refresh. Auth-gated:
 	// ChangePassword, Account, DeleteAccount. All nil-guarded so the
 	// router stays functional when the auth stack is absent (no DB).
-	Login          http.Handler // POST /auth/login (public)
-	Refresh        http.Handler // POST /auth/refresh (public)
+	Login   http.Handler // POST /auth/login (public)
+	Refresh http.Handler // POST /auth/refresh (public)
+
+	// Phase 1b auth-lifecycle endpoints. All PUBLIC (unauthenticated):
+	// signup + email-verification + password-reset flows. All nil-guarded
+	// like Login/Refresh so the router stays functional without the auth
+	// stack (no DB).
+	Register           http.Handler // POST /auth/register (public)
+	VerifyEmail        http.Handler // POST /auth/verify-email (public)
+	ResendVerification http.Handler // POST /auth/resend-verification (public)
+	ForgotPassword     http.Handler // POST /auth/forgot-password (public)
+	ResetPassword      http.Handler // POST /auth/reset-password (public)
+	Social             http.Handler // POST /auth/social (public)
+
 	ChangePassword http.Handler // POST /auth/change-password (auth)
 	Account        http.Handler // GET /auth/account (auth)
 	DeleteAccount  http.Handler // DELETE /auth/account (auth)
@@ -100,6 +112,24 @@ func (r *Router) Build() http.Handler {
 	}
 	if r.Refresh != nil {
 		mux.Method(http.MethodPost, "/auth/refresh", r.Refresh)
+	}
+	if r.Register != nil {
+		mux.Method(http.MethodPost, "/auth/register", r.Register)
+	}
+	if r.VerifyEmail != nil {
+		mux.Method(http.MethodPost, "/auth/verify-email", r.VerifyEmail)
+	}
+	if r.ResendVerification != nil {
+		mux.Method(http.MethodPost, "/auth/resend-verification", r.ResendVerification)
+	}
+	if r.ForgotPassword != nil {
+		mux.Method(http.MethodPost, "/auth/forgot-password", r.ForgotPassword)
+	}
+	if r.ResetPassword != nil {
+		mux.Method(http.MethodPost, "/auth/reset-password", r.ResetPassword)
+	}
+	if r.Social != nil {
+		mux.Method(http.MethodPost, "/auth/social", r.Social)
 	}
 
 	mux.Group(func(api chi.Router) {
