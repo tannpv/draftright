@@ -2,12 +2,14 @@ package payment
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/tannpv/draftright-rewrite/internal/shared"
 	sqlc "github.com/tannpv/draftright-rewrite/internal/shared/pg/sqlc"
 )
 
@@ -180,4 +182,66 @@ func derefBillingPeriod(p *sqlc.PlansBillingPeriodEnum) string {
 		return ""
 	}
 	return string(*p)
+}
+
+// MarshalJSON pins PaymentRow to the TypeORM Payment entity JSON: every column
+// in declaration order, ms-precision timestamps, nested plan last. The `user`
+// relation is NOT loaded by findByUser (relations:['plan'] only), so it is
+// absent here too.
+func (p PaymentRow) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		ID            string     `json:"id"`
+		UserID        string     `json:"user_id"`
+		PlanID        string     `json:"plan_id"`
+		Amount        int        `json:"amount"`
+		Currency      string     `json:"currency"`
+		Method        string     `json:"method"`
+		Status        string     `json:"status"`
+		ProviderRef   *string    `json:"provider_ref"`
+		ReferenceCode string     `json:"reference_code"`
+		QRData        *string    `json:"qr_data"`
+		Notes         *string    `json:"notes"`
+		ExpiresAt     *string    `json:"expires_at"`
+		CompletedAt   *string    `json:"completed_at"`
+		CreatedAt     string     `json:"created_at"`
+		UpdatedAt     string     `json:"updated_at"`
+		Plan          *PlanBrief `json:"plan"`
+	}{
+		ID: p.ID, UserID: p.UserID, PlanID: p.PlanID, Amount: p.Amount,
+		Currency: p.Currency, Method: p.Method, Status: p.Status,
+		ProviderRef: p.ProviderRef, ReferenceCode: p.ReferenceCode, QRData: p.QRData,
+		Notes: p.Notes, ExpiresAt: isoPtr(p.ExpiresAt), CompletedAt: isoPtr(p.CompletedAt),
+		CreatedAt: shared.ISOMillis(p.CreatedAt), UpdatedAt: shared.ISOMillis(p.UpdatedAt),
+		Plan: p.Plan,
+	})
+}
+
+// MarshalJSON pins PlanBrief to plans.PlanEntity's shape (same column order).
+func (p PlanBrief) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		ID            string  `json:"id"`
+		Name          string  `json:"name"`
+		DailyLimit    int     `json:"daily_limit"`
+		PriceCents    int     `json:"price_cents"`
+		Currency      *string `json:"currency"`
+		StripePriceID *string `json:"stripe_price_id"`
+		TrialDays     int     `json:"trial_days"`
+		BillingPeriod string  `json:"billing_period"`
+		IsActive      bool    `json:"is_active"`
+		CreatedAt     string  `json:"created_at"`
+		UpdatedAt     string  `json:"updated_at"`
+	}{
+		ID: p.ID, Name: p.Name, DailyLimit: p.DailyLimit, PriceCents: p.PriceCents,
+		Currency: p.Currency, StripePriceID: p.StripePriceID, TrialDays: p.TrialDays,
+		BillingPeriod: p.BillingPeriod, IsActive: p.IsActive,
+		CreatedAt: shared.ISOMillis(p.CreatedAt), UpdatedAt: shared.ISOMillis(p.UpdatedAt),
+	})
+}
+
+func isoPtr(t *time.Time) *string {
+	if t == nil {
+		return nil
+	}
+	s := shared.ISOMillis(*t)
+	return &s
 }
