@@ -138,6 +138,8 @@ func main() {
 		ChangePassword:     core.changePassword,
 		Account:            core.account,
 		DeleteAccount:      core.deleteAccount,
+		Subscription:       core.subscription,
+		VerifyReceipt:      core.verifyReceipt,
 	}).Build()
 
 	srv := &http.Server{
@@ -277,6 +279,9 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 		core.changePassword = http.HandlerFunc(authHandler.ChangePassword)
 		core.account = http.HandlerFunc(authHandler.Account)
 		core.deleteAccount = http.HandlerFunc(authHandler.DeleteAccount)
+		subHandler := subpkg.NewHandler(subpkg.NewService(subReader, usageCounter))
+		core.subscription = http.HandlerFunc(subHandler.Get)
+		core.verifyReceipt = http.HandlerFunc(subHandler.VerifyReceipt)
 	} else {
 		core.health = corepkg.NewHealthHandler(staticInfoReader{}, appVersion)
 		log.Warn("auth endpoints disabled", "reason", "no DATABASE_URL")
@@ -314,6 +319,8 @@ type coreHandlers struct {
 	changePassword http.Handler // POST /auth/change-password (set when pool != nil)
 	account        http.Handler // GET /auth/account (set when pool != nil)
 	deleteAccount  http.Handler // DELETE /auth/account (set when pool != nil)
+	subscription   http.Handler // GET /subscription (set when pool != nil)
+	verifyReceipt  http.Handler // POST /subscription/verify-receipt (set when pool != nil)
 }
 
 // staticInfoReader is the dev-fallback LogLevelReader used when no
