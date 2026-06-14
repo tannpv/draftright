@@ -66,6 +66,10 @@ type Router struct {
 	Subscription  http.Handler // GET /subscription (auth)
 	VerifyReceipt http.Handler // POST /subscription/verify-receipt (auth)
 
+	MintExtToken   http.Handler // POST   /auth/extension-tokens          (auth)
+	ListExtTokens  http.Handler // GET    /auth/extension-tokens          (auth)
+	RevokeExtToken http.Handler // DELETE /auth/extension-tokens/{id}      (auth)
+
 	// EnableTracing wraps the whole mux with otelhttp middleware so
 	// every request becomes a span. No-op when the global tracer
 	// provider is the default noop (i.e. tracing.Setup returned
@@ -160,6 +164,15 @@ func (r *Router) Build() http.Handler {
 		}
 		if r.VerifyReceipt != nil {
 			api.Method(http.MethodPost, "/subscription/verify-receipt", r.VerifyReceipt)
+		}
+		if r.MintExtToken != nil {
+			api.Method(http.MethodPost, "/auth/extension-tokens", r.MintExtToken)
+		}
+		if r.ListExtTokens != nil {
+			api.Method(http.MethodGet, "/auth/extension-tokens", r.ListExtTokens)
+		}
+		if r.RevokeExtToken != nil {
+			api.Method(http.MethodDelete, "/auth/extension-tokens/{id}", r.RevokeExtToken)
 		}
 	})
 

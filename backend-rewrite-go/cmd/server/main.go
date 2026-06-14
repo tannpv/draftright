@@ -29,6 +29,7 @@ import (
 	authpkg "github.com/tannpv/draftright-rewrite/internal/auth"
 	corepkg "github.com/tannpv/draftright-rewrite/internal/core"
 	emailpkg "github.com/tannpv/draftright-rewrite/internal/email"
+	exttokenpkg "github.com/tannpv/draftright-rewrite/internal/exttoken"
 	planspkg "github.com/tannpv/draftright-rewrite/internal/plans"
 	"github.com/tannpv/draftright-rewrite/internal/platform/auth"
 	"github.com/tannpv/draftright-rewrite/internal/platform/config"
@@ -141,6 +142,9 @@ func main() {
 		DeleteAccount:      core.deleteAccount,
 		Subscription:       core.subscription,
 		VerifyReceipt:      core.verifyReceipt,
+		MintExtToken:       core.mintExtToken,
+		ListExtTokens:      core.listExtTokens,
+		RevokeExtToken:     core.revokeExtToken,
 	}).Build()
 
 	srv := &http.Server{
@@ -284,6 +288,17 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 		core.subscription = http.HandlerFunc(subHandler.Get)
 		core.verifyReceipt = http.HandlerFunc(subHandler.VerifyReceipt)
 
+		// Extension tokens (T15): mint/list/revoke, JWT-gated. extSvc is also
+		// stashed on coreHandlers so T16's dual-auth middleware on /v1/rewrite
+		// can reuse the very same *exttoken.Service (verify path).
+		extRepo := exttokenpkg.NewRepo(q)
+		extSvc := exttokenpkg.NewService(extRepo)
+		extHandler := exttokenpkg.NewHandler(extSvc)
+		core.extSvc = extSvc
+		core.mintExtToken = http.HandlerFunc(extHandler.Mint)
+		core.listExtTokens = http.HandlerFunc(extHandler.List)
+		core.revokeExtToken = http.HandlerFunc(extHandler.Revoke)
+
 		// Daily subscription-expiry cron (ports NestJS @Cron("0 09 * * *")).
 		// Reuses the same subReader (it satisfies subpkg.CronRepo via
 		// DueForRenewal/ExpireLapsed) and the shared email sender. Fires once
@@ -335,6 +350,16 @@ type coreHandlers struct {
 	deleteAccount  http.Handler // DELETE /auth/account (set when pool != nil)
 	subscription   http.Handler // GET /subscription (set when pool != nil)
 	verifyReceipt  http.Handler // POST /subscription/verify-receipt (set when pool != nil)
+
+	// Extension-token handlers (set when pool != nil; all JWT-gated).
+	mintExtToken   http.Handler // POST   /auth/extension-tokens
+	listExtTokens  http.Handler // GET    /auth/extension-tokens
+	revokeExtToken http.Handler // DELETE /auth/extension-tokens/{id}
+
+	// extSvc is the live *exttoken.Service (verify path). Stashed so T16's
+	// dual-auth middleware on /v1/rewrite can authorize presented ext tokens
+	// without re-building the service. Nil when pool == nil.
+	extSvc *exttokenpkg.Service
 }
 
 // staticInfoReader is the dev-fallback LogLevelReader used when no
