@@ -88,6 +88,20 @@ type Config struct {
 	// (comma-separated). Used only when app_settings has no override.
 	PaymentEnabledMethods string
 
+	// Payment (Phase 3b). Credentials prefer the app_settings DB row at
+	// runtime; these env values are the resolveCredential() fallback
+	// (first-deploy / dev). PublishableKey + ApplePayMerchantID are
+	// env-ONLY (no app_settings column).
+	WebsiteURL           string
+	StripeSecretKey      string
+	StripePublishableKey string
+	ApplePayMerchantID   string
+	LemonSqueezyAPIKey   string
+	LemonSqueezyStoreID  string
+	VietQRBankID         string
+	VietQRAccountNumber  string
+	VietQRAccountName    string
+
 	// GoBackendRampPercent is the percentage of users bucketed onto the
 	// Go backend, surfaced via /auth/me flags.use_go_backend. Mirrors the
 	// Node GO_BACKEND_RAMP_PERCENT env var. Default 0 (no ramp).
@@ -134,6 +148,15 @@ func Load() (*Config, error) {
 		AppleAudiences:        os.Getenv("APPLE_AUDIENCES"),
 		AIProviders:           os.Getenv("AI_PROVIDERS"),
 		PaymentEnabledMethods: os.Getenv("PAYMENT_ENABLED_METHODS"),
+		WebsiteURL:            envOr("WEBSITE_URL", "http://localhost:4000"),
+		StripeSecretKey:       os.Getenv("STRIPE_SECRET_KEY"),
+		StripePublishableKey:  os.Getenv("STRIPE_PUBLISHABLE_KEY"),
+		ApplePayMerchantID:    os.Getenv("APPLE_PAY_MERCHANT_ID"),
+		LemonSqueezyAPIKey:    os.Getenv("LEMONSQUEEZY_API_KEY"),
+		LemonSqueezyStoreID:   os.Getenv("LEMONSQUEEZY_STORE_ID"),
+		VietQRBankID:          os.Getenv("VIETQR_BANK_ID"),
+		VietQRAccountNumber:   os.Getenv("VIETQR_ACCOUNT_NUMBER"),
+		VietQRAccountName:     os.Getenv("VIETQR_ACCOUNT_NAME"),
 		GoBackendRampPercent:  envInt("GO_BACKEND_RAMP_PERCENT", 0),
 		AppEnv:                envOr("APP_ENV", "development"),
 
