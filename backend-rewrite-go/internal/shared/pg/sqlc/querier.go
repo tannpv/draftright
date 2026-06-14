@@ -92,6 +92,10 @@ type Querier interface {
 	// deleted still returns (plan_name NULL), matching TypeORM relations:['plan']
 	// with a possibly-null relation.
 	GetPaymentByReference(ctx context.Context, referenceCode string) (GetPaymentByReferenceRow, error)
+	// payment_methods_enabled CSV from the singleton app_settings row. NOT NULL
+	// (default ''); empty string means unconfigured → caller falls back to env
+	// then default. No row at all → pgx.ErrNoRows, mapped to found=false.
+	GetPaymentMethodsEnabled(ctx context.Context) (string, error)
 	GetUserAuthState(ctx context.Context, email string) (GetUserAuthStateRow, error)
 	// Phase 0 core-endpoint queries (health + /auth/me). Kept separate
 	// from the rewrite module's queries.sql so the core package depends on
