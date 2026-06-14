@@ -44,3 +44,14 @@ func TestVerifyFacebook_OK(t *testing.T) {
 		t.Fatalf("%+v", p)
 	}
 }
+
+func TestVerifyTikTok_TrustsProfile(t *testing.T) {
+	v := &httpVerifier{}
+	p, err := v.Verify(context.Background(), "tiktok", "openid123", InboundProfile{Email: "t@b.com", Name: "T"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.SocialID != "openid123" || p.Email != "t@b.com" || p.EmailVerified {
+		t.Fatalf("%+v", p)
+	}
+}
