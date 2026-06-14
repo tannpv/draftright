@@ -383,6 +383,76 @@ func (s *Service) ResendVerification(ctx context.Context, email string) error {
 	return nil
 }
 
+// ForgotPassword ports auth.service.forgotPassword: silent no-op for
+// unknown OR social-only (non-local / no password) accounts; otherwise
+// set a fresh 6-digit reset code + expiry + attempts=0 and fire-and-forget
+// the reset email.
+func (s *Service) ForgotPassword(ctx context.Context, email string) error {
+	st, err := s.users.AuthState(ctx, normalizeEmail(email))
+	if errors.Is(err, user.ErrNotFound) {
+		return nil // silent
+	}
+	if err != nil {
+		return err
+	}
+	if st.AuthProvider != "local" || st.PasswordHash == "" {
+		return nil // silent for social-only accounts
+	}
+	code := generateCode()
+	expires := nowUTC().Add(emailCodeTTL)
+	zero := 0
+	if err := s.users.Update(ctx, st.ID, user.UserPatch{
+		PasswordResetCode:     user.NullableString{Set: true, Value: &code},
+		PasswordResetExpires:  user.NullableTime{Set: true, Value: &expires},
+		PasswordResetAttempts: &zero,
+	}); err != nil {
+		return err
+	}
+	s.email.SendPasswordReset(ctx, st.Email, st.Name, code) // fire-and-forget
+	return nil
+}
+
+// ResetPassword ports auth.service.resetPassword: reject short passwords
+// (400); validate the reset code (present + matches + not expired); on a
+// bad code, increment attempts and BURN the code (null it + reset attempts)
+// once attempts reach maxResetAttempts; on success, patch only PasswordHash
+// (the repo's ResetPasswordHash query clears code/expiry/attempts atomically).
+func (s *Service) ResetPassword(ctx context.Context, email, code, newPassword string) error {
+	if len(newPassword) < 8 {
+		return badRequest(msgPasswordTooShort)
+	}
+	st, err := s.users.AuthState(ctx, normalizeEmail(email))
+	if errors.Is(err, user.ErrNotFound) {
+		return badRequest(msgInvalidResetCode)
+	}
+	if err != nil {
+		return err
+	}
+	if st.PasswordResetCode == "" || st.PasswordResetExpires == nil {
+		return badRequest(msgInvalidResetCode)
+	}
+	badCode := st.PasswordResetCode != code || st.PasswordResetExpires.Before(nowUTC())
+	if badCode {
+		attempts := st.PasswordResetAttempts + 1
+		if attempts >= maxResetAttempts {
+			zero := 0
+			_ = s.users.Update(ctx, st.ID, user.UserPatch{
+				PasswordResetCode:     user.NullableString{Set: true, Value: nil},
+				PasswordResetExpires:  user.NullableTime{Set: true, Value: nil},
+				PasswordResetAttempts: &zero,
+			})
+		} else {
+			_ = s.users.Update(ctx, st.ID, user.UserPatch{PasswordResetAttempts: &attempts})
+		}
+		return badRequest(msgInvalidResetCode)
+	}
+	hash, err := shared.HashPassword(newPassword)
+	if err != nil {
+		return err
+	}
+	return s.users.Update(ctx, st.ID, user.UserPatch{PasswordHash: &hash})
+}
+
 // DeleteAccount ports the cascade delete.
 func (s *Service) DeleteAccount(ctx context.Context, userID string) error {
 	return s.users.DeleteAccount(ctx, userID)
