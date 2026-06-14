@@ -5,12 +5,15 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
+
+	sqlc "github.com/tannpv/draftright-rewrite/internal/shared/pg/sqlc"
 )
 
-// coreSettingsQuerier is the one-method sqlc subset for the settings read.
+// coreSettingsQuerier is the sqlc subset for the settings reads.
 // Satisfied by the live *sqlc.Queries.
 type coreSettingsQuerier interface {
 	GetPaymentMethodsEnabled(ctx context.Context) (string, error)
+	GetPaymentCredentials(ctx context.Context) (sqlc.GetPaymentCredentialsRow, error)
 }
 
 // SettingsAdapter maps app_settings.payment_methods_enabled to the Service's
@@ -33,4 +36,40 @@ func (a *SettingsAdapter) PaymentMethodsEnabled(ctx context.Context) (string, bo
 		return "", false, err
 	}
 	return v, v != "", nil
+}
+
+// Credentials is the checkout-time provider credential set (DB priority side
+// of resolveCredential). Empty strings when the column / row is absent.
+type Credentials struct {
+	StripeSecretKey            string
+	VietQRBankID               string
+	VietQRAccountNumber        string
+	VietQRAccountName          string
+	LemonSqueezyAPIKey         string
+	LemonSqueezyStoreID        string
+	LemonSqueezyVariantMonthly string
+	LemonSqueezyVariantYearly  string
+}
+
+// Credentials reads the singleton app_settings credential row. A missing row
+// is not an error — it yields the zero value, and the caller falls back to env
+// per resolveCredential (Node getSettings() returns null the same way).
+func (a *SettingsAdapter) Credentials(ctx context.Context) (Credentials, error) {
+	row, err := a.q.GetPaymentCredentials(ctx)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Credentials{}, nil
+	}
+	if err != nil {
+		return Credentials{}, err
+	}
+	return Credentials{
+		StripeSecretKey:            row.StripeSecretKey,
+		VietQRBankID:               row.VietqrBankID,
+		VietQRAccountNumber:        row.VietqrAccountNumber,
+		VietQRAccountName:          row.VietqrAccountName,
+		LemonSqueezyAPIKey:         row.LemonsqueezyApiKey,
+		LemonSqueezyStoreID:        row.LemonsqueezyStoreID,
+		LemonSqueezyVariantMonthly: row.LemonsqueezyVariantMonthly,
+		LemonSqueezyVariantYearly:  row.LemonsqueezyVariantYearly,
+	}, nil
 }

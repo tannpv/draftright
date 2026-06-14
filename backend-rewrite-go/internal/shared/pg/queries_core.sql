@@ -23,3 +23,18 @@ LIMIT 1;
 -- (default ''); empty string means unconfigured → caller falls back to env
 -- then default. No row at all → pgx.ErrNoRows, mapped to found=false.
 SELECT payment_methods_enabled FROM app_settings LIMIT 1;
+
+-- name: GetPaymentCredentials :one
+-- Checkout-time provider credentials from the singleton app_settings row.
+-- All columns are NOT NULL DEFAULT ''. No row → pgx.ErrNoRows (caller treats
+-- as all-empty → env fallback per resolveCredential).
+SELECT stripe_secret_key,
+       vietqr_bank_id,
+       vietqr_account_number,
+       vietqr_account_name,
+       lemonsqueezy_api_key,
+       lemonsqueezy_store_id,
+       lemonsqueezy_variant_monthly,
+       lemonsqueezy_variant_yearly
+FROM app_settings
+LIMIT 1;

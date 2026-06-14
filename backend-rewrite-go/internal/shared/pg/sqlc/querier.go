@@ -92,6 +92,10 @@ type Querier interface {
 	// deleted still returns (plan_name NULL), matching TypeORM relations:['plan']
 	// with a possibly-null relation.
 	GetPaymentByReference(ctx context.Context, referenceCode string) (GetPaymentByReferenceRow, error)
+	// Checkout-time provider credentials from the singleton app_settings row.
+	// All columns are NOT NULL DEFAULT ''. No row → pgx.ErrNoRows (caller treats
+	// as all-empty → env fallback per resolveCredential).
+	GetPaymentCredentials(ctx context.Context) (GetPaymentCredentialsRow, error)
 	// payment_methods_enabled CSV from the singleton app_settings row. NOT NULL
 	// (default ''); empty string means unconfigured → caller falls back to env
 	// then default. No row at all → pgx.ErrNoRows, mapped to found=false.
