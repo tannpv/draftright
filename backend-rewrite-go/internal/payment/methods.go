@@ -36,9 +36,11 @@ func RegisteredMethods() []string {
 // lowercase/dedupe/first-seen ordering and the vietqr→bank_transfer rule.
 // Output order is byte-identical to Node's `[...set]`.
 func EnabledMethods(raw string) []string {
-	if strings.TrimSpace(raw) == "" {
-		raw = DefaultPaymentMethod
-	}
+	// No blank→default shortcut here: the default lives in the caller's
+	// precedence (settings ?? env ?? default), exactly like Node's
+	// `(settings || env || DEFAULT).toLowerCase()`. A whitespace-only CSV is
+	// truthy in JS, so Node keeps it → split/trim/filter(Boolean) → [].
+	// Mirror that: a blank/whitespace raw collapses to an empty set here.
 	raw = strings.ToLower(raw)
 	seen := map[string]bool{}
 	out := []string{}

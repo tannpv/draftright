@@ -19,7 +19,8 @@ func TestEnabledMethods_OrderingAndVietQRImplication(t *testing.T) {
 		raw  string
 		want []string
 	}{
-		{"default when blank", "", []string{"stripe"}},
+		{"blank yields empty set (default lives in usecase precedence)", "", []string{}},
+		{"whitespace-only yields empty set (JS-truthy, Node filters to [])", "   ", []string{}},
 		{"single", "lemonsqueezy", []string{"lemonsqueezy"}},
 		{"vietqr implies bank_transfer appended last", "vietqr", []string{"vietqr", "bank_transfer"}},
 		{"insertion order preserved", "lemonsqueezy,stripe", []string{"lemonsqueezy", "stripe"}},
