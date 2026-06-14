@@ -25,6 +25,9 @@ type Querier interface {
 	CountUsageToday(ctx context.Context, arg CountUsageTodayParams) (int64, error)
 	CreateFreeSubscription(ctx context.Context, arg CreateFreeSubscriptionParams) error
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
+	// Cron pass 2: flip active|cancelled subs past expiry to expired, returning
+	// the affected rows so the caller can email each. expires_at left untouched.
+	ExpireLapsedSubs(ctx context.Context, expiresAt pgtype.Timestamp) ([]ExpireLapsedSubsRow, error)
 	FindFreePlan(ctx context.Context) (FindFreePlanRow, error)
 	FindUserByAppleId(ctx context.Context, appleID *string) (FindUserByAppleIdRow, error)
 	FindUserByFacebookId(ctx context.Context, facebookID *string) (FindUserByFacebookIdRow, error)
@@ -103,6 +106,9 @@ type Querier interface {
 	SetEmailVerificationCode(ctx context.Context, arg SetEmailVerificationCodeParams) error
 	SetPasswordResetAttempts(ctx context.Context, arg SetPasswordResetAttemptsParams) error
 	SetPasswordResetCode(ctx context.Context, arg SetPasswordResetCodeParams) error
+	// Cron pass 1: active subs whose expiry falls in the reminder window.
+	// Bounds passed by caller (now+2.5d, now+3.5d) to keep tz in the Go process.
+	SubsDueForRenewal(ctx context.Context, arg SubsDueForRenewalParams) ([]SubsDueForRenewalRow, error)
 	UpdateUserPasswordHash(ctx context.Context, arg UpdateUserPasswordHashParams) error
 	UpdateUserVerification(ctx context.Context, arg UpdateUserVerificationParams) error
 }

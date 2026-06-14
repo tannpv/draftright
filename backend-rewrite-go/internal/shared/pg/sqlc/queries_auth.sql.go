@@ -105,6 +105,44 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateU
 	return i, err
 }
 
+const expireLapsedSubs = `-- name: ExpireLapsedSubs :many
+UPDATE subscriptions s
+SET status = 'expired'::subscriptions_status_enum, updated_at = now()
+FROM users u
+WHERE u.id = s.user_id
+  AND s.status IN ('active'::subscriptions_status_enum, 'cancelled'::subscriptions_status_enum)
+  AND s.expires_at < $1
+RETURNING s.user_id, u.email, s.expires_at
+`
+
+type ExpireLapsedSubsRow struct {
+	UserID    pgtype.UUID      `db:"user_id" json:"user_id"`
+	Email     string           `db:"email" json:"email"`
+	ExpiresAt pgtype.Timestamp `db:"expires_at" json:"expires_at"`
+}
+
+// Cron pass 2: flip active|cancelled subs past expiry to expired, returning
+// the affected rows so the caller can email each. expires_at left untouched.
+func (q *Queries) ExpireLapsedSubs(ctx context.Context, expiresAt pgtype.Timestamp) ([]ExpireLapsedSubsRow, error) {
+	rows, err := q.db.Query(ctx, expireLapsedSubs, expiresAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExpireLapsedSubsRow{}
+	for rows.Next() {
+		var i ExpireLapsedSubsRow
+		if err := rows.Scan(&i.UserID, &i.Email, &i.ExpiresAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const findFreePlan = `-- name: FindFreePlan :one
 SELECT id, name, daily_limit FROM plans
 WHERE billing_period = 'none'::plans_billing_period_enum AND is_active = true
@@ -759,6 +797,54 @@ func (q *Queries) SetPasswordResetCode(ctx context.Context, arg SetPasswordReset
 		arg.PasswordResetAttempts,
 	)
 	return err
+}
+
+const subsDueForRenewal = `-- name: SubsDueForRenewal :many
+SELECT s.user_id, u.email, s.expires_at, p.name AS plan_name
+FROM subscriptions s
+JOIN users u ON u.id = s.user_id
+JOIN plans p ON p.id = s.plan_id
+WHERE s.status = 'active'::subscriptions_status_enum
+  AND s.expires_at >= $1 AND s.expires_at <= $2
+`
+
+type SubsDueForRenewalParams struct {
+	ExpiresAt   pgtype.Timestamp `db:"expires_at" json:"expires_at"`
+	ExpiresAt_2 pgtype.Timestamp `db:"expires_at_2" json:"expires_at_2"`
+}
+
+type SubsDueForRenewalRow struct {
+	UserID    pgtype.UUID      `db:"user_id" json:"user_id"`
+	Email     string           `db:"email" json:"email"`
+	ExpiresAt pgtype.Timestamp `db:"expires_at" json:"expires_at"`
+	PlanName  string           `db:"plan_name" json:"plan_name"`
+}
+
+// Cron pass 1: active subs whose expiry falls in the reminder window.
+// Bounds passed by caller (now+2.5d, now+3.5d) to keep tz in the Go process.
+func (q *Queries) SubsDueForRenewal(ctx context.Context, arg SubsDueForRenewalParams) ([]SubsDueForRenewalRow, error) {
+	rows, err := q.db.Query(ctx, subsDueForRenewal, arg.ExpiresAt, arg.ExpiresAt_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SubsDueForRenewalRow{}
+	for rows.Next() {
+		var i SubsDueForRenewalRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.Email,
+			&i.ExpiresAt,
+			&i.PlanName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const updateUserPasswordHash = `-- name: UpdateUserPasswordHash :exec

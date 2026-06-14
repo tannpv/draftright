@@ -20,6 +20,11 @@ type fakeQ struct {
 
 	lastExpired    pgtype.Timestamp
 	lastExpiredErr error
+
+	dueRows     []sqlc.SubsDueForRenewalRow
+	dueErr      error
+	expiredRows []sqlc.ExpireLapsedSubsRow
+	expiredErr  error
 }
 
 func (f fakeQ) GetActiveSubscriptionByUserID(ctx context.Context, id pgtype.UUID) (sqlc.GetActiveSubscriptionByUserIDRow, error) {
@@ -32,6 +37,14 @@ func (f fakeQ) GetActiveSubWithPlan(ctx context.Context, id pgtype.UUID) (sqlc.G
 
 func (f fakeQ) GetLastExpiredAt(ctx context.Context, id pgtype.UUID) (pgtype.Timestamp, error) {
 	return f.lastExpired, f.lastExpiredErr
+}
+
+func (f fakeQ) SubsDueForRenewal(ctx context.Context, arg sqlc.SubsDueForRenewalParams) ([]sqlc.SubsDueForRenewalRow, error) {
+	return f.dueRows, f.dueErr
+}
+
+func (f fakeQ) ExpireLapsedSubs(ctx context.Context, expiresAt pgtype.Timestamp) ([]sqlc.ExpireLapsedSubsRow, error) {
+	return f.expiredRows, f.expiredErr
 }
 
 func TestActiveByUser_Found(t *testing.T) {
@@ -158,5 +171,53 @@ func TestLastExpiredAt_NotValid_Nil(t *testing.T) {
 	tm, err := r.LastExpiredAt(context.Background(), "11111111-1111-1111-1111-111111111111")
 	if err != nil || tm != nil {
 		t.Fatalf("want nil,nil got %v,%v", tm, err)
+	}
+}
+
+// *Reader must satisfy the cron's CronRepo port.
+var _ sub.CronRepo = (*sub.Reader)(nil)
+
+func TestDueForRenewal_MapsRows(t *testing.T) {
+	exp := time.Date(2026, 6, 17, 9, 0, 0, 0, time.UTC)
+	var uid pgtype.UUID
+	_ = uid.Scan("11111111-1111-1111-1111-111111111111")
+	r := sub.NewReader(fakeQ{dueRows: []sqlc.SubsDueForRenewalRow{{
+		UserID:    uid,
+		Email:     "a@b.com",
+		ExpiresAt: pgtype.Timestamp{Time: exp, Valid: true},
+		PlanName:  "Pro",
+	}}})
+	rows, err := r.DueForRenewal(context.Background(),
+		time.Date(2026, 6, 16, 0, 0, 0, 0, time.UTC),
+		time.Date(2026, 6, 18, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("want 1 row, got %d", len(rows))
+	}
+	got := rows[0]
+	if got.UserID != "11111111-1111-1111-1111-111111111111" || got.Email != "a@b.com" ||
+		got.PlanName != "Pro" || !got.ExpiresAt.Equal(exp) {
+		t.Fatalf("bad mapping: %+v", got)
+	}
+}
+
+func TestExpireLapsed_MapsRows(t *testing.T) {
+	exp := time.Date(2026, 6, 1, 9, 0, 0, 0, time.UTC)
+	var uid pgtype.UUID
+	_ = uid.Scan("22222222-2222-2222-2222-222222222222")
+	r := sub.NewReader(fakeQ{expiredRows: []sqlc.ExpireLapsedSubsRow{{
+		UserID:    uid,
+		Email:     "c@d.com",
+		ExpiresAt: pgtype.Timestamp{Time: exp, Valid: true},
+	}}})
+	rows, err := r.ExpireLapsed(context.Background(), time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || rows[0].UserID != "22222222-2222-2222-2222-222222222222" ||
+		rows[0].Email != "c@d.com" || !rows[0].ExpiresAt.Equal(exp) {
+		t.Fatalf("bad mapping: %+v", rows)
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	sqlc "github.com/tannpv/draftright-rewrite/internal/shared/pg/sqlc"
@@ -29,6 +30,8 @@ type Querier interface {
 	GetActiveSubscriptionByUserID(ctx context.Context, id pgtype.UUID) (sqlc.GetActiveSubscriptionByUserIDRow, error)
 	GetActiveSubWithPlan(ctx context.Context, userID pgtype.UUID) (sqlc.GetActiveSubWithPlanRow, error)
 	GetLastExpiredAt(ctx context.Context, userID pgtype.UUID) (pgtype.Timestamp, error)
+	SubsDueForRenewal(ctx context.Context, arg sqlc.SubsDueForRenewalParams) ([]sqlc.SubsDueForRenewalRow, error)
+	ExpireLapsedSubs(ctx context.Context, expiresAt pgtype.Timestamp) ([]sqlc.ExpireLapsedSubsRow, error)
 }
 
 // Reader resolves the active subscription.
@@ -118,4 +121,45 @@ func (r *Reader) LastExpiredAt(ctx context.Context, userID string) (*time.Time, 
 	}
 	t := ts.Time
 	return &t, nil
+}
+
+// DueForRenewal implements CronRepo pass 1: active subs whose expiry falls in
+// [lo, hi]. Bounds are caller-computed (now+2.5d / now+3.5d) so timezone math
+// stays in the Go process.
+func (r *Reader) DueForRenewal(ctx context.Context, lo, hi time.Time) ([]RenewalRow, error) {
+	rows, err := r.q.SubsDueForRenewal(ctx, sqlc.SubsDueForRenewalParams{
+		ExpiresAt:   pgtype.Timestamp{Time: lo, Valid: true},
+		ExpiresAt_2: pgtype.Timestamp{Time: hi, Valid: true},
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]RenewalRow, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, RenewalRow{
+			UserID:    uuid.UUID(row.UserID.Bytes).String(),
+			Email:     row.Email,
+			PlanName:  row.PlanName,
+			ExpiresAt: row.ExpiresAt.Time,
+		})
+	}
+	return out, nil
+}
+
+// ExpireLapsed implements CronRepo pass 2: flip active|cancelled subs past
+// expiry to expired (one bulk UPDATE), returning the affected rows.
+func (r *Reader) ExpireLapsed(ctx context.Context, now time.Time) ([]ExpiredRow, error) {
+	rows, err := r.q.ExpireLapsedSubs(ctx, pgtype.Timestamp{Time: now, Valid: true})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]ExpiredRow, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, ExpiredRow{
+			UserID:    uuid.UUID(row.UserID.Bytes).String(),
+			Email:     row.Email,
+			ExpiresAt: row.ExpiresAt.Time,
+		})
+	}
+	return out, nil
 }
