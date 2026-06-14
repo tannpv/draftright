@@ -14,8 +14,9 @@ type fakeRepo struct {
 
 	revokeDeviceErr error
 
-	insertRow exttoken.TokenRow
-	insertErr error
+	insertRow  exttoken.TokenRow
+	insertErr  error
+	mintUserID string // records the userID Insert was called with
 
 	listRows []exttoken.TokenRow
 	listErr  error
@@ -35,6 +36,7 @@ func (f *fakeRepo) RevokeActiveForDevice(ctx context.Context, userID, deviceID s
 
 func (f *fakeRepo) Insert(ctx context.Context, userID, tokenHash, deviceID, deviceName string, scopes []string) (exttoken.TokenRow, error) {
 	f.calls = append(f.calls, "Insert")
+	f.mintUserID = userID
 	return f.insertRow, f.insertErr
 }
 
