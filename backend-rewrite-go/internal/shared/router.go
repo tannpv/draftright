@@ -57,6 +57,8 @@ type Router struct {
 	ResetPassword      http.Handler // POST /auth/reset-password (public)
 	Social             http.Handler // POST /auth/social (public)
 
+	Plans http.Handler // GET /plans (public)
+
 	ChangePassword http.Handler // POST /auth/change-password (auth)
 	Account        http.Handler // GET /auth/account (auth)
 	DeleteAccount  http.Handler // DELETE /auth/account (auth)
@@ -130,6 +132,9 @@ func (r *Router) Build() http.Handler {
 	}
 	if r.Social != nil {
 		mux.Method(http.MethodPost, "/auth/social", r.Social)
+	}
+	if r.Plans != nil {
+		mux.Method(http.MethodGet, "/plans", r.Plans)
 	}
 
 	mux.Group(func(api chi.Router) {

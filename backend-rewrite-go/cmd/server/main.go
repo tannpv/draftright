@@ -134,6 +134,7 @@ func main() {
 		ForgotPassword:     core.forgotPassword,
 		ResetPassword:      core.resetPassword,
 		Social:             core.social,
+		Plans:              core.plans,
 		ChangePassword:     core.changePassword,
 		Account:            core.account,
 		DeleteAccount:      core.deleteAccount,
@@ -255,6 +256,7 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 		// verifier stays nil — wired in B9 (Part B); the lifecycle handlers
 		// never dereference it.
 		plansReader := planspkg.NewReader(q)
+		core.plans = http.HandlerFunc(planspkg.NewHandler(planspkg.NewService(plansReader)).List)
 		subWriter := subpkg.NewWriter(q)
 		emailSvc := emailpkg.NewService(emailpkg.NewPgRepo(q), emailpkg.Config{
 			EnvAPIKey: cfg.ResendAPIKey,
@@ -306,6 +308,8 @@ type coreHandlers struct {
 	forgotPassword     http.Handler // POST /auth/forgot-password
 	resetPassword      http.Handler // POST /auth/reset-password
 	social             http.Handler // POST /auth/social
+
+	plans http.Handler // GET /plans (set when pool != nil)
 
 	changePassword http.Handler // POST /auth/change-password (set when pool != nil)
 	account        http.Handler // GET /auth/account (set when pool != nil)
