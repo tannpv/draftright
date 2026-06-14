@@ -86,3 +86,8 @@ UPDATE users SET password_hash = $2, password_reset_code = null,
 SELECT id, name, daily_limit FROM plans
 WHERE billing_period = 'none'::plans_billing_period_enum AND is_active = true
 LIMIT 1;
+
+-- name: CreateFreeSubscription :exec
+INSERT INTO subscriptions (user_id, plan_id, status, store_type, started_at, expires_at)
+VALUES ($1, $2, 'active'::subscriptions_status_enum,
+        'admin_granted'::subscriptions_store_type_enum, now(), null);

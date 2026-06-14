@@ -23,6 +23,7 @@ type Querier interface {
 	// The caller passes the midnight boundary so timezone handling matches
 	// the Node process (new Date(); setHours(0,0,0,0)).
 	CountUsageToday(ctx context.Context, arg CountUsageTodayParams) (int64, error)
+	CreateFreeSubscription(ctx context.Context, arg CreateFreeSubscriptionParams) error
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
 	FindFreePlan(ctx context.Context) (FindFreePlanRow, error)
 	// Queries for the /rewrite microservice's Postgres adapter.

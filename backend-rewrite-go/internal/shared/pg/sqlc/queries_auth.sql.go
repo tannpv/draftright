@@ -31,6 +31,22 @@ func (q *Queries) CountUsageToday(ctx context.Context, arg CountUsageTodayParams
 	return count, err
 }
 
+const createFreeSubscription = `-- name: CreateFreeSubscription :exec
+INSERT INTO subscriptions (user_id, plan_id, status, store_type, started_at, expires_at)
+VALUES ($1, $2, 'active'::subscriptions_status_enum,
+        'admin_granted'::subscriptions_store_type_enum, now(), null)
+`
+
+type CreateFreeSubscriptionParams struct {
+	UserID pgtype.UUID `db:"user_id" json:"user_id"`
+	PlanID pgtype.UUID `db:"plan_id" json:"plan_id"`
+}
+
+func (q *Queries) CreateFreeSubscription(ctx context.Context, arg CreateFreeSubscriptionParams) error {
+	_, err := q.db.Exec(ctx, createFreeSubscription, arg.UserID, arg.PlanID)
+	return err
+}
+
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (
   email, password_hash, name, auth_provider, avatar_url, email_verified,
