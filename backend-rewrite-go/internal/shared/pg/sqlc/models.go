@@ -193,6 +193,7 @@ const (
 	UsersAuthProviderEnumGoogle   UsersAuthProviderEnum = "google"
 	UsersAuthProviderEnumFacebook UsersAuthProviderEnum = "facebook"
 	UsersAuthProviderEnumTiktok   UsersAuthProviderEnum = "tiktok"
+	UsersAuthProviderEnumApple    UsersAuthProviderEnum = "apple"
 )
 
 func (e *UsersAuthProviderEnum) Scan(src interface{}) error {
@@ -392,6 +393,13 @@ type EmailLog struct {
 	CreatedAt  pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
+type EmailSuppression struct {
+	ID        pgtype.UUID        `db:"id" json:"id"`
+	Email     string             `db:"email" json:"email"`
+	Reason    *string            `db:"reason" json:"reason"`
+	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
 type EmailTemplate struct {
 	TemplateKey string             `db:"template_key" json:"template_key"`
 	Subject     string             `db:"subject" json:"subject"`
@@ -527,4 +535,8 @@ type User struct {
 	EmailVerificationExpires pgtype.Timestamptz    `db:"email_verification_expires" json:"email_verification_expires"`
 	LemonsqueezyCustomerID   *string               `db:"lemonsqueezy_customer_id" json:"lemonsqueezy_customer_id"`
 	StripeCustomerID         *string               `db:"stripe_customer_id" json:"stripe_customer_id"`
+	AppleID                  *string               `db:"apple_id" json:"apple_id"`
+	PasswordResetCode        *string               `db:"password_reset_code" json:"password_reset_code"`
+	PasswordResetExpires     pgtype.Timestamptz    `db:"password_reset_expires" json:"password_reset_expires"`
+	PasswordResetAttempts    int32                 `db:"password_reset_attempts" json:"password_reset_attempts"`
 }
