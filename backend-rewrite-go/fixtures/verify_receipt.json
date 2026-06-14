@@ -1,0 +1,9 @@
+{
+  "name": "verify-receipt",
+  "method": "POST",
+  "path": "/subscription/verify-receipt",
+  "headers": { "Content-Type": "application/json", "Authorization": "Bearer REPLACE_WITH_DEV_NODE_TOKEN" },
+  "body": { "store_type": "app_store", "receipt_data": "REPLACE_WITH_DEV_RECEIPT_OR_DUMMY", "product_id": "REPLACE_WITH_DEV_PRODUCT_ID" },
+  "ignore_value_of": ["request_id", "expires_at"],
+  "_note": "Authed, POST → 201 (Node @Post default, no @HttpCode). Body: {subscription:{plan,status,expires_at}|null}. For a seeded user with NO active sub, Node returns {subscription:null} — fully deterministic, nothing to ignore except request_id. If the operator points this at a user WITH an active sub, expires_at is ignored pending timestamp pinning. NON-MUTATING read in Node (findActiveByUserId only; it does NOT grant/extend a sub here), so safe to replay repeatedly. Verify against Node before trusting — if a future Node change makes this write, drop this fixture from the gate."
+}

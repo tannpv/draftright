@@ -1,0 +1,8 @@
+{
+  "name": "plans-public",
+  "method": "GET",
+  "path": "/plans",
+  "headers": {},
+  "ignore_value_of": [],
+  "_note": "Public, no auth. Top-level JSON array of plan rows. No fields ignored: plan rows are static seed data, every column (id, name, daily_limit, price_cents, billing_period, ...) must match byte-for-byte. If Go emits a per-row created_at/updated_at that Node omits (or vice versa) the gate must flag it — do NOT add timestamps to ignore_value_of to paper over a real shape diff."
+}

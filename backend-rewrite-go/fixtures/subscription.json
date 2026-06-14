@@ -1,0 +1,8 @@
+{
+  "name": "subscription",
+  "method": "GET",
+  "path": "/subscription",
+  "headers": { "Authorization": "Bearer REPLACE_WITH_DEV_NODE_TOKEN" },
+  "ignore_value_of": ["request_id", "expires_at", "expiresAt"],
+  "_note": "Authed. Body: {plan{name,daily_limit,billing_period}|null, status, expires_at, usage_today, nudge}. expires_at + nudge.expiresAt ignored until timestamp format is pinned byte-for-byte against a captured Node response (same RFC3339/ISOMillis risk as account.json) — then REMOVE them so the gate verifies the timestamps. usage_today is deterministic for a freshly-seeded user (run before any /v1/rewrite) so it is NOT ignored; if it drifts the gate should flag a counter parity bug."
+}

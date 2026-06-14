@@ -1,0 +1,9 @@
+{
+  "name": "ext-mint",
+  "method": "POST",
+  "path": "/auth/extension-tokens",
+  "headers": { "Content-Type": "application/json", "Authorization": "Bearer REPLACE_WITH_DEV_NODE_TOKEN" },
+  "body": { "device_id": "REPLACE_WITH_DEV_DEVICE_UUID_V4", "device_name": "shadow-gate phone" },
+  "ignore_value_of": ["request_id", "token", "id"],
+  "_note": "MUTATING. POST → 200 (controller @HttpCode(200), not 201 — feedback_nest_post_status.md). Response body is ONLY {token, id} — token is the one-time dr_ext_* secret (random), id is the new row uuid; both ignored (presence+non-empty). Nothing else is returned, so the gate's real check here is status-code + body-shape parity. OPERATOR: each replay revokes the prior active row for this (user, device_id) and INSERTS a new row — revoked rows accumulate (list() filters revoked_at IS NULL so the visible count stays 1 per device). Reuse one device_id; clean up revoked rows afterward on the throwaway user."
+}

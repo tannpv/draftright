@@ -1,0 +1,9 @@
+{
+  "name": "rewrite-ext-unauthorized",
+  "method": "POST",
+  "path": "/v1/rewrite",
+  "headers": { "Content-Type": "application/json", "Authorization": "Bearer dr_ext_thisisnotarealextensiontoken000000000000000" },
+  "body": { "text": "hello world", "tone": "professional" },
+  "ignore_value_of": ["request_id"],
+  "_note": "NON-mutating 401 path. Header is a well-formed dr_ext_* token that hashes to no row → validate() returns null → UnauthorizedException('Invalid extension token'). validate() does NOT write (no last_used_at update on a miss) so this is safe to replay. Expected body {error:'Invalid extension token', code:'invalid-token', request_id}. The bogus token must keep the dr_ext_ prefix or the guard would fall through to the JWT path and the message would change to 'Unauthorized'. SUCCESS path deliberately NOT fixtured — LLM output is non-deterministic, not byte-comparable."
+}
