@@ -187,6 +187,39 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// Social: POST /auth/social → 201. Mirrors Login's body shape. Unsupported
+// provider / missing email → 400 invalid-input; takeover guard / disabled →
+// 401 invalid-token.
+func (h *Handler) Social(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Provider  string `json:"provider"`
+		IDToken   string `json:"id_token"`
+		Name      string `json:"name"`
+		Email     string `json:"email"`
+		AvatarURL string `json:"avatar_url"`
+	}
+	if !decodeJSON(w, r, &body) {
+		return
+	}
+	res, err := h.svc.SocialLogin(r.Context(), body.Provider, body.IDToken, InboundProfile{
+		Name: body.Name, Email: body.Email, AvatarURL: body.AvatarURL,
+	})
+	if err != nil {
+		if writeDomainErr(w, r, err) {
+			return
+		}
+		shared.WriteError(w, r, "internal", "social login failed")
+		return
+	}
+	shared.WriteJSON(w, http.StatusCreated, map[string]any{
+		"access_token":  res.AccessToken,
+		"refresh_token": res.RefreshToken,
+		"user": map[string]any{
+			"id": res.User.ID, "email": res.User.Email, "name": res.User.Name,
+		},
+	})
+}
+
 // VerifyEmail: POST /auth/verify-email → 200. Bad/expired code → 400
 // invalid-input. Success body {"success":true}.
 func (h *Handler) VerifyEmail(w http.ResponseWriter, r *http.Request) {
