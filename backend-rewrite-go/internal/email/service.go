@@ -63,6 +63,20 @@ func (s *Service) SendPasswordReset(ctx context.Context, to, name, code string) 
 	s.fire(ctx, "password-reset", to, map[string]string{"name": orThere(name), "code": code})
 }
 
+// SendRaw fires a pre-rendered transactional email (subject + HTML body)
+// through the same suppression → creds → Resend → email_logs path as the
+// templated sends. label is the email_logs Type column. Fire-and-forget,
+// like the templated methods. Used by out-of-band jobs (e.g. the expiry
+// cron) that don't have a built-in template.
+func (s *Service) SendRaw(ctx context.Context, to, subject, html, label string) {
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		defer func() { _ = recover() }()
+		s.deliver(context.WithoutCancel(ctx), to, subject, html, label)
+	}()
+}
+
 func orThere(n string) string {
 	if n == "" {
 		return "there"

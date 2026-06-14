@@ -105,6 +105,44 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateU
 	return i, err
 }
 
+const expireLapsedSubs = `-- name: ExpireLapsedSubs :many
+UPDATE subscriptions s
+SET status = 'expired'::subscriptions_status_enum, updated_at = now()
+FROM users u
+WHERE u.id = s.user_id
+  AND s.status IN ('active'::subscriptions_status_enum, 'cancelled'::subscriptions_status_enum)
+  AND s.expires_at < $1
+RETURNING s.user_id, u.email, s.expires_at
+`
+
+type ExpireLapsedSubsRow struct {
+	UserID    pgtype.UUID      `db:"user_id" json:"user_id"`
+	Email     string           `db:"email" json:"email"`
+	ExpiresAt pgtype.Timestamp `db:"expires_at" json:"expires_at"`
+}
+
+// Cron pass 2: flip active|cancelled subs past expiry to expired, returning
+// the affected rows so the caller can email each. expires_at left untouched.
+func (q *Queries) ExpireLapsedSubs(ctx context.Context, expiresAt pgtype.Timestamp) ([]ExpireLapsedSubsRow, error) {
+	rows, err := q.db.Query(ctx, expireLapsedSubs, expiresAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExpireLapsedSubsRow{}
+	for rows.Next() {
+		var i ExpireLapsedSubsRow
+		if err := rows.Scan(&i.UserID, &i.Email, &i.ExpiresAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const findFreePlan = `-- name: FindFreePlan :one
 SELECT id, name, daily_limit FROM plans
 WHERE billing_period = 'none'::plans_billing_period_enum AND is_active = true
@@ -268,6 +306,40 @@ func (q *Queries) FindUserByTiktokId(ctx context.Context, tiktokID *string) (Fin
 		&i.EmailVerified,
 		&i.LemonsqueezyCustomerID,
 		&i.AvatarUrl,
+	)
+	return i, err
+}
+
+const getActiveSubWithPlan = `-- name: GetActiveSubWithPlan :one
+SELECT s.status, s.expires_at,
+       p.name AS plan_name, p.daily_limit, p.billing_period
+FROM subscriptions s
+JOIN plans p ON p.id = s.plan_id
+WHERE s.user_id = $1 AND s.status = 'active'::subscriptions_status_enum
+ORDER BY s.created_at DESC
+LIMIT 1
+`
+
+type GetActiveSubWithPlanRow struct {
+	Status        SubscriptionsStatusEnum `db:"status" json:"status"`
+	ExpiresAt     pgtype.Timestamp        `db:"expires_at" json:"expires_at"`
+	PlanName      string                  `db:"plan_name" json:"plan_name"`
+	DailyLimit    int32                   `db:"daily_limit" json:"daily_limit"`
+	BillingPeriod PlansBillingPeriodEnum  `db:"billing_period" json:"billing_period"`
+}
+
+// GET /subscription: newest active sub + plan fields incl billing_period.
+// Distinct from GetActiveSubscriptionByUserID (which omits billing_period
+// and is pinned for /auth/account).
+func (q *Queries) GetActiveSubWithPlan(ctx context.Context, userID pgtype.UUID) (GetActiveSubWithPlanRow, error) {
+	row := q.db.QueryRow(ctx, getActiveSubWithPlan, userID)
+	var i GetActiveSubWithPlanRow
+	err := row.Scan(
+		&i.Status,
+		&i.ExpiresAt,
+		&i.PlanName,
+		&i.DailyLimit,
+		&i.BillingPeriod,
 	)
 	return i, err
 }
@@ -442,6 +514,22 @@ func (q *Queries) GetEmailTemplateByKey(ctx context.Context, templateKey string)
 	return i, err
 }
 
+const getLastExpiredAt = `-- name: GetLastExpiredAt :one
+SELECT updated_at FROM subscriptions
+WHERE user_id = $1 AND status = 'expired'::subscriptions_status_enum
+ORDER BY updated_at DESC
+LIMIT 1
+`
+
+// updated_at of the user's most-recently expired subscription (free-tier
+// just_expired banner). No row → caller treats as nil.
+func (q *Queries) GetLastExpiredAt(ctx context.Context, userID pgtype.UUID) (pgtype.Timestamp, error) {
+	row := q.db.QueryRow(ctx, getLastExpiredAt, userID)
+	var updated_at pgtype.Timestamp
+	err := row.Scan(&updated_at)
+	return updated_at, err
+}
+
 const getUserAuthState = `-- name: GetUserAuthState :one
 SELECT id, email, name, password_hash, auth_provider, is_active,
        email_verified, email_verification_code, email_verification_expires,
@@ -587,6 +675,62 @@ func (q *Queries) LinkSocialTiktok(ctx context.Context, arg LinkSocialTiktokPara
 	return err
 }
 
+const listActivePlans = `-- name: ListActivePlans :many
+SELECT id, name, daily_limit, price_cents, currency, stripe_price_id,
+       trial_days, billing_period, is_active, created_at, updated_at
+FROM plans
+WHERE is_active = true
+ORDER BY price_cents ASC
+`
+
+type ListActivePlansRow struct {
+	ID            pgtype.UUID            `db:"id" json:"id"`
+	Name          string                 `db:"name" json:"name"`
+	DailyLimit    int32                  `db:"daily_limit" json:"daily_limit"`
+	PriceCents    int32                  `db:"price_cents" json:"price_cents"`
+	Currency      *string                `db:"currency" json:"currency"`
+	StripePriceID *string                `db:"stripe_price_id" json:"stripe_price_id"`
+	TrialDays     int32                  `db:"trial_days" json:"trial_days"`
+	BillingPeriod PlansBillingPeriodEnum `db:"billing_period" json:"billing_period"`
+	IsActive      bool                   `db:"is_active" json:"is_active"`
+	CreatedAt     pgtype.Timestamp       `db:"created_at" json:"created_at"`
+	UpdatedAt     pgtype.Timestamp       `db:"updated_at" json:"updated_at"`
+}
+
+// Mirrors plansService.findAll(): every active plan, cheapest first.
+// No tiebreaker beyond price_cents (matches TypeORM order:{price_cents:'ASC'}).
+func (q *Queries) ListActivePlans(ctx context.Context) ([]ListActivePlansRow, error) {
+	rows, err := q.db.Query(ctx, listActivePlans)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListActivePlansRow{}
+	for rows.Next() {
+		var i ListActivePlansRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.DailyLimit,
+			&i.PriceCents,
+			&i.Currency,
+			&i.StripePriceID,
+			&i.TrialDays,
+			&i.BillingPeriod,
+			&i.IsActive,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const resetPasswordHash = `-- name: ResetPasswordHash :exec
 UPDATE users SET password_hash = $2, password_reset_code = null,
   password_reset_expires = null, password_reset_attempts = 0,
@@ -653,6 +797,54 @@ func (q *Queries) SetPasswordResetCode(ctx context.Context, arg SetPasswordReset
 		arg.PasswordResetAttempts,
 	)
 	return err
+}
+
+const subsDueForRenewal = `-- name: SubsDueForRenewal :many
+SELECT s.user_id, u.email, s.expires_at, p.name AS plan_name
+FROM subscriptions s
+JOIN users u ON u.id = s.user_id
+JOIN plans p ON p.id = s.plan_id
+WHERE s.status = 'active'::subscriptions_status_enum
+  AND s.expires_at >= $1 AND s.expires_at <= $2
+`
+
+type SubsDueForRenewalParams struct {
+	ExpiresAt   pgtype.Timestamp `db:"expires_at" json:"expires_at"`
+	ExpiresAt_2 pgtype.Timestamp `db:"expires_at_2" json:"expires_at_2"`
+}
+
+type SubsDueForRenewalRow struct {
+	UserID    pgtype.UUID      `db:"user_id" json:"user_id"`
+	Email     string           `db:"email" json:"email"`
+	ExpiresAt pgtype.Timestamp `db:"expires_at" json:"expires_at"`
+	PlanName  string           `db:"plan_name" json:"plan_name"`
+}
+
+// Cron pass 1: active subs whose expiry falls in the reminder window.
+// Bounds passed by caller (now+2.5d, now+3.5d) to keep tz in the Go process.
+func (q *Queries) SubsDueForRenewal(ctx context.Context, arg SubsDueForRenewalParams) ([]SubsDueForRenewalRow, error) {
+	rows, err := q.db.Query(ctx, subsDueForRenewal, arg.ExpiresAt, arg.ExpiresAt_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SubsDueForRenewalRow{}
+	for rows.Next() {
+		var i SubsDueForRenewalRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.Email,
+			&i.ExpiresAt,
+			&i.PlanName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const updateUserPasswordHash = `-- name: UpdateUserPasswordHash :exec

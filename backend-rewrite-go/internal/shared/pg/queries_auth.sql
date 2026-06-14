@@ -34,6 +34,26 @@ WHERE s.user_id = $1 AND s.status = 'active'::subscriptions_status_enum
 ORDER BY s.created_at DESC
 LIMIT 1;
 
+-- name: GetActiveSubWithPlan :one
+-- GET /subscription: newest active sub + plan fields incl billing_period.
+-- Distinct from GetActiveSubscriptionByUserID (which omits billing_period
+-- and is pinned for /auth/account).
+SELECT s.status, s.expires_at,
+       p.name AS plan_name, p.daily_limit, p.billing_period
+FROM subscriptions s
+JOIN plans p ON p.id = s.plan_id
+WHERE s.user_id = $1 AND s.status = 'active'::subscriptions_status_enum
+ORDER BY s.created_at DESC
+LIMIT 1;
+
+-- name: GetLastExpiredAt :one
+-- updated_at of the user's most-recently expired subscription (free-tier
+-- just_expired banner). No row → caller treats as nil.
+SELECT updated_at FROM subscriptions
+WHERE user_id = $1 AND status = 'expired'::subscriptions_status_enum
+ORDER BY updated_at DESC
+LIMIT 1;
+
 -- name: CountUsageToday :one
 -- Mirrors usageService.countTodayByUser: rows since local midnight.
 -- The caller passes the midnight boundary so timezone handling matches
@@ -144,3 +164,33 @@ UPDATE users SET tiktok_id = $2, avatar_url = $3, email_verified = true,
 -- name: LinkSocialApple :exec
 UPDATE users SET apple_id = $2, avatar_url = $3, email_verified = true,
   updated_at = now() WHERE id = $1;
+
+-- name: ListActivePlans :many
+-- Mirrors plansService.findAll(): every active plan, cheapest first.
+-- No tiebreaker beyond price_cents (matches TypeORM order:{price_cents:'ASC'}).
+SELECT id, name, daily_limit, price_cents, currency, stripe_price_id,
+       trial_days, billing_period, is_active, created_at, updated_at
+FROM plans
+WHERE is_active = true
+ORDER BY price_cents ASC;
+
+-- name: SubsDueForRenewal :many
+-- Cron pass 1: active subs whose expiry falls in the reminder window.
+-- Bounds passed by caller (now+2.5d, now+3.5d) to keep tz in the Go process.
+SELECT s.user_id, u.email, s.expires_at, p.name AS plan_name
+FROM subscriptions s
+JOIN users u ON u.id = s.user_id
+JOIN plans p ON p.id = s.plan_id
+WHERE s.status = 'active'::subscriptions_status_enum
+  AND s.expires_at >= $1 AND s.expires_at <= $2;
+
+-- name: ExpireLapsedSubs :many
+-- Cron pass 2: flip active|cancelled subs past expiry to expired, returning
+-- the affected rows so the caller can email each. expires_at left untouched.
+UPDATE subscriptions s
+SET status = 'expired'::subscriptions_status_enum, updated_at = now()
+FROM users u
+WHERE u.id = s.user_id
+  AND s.status IN ('active'::subscriptions_status_enum, 'cancelled'::subscriptions_status_enum)
+  AND s.expires_at < $1
+RETURNING s.user_id, u.email, s.expires_at;

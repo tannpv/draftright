@@ -25,6 +25,12 @@ type Querier interface {
 	CountUsageToday(ctx context.Context, arg CountUsageTodayParams) (int64, error)
 	CreateFreeSubscription(ctx context.Context, arg CreateFreeSubscriptionParams) error
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
+	// Cron pass 2: flip active|cancelled subs past expiry to expired, returning
+	// the affected rows so the caller can email each. expires_at left untouched.
+	ExpireLapsedSubs(ctx context.Context, expiresAt pgtype.Timestamp) ([]ExpireLapsedSubsRow, error)
+	// validate(): resolve a presented token's hash to owner + scopes. Returns id
+	// too — Verify (T13) fires TouchTokenLastUsed by id afterwards.
+	FindActiveTokenByHash(ctx context.Context, tokenHash string) (FindActiveTokenByHashRow, error)
 	FindFreePlan(ctx context.Context) (FindFreePlanRow, error)
 	FindUserByAppleId(ctx context.Context, appleID *string) (FindUserByAppleIdRow, error)
 	FindUserByFacebookId(ctx context.Context, facebookID *string) (FindUserByFacebookIdRow, error)
@@ -48,6 +54,10 @@ type Querier interface {
 	// Filter on subscriptions.status = 'active' so cancelled subs don't
 	// still grant their old plan.
 	FindUserWithPlan(ctx context.Context, id pgtype.UUID) (FindUserWithPlanRow, error)
+	// GET /subscription: newest active sub + plan fields incl billing_period.
+	// Distinct from GetActiveSubscriptionByUserID (which omits billing_period
+	// and is pinned for /auth/account).
+	GetActiveSubWithPlan(ctx context.Context, userID pgtype.UUID) (GetActiveSubWithPlanRow, error)
 	// Mirrors subscriptionsService.findActiveByUserId: newest ACTIVE
 	// subscription for the user, joined to its plan. ORDER BY created_at
 	// DESC + LIMIT 1 reproduces TypeORM order:{created_at:'DESC'} findOne.
@@ -70,6 +80,9 @@ type Querier interface {
 	GetEmailSettings(ctx context.Context) (GetEmailSettingsRow, error)
 	// DB template override. PK column is template_key (not key).
 	GetEmailTemplateByKey(ctx context.Context, templateKey string) (GetEmailTemplateByKeyRow, error)
+	// updated_at of the user's most-recently expired subscription (free-tier
+	// just_expired banner). No row → caller treats as nil.
+	GetLastExpiredAt(ctx context.Context, userID pgtype.UUID) (pgtype.Timestamp, error)
 	GetUserAuthState(ctx context.Context, email string) (GetUserAuthStateRow, error)
 	// Phase 0 core-endpoint queries (health + /auth/me). Kept separate
 	// from the rewrite module's queries.sql so the core package depends on
@@ -79,6 +92,9 @@ type Querier interface {
 	GetUserByID(ctx context.Context, id pgtype.UUID) (GetUserByIDRow, error)
 	// Audit row for every deliver attempt (suppressed/skipped/sent/failed).
 	InsertEmailLog(ctx context.Context, arg InsertEmailLogParams) error
+	// mint() insert. Returns the projection list() serializes (token_hash and
+	// user_id stripped by the controller, so omitted here).
+	InsertExtensionToken(ctx context.Context, arg InsertExtensionTokenParams) (InsertExtensionTokenRow, error)
 	// Records one /rewrite call for daily quota tracking + analytics.
 	// Mirrors NestJS UsageService.log: same columns, same names, same
 	// precision so the two backends populate identical rows.
@@ -89,10 +105,35 @@ type Querier interface {
 	LinkSocialFacebook(ctx context.Context, arg LinkSocialFacebookParams) error
 	LinkSocialGoogle(ctx context.Context, arg LinkSocialGoogleParams) error
 	LinkSocialTiktok(ctx context.Context, arg LinkSocialTiktokParams) error
+	// Mirrors plansService.findAll(): every active plan, cheapest first.
+	// No tiebreaker beyond price_cents (matches TypeORM order:{price_cents:'ASC'}).
+	ListActivePlans(ctx context.Context) ([]ListActivePlansRow, error)
+	// list(): active tokens for the user, newest first
+	// (TypeORM where:{user_id, revoked_at:IsNull()} order:{created_at:'DESC'}).
+	ListActiveTokens(ctx context.Context, userID pgtype.UUID) ([]ListActiveTokensRow, error)
 	ResetPasswordHash(ctx context.Context, arg ResetPasswordHashParams) error
+	// Extension-token persistence (dr_ext_* keyboard/share tokens).
+	// Read the live NestJS-owned schema as-is; mirror ExtensionTokenService
+	// (backend/src/auth/extension-token.service.ts) WHERE semantics exactly.
+	// Table: public.extension_tokens — scopes text[], device_id uuid,
+	// timestamps "without time zone".
+	// mint() rotates: revoke any still-active token for this (user, device)
+	// first so the partial unique index idx_ext_tokens_user_device_active
+	// (user_id, device_id) WHERE revoked_at IS NULL doesn't collide.
+	RevokeActiveTokensForDevice(ctx context.Context, arg RevokeActiveTokensForDeviceParams) error
+	// revoke(): owner-scoped UPDATE keyed by (id, user_id). Node does NOT filter
+	// revoked_at IS NULL here, so re-revoking an already-revoked row is a no-op
+	// touch of revoked_at — idempotent, controller returns 204 either way.
+	RevokeTokenByID(ctx context.Context, arg RevokeTokenByIDParams) error
 	SetEmailVerificationCode(ctx context.Context, arg SetEmailVerificationCodeParams) error
 	SetPasswordResetAttempts(ctx context.Context, arg SetPasswordResetAttemptsParams) error
 	SetPasswordResetCode(ctx context.Context, arg SetPasswordResetCodeParams) error
+	// Cron pass 1: active subs whose expiry falls in the reminder window.
+	// Bounds passed by caller (now+2.5d, now+3.5d) to keep tz in the Go process.
+	SubsDueForRenewal(ctx context.Context, arg SubsDueForRenewalParams) ([]SubsDueForRenewalRow, error)
+	// validate() write-behind: bump last_used_at. Failures non-fatal (caller
+	// ignores the error so the request still succeeds).
+	TouchTokenLastUsed(ctx context.Context, id pgtype.UUID) error
 	UpdateUserPasswordHash(ctx context.Context, arg UpdateUserPasswordHashParams) error
 	UpdateUserVerification(ctx context.Context, arg UpdateUserVerificationParams) error
 }

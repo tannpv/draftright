@@ -29,6 +29,15 @@ type Router struct {
 	// http.Handler stub.
 	Rewrite http.Handler
 
+	// ExtVerifier, when non-nil, enables dual auth on /v1/rewrite: a
+	// bearer token prefixed dr_ext_ is verified as an extension token
+	// (mirroring Node's RewriteAuthGuard) instead of a JWT. nil-guarded:
+	// when absent (e.g. no DB → no exttoken service) /v1/rewrite stays
+	// JWT-only, byte-identical to before this field existed. main.go must
+	// leave this a nil INTERFACE (not a typed-nil *exttoken.Service) when
+	// there is no service, or ExtOrJWT would call Verify on a nil pointer.
+	ExtVerifier ExtVerifier
+
 	// MetricsHandler, when non-nil, exposes /metrics. Production
 	// passes the Prometheus handler; tests + dev can leave nil.
 	MetricsHandler http.Handler
@@ -57,9 +66,18 @@ type Router struct {
 	ResetPassword      http.Handler // POST /auth/reset-password (public)
 	Social             http.Handler // POST /auth/social (public)
 
+	Plans http.Handler // GET /plans (public)
+
 	ChangePassword http.Handler // POST /auth/change-password (auth)
 	Account        http.Handler // GET /auth/account (auth)
 	DeleteAccount  http.Handler // DELETE /auth/account (auth)
+
+	Subscription  http.Handler // GET /subscription (auth)
+	VerifyReceipt http.Handler // POST /subscription/verify-receipt (auth)
+
+	MintExtToken   http.Handler // POST   /auth/extension-tokens          (auth)
+	ListExtTokens  http.Handler // GET    /auth/extension-tokens          (auth)
+	RevokeExtToken http.Handler // DELETE /auth/extension-tokens/{id}      (auth)
 
 	// EnableTracing wraps the whole mux with otelhttp middleware so
 	// every request becomes a span. No-op when the global tracer
@@ -131,10 +149,30 @@ func (r *Router) Build() http.Handler {
 	if r.Social != nil {
 		mux.Method(http.MethodPost, "/auth/social", r.Social)
 	}
+	if r.Plans != nil {
+		mux.Method(http.MethodGet, "/plans", r.Plans)
+	}
+
+	// Build the JWT middleware once so /v1/rewrite (dual-auth) and the
+	// JWT-only group share the exact same RequireAuth instance.
+	jwtMW := RequireAuth(r.Verifier, r.Log)
+
+	// /v1/rewrite mounts OUTSIDE the JWT group: it accepts a dr_ext_
+	// extension token OR a JWT (Node's RewriteAuthGuard). Mounted at the
+	// top level via mux.Method so it still runs through the global
+	// middleware chain (RequestID/RealIP/Recoverer/logger), which are
+	// router-level. With an ExtVerifier it gets dual auth; without one it
+	// stays JWT-only — byte-identical to before this task.
+	if r.Rewrite != nil {
+		if r.ExtVerifier != nil {
+			mux.Method(http.MethodPost, "/v1/rewrite", ExtOrJWT(r.ExtVerifier, jwtMW, r.Log)(r.Rewrite))
+		} else {
+			mux.Method(http.MethodPost, "/v1/rewrite", jwtMW(r.Rewrite))
+		}
+	}
 
 	mux.Group(func(api chi.Router) {
-		api.Use(RequireAuth(r.Verifier, r.Log))
-		api.Post("/v1/rewrite", r.Rewrite.ServeHTTP)
+		api.Use(jwtMW)
 		if r.Me != nil {
 			api.Method(http.MethodGet, "/auth/me", r.Me)
 		}
@@ -146,6 +184,21 @@ func (r *Router) Build() http.Handler {
 		}
 		if r.DeleteAccount != nil {
 			api.Method(http.MethodDelete, "/auth/account", r.DeleteAccount)
+		}
+		if r.Subscription != nil {
+			api.Method(http.MethodGet, "/subscription", r.Subscription)
+		}
+		if r.VerifyReceipt != nil {
+			api.Method(http.MethodPost, "/subscription/verify-receipt", r.VerifyReceipt)
+		}
+		if r.MintExtToken != nil {
+			api.Method(http.MethodPost, "/auth/extension-tokens", r.MintExtToken)
+		}
+		if r.ListExtTokens != nil {
+			api.Method(http.MethodGet, "/auth/extension-tokens", r.ListExtTokens)
+		}
+		if r.RevokeExtToken != nil {
+			api.Method(http.MethodDelete, "/auth/extension-tokens/{id}", r.RevokeExtToken)
 		}
 	})
 

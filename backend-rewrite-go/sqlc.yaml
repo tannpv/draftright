@@ -20,6 +20,7 @@ sql:
       - "internal/rewrite/adapter/pg/queries.sql"
       - "internal/shared/pg/queries_core.sql"
       - "internal/shared/pg/queries_auth.sql"
+      - "internal/shared/pg/queries_exttoken.sql"
     engine: "postgresql"
     gen:
       go:

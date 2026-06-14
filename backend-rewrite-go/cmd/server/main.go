@@ -29,11 +29,13 @@ import (
 	authpkg "github.com/tannpv/draftright-rewrite/internal/auth"
 	corepkg "github.com/tannpv/draftright-rewrite/internal/core"
 	emailpkg "github.com/tannpv/draftright-rewrite/internal/email"
+	exttokenpkg "github.com/tannpv/draftright-rewrite/internal/exttoken"
 	planspkg "github.com/tannpv/draftright-rewrite/internal/plans"
 	"github.com/tannpv/draftright-rewrite/internal/platform/auth"
 	"github.com/tannpv/draftright-rewrite/internal/platform/config"
 	platformdb "github.com/tannpv/draftright-rewrite/internal/platform/db"
 	"github.com/tannpv/draftright-rewrite/internal/platform/metrics"
+	"github.com/tannpv/draftright-rewrite/internal/platform/scheduler"
 	settingspkg "github.com/tannpv/draftright-rewrite/internal/platform/settings"
 	"github.com/tannpv/draftright-rewrite/internal/platform/tracing"
 	"github.com/tannpv/draftright-rewrite/internal/rewrite/adapter/anthropic"
@@ -115,7 +117,7 @@ func main() {
 	}
 	defer cleanup()
 
-	router := (&shared.Router{
+	rt := &shared.Router{
 		Log:            log,
 		Verifier:       auth.NewVerifier(cfg.JWTSecret),
 		MetricsHandler: metricsHTTP,
@@ -134,10 +136,24 @@ func main() {
 		ForgotPassword:     core.forgotPassword,
 		ResetPassword:      core.resetPassword,
 		Social:             core.social,
+		Plans:              core.plans,
 		ChangePassword:     core.changePassword,
 		Account:            core.account,
 		DeleteAccount:      core.deleteAccount,
-	}).Build()
+		Subscription:       core.subscription,
+		VerifyReceipt:      core.verifyReceipt,
+		MintExtToken:       core.mintExtToken,
+		ListExtTokens:      core.listExtTokens,
+		RevokeExtToken:     core.revokeExtToken,
+	}
+	// Enable dual auth on /v1/rewrite (dr_ext_ token OR JWT) only when the
+	// extension-token service is wired (DB present). Guarded so the field
+	// stays a nil INTERFACE when there's no service — a typed-nil
+	// *exttoken.Service in the interface would be non-nil and panic on Verify.
+	if core.extSvc != nil {
+		rt.ExtVerifier = core.extSvc
+	}
+	router := rt.Build()
 
 	srv := &http.Server{
 		Addr:         cfg.Listen,
@@ -255,6 +271,7 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 		// verifier stays nil — wired in B9 (Part B); the lifecycle handlers
 		// never dereference it.
 		plansReader := planspkg.NewReader(q)
+		core.plans = http.HandlerFunc(planspkg.NewHandler(planspkg.NewService(plansReader)).List)
 		subWriter := subpkg.NewWriter(q)
 		emailSvc := emailpkg.NewService(emailpkg.NewPgRepo(q), emailpkg.Config{
 			EnvAPIKey: cfg.ResendAPIKey,
@@ -275,6 +292,33 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 		core.changePassword = http.HandlerFunc(authHandler.ChangePassword)
 		core.account = http.HandlerFunc(authHandler.Account)
 		core.deleteAccount = http.HandlerFunc(authHandler.DeleteAccount)
+		subHandler := subpkg.NewHandler(subpkg.NewService(subReader, usageCounter, plansReader))
+		core.subscription = http.HandlerFunc(subHandler.Get)
+		core.verifyReceipt = http.HandlerFunc(subHandler.VerifyReceipt)
+
+		// Extension tokens (T15): mint/list/revoke, JWT-gated. extSvc is also
+		// stashed on coreHandlers so T16's dual-auth middleware on /v1/rewrite
+		// can reuse the very same *exttoken.Service (verify path).
+		extRepo := exttokenpkg.NewRepo(q)
+		extSvc := exttokenpkg.NewService(extRepo)
+		extHandler := exttokenpkg.NewHandler(extSvc)
+		core.extSvc = extSvc
+		core.mintExtToken = http.HandlerFunc(extHandler.Mint)
+		core.listExtTokens = http.HandlerFunc(extHandler.List)
+		core.revokeExtToken = http.HandlerFunc(extHandler.Revoke)
+
+		// Daily subscription-expiry cron (ports NestJS @Cron("0 09 * * *")).
+		// Reuses the same subReader (it satisfies subpkg.CronRepo via
+		// DueForRenewal/ExpireLapsed) and the shared email sender. Fires once
+		// per day at 09:00 server-local. The goroutine is a background daemon
+		// scoped to ctx; it exits with the process.
+		expiryCron := subpkg.NewExpiryCron(subReader, subpkg.NewMailCronNotifier(emailSvc, log), log)
+		go scheduler.RunDaily(ctx, 9, 0, time.Local, time.Now, func(c context.Context, t time.Time) {
+			if err := expiryCron.RunOnce(c, t); err != nil {
+				log.Error("expiry cron failed", "err", err)
+			}
+		})
+		log.Info("scheduler started", "job", "subscription-expiry", "at", "09:00 local")
 	} else {
 		core.health = corepkg.NewHealthHandler(staticInfoReader{}, appVersion)
 		log.Warn("auth endpoints disabled", "reason", "no DATABASE_URL")
@@ -307,9 +351,23 @@ type coreHandlers struct {
 	resetPassword      http.Handler // POST /auth/reset-password
 	social             http.Handler // POST /auth/social
 
+	plans http.Handler // GET /plans (set when pool != nil)
+
 	changePassword http.Handler // POST /auth/change-password (set when pool != nil)
 	account        http.Handler // GET /auth/account (set when pool != nil)
 	deleteAccount  http.Handler // DELETE /auth/account (set when pool != nil)
+	subscription   http.Handler // GET /subscription (set when pool != nil)
+	verifyReceipt  http.Handler // POST /subscription/verify-receipt (set when pool != nil)
+
+	// Extension-token handlers (set when pool != nil; all JWT-gated).
+	mintExtToken   http.Handler // POST   /auth/extension-tokens
+	listExtTokens  http.Handler // GET    /auth/extension-tokens
+	revokeExtToken http.Handler // DELETE /auth/extension-tokens/{id}
+
+	// extSvc is the live *exttoken.Service (verify path). Stashed so T16's
+	// dual-auth middleware on /v1/rewrite can authorize presented ext tokens
+	// without re-building the service. Nil when pool == nil.
+	extSvc *exttokenpkg.Service
 }
 
 // staticInfoReader is the dev-fallback LogLevelReader used when no

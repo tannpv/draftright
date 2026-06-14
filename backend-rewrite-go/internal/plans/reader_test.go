@@ -10,11 +10,16 @@ import (
 )
 
 type fakeQ struct {
-	row sqlc.FindFreePlanRow
-	err error
+	row  sqlc.FindFreePlanRow
+	err  error
+	rows []sqlc.ListActivePlansRow
 }
 
 func (f fakeQ) FindFreePlan(context.Context) (sqlc.FindFreePlanRow, error) { return f.row, f.err }
+
+func (f fakeQ) ListActivePlans(context.Context) ([]sqlc.ListActivePlansRow, error) {
+	return f.rows, f.err
+}
 
 func TestFindFreePlan(t *testing.T) {
 	var id pgtype.UUID
