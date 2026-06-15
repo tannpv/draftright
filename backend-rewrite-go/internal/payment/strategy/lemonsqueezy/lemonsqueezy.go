@@ -11,11 +11,16 @@ package lemonsqueezy
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/tannpv/draftright-rewrite/internal/payment/strategy"
 )
@@ -180,6 +185,117 @@ func (s *Strategy) CancelSubscription(ctx context.Context, subscriptionID string
 		return false, wrapAPI(err, "Could not cancel the subscription")
 	}
 	return true, nil
+}
+
+// VerifyWebhook ports LemonSqueezyStrategy.verifyWebhook. Unset signing secret →
+// Ignored. HMAC-SHA256(hex) over the raw body must match X-Signature
+// (constant-time) else 400. Dispatches on meta.event_name.
+func (s *Strategy) VerifyWebhook(ctx context.Context, payload []byte, headers http.Header) (strategy.WebhookAction, error) {
+	if s.creds.WebhookSecret == "" {
+		return strategy.Ignored(), nil
+	}
+	mac := hmac.New(sha256.New, []byte(s.creds.WebhookSecret))
+	mac.Write(payload)
+	expected := hex.EncodeToString(mac.Sum(nil))
+	got := headers.Get("X-Signature")
+	if !hexSigMatches(expected, got) {
+		return strategy.WebhookAction{}, &strategy.WebhookError{Status: 400, Message: "Invalid Lemon Squeezy webhook signature"}
+	}
+
+	var event struct {
+		Meta struct {
+			EventName  string `json:"event_name"`
+			CustomData struct {
+				ReferenceCode string `json:"reference_code"`
+			} `json:"custom_data"`
+		} `json:"meta"`
+		Data struct {
+			ID         any `json:"id"`
+			Attributes struct {
+				RenewsAt   string `json:"renews_at"`
+				CustomerID any    `json:"customer_id"`
+				VariantID  any    `json:"variant_id"`
+			} `json:"attributes"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(payload, &event); err != nil {
+		return strategy.Ignored(), nil
+	}
+
+	ref := event.Meta.CustomData.ReferenceCode
+	subID := anyToStr(event.Data.ID)
+	customerID := anyToStr(event.Data.Attributes.CustomerID)
+	variantID := anyToStr(event.Data.Attributes.VariantID)
+
+	switch event.Meta.EventName {
+	case "subscription_created", "subscription_payment_success":
+		if ref == "" || subID == "" {
+			return strategy.Ignored(), nil
+		}
+		return strategy.WebhookAction{
+			Type:             strategy.ActionLSPaymentSuccess,
+			ReferenceCode:    ref,
+			LSSubscriptionID: subID,
+			LSCustomerID:     customerID,
+			LSVariantID:      variantID,
+			CurrentPeriodEnd: isoToUnix(event.Data.Attributes.RenewsAt),
+		}, nil
+	case "subscription_payment_failed":
+		if subID == "" {
+			return strategy.Ignored(), nil
+		}
+		return strategy.WebhookAction{Type: strategy.ActionLSPaymentFailed, LSSubscriptionID: subID}, nil
+	case "subscription_cancelled":
+		if subID == "" {
+			return strategy.Ignored(), nil
+		}
+		return strategy.WebhookAction{Type: strategy.ActionLSSubscriptionCanceled, LSSubscriptionID: subID}, nil
+	case "subscription_expired":
+		if subID == "" {
+			return strategy.Ignored(), nil
+		}
+		return strategy.WebhookAction{Type: strategy.ActionLSSubscriptionExpired, LSSubscriptionID: subID}, nil
+	default:
+		return strategy.Ignored(), nil
+	}
+}
+
+// hexSigMatches ports signatureMatches: length-checked constant-time hex compare.
+func hexSigMatches(expectedHex, actualHex string) bool {
+	if actualHex == "" || len(expectedHex) != len(actualHex) {
+		return false
+	}
+	eb, err1 := hex.DecodeString(expectedHex)
+	ab, err2 := hex.DecodeString(actualHex)
+	if err1 != nil || err2 != nil || len(eb) != len(ab) {
+		return false
+	}
+	return subtle.ConstantTimeCompare(eb, ab) == 1
+}
+
+// anyToStr ports `x != null ? String(x) : ”` for LS numeric-or-string ids.
+func anyToStr(v any) string {
+	switch n := v.(type) {
+	case string:
+		return n
+	case float64:
+		return strconv.FormatInt(int64(n), 10)
+	default:
+		return ""
+	}
+}
+
+// isoToUnix ports `Math.floor(new Date(iso).getTime()/1000)`; "" → 0.
+func isoToUnix(iso string) int64 {
+	if iso == "" {
+		return 0
+	}
+	// LS sends microsecond ISO with a trailing Z. RFC3339Nano parses it.
+	t, err := time.Parse(time.RFC3339Nano, iso)
+	if err != nil {
+		return 0
+	}
+	return t.Unix()
 }
 
 func (s *Strategy) do(ctx context.Context, method, path string, body any, out any) error {
