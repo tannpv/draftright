@@ -80,6 +80,29 @@ func TestPortalHandler_200(t *testing.T) {
 	}
 }
 
+func TestPortalHandler_StrategyError500(t *testing.T) {
+	svc := portalSvc(&fakeCheckoutRepo{user: &CheckoutUser{ID: "u1", StripeCustomerID: "cus_1"}},
+		fakeSubs{sub: &subscription.AccountSub{StoreType: "stripe"}},
+		map[string]strategy.Strategy{"stripe": fakeStrategyErr{msg: "Stripe is not configured."}})
+	h := NewHandler(svc)
+	rec := httptest.NewRecorder()
+	req := withClaims(httptest.NewRequest(http.MethodGet, "/payment/portal", nil), "u1")
+	h.Portal(rec, req)
+	if rec.Code != 500 {
+		t.Fatalf("status = %d, want 500 (body=%s)", rec.Code, rec.Body.String())
+	}
+	var env map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &env); err != nil {
+		t.Fatal(err)
+	}
+	if env["code"] != "internal" {
+		t.Fatalf("code = %v, want internal", env["code"])
+	}
+	if env["error"] != "Stripe is not configured." {
+		t.Fatalf("error = %v, want raw strategy message", env["error"])
+	}
+}
+
 func TestCancelHandler_200(t *testing.T) {
 	exp := time.Now()
 	svc := portalSvc(&fakeCheckoutRepo{user: &CheckoutUser{ID: "u1"}},

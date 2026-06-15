@@ -54,7 +54,7 @@ func (s *Service) CustomerPortalURL(ctx context.Context, userID string) (string,
 	}
 	url, err := strat.CustomerPortalURL(ctx, PortalUserFrom(user))
 	if err != nil {
-		return "", badRequest(err.Error())
+		return "", internalError(err.Error())
 	}
 	if url == "" {
 		return "", notFound("Customer portal is not available for this subscription")
@@ -111,7 +111,7 @@ func (s *Service) CancelActiveSubscription(ctx context.Context, userID string) (
 	}
 	cancelled, err := strat.CancelSubscription(ctx, sub.StoreTransactionID)
 	if err != nil {
-		return nil, badRequest(err.Error())
+		return nil, internalError(err.Error())
 	}
 	if !cancelled {
 		return nil, notFound("Provider declined to cancel the subscription")

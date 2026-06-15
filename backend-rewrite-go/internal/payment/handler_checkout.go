@@ -54,6 +54,8 @@ func writePaymentErr(w http.ResponseWriter, r *http.Request, err error) bool {
 		code = "not-found"
 	case 400:
 		code = "invalid-input"
+	case 500:
+		code = "internal"
 	default:
 		return false
 	}

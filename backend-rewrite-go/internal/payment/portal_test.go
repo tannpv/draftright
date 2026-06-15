@@ -2,6 +2,7 @@ package payment
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -37,6 +38,18 @@ func (f fakeStrategyPortal) CustomerPortalURL(context.Context, strategy.PortalUs
 }
 func (f fakeStrategyPortal) CancelSubscription(context.Context, string) (bool, error) {
 	return false, nil
+}
+
+type fakeStrategyErr struct{ msg string }
+
+func (f fakeStrategyErr) CreateCheckout(context.Context, strategy.Payment, strategy.Plan, strategy.Options) (strategy.Result, error) {
+	return strategy.Result{}, nil
+}
+func (f fakeStrategyErr) CustomerPortalURL(context.Context, strategy.PortalUser) (string, error) {
+	return "", errors.New(f.msg)
+}
+func (f fakeStrategyErr) CancelSubscription(context.Context, string) (bool, error) {
+	return false, errors.New(f.msg)
 }
 
 func portalSvc(repo CheckoutRepo, subs SubsPort, strategies map[string]strategy.Strategy) *Service {
@@ -103,6 +116,23 @@ func TestCancel_ProviderDeclined(t *testing.T) {
 		map[string]strategy.Strategy{"stripe": fakeStrategy{}})
 	_, err := s.CancelActiveSubscription(context.Background(), "u1")
 	assertDomainErr(t, err, 404, "Provider declined to cancel the subscription")
+}
+
+func TestPortal_StrategyError500(t *testing.T) {
+	s := portalSvc(&fakeCheckoutRepo{user: &CheckoutUser{ID: "u1", StripeCustomerID: "cus_1"}},
+		fakeSubs{sub: &subscription.AccountSub{StoreType: "stripe"}},
+		map[string]strategy.Strategy{"stripe": fakeStrategyErr{msg: "Stripe is not configured."}})
+	_, err := s.CustomerPortalURL(context.Background(), "u1")
+	assertDomainErr(t, err, 500, "Stripe is not configured.")
+}
+
+func TestCancel_StrategyError500(t *testing.T) {
+	exp := time.Now()
+	s := portalSvc(&fakeCheckoutRepo{user: &CheckoutUser{ID: "u1"}},
+		fakeSubs{sub: &subscription.AccountSub{StoreType: "stripe", StoreTransactionID: "sub_1", ExpiresAt: &exp}},
+		map[string]strategy.Strategy{"stripe": fakeStrategyErr{msg: "Could not cancel the subscription"}})
+	_, err := s.CancelActiveSubscription(context.Background(), "u1")
+	assertDomainErr(t, err, 500, "Could not cancel the subscription")
 }
 
 func TestCancel_Success(t *testing.T) {

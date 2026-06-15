@@ -20,8 +20,9 @@ type DomainError struct {
 
 func (e *DomainError) Error() string { return e.Message }
 
-func notFound(msg string) *DomainError   { return &DomainError{Status: 404, Message: msg} }
-func badRequest(msg string) *DomainError { return &DomainError{Status: 400, Message: msg} }
+func notFound(msg string) *DomainError      { return &DomainError{Status: 404, Message: msg} }
+func badRequest(msg string) *DomainError    { return &DomainError{Status: 400, Message: msg} }
+func internalError(msg string) *DomainError { return &DomainError{Status: 500, Message: msg} }
 
 // CheckoutOptions ports CreateCheckoutDto's success/cancel URLs.
 type CheckoutOptions struct {
