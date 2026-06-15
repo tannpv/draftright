@@ -15,10 +15,11 @@ import (
 // Token-by-token streaming respects ctx so the producer goroutine
 // never leaks — a critical invariant the use case relies on.
 type Provider struct {
-	id     uuid.UUID
-	name   string
-	tokens []string
-	final  error
+	id         uuid.UUID
+	name       string
+	tokens     []string
+	final      error
+	completion string // scripted blocking-Complete result; see complete.go
 }
 
 // NewProvider builds a streaming fake. id + name appear on the
