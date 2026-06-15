@@ -83,6 +83,12 @@ type Router struct {
 	PaymentStatus  http.Handler // GET /payment/status/{ref}   (public)
 	PaymentHistory http.Handler // GET /payment/history        (auth)
 
+	PaymentWebhookStripe       http.Handler // POST /payment/webhook/stripe       (public)
+	PaymentWebhookVietQR       http.Handler // POST /payment/webhook/vietqr       (public)
+	PaymentWebhookCasso        http.Handler // POST /payment/webhook/casso        (public)
+	PaymentWebhookSepay        http.Handler // POST /payment/webhook/sepay        (public)
+	PaymentWebhookLemonSqueezy http.Handler // POST /payment/webhook/lemonsqueezy (public)
+
 	PaymentCheckout  http.Handler // POST /payment/checkout       (auth)
 	PaymentPortal    http.Handler // GET /payment/portal          (auth)
 	PaymentCancelSub http.Handler // DELETE /payment/subscription (auth)
@@ -165,6 +171,21 @@ func (r *Router) Build() http.Handler {
 	}
 	if r.PaymentStatus != nil {
 		mux.Method(http.MethodGet, "/payment/status/{ref}", r.PaymentStatus)
+	}
+	if r.PaymentWebhookStripe != nil {
+		mux.Method(http.MethodPost, "/payment/webhook/stripe", r.PaymentWebhookStripe)
+	}
+	if r.PaymentWebhookVietQR != nil {
+		mux.Method(http.MethodPost, "/payment/webhook/vietqr", r.PaymentWebhookVietQR)
+	}
+	if r.PaymentWebhookCasso != nil {
+		mux.Method(http.MethodPost, "/payment/webhook/casso", r.PaymentWebhookCasso)
+	}
+	if r.PaymentWebhookSepay != nil {
+		mux.Method(http.MethodPost, "/payment/webhook/sepay", r.PaymentWebhookSepay)
+	}
+	if r.PaymentWebhookLemonSqueezy != nil {
+		mux.Method(http.MethodPost, "/payment/webhook/lemonsqueezy", r.PaymentWebhookLemonSqueezy)
 	}
 
 	// Build the JWT middleware once so /v1/rewrite (dual-auth) and the

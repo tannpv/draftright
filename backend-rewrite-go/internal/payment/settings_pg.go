@@ -81,3 +81,14 @@ func (a *SettingsAdapter) Credentials(ctx context.Context) (Credentials, error) 
 		LemonSqueezyWebhookSecret:  row.LemonsqueezyWebhookSecret,
 	}, nil
 }
+
+// LemonSqueezyVariants returns the configured (monthly, yearly) variant ids,
+// satisfying the Service's VariantResolver port for the LS webhook plan
+// re-resolution path.
+func (a *SettingsAdapter) LemonSqueezyVariants(ctx context.Context) (string, string, error) {
+	c, err := a.Credentials(ctx)
+	if err != nil {
+		return "", "", err
+	}
+	return c.LemonSqueezyVariantMonthly, c.LemonSqueezyVariantYearly, nil
+}

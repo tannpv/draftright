@@ -153,9 +153,15 @@ func main() {
 		PaymentCheckout:    core.paymentCheckout,
 		PaymentPortal:      core.paymentPortal,
 		PaymentCancelSub:   core.paymentCancelSub,
-		MintExtToken:       core.mintExtToken,
-		ListExtTokens:      core.listExtTokens,
-		RevokeExtToken:     core.revokeExtToken,
+
+		PaymentWebhookStripe:       core.paymentWebhookStripe,
+		PaymentWebhookVietQR:       core.paymentWebhookVietQR,
+		PaymentWebhookCasso:        core.paymentWebhookCasso,
+		PaymentWebhookSepay:        core.paymentWebhookSepay,
+		PaymentWebhookLemonSqueezy: core.paymentWebhookLemonSqueezy,
+		MintExtToken:               core.mintExtToken,
+		ListExtTokens:              core.listExtTokens,
+		RevokeExtToken:             core.revokeExtToken,
 	}
 	// Enable dual auth on /v1/rewrite (dr_ext_ token OR JWT) only when the
 	// extension-token service is wired (DB present). Guarded so the field
@@ -369,6 +375,17 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 			paymentpkg.GeneratePaymentReference,
 			subReader, // *subpkg.Reader satisfies SubsPort (ActiveByUser) for portal/cancel
 		)
+		// Phase 3c: wire the webhook collaborators onto the same paymentSvc.
+		// subWebhookWriter activates/extends/cancels subscriptions; the mail
+		// emailer sends payment-failed/activated mails; paymentSettings resolves
+		// LS variants for plan re-resolution. The handler holds the same pointer.
+		subWebhookWriter := subpkg.NewWebhookWriter(q)
+		paymentSvc.WithWebhook(
+			paymentRepo,      // WebhookRepo
+			subWebhookWriter, // SubsWriter
+			paymentpkg.NewMailWebhookEmailer(emailSvc), // WebhookEmailer
+			paymentSettings, // VariantResolver
+		)
 		paymentHandler := paymentpkg.NewHandler(paymentSvc)
 		core.paymentMethods = http.HandlerFunc(paymentHandler.Methods)
 		core.paymentStatus = http.HandlerFunc(paymentHandler.Status)
@@ -376,6 +393,11 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 		core.paymentCheckout = http.HandlerFunc(paymentHandler.Checkout)
 		core.paymentPortal = http.HandlerFunc(paymentHandler.Portal)
 		core.paymentCancelSub = http.HandlerFunc(paymentHandler.CancelSubscription)
+		core.paymentWebhookStripe = http.HandlerFunc(paymentHandler.StripeWebhook)
+		core.paymentWebhookVietQR = http.HandlerFunc(paymentHandler.VietQRWebhook)
+		core.paymentWebhookCasso = http.HandlerFunc(paymentHandler.CassoWebhook)
+		core.paymentWebhookSepay = http.HandlerFunc(paymentHandler.SepayWebhook)
+		core.paymentWebhookLemonSqueezy = http.HandlerFunc(paymentHandler.LemonSqueezyWebhook)
 
 		// Daily subscription-expiry cron (ports NestJS @Cron("0 09 * * *")).
 		// Reuses the same subReader (it satisfies subpkg.CronRepo via
@@ -437,6 +459,13 @@ type coreHandlers struct {
 	paymentCheckout  http.Handler // POST /payment/checkout      (auth)
 	paymentPortal    http.Handler // GET /payment/portal         (auth)
 	paymentCancelSub http.Handler // DELETE /payment/subscription (auth)
+
+	// Payment webhooks (Phase 3c; set when pool != nil; all public).
+	paymentWebhookStripe       http.Handler // POST /payment/webhook/stripe
+	paymentWebhookVietQR       http.Handler // POST /payment/webhook/vietqr
+	paymentWebhookCasso        http.Handler // POST /payment/webhook/casso
+	paymentWebhookSepay        http.Handler // POST /payment/webhook/sepay
+	paymentWebhookLemonSqueezy http.Handler // POST /payment/webhook/lemonsqueezy
 
 	// Extension-token handlers (set when pool != nil; all JWT-gated).
 	mintExtToken   http.Handler // POST   /auth/extension-tokens
