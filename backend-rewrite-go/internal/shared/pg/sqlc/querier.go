@@ -168,6 +168,12 @@ type Querier interface {
 	// findByUser(userId): the user's 20 most-recent payments, newest first, each
 	// with its plan (TypeORM relations:['plan'] order:{created_at:'DESC'} take:20).
 	ListPaymentsByUser(ctx context.Context, userID pgtype.UUID) ([]ListPaymentsByUserRow, error)
+	// Reflect a Resend delivery event onto email_logs.status (by Resend
+	// message id). error is only overwritten when a reason is supplied —
+	// a NULL reason leaves the existing error untouched, mirroring the
+	// NestJS markByProviderId (which omits error from the UPDATE when the
+	// detail arg is null).
+	MarkEmailByProviderID(ctx context.Context, arg MarkEmailByProviderIDParams) error
 	MarkPaymentCompleted(ctx context.Context, referenceCode string) error
 	MarkPaymentFailed(ctx context.Context, arg MarkPaymentFailedParams) error
 	MarkPaymentFailedByRef(ctx context.Context, referenceCode string) error
@@ -194,6 +200,9 @@ type Querier interface {
 	// Cron pass 1: active subs whose expiry falls in the reminder window.
 	// Bounds passed by caller (now+2.5d, now+3.5d) to keep tz in the Go process.
 	SubsDueForRenewal(ctx context.Context, arg SubsDueForRenewalParams) ([]SubsDueForRenewalRow, error)
+	// Add an address to the suppression list (idempotent). Mirrors the
+	// NestJS suppress() orIgnore() → bare ON CONFLICT DO NOTHING.
+	SuppressEmail(ctx context.Context, arg SuppressEmailParams) error
 	// validate() write-behind: bump last_used_at. Failures non-fatal (caller
 	// ignores the error so the request still succeeds).
 	TouchTokenLastUsed(ctx context.Context, id pgtype.UUID) error
