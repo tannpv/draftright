@@ -26,7 +26,9 @@ func TestLatest_ShapeAndPlatformsOmitNulls(t *testing.T) {
 		t.Fatalf("status = %d", rec.Code)
 	}
 	var body map[string]any
-	json.Unmarshal(rec.Body.Bytes(), &body)
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
 	if body["mac_url"] != "https://x/mac" || body["windows_url"] != "" {
 		t.Errorf("top-level urls wrong: %v", body)
 	}
@@ -48,7 +50,9 @@ func TestLatest_EmptyDB200(t *testing.T) {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
 	var body map[string]any
-	json.Unmarshal(rec.Body.Bytes(), &body)
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
 	if body["version"] != "" {
 		t.Errorf("version = %v, want empty", body["version"])
 	}
