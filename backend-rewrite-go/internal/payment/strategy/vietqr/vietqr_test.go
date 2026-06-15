@@ -127,6 +127,28 @@ func TestVietQRVerify_AuthedButNoRefIgnored(t *testing.T) {
 	}
 }
 
+func TestVietQRVerify_ApikeyNoSpaceNotStripped(t *testing.T) {
+	// "Apikeyck" has no whitespace after "Apikey" → Node leaves it whole, so it
+	// is NOT a valid key match (key is "ck") → 401 invalid.
+	s := New(Creds{CassoAPIKey: "ck"})
+	h := http.Header{}
+	h.Set("Authorization", "Apikeyck")
+	_, err := s.VerifyWebhook(context.Background(), []byte(`{}`), h)
+	assertWebhookErr(t, err, 401, "Invalid webhook authorization")
+}
+
+func TestVietQRVerify_FalsyTransactionIdIgnored(t *testing.T) {
+	// transactionId 0 is JS-falsy → MB branch skipped → Ignored (Node parity).
+	s := New(Creds{CassoAPIKey: "ck"})
+	h := http.Header{}
+	h.Set("Authorization", "Apikey ck")
+	body := `{"transactionId":0,"description":"chuyen khoan DR-PRO-MBMB","creditAmount":5}`
+	act, err := s.VerifyWebhook(context.Background(), []byte(body), h)
+	if err != nil || act.Type != strategy.ActionIgnored {
+		t.Fatalf("want ignored, got %+v %v", act, err)
+	}
+}
+
 func assertWebhookErr(t *testing.T, err error, status int, msg string) {
 	t.Helper()
 	var we *strategy.WebhookError

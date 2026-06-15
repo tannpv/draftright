@@ -110,6 +110,23 @@ func extractRef(text string) string {
 	return drRefRegex.FindString(strings.ToUpper(text))
 }
 
+// isTruthy ports JS truthiness for a JSON-decoded value (used for Node's
+// `if (payload.transactionId && ...)`): nil/false/0/"" are falsy.
+func isTruthy(v any) bool {
+	switch x := v.(type) {
+	case nil:
+		return false
+	case bool:
+		return x
+	case float64:
+		return x != 0
+	case string:
+		return x != ""
+	default:
+		return true
+	}
+}
+
 // VerifyWebhook ports VietQRStrategy.verifyWebhook. Header auth first (401 on
 // any failure), then reference extraction from the Casso / SePay / MB body
 // shapes. Authenticated-but-unmatched → Ignored.
@@ -170,7 +187,7 @@ func (s *Strategy) VerifyWebhook(ctx context.Context, payload []byte, headers ht
 		}
 	}
 	// MB Bank BaaS: transactionId + description + creditAmount.
-	if body.TransactionID != nil && body.Description != "" {
+	if isTruthy(body.TransactionID) && body.Description != "" {
 		if ref := extractRef(body.Description); ref != "" && body.CreditAmount > 0 {
 			return strategy.WebhookAction{Type: strategy.ActionPaymentCompleted, ReferenceCode: ref}, nil
 		}
@@ -178,13 +195,12 @@ func (s *Strategy) VerifyWebhook(ctx context.Context, payload []byte, headers ht
 	return strategy.Ignored(), nil
 }
 
-// stripApikeyPrefix removes a leading case-insensitive "Apikey " (Node
-// .replace(/^Apikey\s+/i, ”)).
+// apikeyPrefixRe ports Node's /^Apikey\s+/i — anchored, requires ≥1 whitespace
+// after "Apikey". No leading space allowed (the ^ anchor).
+var apikeyPrefixRe = regexp.MustCompile(`(?i)^Apikey\s+`)
+
+// stripApikeyPrefix removes a leading "Apikey " prefix exactly as Node's
+// authHeader.replace(/^Apikey\s+/i, ”) does — unchanged if it doesn't match.
 func stripApikeyPrefix(h string) string {
-	const p = "apikey"
-	t := strings.TrimSpace(h)
-	if len(t) >= len(p) && strings.EqualFold(t[:len(p)], p) {
-		return strings.TrimLeft(t[len(p):], " \t")
-	}
-	return t
+	return apikeyPrefixRe.ReplaceAllString(h, "")
 }
