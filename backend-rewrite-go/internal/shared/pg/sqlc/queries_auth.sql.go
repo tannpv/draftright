@@ -345,7 +345,7 @@ func (q *Queries) GetActiveSubWithPlan(ctx context.Context, userID pgtype.UUID) 
 }
 
 const getActiveSubscriptionByUserID = `-- name: GetActiveSubscriptionByUserID :one
-SELECT s.status, s.store_type, s.started_at, s.expires_at,
+SELECT s.status, s.store_type, s.started_at, s.expires_at, s.store_transaction_id,
        p.name AS plan_name, p.daily_limit
 FROM subscriptions s
 JOIN plans p ON p.id = s.plan_id
@@ -355,12 +355,13 @@ LIMIT 1
 `
 
 type GetActiveSubscriptionByUserIDRow struct {
-	Status     SubscriptionsStatusEnum    `db:"status" json:"status"`
-	StoreType  SubscriptionsStoreTypeEnum `db:"store_type" json:"store_type"`
-	StartedAt  pgtype.Timestamp           `db:"started_at" json:"started_at"`
-	ExpiresAt  pgtype.Timestamp           `db:"expires_at" json:"expires_at"`
-	PlanName   string                     `db:"plan_name" json:"plan_name"`
-	DailyLimit int32                      `db:"daily_limit" json:"daily_limit"`
+	Status             SubscriptionsStatusEnum    `db:"status" json:"status"`
+	StoreType          SubscriptionsStoreTypeEnum `db:"store_type" json:"store_type"`
+	StartedAt          pgtype.Timestamp           `db:"started_at" json:"started_at"`
+	ExpiresAt          pgtype.Timestamp           `db:"expires_at" json:"expires_at"`
+	StoreTransactionID *string                    `db:"store_transaction_id" json:"store_transaction_id"`
+	PlanName           string                     `db:"plan_name" json:"plan_name"`
+	DailyLimit         int32                      `db:"daily_limit" json:"daily_limit"`
 }
 
 // Mirrors subscriptionsService.findActiveByUserId: newest ACTIVE
@@ -374,6 +375,7 @@ func (q *Queries) GetActiveSubscriptionByUserID(ctx context.Context, userID pgty
 		&i.StoreType,
 		&i.StartedAt,
 		&i.ExpiresAt,
+		&i.StoreTransactionID,
 		&i.PlanName,
 		&i.DailyLimit,
 	)

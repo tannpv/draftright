@@ -31,6 +31,10 @@ import (
 	emailpkg "github.com/tannpv/draftright-rewrite/internal/email"
 	exttokenpkg "github.com/tannpv/draftright-rewrite/internal/exttoken"
 	paymentpkg "github.com/tannpv/draftright-rewrite/internal/payment"
+	paymentstrategy "github.com/tannpv/draftright-rewrite/internal/payment/strategy"
+	"github.com/tannpv/draftright-rewrite/internal/payment/strategy/lemonsqueezy"
+	"github.com/tannpv/draftright-rewrite/internal/payment/strategy/stripe"
+	"github.com/tannpv/draftright-rewrite/internal/payment/strategy/vietqr"
 	planspkg "github.com/tannpv/draftright-rewrite/internal/plans"
 	"github.com/tannpv/draftright-rewrite/internal/platform/auth"
 	"github.com/tannpv/draftright-rewrite/internal/platform/config"
@@ -146,6 +150,9 @@ func main() {
 		PaymentMethods:     core.paymentMethods,
 		PaymentStatus:      core.paymentStatus,
 		PaymentHistory:     core.paymentHistory,
+		PaymentCheckout:    core.paymentCheckout,
+		PaymentPortal:      core.paymentPortal,
+		PaymentCancelSub:   core.paymentCancelSub,
 		MintExtToken:       core.mintExtToken,
 		ListExtTokens:      core.listExtTokens,
 		RevokeExtToken:     core.revokeExtToken,
@@ -316,11 +323,53 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 		// payment Querier and the coreSettingsQuerier ports.
 		paymentRepo := paymentpkg.NewRepo(q)
 		paymentSettings := paymentpkg.NewSettingsAdapter(q)
-		paymentSvc := paymentpkg.NewService(paymentRepo, paymentSettings, cfg.PaymentEnabledMethods)
+		creds, err := paymentSettings.Credentials(ctx) // startup load; missing row → zero value (env fallback)
+		if err != nil {
+			cleanup()
+			return usecase.RewriteDeps{}, coreHandlers{}, nil, fmt.Errorf("load payment credentials: %w", err)
+		}
+		vietqrStrat := vietqr.New(vietqr.Creds{
+			BankID:        paymentstrategy.ResolveCredential(creds.VietQRBankID, cfg.VietQRBankID),
+			AccountNumber: paymentstrategy.ResolveCredential(creds.VietQRAccountNumber, cfg.VietQRAccountNumber),
+			AccountName:   paymentstrategy.ResolveCredential(creds.VietQRAccountName, cfg.VietQRAccountName),
+		})
+		stripeStrat := stripe.New(
+			stripe.Creds{SecretKey: paymentstrategy.ResolveCredential(creds.StripeSecretKey, cfg.StripeSecretKey)},
+			stripe.Env{
+				PublishableKey:     cfg.StripePublishableKey,
+				ApplePayMerchantID: cfg.ApplePayMerchantID,
+				WebsiteURL:         cfg.WebsiteURL,
+			},
+		)
+		lsStrat := lemonsqueezy.New(lemonsqueezy.Creds{
+			APIKey:         paymentstrategy.ResolveCredential(creds.LemonSqueezyAPIKey, cfg.LemonSqueezyAPIKey),
+			StoreID:        paymentstrategy.ResolveCredential(creds.LemonSqueezyStoreID, cfg.LemonSqueezyStoreID),
+			VariantMonthly: creds.LemonSqueezyVariantMonthly,
+			VariantYearly:  creds.LemonSqueezyVariantYearly,
+		}, cfg.WebsiteURL)
+		strategies := map[string]paymentstrategy.Strategy{
+			"stripe":        stripeStrat,
+			"vietqr":        vietqrStrat,
+			"bank_transfer": vietqrStrat,
+			"lemonsqueezy":  lsStrat,
+			"apple_pay":     stripeStrat,
+			"google_pay":    stripeStrat,
+		}
+		paymentSvc := paymentpkg.NewService(
+			paymentRepo, paymentSettings, cfg.PaymentEnabledMethods,
+			paymentRepo, // *Repo also satisfies CheckoutRepo
+			strategies,
+			time.Now,
+			paymentpkg.GeneratePaymentReference,
+			subReader, // *subpkg.Reader satisfies SubsPort (ActiveByUser) for portal/cancel
+		)
 		paymentHandler := paymentpkg.NewHandler(paymentSvc)
 		core.paymentMethods = http.HandlerFunc(paymentHandler.Methods)
 		core.paymentStatus = http.HandlerFunc(paymentHandler.Status)
 		core.paymentHistory = http.HandlerFunc(paymentHandler.History)
+		core.paymentCheckout = http.HandlerFunc(paymentHandler.Checkout)
+		core.paymentPortal = http.HandlerFunc(paymentHandler.Portal)
+		core.paymentCancelSub = http.HandlerFunc(paymentHandler.CancelSubscription)
 
 		// Daily subscription-expiry cron (ports NestJS @Cron("0 09 * * *")).
 		// Reuses the same subReader (it satisfies subpkg.CronRepo via
@@ -378,6 +427,10 @@ type coreHandlers struct {
 	paymentMethods http.Handler // GET /payment/methods (public)
 	paymentStatus  http.Handler // GET /payment/status/{ref} (public)
 	paymentHistory http.Handler // GET /payment/history (auth)
+
+	paymentCheckout  http.Handler // POST /payment/checkout      (auth)
+	paymentPortal    http.Handler // GET /payment/portal         (auth)
+	paymentCancelSub http.Handler // DELETE /payment/subscription (auth)
 
 	// Extension-token handlers (set when pool != nil; all JWT-gated).
 	mintExtToken   http.Handler // POST   /auth/extension-tokens

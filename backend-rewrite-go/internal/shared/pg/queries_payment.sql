@@ -35,3 +35,32 @@ LEFT JOIN plans pl ON pl.id = p.plan_id
 WHERE p.user_id = $1
 ORDER BY p.created_at DESC
 LIMIT 20;
+
+-- name: GetPlanForCheckout :one
+-- Full plan entity createCheckout needs: price_cents drives the free-plan guard +
+-- payment.amount, the strategy reads name/stripe_price_id/trial_days/billing_period,
+-- and the nested `payment.plan` response object serializes the WHOLE plan
+-- (daily_limit/is_active/created_at/updated_at included — Node attaches
+-- plansService.findById, the full entity). No row → pgx.ErrNoRows.
+SELECT id, name, daily_limit, price_cents, currency, stripe_price_id, trial_days,
+       billing_period, is_active, created_at, updated_at
+FROM plans
+WHERE id = $1;
+
+-- name: GetUserForCheckout :one
+-- User fields createCheckout / portal / cancel need. No row → pgx.ErrNoRows.
+SELECT id, email, stripe_customer_id, lemonsqueezy_customer_id
+FROM users
+WHERE id = $1;
+
+-- name: CreatePayment :one
+-- Insert a pending payment. Defaults (id, created_at, updated_at) are returned.
+INSERT INTO payments (user_id, plan_id, amount, currency, method, status, reference_code, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, created_at, updated_at;
+
+-- name: UpdatePaymentQRData :exec
+UPDATE payments SET qr_data = $2, updated_at = now() WHERE id = $1;
+
+-- name: MarkPaymentFailed :exec
+UPDATE payments SET status = 'failed', notes = $2, updated_at = now() WHERE id = $1;

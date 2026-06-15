@@ -83,6 +83,10 @@ type Router struct {
 	PaymentStatus  http.Handler // GET /payment/status/{ref}   (public)
 	PaymentHistory http.Handler // GET /payment/history        (auth)
 
+	PaymentCheckout  http.Handler // POST /payment/checkout       (auth)
+	PaymentPortal    http.Handler // GET /payment/portal          (auth)
+	PaymentCancelSub http.Handler // DELETE /payment/subscription (auth)
+
 	// EnableTracing wraps the whole mux with otelhttp middleware so
 	// every request becomes a span. No-op when the global tracer
 	// provider is the default noop (i.e. tracing.Setup returned
@@ -212,6 +216,15 @@ func (r *Router) Build() http.Handler {
 		}
 		if r.PaymentHistory != nil {
 			api.Method(http.MethodGet, "/payment/history", r.PaymentHistory)
+		}
+		if r.PaymentCheckout != nil {
+			api.Method(http.MethodPost, "/payment/checkout", r.PaymentCheckout)
+		}
+		if r.PaymentPortal != nil {
+			api.Method(http.MethodGet, "/payment/portal", r.PaymentPortal)
+		}
+		if r.PaymentCancelSub != nil {
+			api.Method(http.MethodDelete, "/payment/subscription", r.PaymentCancelSub)
 		}
 	})
 

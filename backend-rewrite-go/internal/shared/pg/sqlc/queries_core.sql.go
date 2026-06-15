@@ -27,6 +27,49 @@ func (q *Queries) GetClientLogLevel(ctx context.Context) (string, error) {
 	return client_log_level, err
 }
 
+const getPaymentCredentials = `-- name: GetPaymentCredentials :one
+SELECT stripe_secret_key,
+       vietqr_bank_id,
+       vietqr_account_number,
+       vietqr_account_name,
+       lemonsqueezy_api_key,
+       lemonsqueezy_store_id,
+       lemonsqueezy_variant_monthly,
+       lemonsqueezy_variant_yearly
+FROM app_settings
+LIMIT 1
+`
+
+type GetPaymentCredentialsRow struct {
+	StripeSecretKey            string `db:"stripe_secret_key" json:"stripe_secret_key"`
+	VietqrBankID               string `db:"vietqr_bank_id" json:"vietqr_bank_id"`
+	VietqrAccountNumber        string `db:"vietqr_account_number" json:"vietqr_account_number"`
+	VietqrAccountName          string `db:"vietqr_account_name" json:"vietqr_account_name"`
+	LemonsqueezyApiKey         string `db:"lemonsqueezy_api_key" json:"lemonsqueezy_api_key"`
+	LemonsqueezyStoreID        string `db:"lemonsqueezy_store_id" json:"lemonsqueezy_store_id"`
+	LemonsqueezyVariantMonthly string `db:"lemonsqueezy_variant_monthly" json:"lemonsqueezy_variant_monthly"`
+	LemonsqueezyVariantYearly  string `db:"lemonsqueezy_variant_yearly" json:"lemonsqueezy_variant_yearly"`
+}
+
+// Checkout-time provider credentials from the singleton app_settings row.
+// All columns are NOT NULL DEFAULT ”. No row → pgx.ErrNoRows (caller treats
+// as all-empty → env fallback per resolveCredential).
+func (q *Queries) GetPaymentCredentials(ctx context.Context) (GetPaymentCredentialsRow, error) {
+	row := q.db.QueryRow(ctx, getPaymentCredentials)
+	var i GetPaymentCredentialsRow
+	err := row.Scan(
+		&i.StripeSecretKey,
+		&i.VietqrBankID,
+		&i.VietqrAccountNumber,
+		&i.VietqrAccountName,
+		&i.LemonsqueezyApiKey,
+		&i.LemonsqueezyStoreID,
+		&i.LemonsqueezyVariantMonthly,
+		&i.LemonsqueezyVariantYearly,
+	)
+	return i, err
+}
+
 const getPaymentMethodsEnabled = `-- name: GetPaymentMethodsEnabled :one
 SELECT payment_methods_enabled FROM app_settings LIMIT 1
 `

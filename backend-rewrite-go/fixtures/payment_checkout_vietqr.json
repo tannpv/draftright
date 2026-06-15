@@ -1,0 +1,12 @@
+{
+  "name": "payment-checkout-vietqr",
+  "method": "POST",
+  "path": "/payment/checkout",
+  "headers": { "Authorization": "Bearer REPLACE_WITH_DEV_NODE_TOKEN", "Content-Type": "application/json" },
+  "body": { "plan_id": "REPLACE_WITH_DEV_PAID_VND_PLAN_ID", "method": "vietqr" },
+  "ignore_value_of": [
+    "id", "reference_code", "expires_at", "created_at", "updated_at",
+    "qr_data", "reference"
+  ],
+  "_note": "MUTATING + non-deterministic: each run INSERTs a pending payment in both backends. Requires VietQR enabled in app_settings.payment_methods_enabled (CSV must include 'vietqr') and a paid VND plan id. Deterministic + compared: payment.amount, payment.currency='VND', payment.method='vietqr', payment.status='pending', payment.user_id, payment.plan_id, payment.completed_at, payment.provider_ref, payment.notes, the nested plan.daily_limit/plan.is_active, and bank_info.{bank_name,account_number,account_name,amount,currency}. completed_at/provider_ref/notes are deterministic null on both backends for a fresh pending row, so they are COMPARED (null==null), NOT ignored. Do NOT add them to ignore_value_of: the gate's ignore-branch requires an ignored key to be present AND non-empty on both sides, so listing a null-on-both key there produces a guaranteed false failure ('must be present+non-empty on both'). GetPlanForCheckout now selects the FULL plan entity (Node attaches plansService.findById), so the nested plan.daily_limit and plan.is_active are real deterministic DB attributes read from the same row by both backends — they are COMPARED (asserting parity), no longer ignored (a bool is never empty; daily_limit is an int, both always present). Ignored (random/per-request): id/reference_code/expires_at, qr_data (URL embeds the random reference_code), bank_info.reference (=reference_code). created_at/updated_at are ignored ONLY to mask the PAYMENT row's dynamic insert timestamps; because the structural gate ignores by bare key NAME globally, this unavoidably also masks the nested plan.created_at/plan.updated_at — but those are now genuinely correct on the wire (same query + same shared.ISOMillis formatting as Node), so the masking no longer hides a bug, the gate simply can't isolate them. If Go and Node disagree on any NON-ignored key the gate flags a real parity bug."
+}

@@ -2,14 +2,32 @@ package payment
 
 import (
 	"context"
+	"time"
 
+	"github.com/tannpv/draftright-rewrite/internal/payment/strategy"
 	"github.com/tannpv/draftright-rewrite/internal/shared"
+	"github.com/tannpv/draftright-rewrite/internal/subscription"
 )
+
+// SubsPort is the subscription read the portal/cancel use cases need.
+type SubsPort interface {
+	ActiveByUser(ctx context.Context, userID string) (*subscription.AccountSub, error)
+}
 
 // PaymentRepo is the consumer-side port for the read paths (satisfied by *Repo).
 type PaymentRepo interface {
 	GetByReference(ctx context.Context, ref string) (*StatusRow, error)
 	ListByUser(ctx context.Context, userID string) ([]PaymentRow, error)
+}
+
+// CheckoutRepo is the persistence the checkout use case needs (consumer port;
+// the concrete *Repo satisfies it).
+type CheckoutRepo interface {
+	PlanForCheckout(ctx context.Context, id string) (*CheckoutPlan, error)
+	UserForCheckout(ctx context.Context, id string) (*CheckoutUser, error)
+	CreatePayment(ctx context.Context, userID, planID string, amount int, currency, method, status, ref string, expiresAt time.Time) (*CreatedPayment, error)
+	UpdateQRData(ctx context.Context, paymentID, qr string) error
+	MarkFailed(ctx context.Context, paymentID, notes string) error
 }
 
 // SettingsReader yields the admin-configured payment_methods_enabled CSV.
@@ -19,16 +37,43 @@ type SettingsReader interface {
 	PaymentMethodsEnabled(ctx context.Context) (string, bool, error)
 }
 
-// Service is the payment read use case (methods/status/history).
+// Service is the payment use case (methods/status/history + checkout).
 type Service struct {
 	repo     PaymentRepo
 	settings SettingsReader
 	envCSV   string // PAYMENT_ENABLED_METHODS, used when settings absent
+
+	// Checkout-side collaborators (Phase 3b). Read-path callers may pass nil.
+	checkoutRepo CheckoutRepo
+	strategies   map[string]strategy.Strategy
+	now          func() time.Time
+	genRef       func() string
+
+	// subs feeds the portal + in-app cancel use cases (active-subscription read).
+	// main.go always injects the real subscription reader; read-path tests pass nil.
+	subs SubsPort
 }
 
-// NewService wires the repo, settings reader, and env fallback CSV.
-func NewService(repo PaymentRepo, settings SettingsReader, envCSV string) *Service {
-	return &Service{repo: repo, settings: settings, envCSV: envCSV}
+// NewService wires the repo, settings reader, env fallback CSV, and the
+// checkout-side collaborators (checkout repo, strategy registry, clock, and
+// reference-code generator).
+func NewService(repo PaymentRepo, settings SettingsReader, envCSV string, checkoutRepo CheckoutRepo, strategies map[string]strategy.Strategy, now func() time.Time, genRef func() string, subs SubsPort) *Service {
+	if now == nil {
+		now = time.Now
+	}
+	if genRef == nil {
+		genRef = GeneratePaymentReference
+	}
+	return &Service{
+		repo:         repo,
+		settings:     settings,
+		envCSV:       envCSV,
+		checkoutRepo: checkoutRepo,
+		strategies:   strategies,
+		now:          now,
+		genRef:       genRef,
+		subs:         subs,
+	}
 }
 
 // EnabledMethods resolves the storefront's visible methods. Precedence mirrors
