@@ -5,8 +5,11 @@ package vietqr
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/tannpv/draftright-rewrite/internal/payment/strategy"
@@ -96,4 +99,92 @@ func (s *Strategy) CustomerPortalURL(_ context.Context, _ strategy.PortalUser) (
 
 func (s *Strategy) CancelSubscription(_ context.Context, _ string) (bool, error) {
 	return false, nil
+}
+
+// drRefRegex mirrors internal/payment/reference.go's matcher. Duplicated here
+// (not imported) to avoid a payment→strategy→payment import cycle; both derive
+// from the same Node PAYMENT_REF_REGEX = /DR-[A-Z]+-[A-Z0-9]+/.
+var drRefRegex = regexp.MustCompile(`DR-[A-Z]+-[A-Z0-9]+`)
+
+func extractRef(text string) string {
+	return drRefRegex.FindString(strings.ToUpper(text))
+}
+
+// VerifyWebhook ports VietQRStrategy.verifyWebhook. Header auth first (401 on
+// any failure), then reference extraction from the Casso / SePay / MB body
+// shapes. Authenticated-but-unmatched → Ignored.
+func (s *Strategy) VerifyWebhook(ctx context.Context, payload []byte, headers http.Header) (strategy.WebhookAction, error) {
+	authHeader := headers.Get("Authorization")
+	secureToken := strings.TrimSpace(headers.Get("Secure-Token"))
+	provided := strings.TrimSpace(stripApikeyPrefix(authHeader))
+	if provided == "" {
+		provided = secureToken
+	}
+	if provided == "" {
+		return strategy.WebhookAction{}, &strategy.WebhookError{Status: 401, Message: "Missing webhook authorization"}
+	}
+
+	var validKeys []string
+	if s.creds.CassoAPIKey != "" {
+		validKeys = append(validKeys, s.creds.CassoAPIKey)
+	}
+	if s.creds.SepayAPIKey != "" {
+		validKeys = append(validKeys, s.creds.SepayAPIKey)
+	}
+	if len(validKeys) == 0 {
+		return strategy.WebhookAction{}, &strategy.WebhookError{Status: 401, Message: "VietQR webhooks not configured"}
+	}
+	matched := false
+	for _, k := range validKeys {
+		if strategy.TimingSafeStrEqual(k, provided) {
+			matched = true
+		}
+	}
+	if !matched {
+		return strategy.WebhookAction{}, &strategy.WebhookError{Status: 401, Message: "Invalid webhook authorization"}
+	}
+
+	var body struct {
+		Data []struct {
+			Description string  `json:"description"`
+			Amount      float64 `json:"amount"`
+		} `json:"data"`
+		Content        string  `json:"content"`
+		TransferAmount float64 `json:"transferAmount"`
+		TransactionID  any     `json:"transactionId"`
+		Description    string  `json:"description"`
+		CreditAmount   float64 `json:"creditAmount"`
+	}
+	_ = json.Unmarshal(payload, &body)
+
+	// Casso: data[] of statement lines.
+	for _, tx := range body.Data {
+		if ref := extractRef(tx.Description); ref != "" && tx.Amount > 0 {
+			return strategy.WebhookAction{Type: strategy.ActionPaymentCompleted, ReferenceCode: ref}, nil
+		}
+	}
+	// SePay: content + transferAmount.
+	if body.Content != "" && body.TransferAmount > 0 {
+		if ref := extractRef(body.Content); ref != "" {
+			return strategy.WebhookAction{Type: strategy.ActionPaymentCompleted, ReferenceCode: ref}, nil
+		}
+	}
+	// MB Bank BaaS: transactionId + description + creditAmount.
+	if body.TransactionID != nil && body.Description != "" {
+		if ref := extractRef(body.Description); ref != "" && body.CreditAmount > 0 {
+			return strategy.WebhookAction{Type: strategy.ActionPaymentCompleted, ReferenceCode: ref}, nil
+		}
+	}
+	return strategy.Ignored(), nil
+}
+
+// stripApikeyPrefix removes a leading case-insensitive "Apikey " (Node
+// .replace(/^Apikey\s+/i, ”)).
+func stripApikeyPrefix(h string) string {
+	const p = "apikey"
+	t := strings.TrimSpace(h)
+	if len(t) >= len(p) && strings.EqualFold(t[:len(p)], p) {
+		return strings.TrimLeft(t[len(p):], " \t")
+	}
+	return t
 }
