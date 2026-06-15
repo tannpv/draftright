@@ -52,7 +52,7 @@ func TestPaymentRow_MarshalJSON_FieldOrder(t *testing.T) {
 }
 
 func TestMethodsHandler(t *testing.T) {
-	h := NewHandler(NewService(fakeRepo{}, fakeSettings{csv: "stripe", found: true}, ""))
+	h := NewHandler(NewService(fakeRepo{}, fakeSettings{csv: "stripe", found: true}, "", nil, nil, nil, nil))
 	rec := httptest.NewRecorder()
 	h.Methods(rec, httptest.NewRequest(http.MethodGet, "/payment/methods", nil))
 	if rec.Code != 200 {
@@ -71,7 +71,7 @@ func statusReq(ref string) *http.Request {
 }
 
 func TestStatusHandler_NotFound(t *testing.T) {
-	h := NewHandler(NewService(fakeRepo{status: nil}, fakeSettings{}, ""))
+	h := NewHandler(NewService(fakeRepo{status: nil}, fakeSettings{}, "", nil, nil, nil, nil))
 	rec := httptest.NewRecorder()
 	h.Status(rec, statusReq("DR-PRO-NOPE"))
 	if rec.Code != 200 {
@@ -87,7 +87,7 @@ func TestStatusHandler_Found(t *testing.T) {
 	h := NewHandler(NewService(fakeRepo{status: &StatusRow{
 		Status: "completed", Method: "stripe", Amount: 900, Currency: "USD",
 		ReferenceCode: "DR-PRO-ABCD1234", PlanName: &name,
-	}}, fakeSettings{}, ""))
+	}}, fakeSettings{}, "", nil, nil, nil, nil))
 	rec := httptest.NewRecorder()
 	h.Status(rec, statusReq("DR-PRO-ABCD1234"))
 	if rec.Code != 200 {
@@ -103,7 +103,7 @@ func TestStatusHandler_Found(t *testing.T) {
 }
 
 func TestHistoryHandler_Empty(t *testing.T) {
-	h := NewHandler(NewService(fakeRepo{hist: nil}, fakeSettings{}, ""))
+	h := NewHandler(NewService(fakeRepo{hist: nil}, fakeSettings{}, "", nil, nil, nil, nil))
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/payment/history", nil)
 	req = req.WithContext(shared.ContextWithClaims(req.Context(), &auth.Claims{Sub: "u1"}))
@@ -117,7 +117,7 @@ func TestHistoryHandler_Empty(t *testing.T) {
 }
 
 func TestHistoryHandler_MissingClaims(t *testing.T) {
-	h := NewHandler(NewService(fakeRepo{}, fakeSettings{}, ""))
+	h := NewHandler(NewService(fakeRepo{}, fakeSettings{}, "", nil, nil, nil, nil))
 	rec := httptest.NewRecorder()
 	h.History(rec, httptest.NewRequest(http.MethodGet, "/payment/history", nil))
 	if rec.Code != 500 {

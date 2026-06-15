@@ -31,6 +31,7 @@ import (
 	emailpkg "github.com/tannpv/draftright-rewrite/internal/email"
 	exttokenpkg "github.com/tannpv/draftright-rewrite/internal/exttoken"
 	paymentpkg "github.com/tannpv/draftright-rewrite/internal/payment"
+	paymentstrategy "github.com/tannpv/draftright-rewrite/internal/payment/strategy"
 	planspkg "github.com/tannpv/draftright-rewrite/internal/plans"
 	"github.com/tannpv/draftright-rewrite/internal/platform/auth"
 	"github.com/tannpv/draftright-rewrite/internal/platform/config"
@@ -316,7 +317,13 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 		// payment Querier and the coreSettingsQuerier ports.
 		paymentRepo := paymentpkg.NewRepo(q)
 		paymentSettings := paymentpkg.NewSettingsAdapter(q)
-		paymentSvc := paymentpkg.NewService(paymentRepo, paymentSettings, cfg.PaymentEnabledMethods)
+		paymentSvc := paymentpkg.NewService(
+			paymentRepo, paymentSettings, cfg.PaymentEnabledMethods,
+			paymentRepo,                           // *Repo also satisfies CheckoutRepo
+			map[string]paymentstrategy.Strategy{}, // Task 12 fills the real registry
+			time.Now,
+			paymentpkg.GeneratePaymentReference,
+		)
 		paymentHandler := paymentpkg.NewHandler(paymentSvc)
 		core.paymentMethods = http.HandlerFunc(paymentHandler.Methods)
 		core.paymentStatus = http.HandlerFunc(paymentHandler.Status)
