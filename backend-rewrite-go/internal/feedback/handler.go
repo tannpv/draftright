@@ -73,7 +73,17 @@ type createResp struct {
 // ValidationPipe (DTO) → controller honeypot → service.
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	var body createBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	dec := json.NewDecoder(r.Body)
+	// Node global pipe uses whitelist + forbidNonWhitelisted → an unknown body
+	// property is a 400. Mirror the rewrite module's idiom (handler_rewrite.go):
+	// DisallowUnknownFields, then collapse any decode failure to the generic
+	// invalid-input 400 (status, not class-validator's exact "property X should
+	// not exist" message). createBody has a json field for EVERY CreateFeedbackDto
+	// property (kind, title, target_platform, description, source, app_version,
+	// os_info, user_email, website) — including the `website` honeypot, which is a
+	// whitelisted DTO field clients legitimately send, so it is NOT rejected here.
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&body); err != nil {
 		shared.WriteError(w, r, "invalid-input", "Invalid request body")
 		return
 	}

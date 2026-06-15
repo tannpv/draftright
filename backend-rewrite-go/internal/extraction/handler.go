@@ -27,7 +27,14 @@ func NewHandler(svc *Service) *Handler { return &Handler{svc: svc} }
 // Extract handles POST /extract → 200 (NestJS @HttpCode(200), NOT 201).
 func (h *Handler) Extract(w http.ResponseWriter, r *http.Request) {
 	var body requestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	dec := json.NewDecoder(r.Body)
+	// Node global pipe uses whitelist + forbidNonWhitelisted → an unknown body
+	// property is a 400. Mirror the rewrite module's idiom (handler_rewrite.go):
+	// DisallowUnknownFields, then collapse any decode failure to the generic
+	// invalid-input 400 (we match the STATUS, not class-validator's exact
+	// "property X should not exist" message).
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&body); err != nil {
 		shared.WriteError(w, r, "invalid-input", "Invalid request body")
 		return
 	}

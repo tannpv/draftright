@@ -77,6 +77,91 @@ func TestExtract_BadKind400(t *testing.T) {
 	}
 }
 
+func TestExtract_MissingText400(t *testing.T) {
+	// Node ValidationPipe on a missing required `text`: @MaxLength reports first,
+	// then @IsString, joined by AllExceptionsFilter with ". ". Verified by running
+	// class-validator against ExtractRequestDto: body {} →
+	// ["text must be shorter than or equal to 8000 characters","text must be a string"].
+	st := &stubExtractor{}
+	h := newTestHandler(st)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/extract", strings.NewReader(`{}`))
+	h.Extract(rec, req)
+
+	if rec.Code != 400 {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if body["code"] != "invalid-input" {
+		t.Fatalf("code = %v, want invalid-input", body["code"])
+	}
+	want := "text must be shorter than or equal to 8000 characters. text must be a string"
+	if body["error"] != want {
+		t.Fatalf("error = %q, want %q", body["error"], want)
+	}
+	if st.got.text != "" {
+		t.Error("invalid input must not reach the service")
+	}
+}
+
+func TestExtract_NonStringText400(t *testing.T) {
+	// {"text":123} is well-formed JSON but `text` is not a string. Node parses
+	// the body fine then the pipe emits the same two-message join as a missing
+	// text. Go must NOT collapse this to the generic "Invalid request body".
+	st := &stubExtractor{}
+	h := newTestHandler(st)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/extract", strings.NewReader(`{"text":123}`))
+	h.Extract(rec, req)
+
+	if rec.Code != 400 {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if body["code"] != "invalid-input" {
+		t.Fatalf("code = %v, want invalid-input", body["code"])
+	}
+	want := "text must be shorter than or equal to 8000 characters. text must be a string"
+	if body["error"] != want {
+		t.Fatalf("error = %q, want %q", body["error"], want)
+	}
+	if st.got.text != "" {
+		t.Error("invalid input must not reach the service")
+	}
+}
+
+func TestExtract_UnknownKey400(t *testing.T) {
+	// Node global pipe (whitelist + forbidNonWhitelisted) → 400 on an unknown
+	// body property. The Go rewrite module collapses DisallowUnknownFields to the
+	// generic invalid-input 400; match that established idiom (status, not the
+	// class-validator "property X should not exist" message).
+	st := &stubExtractor{}
+	h := newTestHandler(st)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/extract", strings.NewReader(`{"text":"hi","bogus":1}`))
+	h.Extract(rec, req)
+
+	if rec.Code != 400 {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if body["code"] != "invalid-input" {
+		t.Fatalf("code = %v, want invalid-input", body["code"])
+	}
+	if st.got.text != "" {
+		t.Error("unknown-field body must not reach the service")
+	}
+}
+
 func TestExtract_HappyPath200(t *testing.T) {
 	st := &stubExtractor{resp: Response{
 		Entities:   []Entity{{Kind: KindAddress, Value: "123 Main", Display: "123 Main", Start: 0, End: 8, Confidence: 0.9}},

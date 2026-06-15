@@ -82,6 +82,32 @@ func TestFeedback_BadKind400(t *testing.T) {
 	}
 }
 
+// Unknown JSON property → 400. Node global pipe (whitelist +
+// forbidNonWhitelisted) rejects it ("property bogus should not exist"); the Go
+// rewrite idiom collapses DisallowUnknownFields to the generic invalid-input
+// 400 (status, not the exact class-validator message). The honeypot `website`
+// field is a whitelisted DTO property (covered by TestFeedback_Honeypot…), so
+// it must NOT be rejected here.
+func TestFeedback_UnknownKey400(t *testing.T) {
+	repo := newFakeRepo()
+	h := newHandlerT(repo, nil)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/feedback",
+		strings.NewReader(`{"kind":"bug","description":"x","source":"web","bogus":1}`))
+	h.Create(rec, req)
+
+	if rec.Code != 400 {
+		t.Fatalf("status = %d, want 400; body=%s", rec.Code, rec.Body.String())
+	}
+	body := decodeBody(t, rec.Body.String())
+	if body["code"] != "invalid-input" {
+		t.Fatalf("code = %v, want invalid-input", body["code"])
+	}
+	if repo.inserted != nil {
+		t.Error("unknown-field body must not reach the service")
+	}
+}
+
 // (c) happy feature → 201 { id, ref:"FR-<n>", message }.
 func TestFeedback_CreateFeature201(t *testing.T) {
 	repo := newFakeRepo()
