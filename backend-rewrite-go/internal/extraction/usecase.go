@@ -5,6 +5,7 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math"
@@ -12,6 +13,12 @@ import (
 	"strconv"
 	"strings"
 )
+
+// ErrNoDefaultProvider mirrors the Node BadRequestException thrown by
+// AiProvidersService.findDefault() when no default AI provider is configured
+// ("No default AI provider configured"). The provider/Completer layer surfaces
+// this condition; the handler maps it to a 400 invalid-input (wired in Task 11).
+var ErrNoDefaultProvider = errors.New("No default AI provider configured")
 
 // Completer is the consumer-side port (own copy of aicall.Completer): a
 // blocking system+user completion against the configured default provider.
