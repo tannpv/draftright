@@ -18,6 +18,7 @@ type Querier interface {
 	BumpErrorReport(ctx context.Context, arg BumpErrorReportParams) (BumpErrorReportRow, error)
 	CancelActiveSubsByUser(ctx context.Context, userID pgtype.UUID) error
 	CancelByStoreRef(ctx context.Context, arg CancelByStoreRefParams) (int64, error)
+	CountFeatures(ctx context.Context, arg CountFeaturesParams) (int64, error)
 	// Today's daily-quota tally for the user. Compared against
 	// plan.daily_limit in the application layer (so the limit can come
 	// from a fallback when the user has no subscription).
@@ -26,10 +27,12 @@ type Querier interface {
 	// The caller passes the midnight boundary so timezone handling matches
 	// the Node process (new Date(); setHours(0,0,0,0)).
 	CountUsageToday(ctx context.Context, arg CountUsageTodayParams) (int64, error)
+	CountVotes(ctx context.Context, featureID pgtype.UUID) (int64, error)
 	CreateFreeSubscription(ctx context.Context, arg CreateFreeSubscriptionParams) error
 	// Insert a pending payment. Defaults (id, created_at, updated_at) are returned.
 	CreatePayment(ctx context.Context, arg CreatePaymentParams) (CreatePaymentRow, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
+	DeleteVote(ctx context.Context, arg DeleteVoteParams) error
 	ExpireByStoreRef(ctx context.Context, arg ExpireByStoreRefParams) (int64, error)
 	// Cron pass 2: flip active|cancelled subs past expiry to expired, returning
 	// the affected rows so the caller can email each. expires_at left untouched.
@@ -42,6 +45,7 @@ type Querier interface {
 	// internal/shared/pg/queries_errors.sql
 	// Crash-report ingest: read-then-write dedup (no ON CONFLICT, matching Node).
 	FindErrorByFingerprint(ctx context.Context, fingerprint string) (ErrorReport, error)
+	FindFeature(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error)
 	// Ports plansService.findFirstActive({is_active, billing_period, currency},
 	// order created_at ASC). Returns the active plan id for that (period, currency).
 	FindFirstActivePlanByPeriodCurrency(ctx context.Context, arg FindFirstActivePlanByPeriodCurrencyParams) (pgtype.UUID, error)
@@ -68,6 +72,7 @@ type Querier interface {
 	// Filter on subscriptions.status = 'active' so cancelled subs don't
 	// still grant their old plan.
 	FindUserWithPlan(ctx context.Context, id pgtype.UUID) (FindUserWithPlanRow, error)
+	FindVote(ctx context.Context, arg FindVoteParams) (pgtype.UUID, error)
 	// GET /subscription: newest active sub + plan fields incl billing_period.
 	// Distinct from GetActiveSubscriptionByUserID (which omits billing_period
 	// and is pinned for /auth/account).
@@ -149,11 +154,24 @@ type Querier interface {
 	// mint() insert. Returns the projection list() serializes (token_hash and
 	// user_id stripped by the controller, so omitted here).
 	InsertExtensionToken(ctx context.Context, arg InsertExtensionTokenParams) (InsertExtensionTokenRow, error)
+	// internal/shared/pg/queries_feedback.sql
+	// Public feedback board (POST /feedback, GET /feedback, POST /feedback/:id/vote).
+	// Shares the bug_reports table with bug-report ingest (kind='feature' vs 'bug')
+	// plus the feature_votes table (one vote per user per feature; vote_count is
+	// derived = COUNT(feature_votes)).
+	//
+	// The optional status / target_platform filters use the
+	// (@x::text IS NULL OR col = @x) idiom so CountFeatures and ListPublicFeatures
+	// share one WHERE clause; the use case passes NULL to skip a filter (mirrors
+	// Node only adding the key to its `where` object when the value passes its
+	// allow-list check).
+	InsertFeedback(ctx context.Context, arg InsertFeedbackParams) (InsertFeedbackRow, error)
 	InsertGrantedSubscription(ctx context.Context, arg InsertGrantedSubscriptionParams) error
 	// Records one /rewrite call for daily quota tracking + analytics.
 	// Mirrors NestJS UsageService.log: same columns, same names, same
 	// precision so the two backends populate identical rows.
 	InsertUsageLog(ctx context.Context, arg InsertUsageLogParams) error
+	InsertVote(ctx context.Context, arg InsertVoteParams) error
 	// Lowercased-email suppression check (bounce/complaint list).
 	IsEmailSuppressed(ctx context.Context, email string) (bool, error)
 	LinkSocialApple(ctx context.Context, arg LinkSocialAppleParams) error
@@ -169,6 +187,7 @@ type Querier interface {
 	// findByUser(userId): the user's 20 most-recent payments, newest first, each
 	// with its plan (TypeORM relations:['plan'] order:{created_at:'DESC'} take:20).
 	ListPaymentsByUser(ctx context.Context, userID pgtype.UUID) ([]ListPaymentsByUserRow, error)
+	ListPublicFeatures(ctx context.Context, arg ListPublicFeaturesParams) ([]ListPublicFeaturesRow, error)
 	// Reflect a Resend delivery event onto email_logs.status (by Resend
 	// message id). error is only overwritten when a reason is supplied —
 	// a NULL reason leaves the existing error untouched, mirroring the
@@ -207,6 +226,7 @@ type Querier interface {
 	// validate() write-behind: bump last_used_at. Failures non-fatal (caller
 	// ignores the error so the request still succeeds).
 	TouchTokenLastUsed(ctx context.Context, id pgtype.UUID) error
+	UpdateFeatureVoteCount(ctx context.Context, arg UpdateFeatureVoteCountParams) error
 	UpdatePaymentPlan(ctx context.Context, arg UpdatePaymentPlanParams) error
 	UpdatePaymentQRData(ctx context.Context, arg UpdatePaymentQRDataParams) error
 	UpdateUserPasswordHash(ctx context.Context, arg UpdateUserPasswordHashParams) error
@@ -215,6 +235,7 @@ type Querier interface {
 	// Public bug-report ingest (POST /bug-reports, multipart with optional
 	// screenshot). user_id is nulled when the JWT outlives its user.
 	UserExists(ctx context.Context, id pgtype.UUID) (bool, error)
+	VotedFeatureIDs(ctx context.Context, arg VotedFeatureIDsParams) ([]pgtype.UUID, error)
 }
 
 var _ Querier = (*Queries)(nil)
