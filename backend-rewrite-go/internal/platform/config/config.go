@@ -111,6 +111,16 @@ type Config struct {
 	// Node GO_BACKEND_RAMP_PERCENT env var. Default 0 (no ramp).
 	GoBackendRampPercent int
 
+	// BugReportsDir is the on-disk root where bug-report screenshots are
+	// written (date-bucketed subdirs, UTC). Mirrors the NestJS
+	// BUG_REPORTS_DIR. Default /var/lib/draftright/bug-reports.
+	BugReportsDir string
+
+	// ResendWebhookSecret is the Svix signing secret for /webhooks/resend
+	// (whsec_…). Empty disables the webhook (every event 400s — fail
+	// closed). Mirrors the NestJS RESEND_WEBHOOK_SECRET.
+	ResendWebhookSecret string
+
 	// App environment label (development | staging | production).
 	// Drives a few startup checks + the log output format choice.
 	AppEnv string
@@ -166,6 +176,8 @@ func Load() (*Config, error) {
 		VietQRAccountNumber:       os.Getenv("VIETQR_ACCOUNT_NUMBER"),
 		VietQRAccountName:         os.Getenv("VIETQR_ACCOUNT_NAME"),
 		GoBackendRampPercent:      envInt("GO_BACKEND_RAMP_PERCENT", 0),
+		BugReportsDir:             envOr("BUG_REPORTS_DIR", "/var/lib/draftright/bug-reports"),
+		ResendWebhookSecret:       os.Getenv("RESEND_WEBHOOK_SECRET"),
 		AppEnv:                    envOr("APP_ENV", "development"),
 
 		MetricsEnabled:  envBool("METRICS_ENABLED", false),

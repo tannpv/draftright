@@ -131,19 +131,8 @@ func (h *Handler) Ingest(w http.ResponseWriter, r *http.Request) {
 }
 
 // optionalUserID extracts `sub` from a best-effort bearer; "" on any failure.
+// Thin wrapper over the shared auth.OptionalUserID (Rule #1: bug_reports +
+// feedback reuse the same logic).
 func (h *Handler) optionalUserID(r *http.Request) string {
-	if h.verifier == nil {
-		return ""
-	}
-	authz := r.Header.Get("Authorization")
-	const p = "Bearer "
-	// Node: authHeader.startsWith('Bearer ') — case-sensitive prefix.
-	if !strings.HasPrefix(authz, p) {
-		return ""
-	}
-	claims, err := h.verifier.Verify(authz[len(p):])
-	if err != nil {
-		return ""
-	}
-	return claims.UserID()
+	return auth.OptionalUserID(h.verifier, r)
 }
