@@ -15,6 +15,7 @@ type Querier interface {
 	// AiProvidersService.findActive — keep the ORDER BY in sync there + here
 	// (is_default DESC, is_active = TRUE).
 	ActiveAIProvider(ctx context.Context) (ActiveAIProviderRow, error)
+	BumpErrorReport(ctx context.Context, arg BumpErrorReportParams) (BumpErrorReportRow, error)
 	CancelActiveSubsByUser(ctx context.Context, userID pgtype.UUID) error
 	CancelByStoreRef(ctx context.Context, arg CancelByStoreRefParams) (int64, error)
 	// Today's daily-quota tally for the user. Compared against
@@ -38,6 +39,9 @@ type Querier interface {
 	// too — Verify (T13) fires TouchTokenLastUsed by id afterwards.
 	FindActiveTokenByHash(ctx context.Context, tokenHash string) (FindActiveTokenByHashRow, error)
 	FindByStoreRef(ctx context.Context, arg FindByStoreRefParams) (FindByStoreRefRow, error)
+	// internal/shared/pg/queries_errors.sql
+	// Crash-report ingest: read-then-write dedup (no ON CONFLICT, matching Node).
+	FindErrorByFingerprint(ctx context.Context, fingerprint string) (ErrorReport, error)
 	// Ports plansService.findFirstActive({is_active, billing_period, currency},
 	// order created_at ASC). Returns the active plan id for that (period, currency).
 	FindFirstActivePlanByPeriodCurrency(ctx context.Context, arg FindFirstActivePlanByPeriodCurrencyParams) (pgtype.UUID, error)
@@ -140,6 +144,7 @@ type Querier interface {
 	GetUserForCheckout(ctx context.Context, id pgtype.UUID) (GetUserForCheckoutRow, error)
 	// Audit row for every deliver attempt (suppressed/skipped/sent/failed).
 	InsertEmailLog(ctx context.Context, arg InsertEmailLogParams) error
+	InsertErrorReport(ctx context.Context, arg InsertErrorReportParams) (InsertErrorReportRow, error)
 	// mint() insert. Returns the projection list() serializes (token_hash and
 	// user_id stripped by the controller, so omitted here).
 	InsertExtensionToken(ctx context.Context, arg InsertExtensionTokenParams) (InsertExtensionTokenRow, error)
