@@ -142,6 +142,7 @@ type Querier interface {
 	GetUserEmailName(ctx context.Context, id pgtype.UUID) (GetUserEmailNameRow, error)
 	// User fields createCheckout / portal / cancel need. No row → pgx.ErrNoRows.
 	GetUserForCheckout(ctx context.Context, id pgtype.UUID) (GetUserForCheckoutRow, error)
+	InsertBugReport(ctx context.Context, arg InsertBugReportParams) (InsertBugReportRow, error)
 	// Audit row for every deliver attempt (suppressed/skipped/sent/failed).
 	InsertEmailLog(ctx context.Context, arg InsertEmailLogParams) error
 	InsertErrorReport(ctx context.Context, arg InsertErrorReportParams) (InsertErrorReportRow, error)
@@ -210,6 +211,10 @@ type Querier interface {
 	UpdatePaymentQRData(ctx context.Context, arg UpdatePaymentQRDataParams) error
 	UpdateUserPasswordHash(ctx context.Context, arg UpdateUserPasswordHashParams) error
 	UpdateUserVerification(ctx context.Context, arg UpdateUserVerificationParams) error
+	// internal/shared/pg/queries_bugreports.sql
+	// Public bug-report ingest (POST /bug-reports, multipart with optional
+	// screenshot). user_id is nulled when the JWT outlives its user.
+	UserExists(ctx context.Context, id pgtype.UUID) (bool, error)
 }
 
 var _ Querier = (*Queries)(nil)
