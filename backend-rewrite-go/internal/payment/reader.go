@@ -159,11 +159,15 @@ func (r *Repo) ListByUser(ctx context.Context, userID string) ([]PaymentRow, err
 // payment.amount + strategy inputs). Nullable columns flatten to "".
 type CheckoutPlan struct {
 	ID, Name      string
+	DailyLimit    int
 	PriceCents    int
 	Currency      string // "" when NULL
 	StripePriceID string // "" when NULL
 	TrialDays     int
 	BillingPeriod string
+	IsActive      bool
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
 }
 
 // CheckoutUser is the user projection createCheckout / portal / cancel need.
@@ -199,11 +203,15 @@ func (r *Repo) PlanForCheckout(ctx context.Context, id string) (*CheckoutPlan, e
 	return &CheckoutPlan{
 		ID:            uuid.UUID(row.ID.Bytes).String(),
 		Name:          row.Name,
+		DailyLimit:    int(row.DailyLimit),
 		PriceCents:    int(row.PriceCents),
 		Currency:      derefStr(row.Currency),
 		StripePriceID: derefStr(row.StripePriceID),
 		TrialDays:     int(row.TrialDays),
 		BillingPeriod: string(row.BillingPeriod),
+		IsActive:      row.IsActive,
+		CreatedAt:     row.CreatedAt.Time,
+		UpdatedAt:     row.UpdatedAt.Time,
 	}, nil
 }
 

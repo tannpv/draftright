@@ -116,7 +116,8 @@ func (q *Queries) GetPaymentByReference(ctx context.Context, referenceCode strin
 }
 
 const getPlanForCheckout = `-- name: GetPlanForCheckout :one
-SELECT id, name, price_cents, currency, stripe_price_id, trial_days, billing_period
+SELECT id, name, daily_limit, price_cents, currency, stripe_price_id, trial_days,
+       billing_period, is_active, created_at, updated_at
 FROM plans
 WHERE id = $1
 `
@@ -124,26 +125,37 @@ WHERE id = $1
 type GetPlanForCheckoutRow struct {
 	ID            pgtype.UUID            `db:"id" json:"id"`
 	Name          string                 `db:"name" json:"name"`
+	DailyLimit    int32                  `db:"daily_limit" json:"daily_limit"`
 	PriceCents    int32                  `db:"price_cents" json:"price_cents"`
 	Currency      *string                `db:"currency" json:"currency"`
 	StripePriceID *string                `db:"stripe_price_id" json:"stripe_price_id"`
 	TrialDays     int32                  `db:"trial_days" json:"trial_days"`
 	BillingPeriod PlansBillingPeriodEnum `db:"billing_period" json:"billing_period"`
+	IsActive      bool                   `db:"is_active" json:"is_active"`
+	CreatedAt     pgtype.Timestamp       `db:"created_at" json:"created_at"`
+	UpdatedAt     pgtype.Timestamp       `db:"updated_at" json:"updated_at"`
 }
 
-// Plan fields createCheckout needs (price_cents drives the free-plan guard +
-// payment.amount; the rest feed the strategy). No row → pgx.ErrNoRows.
+// Full plan entity createCheckout needs: price_cents drives the free-plan guard +
+// payment.amount, the strategy reads name/stripe_price_id/trial_days/billing_period,
+// and the nested `payment.plan` response object serializes the WHOLE plan
+// (daily_limit/is_active/created_at/updated_at included — Node attaches
+// plansService.findById, the full entity). No row → pgx.ErrNoRows.
 func (q *Queries) GetPlanForCheckout(ctx context.Context, id pgtype.UUID) (GetPlanForCheckoutRow, error) {
 	row := q.db.QueryRow(ctx, getPlanForCheckout, id)
 	var i GetPlanForCheckoutRow
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
+		&i.DailyLimit,
 		&i.PriceCents,
 		&i.Currency,
 		&i.StripePriceID,
 		&i.TrialDays,
 		&i.BillingPeriod,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }

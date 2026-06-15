@@ -102,8 +102,11 @@ type Querier interface {
 	// (default ''); empty string means unconfigured → caller falls back to env
 	// then default. No row at all → pgx.ErrNoRows, mapped to found=false.
 	GetPaymentMethodsEnabled(ctx context.Context) (string, error)
-	// Plan fields createCheckout needs (price_cents drives the free-plan guard +
-	// payment.amount; the rest feed the strategy). No row → pgx.ErrNoRows.
+	// Full plan entity createCheckout needs: price_cents drives the free-plan guard +
+	// payment.amount, the strategy reads name/stripe_price_id/trial_days/billing_period,
+	// and the nested `payment.plan` response object serializes the WHOLE plan
+	// (daily_limit/is_active/created_at/updated_at included — Node attaches
+	// plansService.findById, the full entity). No row → pgx.ErrNoRows.
 	GetPlanForCheckout(ctx context.Context, id pgtype.UUID) (GetPlanForCheckoutRow, error)
 	GetUserAuthState(ctx context.Context, email string) (GetUserAuthStateRow, error)
 	// Phase 0 core-endpoint queries (health + /auth/me). Kept separate

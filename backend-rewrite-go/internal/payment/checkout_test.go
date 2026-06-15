@@ -2,11 +2,14 @@ package payment
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/tannpv/draftright-rewrite/internal/payment/strategy"
+	"github.com/tannpv/draftright-rewrite/internal/shared"
 )
 
 // --- fakes ---
@@ -169,5 +172,64 @@ func TestCheckout_VietQRSuccessPersistsQR(t *testing.T) {
 	}
 	if resp.Payment.Status != "pending" || resp.Payment.Amount != 124000 || resp.Payment.Currency != "VND" {
 		t.Fatalf("payment shape wrong: %+v", resp.Payment)
+	}
+}
+
+// TestCheckout_NestedPlanCarriesFullEntity proves the response's nested
+// payment.plan serializes the FULL plan entity (daily_limit/is_active/
+// created_at/updated_at) with real DB values — Node attaches
+// plansService.findById, the complete row, so the Go port must too. Before
+// the fix these were hardcoded (is_active=true) or zero (daily_limit=0,
+// zero-time timestamps).
+func TestCheckout_NestedPlanCarriesFullEntity(t *testing.T) {
+	createdAt := time.Unix(1600000000, 0).UTC()
+	updatedAt := time.Unix(1600000001, 0).UTC()
+	repo := &fakeCheckoutRepo{
+		plan: &CheckoutPlan{
+			Name:          "Pro",
+			DailyLimit:    100,
+			PriceCents:    124000,
+			Currency:      "VND",
+			TrialDays:     7,
+			BillingPeriod: "monthly",
+			IsActive:      true,
+			CreatedAt:     createdAt,
+			UpdatedAt:     updatedAt,
+		},
+		user:    &CheckoutUser{ID: "u1", Email: "u@x.com"},
+		created: &CreatedPayment{ID: "pay1"},
+	}
+	strat := fakeStrategy{res: strategy.Result{QRData: "https://img.vietqr.io/...", BankInfo: &strategy.BankInfo{BankName: "MB Bank"}}}
+	s := svcWith(repo, strat, []string{"vietqr"})
+	resp, err := s.CreateCheckout(context.Background(), "u1", "p1", "vietqr", CheckoutOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	b, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(b)
+
+	wantSubstrings := []string{
+		`"daily_limit":100`,
+		`"is_active":true`,
+		`"created_at":"` + shared.ISOMillis(createdAt) + `"`,
+		`"updated_at":"` + shared.ISOMillis(updatedAt) + `"`,
+	}
+	for _, w := range wantSubstrings {
+		if !strings.Contains(got, w) {
+			t.Fatalf("nested plan missing %s in response JSON:\n%s", w, got)
+		}
+	}
+
+	// Direct struct assertions on the nested plan too.
+	if resp.Payment.Plan == nil {
+		t.Fatal("nested plan must be present")
+	}
+	p := resp.Payment.Plan
+	if p.DailyLimit != 100 || !p.IsActive || !p.CreatedAt.Equal(createdAt) || !p.UpdatedAt.Equal(updatedAt) {
+		t.Fatalf("nested plan carries stale values: %+v", p)
 	}
 }

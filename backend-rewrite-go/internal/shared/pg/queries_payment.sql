@@ -37,9 +37,13 @@ ORDER BY p.created_at DESC
 LIMIT 20;
 
 -- name: GetPlanForCheckout :one
--- Plan fields createCheckout needs (price_cents drives the free-plan guard +
--- payment.amount; the rest feed the strategy). No row → pgx.ErrNoRows.
-SELECT id, name, price_cents, currency, stripe_price_id, trial_days, billing_period
+-- Full plan entity createCheckout needs: price_cents drives the free-plan guard +
+-- payment.amount, the strategy reads name/stripe_price_id/trial_days/billing_period,
+-- and the nested `payment.plan` response object serializes the WHOLE plan
+-- (daily_limit/is_active/created_at/updated_at included — Node attaches
+-- plansService.findById, the full entity). No row → pgx.ErrNoRows.
+SELECT id, name, daily_limit, price_cents, currency, stripe_price_id, trial_days,
+       billing_period, is_active, created_at, updated_at
 FROM plans
 WHERE id = $1;
 

@@ -139,19 +139,18 @@ func (s *Service) CreateCheckout(ctx context.Context, userID, planID, method str
 		ExpiresAt:     &expiresAt,
 		CreatedAt:     created.CreatedAt,
 		UpdatedAt:     created.UpdatedAt,
-		// TODO(phase3b-followup): GetPlanForCheckout omits daily_limit/is_active/
-		// created_at/updated_at, so this nested plan is partial vs Node's full plan
-		// entity. Known gap, documented in the VietQR shadow fixture's ignore_value_of.
-		// Widen GetPlanForCheckout + populate fully if exact nested-plan parity needed.
 		Plan: &PlanBrief{
 			ID:            plan.ID,
 			Name:          plan.Name,
+			DailyLimit:    plan.DailyLimit,
 			PriceCents:    plan.PriceCents,
 			StripePriceID: ptrOrNil(plan.StripePriceID),
 			TrialDays:     plan.TrialDays,
 			BillingPeriod: plan.BillingPeriod,
 			Currency:      ptrOrNil(plan.Currency),
-			IsActive:      true,
+			IsActive:      plan.IsActive,
+			CreatedAt:     plan.CreatedAt,
+			UpdatedAt:     plan.UpdatedAt,
 		},
 	}
 	if res.QRData != "" {
