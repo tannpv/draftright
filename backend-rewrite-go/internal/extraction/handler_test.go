@@ -39,7 +39,9 @@ func TestExtract_TextTooLong400(t *testing.T) {
 		t.Fatalf("status = %d, want 400", rec.Code)
 	}
 	var body map[string]any
-	json.Unmarshal(rec.Body.Bytes(), &body)
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
 	if body["code"] != "invalid-input" {
 		t.Fatalf("code = %v, want invalid-input", body["code"])
 	}
@@ -63,7 +65,9 @@ func TestExtract_BadKind400(t *testing.T) {
 		t.Fatalf("status = %d, want 400", rec.Code)
 	}
 	var body map[string]any
-	json.Unmarshal(rec.Body.Bytes(), &body)
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
 	if body["code"] != "invalid-input" {
 		t.Fatalf("code = %v, want invalid-input", body["code"])
 	}
@@ -92,7 +96,9 @@ func TestExtract_HappyPath200(t *testing.T) {
 	// Node key order: entities, provider, tokensUsed.
 	assertOrder(t, raw, "entities", "provider", "tokensUsed")
 	var body map[string]any
-	json.Unmarshal([]byte(raw), &body)
+	if err := json.Unmarshal([]byte(raw), &body); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
 	if body["provider"] != "ollama" || body["tokensUsed"] != float64(7) {
 		t.Fatalf("body = %v", body)
 	}
@@ -133,7 +139,9 @@ func TestExtract_NoDefaultProvider400(t *testing.T) {
 		t.Fatalf("status = %d, want 400", rec.Code)
 	}
 	var body map[string]any
-	json.Unmarshal(rec.Body.Bytes(), &body)
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
 	if body["code"] != "invalid-input" {
 		t.Fatalf("code = %v, want invalid-input", body["code"])
 	}
@@ -153,7 +161,9 @@ func TestExtract_ServiceErrorOpaque500(t *testing.T) {
 		t.Fatalf("status = %d, want 500", rec.Code)
 	}
 	var body map[string]any
-	json.Unmarshal(rec.Body.Bytes(), &body)
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
 	if body["code"] != "internal" {
 		t.Fatalf("code = %v, want internal", body["code"])
 	}
