@@ -1,0 +1,13 @@
+{
+  "name": "payment-checkout-vietqr",
+  "method": "POST",
+  "path": "/payment/checkout",
+  "headers": { "Authorization": "Bearer REPLACE_WITH_DEV_NODE_TOKEN", "Content-Type": "application/json" },
+  "body": { "plan_id": "REPLACE_WITH_DEV_PAID_VND_PLAN_ID", "method": "vietqr" },
+  "ignore_value_of": [
+    "id", "reference_code", "expires_at", "created_at", "updated_at",
+    "qr_data", "reference", "completed_at", "provider_ref", "notes",
+    "daily_limit", "is_active"
+  ],
+  "_note": "MUTATING + non-deterministic: each run INSERTs a pending payment in both backends. Requires VietQR enabled in app_settings.payment_methods_enabled (CSV must include 'vietqr') and a paid VND plan id. Deterministic + compared: payment.amount, payment.currency='VND', payment.method='vietqr', payment.status='pending', payment.user_id, payment.plan_id, and bank_info.{bank_name,account_number,account_name,amount,currency}. Ignored (random/per-request OR not selected by GetPlanForCheckout): id/reference_code/timestamps, qr_data (URL embeds the random reference_code), bank_info.reference (=reference_code), and the nested plan.daily_limit/is_active (Phase 3b GetPlanForCheckout doesn't select those columns — known fixture-documented gap, see the TODO in internal/payment/checkout.go). If Go and Node disagree on any NON-ignored key the gate flags a real parity bug."
+}

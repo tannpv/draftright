@@ -1,0 +1,9 @@
+{
+  "name": "payment-checkout-validation",
+  "method": "POST",
+  "path": "/payment/checkout",
+  "headers": { "Authorization": "Bearer REPLACE_WITH_DEV_NODE_TOKEN", "Content-Type": "application/json" },
+  "body": { "method": "banana" },
+  "ignore_value_of": ["request_id"],
+  "_note": "JWT-protected (JwtAuthGuard — substitute a real dev-user SESSION JWT, NOT a dr_ext_ token). Missing plan_id + invalid method → 400 invalid-input. The error string must match byte-for-byte: 'plan_id must be a string. method must be one of the following values: stripe, paypal, momo, vietqr, bank_transfer, lemonsqueezy, apple_pay, google_pay'. Only request_id is ignored. To also exercise the other short-circuit branches, swap the body: {plan_id:<valid>, method:<a-method-not-in-payment_methods_enabled>} → 404 \"Payment method '<m>' is not enabled.\"; and {plan_id:<a-free-plan-id>, method:'stripe'} → 400 'Cannot purchase a free plan'. Each is deterministic and needs no DB mutation."
+}
