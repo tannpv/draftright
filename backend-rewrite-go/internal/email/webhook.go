@@ -54,7 +54,13 @@ type webhookEvent struct {
 // body-consuming middleware (we read the raw body here for signature
 // verification) and WITHOUT RequireAuth (public webhook).
 func (h *WebhookHandler) Handle(w http.ResponseWriter, r *http.Request) {
-	raw, _ := io.ReadAll(r.Body)
+	raw, err := io.ReadAll(r.Body)
+	if err != nil {
+		// Fail closed: an unreadable body can't be signature-verified, so
+		// return the exact same 400 we return for a bad signature.
+		shared.WriteError(w, r, "invalid-input", "Invalid webhook signature")
+		return
+	}
 
 	if h.secret == "" || !verify(h.secret, r.Header, raw) {
 		shared.WriteError(w, r, "invalid-input", "Invalid webhook signature")
@@ -86,8 +92,8 @@ func (h *WebhookHandler) Handle(w http.ResponseWriter, r *http.Request) {
 			reason = "bounced"
 		}
 		if id != "" {
-			r := reason
-			_ = h.svc.MarkByProviderID(ctx, id, "bounced", &r)
+			reasonPtr := reason
+			_ = h.svc.MarkByProviderID(ctx, id, "bounced", &reasonPtr)
 		}
 		// Only PERMANENT/hard bounces suppress — a transient bounce
 		// (full mailbox, greylisting) must not lock a real user out.
@@ -97,8 +103,8 @@ func (h *WebhookHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		}
 	case "email.complained":
 		if id != "" {
-			r := "Recipient marked as spam"
-			_ = h.svc.MarkByProviderID(ctx, id, "complained", &r)
+			reasonPtr := "Recipient marked as spam"
+			_ = h.svc.MarkByProviderID(ctx, id, "complained", &reasonPtr)
 		}
 		if to != "" {
 			_ = h.svc.Suppress(ctx, to, "complained")
