@@ -41,11 +41,11 @@ type Querier interface {
 	BumpErrorReport(ctx context.Context, arg sqlc.BumpErrorReportParams) (sqlc.BumpErrorReportRow, error)
 }
 
-// Repo is the error_reports adapter.
-type Repo struct{ q Querier }
+// PgRepo is the error_reports adapter.
+type PgRepo struct{ q Querier }
 
 // NewPgRepo wires the querier.
-func NewPgRepo(q Querier) *Repo { return &Repo{q: q} }
+func NewPgRepo(q Querier) *PgRepo { return &PgRepo{q: q} }
 
 func toUUID(s *string) pgtype.UUID {
 	var u pgtype.UUID
@@ -62,7 +62,7 @@ func toUUID(s *string) pgtype.UUID {
 }
 
 // FindByFingerprint returns the existing group or (nil,nil).
-func (r *Repo) FindByFingerprint(ctx context.Context, fp string) (*Existing, error) {
+func (r *PgRepo) FindByFingerprint(ctx context.Context, fp string) (*Existing, error) {
 	row, err := r.q.FindErrorByFingerprint(ctx, fp)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
@@ -74,7 +74,7 @@ func (r *Repo) FindByFingerprint(ctx context.Context, fp string) (*Existing, err
 }
 
 // Insert creates a new group (count=1, status=0).
-func (r *Repo) Insert(ctx context.Context, n NewRow) (*Existing, error) {
+func (r *PgRepo) Insert(ctx context.Context, n NewRow) (*Existing, error) {
 	row, err := r.q.InsertErrorReport(ctx, sqlc.InsertErrorReportParams{
 		Platform: n.Platform, AppVersion: n.AppVersion, Severity: n.Severity,
 		ErrorType: n.ErrorType, Message: n.Message, StackTrace: n.StackTrace,
@@ -87,7 +87,7 @@ func (r *Repo) Insert(ctx context.Context, n NewRow) (*Existing, error) {
 }
 
 // BumpDedup increments count + conditionally refreshes fields.
-func (r *Repo) BumpDedup(ctx context.Context, fp string, appVersion, userID, deviceID *string, context []byte) (*Existing, error) {
+func (r *PgRepo) BumpDedup(ctx context.Context, fp string, appVersion, userID, deviceID *string, context []byte) (*Existing, error) {
 	row, err := r.q.BumpErrorReport(ctx, sqlc.BumpErrorReportParams{
 		Fingerprint: fp, AppVersion: appVersion, UserID: toUUID(userID), DeviceID: deviceID, Context: context,
 	})
