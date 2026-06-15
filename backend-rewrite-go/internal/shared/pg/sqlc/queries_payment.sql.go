@@ -137,7 +137,7 @@ func (q *Queries) GetPaymentByReference(ctx context.Context, referenceCode strin
 }
 
 const getPaymentForWebhook = `-- name: GetPaymentForWebhook :one
-SELECT pay.id, pay.user_id, pay.plan_id, pay.status, pay.currency,
+SELECT pay.id, pay.user_id, pay.plan_id, pay.status, pay.currency, pay.method,
        p.billing_period
 FROM payments pay
 LEFT JOIN plans p ON p.id = pay.plan_id
@@ -151,6 +151,7 @@ type GetPaymentForWebhookRow struct {
 	PlanID        pgtype.UUID             `db:"plan_id" json:"plan_id"`
 	Status        string                  `db:"status" json:"status"`
 	Currency      string                  `db:"currency" json:"currency"`
+	Method        string                  `db:"method" json:"method"`
 	BillingPeriod *PlansBillingPeriodEnum `db:"billing_period" json:"billing_period"`
 }
 
@@ -168,6 +169,7 @@ func (q *Queries) GetPaymentForWebhook(ctx context.Context, referenceCode string
 		&i.PlanID,
 		&i.Status,
 		&i.Currency,
+		&i.Method,
 		&i.BillingPeriod,
 	)
 	return i, err
@@ -215,6 +217,24 @@ func (q *Queries) GetPlanForCheckout(ctx context.Context, id pgtype.UUID) (GetPl
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
+	return i, err
+}
+
+const getUserEmailName = `-- name: GetUserEmailName :one
+SELECT email, name FROM users WHERE id = $1
+`
+
+type GetUserEmailNameRow struct {
+	Email string `db:"email" json:"email"`
+	Name  string `db:"name" json:"name"`
+}
+
+// activateSubscription's notify step: the webhook needs the paying user's email
+// + display name to send the "subscription active" mail. name is nullable.
+func (q *Queries) GetUserEmailName(ctx context.Context, id pgtype.UUID) (GetUserEmailNameRow, error) {
+	row := q.db.QueryRow(ctx, getUserEmailName, id)
+	var i GetUserEmailNameRow
+	err := row.Scan(&i.Email, &i.Name)
 	return i, err
 }
 

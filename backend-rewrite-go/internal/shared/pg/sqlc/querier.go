@@ -129,6 +129,9 @@ type Querier interface {
 	// Minimal user projection for GET /auth/me — id, email, role. Mirrors
 	// the fields Node's /auth/me returns from the JWT-resolved user.
 	GetUserByID(ctx context.Context, id pgtype.UUID) (GetUserByIDRow, error)
+	// activateSubscription's notify step: the webhook needs the paying user's email
+	// + display name to send the "subscription active" mail. name is nullable.
+	GetUserEmailName(ctx context.Context, id pgtype.UUID) (GetUserEmailNameRow, error)
 	// User fields createCheckout / portal / cancel need. No row → pgx.ErrNoRows.
 	GetUserForCheckout(ctx context.Context, id pgtype.UUID) (GetUserForCheckoutRow, error)
 	// Audit row for every deliver attempt (suppressed/skipped/sent/failed).

@@ -71,7 +71,7 @@ UPDATE payments SET status = 'failed', notes = $2, updated_at = now() WHERE id =
 -- the plan's billing_period (to re-resolve the active plan by variant). LEFT
 -- JOIN so billing_period is nullable in this row even though the column is NOT
 -- NULL on plans (payments always carry a plan in practice).
-SELECT pay.id, pay.user_id, pay.plan_id, pay.status, pay.currency,
+SELECT pay.id, pay.user_id, pay.plan_id, pay.status, pay.currency, pay.method,
        p.billing_period
 FROM payments pay
 LEFT JOIN plans p ON p.id = pay.plan_id
@@ -102,3 +102,8 @@ SELECT id FROM plans
 WHERE is_active = true AND billing_period = $1 AND currency = $2
 ORDER BY created_at ASC
 LIMIT 1;
+
+-- name: GetUserEmailName :one
+-- activateSubscription's notify step: the webhook needs the paying user's email
+-- + display name to send the "subscription active" mail. name is nullable.
+SELECT email, name FROM users WHERE id = $1;

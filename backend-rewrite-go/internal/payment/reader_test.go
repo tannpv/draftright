@@ -80,6 +80,9 @@ func (f fakeQ) UpdatePaymentPlan(context.Context, sqlc.UpdatePaymentPlanParams) 
 func (f fakeQ) FindFirstActivePlanByPeriodCurrency(context.Context, sqlc.FindFirstActivePlanByPeriodCurrencyParams) (pgtype.UUID, error) {
 	return f.firstPlanID, f.firstPlanErr
 }
+func (f fakeQ) GetUserEmailName(context.Context, pgtype.UUID) (sqlc.GetUserEmailNameRow, error) {
+	return sqlc.GetUserEmailNameRow{Email: "user@example.com", Name: "Test User"}, nil
+}
 
 func uuidV(s string) pgtype.UUID { var u pgtype.UUID; _ = u.Scan(s); return u }
 
@@ -216,13 +219,14 @@ func TestPaymentForWebhook_MapsBillingFields(t *testing.T) {
 		PlanID:        uuidV("cccccccc-cccc-cccc-cccc-cccccccccccc"),
 		Status:        "pending",
 		Currency:      "USD",
+		Method:        "vietqr",
 		BillingPeriod: &bp,
 	}})
 	p, err := r.PaymentForWebhook(context.Background(), "DR-PRO-XX")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p == nil || p.Status != "pending" || p.BillingPeriod != "yearly" || p.Currency != "USD" {
+	if p == nil || p.Status != "pending" || p.BillingPeriod != "yearly" || p.Currency != "USD" || p.Method != "vietqr" {
 		t.Fatalf("bad mapping: %+v", p)
 	}
 	if p.UserID != "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb" || p.PlanID != "cccccccc-cccc-cccc-cccc-cccccccccccc" {

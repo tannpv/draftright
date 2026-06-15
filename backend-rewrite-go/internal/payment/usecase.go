@@ -37,6 +37,43 @@ type SettingsReader interface {
 	PaymentMethodsEnabled(ctx context.Context) (string, bool, error)
 }
 
+// SubsWriter mutates subscriptions on verified webhook events (Phase 3c). The
+// concrete *subscription.WebhookWriter satisfies it; HandleWebhook never imports
+// the writer's guts.
+type SubsWriter interface {
+	Grant(ctx context.Context, userID, planID, storeType string, expiresAt *time.Time) error
+	StampStoreRef(ctx context.Context, referenceCode, storeType, transactionID string) error
+	ExtendByStoreRef(ctx context.Context, storeType, transactionID string, expiresAt time.Time) (int64, error)
+	CancelByStoreRef(ctx context.Context, storeType, transactionID string) (int64, error)
+	ExpireByStoreRef(ctx context.Context, storeType, transactionID string) (int64, error)
+	FindByStoreRef(ctx context.Context, storeType, transactionID string) (*subscription.StoreRefSub, error)
+}
+
+// WebhookRepo is the persistence the webhook path needs (satisfied by *Repo).
+type WebhookRepo interface {
+	PaymentForWebhook(ctx context.Context, ref string) (*WebhookPayment, error)
+	MarkPaymentCompleted(ctx context.Context, ref string) error
+	MarkPaymentFailedByRef(ctx context.Context, ref string) error
+	SetStripeCustomerID(ctx context.Context, userID, customerID string) error
+	SetLemonSqueezyCustomerID(ctx context.Context, userID, customerID string) error
+	UpdatePaymentPlan(ctx context.Context, paymentID, planID string) error
+	FindFirstActivePlanID(ctx context.Context, billingPeriod, currency string) (string, error)
+	UserEmailName(ctx context.Context, userID string) (email, name string, err error)
+}
+
+// WebhookEmailer sends the two out-of-band webhook emails (best-effort, not
+// shadow-gated). Satisfied by *MailWebhookEmailer.
+type WebhookEmailer interface {
+	SubscriptionActivated(ctx context.Context, to, name, planName string)
+	PaymentFailed(ctx context.Context, to, name, planName string)
+}
+
+// VariantResolver resolves the configured Lemon Squeezy monthly/yearly variant
+// ids (re-resolve the true plan from the webhook's variant_id).
+type VariantResolver interface {
+	LemonSqueezyVariants(ctx context.Context) (monthly, yearly string, err error)
+}
+
 // Service is the payment use case (methods/status/history + checkout).
 type Service struct {
 	repo     PaymentRepo
@@ -52,6 +89,24 @@ type Service struct {
 	// subs feeds the portal + in-app cancel use cases (active-subscription read).
 	// main.go always injects the real subscription reader; read-path tests pass nil.
 	subs SubsPort
+
+	// Webhook-side collaborators (Phase 3c), injected via WithWebhook. Read/checkout
+	// callers leave these nil; only HandleWebhook touches them.
+	webhookRepo WebhookRepo
+	subsWriter  SubsWriter
+	emailer     WebhookEmailer
+	variants    VariantResolver
+}
+
+// WithWebhook injects the Phase 3c webhook collaborators (additive — NewService's
+// signature is unchanged). Returns the same Service for chaining at the
+// composition root.
+func (s *Service) WithWebhook(repo WebhookRepo, subs SubsWriter, emailer WebhookEmailer, variants VariantResolver) *Service {
+	s.webhookRepo = repo
+	s.subsWriter = subs
+	s.emailer = emailer
+	s.variants = variants
+	return s
 }
 
 // NewService wires the repo, settings reader, env fallback CSV, and the

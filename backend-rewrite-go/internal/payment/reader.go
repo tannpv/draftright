@@ -31,6 +31,7 @@ type Querier interface {
 	SetUserLemonSqueezyCustomerID(ctx context.Context, arg sqlc.SetUserLemonSqueezyCustomerIDParams) error
 	UpdatePaymentPlan(ctx context.Context, arg sqlc.UpdatePaymentPlanParams) error
 	FindFirstActivePlanByPeriodCurrency(ctx context.Context, arg sqlc.FindFirstActivePlanByPeriodCurrencyParams) (pgtype.UUID, error)
+	GetUserEmailName(ctx context.Context, id pgtype.UUID) (sqlc.GetUserEmailNameRow, error)
 }
 
 // StatusRow is the GetByReference projection feeding the status endpoint.
@@ -302,6 +303,7 @@ type WebhookPayment struct {
 	PlanID        string
 	Status        string
 	Currency      string
+	Method        string
 	BillingPeriod string
 }
 
@@ -322,8 +324,28 @@ func (r *Repo) PaymentForWebhook(ctx context.Context, ref string) (*WebhookPayme
 		PlanID:        uuid.UUID(row.PlanID.Bytes).String(),
 		Status:        row.Status,
 		Currency:      row.Currency,
+		Method:        row.Method,
 		BillingPeriod: derefBillingPeriod(row.BillingPeriod),
 	}, nil
+}
+
+// UserEmailName resolves the user's email + display name for the webhook's
+// "subscription activated" notification. Best-effort: a malformed id or a
+// missing row yields ("","",nil) so the caller silently skips the email
+// (mirrors SetStripeCustomerID's parse-skip / Node's optional notify).
+func (r *Repo) UserEmailName(ctx context.Context, userID string) (string, string, error) {
+	uid, ok := parseUUID(userID)
+	if !ok {
+		return "", "", nil
+	}
+	row, err := r.q.GetUserEmailName(ctx, uid)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", "", nil
+	}
+	if err != nil {
+		return "", "", err
+	}
+	return row.Email, row.Name, nil
 }
 
 // MarkPaymentCompleted flips a payment to completed by reference code, stamping
