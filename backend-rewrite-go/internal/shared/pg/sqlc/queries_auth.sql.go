@@ -11,6 +11,34 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const cancelActiveSubsByUser = `-- name: CancelActiveSubsByUser :exec
+UPDATE subscriptions SET status = 'cancelled'::subscriptions_status_enum, updated_at = now()
+WHERE user_id = $1 AND status = 'active'::subscriptions_status_enum
+`
+
+func (q *Queries) CancelActiveSubsByUser(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, cancelActiveSubsByUser, userID)
+	return err
+}
+
+const cancelByStoreRef = `-- name: CancelByStoreRef :execrows
+UPDATE subscriptions SET status = 'cancelled'::subscriptions_status_enum, updated_at = now()
+WHERE store_type = $1 AND store_transaction_id = $2 AND status = 'active'::subscriptions_status_enum
+`
+
+type CancelByStoreRefParams struct {
+	StoreType          SubscriptionsStoreTypeEnum `db:"store_type" json:"store_type"`
+	StoreTransactionID *string                    `db:"store_transaction_id" json:"store_transaction_id"`
+}
+
+func (q *Queries) CancelByStoreRef(ctx context.Context, arg CancelByStoreRefParams) (int64, error) {
+	result, err := q.db.Exec(ctx, cancelByStoreRef, arg.StoreType, arg.StoreTransactionID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const countUsageToday = `-- name: CountUsageToday :one
 SELECT COUNT(*) FROM usage_logs
 WHERE user_id = $1 AND created_at >= $2
@@ -105,6 +133,24 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateU
 	return i, err
 }
 
+const expireByStoreRef = `-- name: ExpireByStoreRef :execrows
+UPDATE subscriptions SET status = 'expired'::subscriptions_status_enum, expires_at = now(), updated_at = now()
+WHERE store_type = $1 AND store_transaction_id = $2
+`
+
+type ExpireByStoreRefParams struct {
+	StoreType          SubscriptionsStoreTypeEnum `db:"store_type" json:"store_type"`
+	StoreTransactionID *string                    `db:"store_transaction_id" json:"store_transaction_id"`
+}
+
+func (q *Queries) ExpireByStoreRef(ctx context.Context, arg ExpireByStoreRefParams) (int64, error) {
+	result, err := q.db.Exec(ctx, expireByStoreRef, arg.StoreType, arg.StoreTransactionID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const expireLapsedSubs = `-- name: ExpireLapsedSubs :many
 UPDATE subscriptions s
 SET status = 'expired'::subscriptions_status_enum, updated_at = now()
@@ -141,6 +187,58 @@ func (q *Queries) ExpireLapsedSubs(ctx context.Context, expiresAt pgtype.Timesta
 		return nil, err
 	}
 	return items, nil
+}
+
+const extendByStoreRef = `-- name: ExtendByStoreRef :execrows
+UPDATE subscriptions SET expires_at = $3, updated_at = now()
+WHERE store_type = $1 AND store_transaction_id = $2 AND status = 'active'::subscriptions_status_enum
+`
+
+type ExtendByStoreRefParams struct {
+	StoreType          SubscriptionsStoreTypeEnum `db:"store_type" json:"store_type"`
+	StoreTransactionID *string                    `db:"store_transaction_id" json:"store_transaction_id"`
+	ExpiresAt          pgtype.Timestamp           `db:"expires_at" json:"expires_at"`
+}
+
+func (q *Queries) ExtendByStoreRef(ctx context.Context, arg ExtendByStoreRefParams) (int64, error) {
+	result, err := q.db.Exec(ctx, extendByStoreRef, arg.StoreType, arg.StoreTransactionID, arg.ExpiresAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const findByStoreRef = `-- name: FindByStoreRef :one
+SELECT sub.user_id, u.email AS user_email, u.name AS user_name, p.name AS plan_name
+FROM subscriptions sub
+JOIN users u ON u.id = sub.user_id
+JOIN plans p ON p.id = sub.plan_id
+WHERE sub.store_type = $1 AND sub.store_transaction_id = $2
+LIMIT 1
+`
+
+type FindByStoreRefParams struct {
+	StoreType          SubscriptionsStoreTypeEnum `db:"store_type" json:"store_type"`
+	StoreTransactionID *string                    `db:"store_transaction_id" json:"store_transaction_id"`
+}
+
+type FindByStoreRefRow struct {
+	UserID    pgtype.UUID `db:"user_id" json:"user_id"`
+	UserEmail string      `db:"user_email" json:"user_email"`
+	UserName  string      `db:"user_name" json:"user_name"`
+	PlanName  string      `db:"plan_name" json:"plan_name"`
+}
+
+func (q *Queries) FindByStoreRef(ctx context.Context, arg FindByStoreRefParams) (FindByStoreRefRow, error) {
+	row := q.db.QueryRow(ctx, findByStoreRef, arg.StoreType, arg.StoreTransactionID)
+	var i FindByStoreRefRow
+	err := row.Scan(
+		&i.UserID,
+		&i.UserEmail,
+		&i.UserName,
+		&i.PlanName,
+	)
+	return i, err
 }
 
 const findFreePlan = `-- name: FindFreePlan :one
@@ -601,6 +699,28 @@ func (q *Queries) InsertEmailLog(ctx context.Context, arg InsertEmailLogParams) 
 	return err
 }
 
+const insertGrantedSubscription = `-- name: InsertGrantedSubscription :exec
+INSERT INTO subscriptions (user_id, plan_id, status, store_type, started_at, expires_at)
+VALUES ($1, $2, 'active'::subscriptions_status_enum, $3, now(), $4)
+`
+
+type InsertGrantedSubscriptionParams struct {
+	UserID    pgtype.UUID                `db:"user_id" json:"user_id"`
+	PlanID    pgtype.UUID                `db:"plan_id" json:"plan_id"`
+	StoreType SubscriptionsStoreTypeEnum `db:"store_type" json:"store_type"`
+	ExpiresAt pgtype.Timestamp           `db:"expires_at" json:"expires_at"`
+}
+
+func (q *Queries) InsertGrantedSubscription(ctx context.Context, arg InsertGrantedSubscriptionParams) error {
+	_, err := q.db.Exec(ctx, insertGrantedSubscription,
+		arg.UserID,
+		arg.PlanID,
+		arg.StoreType,
+		arg.ExpiresAt,
+	)
+	return err
+}
+
 const isEmailSuppressed = `-- name: IsEmailSuppressed :one
 SELECT COUNT(*) > 0 FROM email_suppressions WHERE email = $1
 `
@@ -799,6 +919,31 @@ func (q *Queries) SetPasswordResetCode(ctx context.Context, arg SetPasswordReset
 		arg.PasswordResetAttempts,
 	)
 	return err
+}
+
+const stampStoreRefByReference = `-- name: StampStoreRefByReference :execrows
+UPDATE subscriptions SET store_type = $2, store_transaction_id = $3, updated_at = now()
+WHERE id = (
+  SELECT sub.id FROM subscriptions sub
+  INNER JOIN payments pay ON pay.user_id = sub.user_id AND pay.reference_code = $1
+  WHERE sub.status = 'active'::subscriptions_status_enum
+  ORDER BY sub.created_at DESC
+  LIMIT 1
+)
+`
+
+type StampStoreRefByReferenceParams struct {
+	ReferenceCode      string                     `db:"reference_code" json:"reference_code"`
+	StoreType          SubscriptionsStoreTypeEnum `db:"store_type" json:"store_type"`
+	StoreTransactionID *string                    `db:"store_transaction_id" json:"store_transaction_id"`
+}
+
+func (q *Queries) StampStoreRefByReference(ctx context.Context, arg StampStoreRefByReferenceParams) (int64, error) {
+	result, err := q.db.Exec(ctx, stampStoreRefByReference, arg.ReferenceCode, arg.StoreType, arg.StoreTransactionID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const subsDueForRenewal = `-- name: SubsDueForRenewal :many

@@ -15,6 +15,8 @@ type Querier interface {
 	// AiProvidersService.findActive — keep the ORDER BY in sync there + here
 	// (is_default DESC, is_active = TRUE).
 	ActiveAIProvider(ctx context.Context) (ActiveAIProviderRow, error)
+	CancelActiveSubsByUser(ctx context.Context, userID pgtype.UUID) error
+	CancelByStoreRef(ctx context.Context, arg CancelByStoreRefParams) (int64, error)
 	// Today's daily-quota tally for the user. Compared against
 	// plan.daily_limit in the application layer (so the limit can come
 	// from a fallback when the user has no subscription).
@@ -27,12 +29,15 @@ type Querier interface {
 	// Insert a pending payment. Defaults (id, created_at, updated_at) are returned.
 	CreatePayment(ctx context.Context, arg CreatePaymentParams) (CreatePaymentRow, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
+	ExpireByStoreRef(ctx context.Context, arg ExpireByStoreRefParams) (int64, error)
 	// Cron pass 2: flip active|cancelled subs past expiry to expired, returning
 	// the affected rows so the caller can email each. expires_at left untouched.
 	ExpireLapsedSubs(ctx context.Context, expiresAt pgtype.Timestamp) ([]ExpireLapsedSubsRow, error)
+	ExtendByStoreRef(ctx context.Context, arg ExtendByStoreRefParams) (int64, error)
 	// validate(): resolve a presented token's hash to owner + scopes. Returns id
 	// too — Verify (T13) fires TouchTokenLastUsed by id afterwards.
 	FindActiveTokenByHash(ctx context.Context, tokenHash string) (FindActiveTokenByHashRow, error)
+	FindByStoreRef(ctx context.Context, arg FindByStoreRefParams) (FindByStoreRefRow, error)
 	FindFreePlan(ctx context.Context) (FindFreePlanRow, error)
 	FindUserByAppleId(ctx context.Context, appleID *string) (FindUserByAppleIdRow, error)
 	FindUserByFacebookId(ctx context.Context, facebookID *string) (FindUserByFacebookIdRow, error)
@@ -122,6 +127,7 @@ type Querier interface {
 	// mint() insert. Returns the projection list() serializes (token_hash and
 	// user_id stripped by the controller, so omitted here).
 	InsertExtensionToken(ctx context.Context, arg InsertExtensionTokenParams) (InsertExtensionTokenRow, error)
+	InsertGrantedSubscription(ctx context.Context, arg InsertGrantedSubscriptionParams) error
 	// Records one /rewrite call for daily quota tracking + analytics.
 	// Mirrors NestJS UsageService.log: same columns, same names, same
 	// precision so the two backends populate identical rows.
@@ -159,6 +165,7 @@ type Querier interface {
 	SetEmailVerificationCode(ctx context.Context, arg SetEmailVerificationCodeParams) error
 	SetPasswordResetAttempts(ctx context.Context, arg SetPasswordResetAttemptsParams) error
 	SetPasswordResetCode(ctx context.Context, arg SetPasswordResetCodeParams) error
+	StampStoreRefByReference(ctx context.Context, arg StampStoreRefByReferenceParams) (int64, error)
 	// Cron pass 1: active subs whose expiry falls in the reminder window.
 	// Bounds passed by caller (now+2.5d, now+3.5d) to keep tz in the Go process.
 	SubsDueForRenewal(ctx context.Context, arg SubsDueForRenewalParams) ([]SubsDueForRenewalRow, error)
