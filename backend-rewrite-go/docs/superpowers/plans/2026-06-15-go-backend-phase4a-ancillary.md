@@ -538,11 +538,57 @@ git commit -m "feat(updates-go): version compare + envelope domain (Phase 4a)"
 ### Task 5: updates sqlc queries + repo
 
 **Files:**
+- Modify: `internal/platform/db/schema.sql` (add the drifted `sha256` column)
 - Create: `internal/shared/pg/queries_updates.sql`
 - Create: `internal/updates/repo_pg.go`
 - Test: (repo has no unit test; exercised via usecase fakes + the live shadow gate)
 
-- [ ] **Step 1: Write the queries**
+**RESOLVED schema-drift fact (do NOT re-investigate, just apply):** The Node
+`AppRelease` entity declares `@Column({ type: 'varchar', length: 64, default:
+'', name: 'sha256' })` and the `/updates/latest` controller emits both
+top-level `*_sha256` and per-platform `platforms.<p>.sha256` from it. Node's
+TypeORM selects every entity column, so **prod's `app_releases` HAS the
+`sha256` column** — it is merely absent from the committed prod schema dump
+(`internal/platform/db/schema.sql`), the documented sqlc drift hazard. We must
+add it to the dump so sqlc regenerates `AppRelease` WITH a `Sha256 string`
+field. Without this the response's `*_sha256` fields would be wrong (always "")
+and break byte-parity for any release row that has a recorded hash.
+
+- [ ] **Step 1: Add the column to the schema dump.** In
+`internal/platform/db/schema.sql`, the `CREATE TABLE public.app_releases`
+block currently reads:
+
+```sql
+CREATE TABLE public.app_releases (
+    platform character varying(20) NOT NULL,
+    version character varying(50) NOT NULL,
+    download_url text NOT NULL,
+    release_notes text DEFAULT ''::text NOT NULL,
+    required boolean DEFAULT false NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    channel character varying(20) DEFAULT 'direct'::character varying NOT NULL,
+    enabled boolean DEFAULT true NOT NULL
+);
+```
+
+Insert the `sha256` column right after `download_url` (matching the Node
+entity's declared order) so the block becomes:
+
+```sql
+CREATE TABLE public.app_releases (
+    platform character varying(20) NOT NULL,
+    version character varying(50) NOT NULL,
+    download_url text NOT NULL,
+    sha256 character varying(64) DEFAULT ''::character varying NOT NULL,
+    release_notes text DEFAULT ''::text NOT NULL,
+    required boolean DEFAULT false NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    channel character varying(20) DEFAULT 'direct'::character varying NOT NULL,
+    enabled boolean DEFAULT true NOT NULL
+);
+```
+
+- [ ] **Step 2: Write the queries** (sha256 included in the release SELECT)
 
 ```sql
 -- internal/shared/pg/queries_updates.sql
@@ -553,14 +599,12 @@ FROM app_release_policies
 WHERE platform = $1;
 
 -- name: GetEnabledReleaseByChannel :one
-SELECT platform, version, download_url, release_notes, required, updated_at, channel, enabled
+SELECT platform, version, download_url, sha256, release_notes, required, updated_at, channel, enabled
 FROM app_releases
 WHERE platform = $1 AND channel = $2 AND enabled = true;
 ```
 
-NOTE: `app_releases` has no `sha256` column in the sqlc `AppRelease` struct shown by introspection? Re-check: the struct in `models.go` lists `Version, DownloadUrl, ReleaseNotes, Required, UpdatedAt, Channel, Enabled` — **confirm whether `sha256` exists** by running `grep -n sha256 internal/shared/pg/sqlc/models.go`. The Node entity HAS `sha256 varchar(64)`. If the column exists in the DB but is absent from the introspected struct, ADD `sha256` to BOTH SELECTs and regenerate so the struct picks it up. If the column genuinely does not exist in this DB, the response `*_sha256` fields are always `""` — match that. Resolve this BEFORE writing the repo and state which case held.
-
-- [ ] **Step 2: Regenerate** — `sqlc generate`, then `go build ./internal/shared/pg/...`.
+- [ ] **Step 3: Regenerate** — `sqlc generate`, then `go build ./internal/shared/pg/...`. Confirm `grep -n Sha256 internal/shared/pg/sqlc/models.go` now shows `Sha256 string` on `AppRelease`. (Steps below are renumbered: the repo is the next step.)
 
 - [ ] **Step 3: Write `repo_pg.go`**
 
@@ -617,6 +661,7 @@ func (r *Repo) EnabledRelease(ctx context.Context, platform, channel string) (*R
 		Platform:     row.Platform,
 		Version:      row.Version,
 		DownloadURL:  row.DownloadUrl,
+		SHA256:       row.Sha256,
 		ReleaseNotes: row.ReleaseNotes,
 		Required:     row.Required,
 		Channel:      row.Channel,
@@ -624,18 +669,15 @@ func (r *Repo) EnabledRelease(ctx context.Context, platform, channel string) (*R
 	if row.UpdatedAt.Valid {
 		rel.UpdatedAt = row.UpdatedAt.Time
 	}
-	// If sha256 exists on the struct after regeneration, set rel.SHA256 = row.Sha256.
 	return rel, nil
 }
 ```
 
-(If `sha256` was added to the struct in Step 1, set `rel.SHA256 = row.Sha256` and add it to the SELECTs.)
-
-- [ ] **Step 4: Commit**
+- [ ] **Step 4: Commit** (the schema.sql edit ships with this task because the regenerated sqlc depends on it)
 
 ```bash
-git add internal/shared/pg/queries_updates.sql internal/shared/pg/sqlc internal/updates/repo_pg.go
-git commit -m "feat(updates-go): sqlc release/policy queries + pg repo (Phase 4a)"
+git add internal/platform/db/schema.sql internal/shared/pg/queries_updates.sql internal/shared/pg/sqlc internal/updates/repo_pg.go
+git commit -m "feat(updates-go): sqlc release/policy queries + pg repo, add sha256 to schema dump (Phase 4a)"
 ```
 
 ### Task 6: updates use case — getEffective / listEffective
