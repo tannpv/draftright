@@ -27,6 +27,11 @@ type fakeQ struct {
 	// UpdatePaymentQRData, MarkPaymentFailed). It is a pointer so the count
 	// survives the value-receiver copy of fakeQ.
 	writeCalls *int
+	// webhook-path stubs (Phase 3c)
+	webhookRow   sqlc.GetPaymentForWebhookRow
+	webhookErr   error
+	firstPlanID  pgtype.UUID
+	firstPlanErr error
 }
 
 func (f fakeQ) GetPaymentByReference(ctx context.Context, ref string) (sqlc.GetPaymentByReferenceRow, error) {
@@ -58,6 +63,25 @@ func (f fakeQ) MarkPaymentFailed(ctx context.Context, arg sqlc.MarkPaymentFailed
 		*f.writeCalls++
 	}
 	return f.failErr
+}
+
+func (f fakeQ) GetPaymentForWebhook(context.Context, string) (sqlc.GetPaymentForWebhookRow, error) {
+	return f.webhookRow, f.webhookErr
+}
+func (f fakeQ) MarkPaymentCompleted(context.Context, string) error   { return nil }
+func (f fakeQ) MarkPaymentFailedByRef(context.Context, string) error { return nil }
+func (f fakeQ) SetUserStripeCustomerID(context.Context, sqlc.SetUserStripeCustomerIDParams) error {
+	return nil
+}
+func (f fakeQ) SetUserLemonSqueezyCustomerID(context.Context, sqlc.SetUserLemonSqueezyCustomerIDParams) error {
+	return nil
+}
+func (f fakeQ) UpdatePaymentPlan(context.Context, sqlc.UpdatePaymentPlanParams) error { return nil }
+func (f fakeQ) FindFirstActivePlanByPeriodCurrency(context.Context, sqlc.FindFirstActivePlanByPeriodCurrencyParams) (pgtype.UUID, error) {
+	return f.firstPlanID, f.firstPlanErr
+}
+func (f fakeQ) GetUserEmailName(context.Context, pgtype.UUID) (sqlc.GetUserEmailNameRow, error) {
+	return sqlc.GetUserEmailNameRow{Email: "user@example.com", Name: "Test User"}, nil
 }
 
 func uuidV(s string) pgtype.UUID { var u pgtype.UUID; _ = u.Scan(s); return u }
@@ -184,5 +208,36 @@ func TestRepo_MarkFailed_MalformedUUID(t *testing.T) {
 	}
 	if calls != 0 {
 		t.Fatalf("DB write must NOT be called on malformed id, got %d calls", calls)
+	}
+}
+
+func TestPaymentForWebhook_MapsBillingFields(t *testing.T) {
+	bp := sqlc.PlansBillingPeriodEnum("yearly")
+	r := NewRepo(fakeQ{webhookRow: sqlc.GetPaymentForWebhookRow{
+		ID:            uuidV("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+		UserID:        uuidV("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
+		PlanID:        uuidV("cccccccc-cccc-cccc-cccc-cccccccccccc"),
+		Status:        "pending",
+		Currency:      "USD",
+		Method:        "vietqr",
+		BillingPeriod: &bp,
+	}})
+	p, err := r.PaymentForWebhook(context.Background(), "DR-PRO-XX")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p == nil || p.Status != "pending" || p.BillingPeriod != "yearly" || p.Currency != "USD" || p.Method != "vietqr" {
+		t.Fatalf("bad mapping: %+v", p)
+	}
+	if p.UserID != "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb" || p.PlanID != "cccccccc-cccc-cccc-cccc-cccccccccccc" {
+		t.Fatalf("id mapping wrong: %+v", p)
+	}
+}
+
+func TestPaymentForWebhook_NoneIsNil(t *testing.T) {
+	r := NewRepo(fakeQ{webhookErr: pgx.ErrNoRows})
+	p, err := r.PaymentForWebhook(context.Background(), "DR-PRO-NONE")
+	if err != nil || p != nil {
+		t.Fatalf("want nil,nil; got %+v,%v", p, err)
 	}
 }

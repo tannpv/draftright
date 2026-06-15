@@ -92,15 +92,19 @@ type Config struct {
 	// runtime; these env values are the resolveCredential() fallback
 	// (first-deploy / dev). PublishableKey + ApplePayMerchantID are
 	// env-ONLY (no app_settings column).
-	WebsiteURL           string
-	StripeSecretKey      string
-	StripePublishableKey string
-	ApplePayMerchantID   string
-	LemonSqueezyAPIKey   string
-	LemonSqueezyStoreID  string
-	VietQRBankID         string
-	VietQRAccountNumber  string
-	VietQRAccountName    string
+	WebsiteURL                string
+	StripeSecretKey           string
+	StripePublishableKey      string
+	StripeWebhookSecret       string
+	ApplePayMerchantID        string
+	LemonSqueezyAPIKey        string
+	LemonSqueezyStoreID       string
+	LemonSqueezyWebhookSecret string
+	CassoAPIKey               string
+	SepayAPIKey               string
+	VietQRBankID              string
+	VietQRAccountNumber       string
+	VietQRAccountName         string
 
 	// GoBackendRampPercent is the percentage of users bucketed onto the
 	// Go backend, surfaced via /auth/me flags.use_go_backend. Mirrors the
@@ -131,34 +135,38 @@ type Config struct {
 // operator can fix all of them in one shot instead of one-error-at-a-time.
 func Load() (*Config, error) {
 	c := &Config{
-		Listen:                envOr("LISTEN_ADDR", ":3001"),
-		LogLevel:              envOr("LOG_LEVEL", "info"),
-		JWTSecret:             os.Getenv("JWT_SECRET"),
-		JWTRefreshSecret:      os.Getenv("JWT_REFRESH_SECRET"),
-		DatabaseURL:           os.Getenv("DATABASE_URL"),
-		RedisURL:              os.Getenv("REDIS_URL"),
-		OpenAIKey:             os.Getenv("OPENAI_API_KEY"),
-		AnthropicKey:          os.Getenv("ANTHROPIC_API_KEY"),
-		OpenAIProviderID:      os.Getenv("OPENAI_PROVIDER_ID"),
-		AnthropicProviderID:   os.Getenv("ANTHROPIC_PROVIDER_ID"),
-		OllamaProviderID:      os.Getenv("OLLAMA_PROVIDER_ID"),
-		OllamaURL:             os.Getenv("OLLAMA_URL"),
-		ResendAPIKey:          os.Getenv("RESEND_API_KEY"),
-		EmailFrom:             os.Getenv("EMAIL_FROM"),
-		AppleAudiences:        os.Getenv("APPLE_AUDIENCES"),
-		AIProviders:           os.Getenv("AI_PROVIDERS"),
-		PaymentEnabledMethods: os.Getenv("PAYMENT_ENABLED_METHODS"),
-		WebsiteURL:            envOr("WEBSITE_URL", "http://localhost:4000"),
-		StripeSecretKey:       os.Getenv("STRIPE_SECRET_KEY"),
-		StripePublishableKey:  os.Getenv("STRIPE_PUBLISHABLE_KEY"),
-		ApplePayMerchantID:    os.Getenv("APPLE_PAY_MERCHANT_ID"),
-		LemonSqueezyAPIKey:    os.Getenv("LEMONSQUEEZY_API_KEY"),
-		LemonSqueezyStoreID:   os.Getenv("LEMONSQUEEZY_STORE_ID"),
-		VietQRBankID:          os.Getenv("VIETQR_BANK_ID"),
-		VietQRAccountNumber:   os.Getenv("VIETQR_ACCOUNT_NUMBER"),
-		VietQRAccountName:     os.Getenv("VIETQR_ACCOUNT_NAME"),
-		GoBackendRampPercent:  envInt("GO_BACKEND_RAMP_PERCENT", 0),
-		AppEnv:                envOr("APP_ENV", "development"),
+		Listen:                    envOr("LISTEN_ADDR", ":3001"),
+		LogLevel:                  envOr("LOG_LEVEL", "info"),
+		JWTSecret:                 os.Getenv("JWT_SECRET"),
+		JWTRefreshSecret:          os.Getenv("JWT_REFRESH_SECRET"),
+		DatabaseURL:               os.Getenv("DATABASE_URL"),
+		RedisURL:                  os.Getenv("REDIS_URL"),
+		OpenAIKey:                 os.Getenv("OPENAI_API_KEY"),
+		AnthropicKey:              os.Getenv("ANTHROPIC_API_KEY"),
+		OpenAIProviderID:          os.Getenv("OPENAI_PROVIDER_ID"),
+		AnthropicProviderID:       os.Getenv("ANTHROPIC_PROVIDER_ID"),
+		OllamaProviderID:          os.Getenv("OLLAMA_PROVIDER_ID"),
+		OllamaURL:                 os.Getenv("OLLAMA_URL"),
+		ResendAPIKey:              os.Getenv("RESEND_API_KEY"),
+		EmailFrom:                 os.Getenv("EMAIL_FROM"),
+		AppleAudiences:            os.Getenv("APPLE_AUDIENCES"),
+		AIProviders:               os.Getenv("AI_PROVIDERS"),
+		PaymentEnabledMethods:     os.Getenv("PAYMENT_ENABLED_METHODS"),
+		WebsiteURL:                envOr("WEBSITE_URL", "http://localhost:4000"),
+		StripeSecretKey:           os.Getenv("STRIPE_SECRET_KEY"),
+		StripePublishableKey:      os.Getenv("STRIPE_PUBLISHABLE_KEY"),
+		StripeWebhookSecret:       os.Getenv("STRIPE_WEBHOOK_SECRET"),
+		ApplePayMerchantID:        os.Getenv("APPLE_PAY_MERCHANT_ID"),
+		LemonSqueezyAPIKey:        os.Getenv("LEMONSQUEEZY_API_KEY"),
+		LemonSqueezyStoreID:       os.Getenv("LEMONSQUEEZY_STORE_ID"),
+		LemonSqueezyWebhookSecret: os.Getenv("LEMONSQUEEZY_WEBHOOK_SECRET"),
+		CassoAPIKey:               os.Getenv("CASSO_API_KEY"),
+		SepayAPIKey:               os.Getenv("SEPAY_API_KEY"),
+		VietQRBankID:              os.Getenv("VIETQR_BANK_ID"),
+		VietQRAccountNumber:       os.Getenv("VIETQR_ACCOUNT_NUMBER"),
+		VietQRAccountName:         os.Getenv("VIETQR_ACCOUNT_NAME"),
+		GoBackendRampPercent:      envInt("GO_BACKEND_RAMP_PERCENT", 0),
+		AppEnv:                    envOr("APP_ENV", "development"),
 
 		MetricsEnabled:  envBool("METRICS_ENABLED", false),
 		OtelEndpoint:    os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),

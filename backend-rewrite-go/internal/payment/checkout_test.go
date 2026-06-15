@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -54,6 +55,9 @@ func (f fakeStrategy) CustomerPortalURL(context.Context, strategy.PortalUser) (s
 	return "", nil
 }
 func (f fakeStrategy) CancelSubscription(context.Context, string) (bool, error) { return false, nil }
+func (f fakeStrategy) VerifyWebhook(context.Context, []byte, http.Header) (strategy.WebhookAction, error) {
+	return strategy.Ignored(), nil
+}
 
 func errProvider(s string) error { return errors.New(s) }
 

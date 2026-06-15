@@ -64,3 +64,47 @@ UPDATE payments SET qr_data = $2, updated_at = now() WHERE id = $1;
 
 -- name: MarkPaymentFailed :exec
 UPDATE payments SET status = 'failed', notes = $2, updated_at = now() WHERE id = $1;
+
+-- name: GetPaymentForWebhook :one
+-- completePayment / activate-subscription projection: the webhook resolves a
+-- payment by reference, then needs user/plan ids + current status + currency +
+-- the plan's billing_period (to re-resolve the active plan by variant). LEFT
+-- JOIN so billing_period is nullable in this row even though the column is NOT
+-- NULL on plans (payments always carry a plan in practice).
+SELECT pay.id, pay.user_id, pay.plan_id, pay.status, pay.currency, pay.method,
+       p.billing_period
+FROM payments pay
+LEFT JOIN plans p ON p.id = pay.plan_id
+WHERE pay.reference_code = $1
+LIMIT 1;
+
+-- name: MarkPaymentCompleted :exec
+UPDATE payments SET status = 'completed', completed_at = NOW(), updated_at = NOW()
+WHERE reference_code = $1;
+
+-- name: MarkPaymentFailedByRef :exec
+UPDATE payments SET status = 'failed', updated_at = NOW()
+WHERE reference_code = $1;
+
+-- name: SetUserStripeCustomerID :exec
+UPDATE users SET stripe_customer_id = $2, updated_at = NOW() WHERE id = $1;
+
+-- name: SetUserLemonSqueezyCustomerID :exec
+UPDATE users SET lemonsqueezy_customer_id = $2, updated_at = NOW() WHERE id = $1;
+
+-- name: UpdatePaymentPlan :exec
+UPDATE payments SET plan_id = $2, updated_at = NOW() WHERE id = $1;
+
+-- name: FindFirstActivePlanByPeriodCurrency :one
+-- Ports plansService.findFirstActive({is_active, billing_period, currency},
+-- order created_at ASC). Returns the active plan id for that (period, currency).
+SELECT id FROM plans
+WHERE is_active = true AND billing_period = $1 AND currency = $2
+ORDER BY created_at ASC
+LIMIT 1;
+
+-- name: GetUserEmailName :one
+-- activateSubscription's notify step: the webhook needs the paying user's email
+-- + display name to send the "subscription active" mail. name is NOT NULL
+-- (schema.sql), so sqlc generates a plain string (no pointer).
+SELECT email, name FROM users WHERE id = $1;

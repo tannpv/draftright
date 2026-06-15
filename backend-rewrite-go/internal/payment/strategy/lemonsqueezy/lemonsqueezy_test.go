@@ -2,7 +2,11 @@ package lemonsqueezy
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +14,75 @@ import (
 
 	"github.com/tannpv/draftright-rewrite/internal/payment/strategy"
 )
+
+func lsSign(payload, secret string) string {
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(payload))
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
+func TestLSVerifyWebhook_PaymentSuccess(t *testing.T) {
+	s := New(Creds{WebhookSecret: "shh"}, "")
+	payload := `{"meta":{"event_name":"subscription_payment_success","custom_data":{"reference_code":"DR-PRO-XY"}},"data":{"id":"99","attributes":{"renews_at":"2027-01-01T00:00:00.000000Z","customer_id":555,"variant_id":42}}}`
+	h := http.Header{}
+	h.Set("X-Signature", lsSign(payload, "shh"))
+	act, err := s.VerifyWebhook(context.Background(), []byte(payload), h)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if act.Type != strategy.ActionLSPaymentSuccess || act.ReferenceCode != "DR-PRO-XY" ||
+		act.LSSubscriptionID != "99" || act.LSCustomerID != "555" || act.LSVariantID != "42" ||
+		act.CurrentPeriodEnd != 1798761600 {
+		t.Fatalf("bad action: %+v", act)
+	}
+}
+
+func TestLSVerifyWebhook_UnsetSecretIgnored(t *testing.T) {
+	s := New(Creds{WebhookSecret: ""}, "")
+	act, err := s.VerifyWebhook(context.Background(), []byte(`{}`), http.Header{})
+	if err != nil || act.Type != strategy.ActionIgnored {
+		t.Fatalf("want ignored,nil; got %+v,%v", act, err)
+	}
+}
+
+func TestLSVerifyWebhook_BadSignature400(t *testing.T) {
+	s := New(Creds{WebhookSecret: "shh"}, "")
+	h := http.Header{}
+	h.Set("X-Signature", lsSign(`{}`, "wrong"))
+	_, err := s.VerifyWebhook(context.Background(), []byte(`{}`), h)
+	var we *strategy.WebhookError
+	if !errors.As(err, &we) || we.Status != 400 || we.Message != "Invalid Lemon Squeezy webhook signature" {
+		t.Fatalf("want 400 invalid-sig, got %v", err)
+	}
+}
+
+func TestLSVerifyWebhook_CancelledExpiredFailed(t *testing.T) {
+	s := New(Creds{WebhookSecret: "shh"}, "")
+	for name, want := range map[string]string{
+		"subscription_cancelled":      strategy.ActionLSSubscriptionCanceled,
+		"subscription_expired":        strategy.ActionLSSubscriptionExpired,
+		"subscription_payment_failed": strategy.ActionLSPaymentFailed,
+	} {
+		payload := `{"meta":{"event_name":"` + name + `"},"data":{"id":"7"}}`
+		h := http.Header{}
+		h.Set("X-Signature", lsSign(payload, "shh"))
+		act, err := s.VerifyWebhook(context.Background(), []byte(payload), h)
+		if err != nil || act.Type != want || act.LSSubscriptionID != "7" {
+			t.Fatalf("%s → %+v %v", name, act, err)
+		}
+	}
+}
+
+func TestLSVerifyWebhook_UpdatedIgnored(t *testing.T) {
+	s := New(Creds{WebhookSecret: "shh"}, "")
+	payload := `{"meta":{"event_name":"subscription_updated"},"data":{"id":"7"}}`
+	h := http.Header{}
+	h.Set("X-Signature", lsSign(payload, "shh"))
+	act, err := s.VerifyWebhook(context.Background(), []byte(payload), h)
+	if err != nil || act.Type != strategy.ActionIgnored {
+		t.Fatalf("want ignored, got %+v %v", act, err)
+	}
+}
 
 func TestLS_NotConfigured(t *testing.T) {
 	s := New(Creds{}, "http://localhost:4000")

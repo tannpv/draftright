@@ -51,6 +51,27 @@ func (q *Queries) CreatePayment(ctx context.Context, arg CreatePaymentParams) (C
 	return i, err
 }
 
+const findFirstActivePlanByPeriodCurrency = `-- name: FindFirstActivePlanByPeriodCurrency :one
+SELECT id FROM plans
+WHERE is_active = true AND billing_period = $1 AND currency = $2
+ORDER BY created_at ASC
+LIMIT 1
+`
+
+type FindFirstActivePlanByPeriodCurrencyParams struct {
+	BillingPeriod PlansBillingPeriodEnum `db:"billing_period" json:"billing_period"`
+	Currency      *string                `db:"currency" json:"currency"`
+}
+
+// Ports plansService.findFirstActive({is_active, billing_period, currency},
+// order created_at ASC). Returns the active plan id for that (period, currency).
+func (q *Queries) FindFirstActivePlanByPeriodCurrency(ctx context.Context, arg FindFirstActivePlanByPeriodCurrencyParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, findFirstActivePlanByPeriodCurrency, arg.BillingPeriod, arg.Currency)
+	var id pgtype.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const getPaymentByReference = `-- name: GetPaymentByReference :one
 
 SELECT
@@ -115,6 +136,45 @@ func (q *Queries) GetPaymentByReference(ctx context.Context, referenceCode strin
 	return i, err
 }
 
+const getPaymentForWebhook = `-- name: GetPaymentForWebhook :one
+SELECT pay.id, pay.user_id, pay.plan_id, pay.status, pay.currency, pay.method,
+       p.billing_period
+FROM payments pay
+LEFT JOIN plans p ON p.id = pay.plan_id
+WHERE pay.reference_code = $1
+LIMIT 1
+`
+
+type GetPaymentForWebhookRow struct {
+	ID            pgtype.UUID             `db:"id" json:"id"`
+	UserID        pgtype.UUID             `db:"user_id" json:"user_id"`
+	PlanID        pgtype.UUID             `db:"plan_id" json:"plan_id"`
+	Status        string                  `db:"status" json:"status"`
+	Currency      string                  `db:"currency" json:"currency"`
+	Method        string                  `db:"method" json:"method"`
+	BillingPeriod *PlansBillingPeriodEnum `db:"billing_period" json:"billing_period"`
+}
+
+// completePayment / activate-subscription projection: the webhook resolves a
+// payment by reference, then needs user/plan ids + current status + currency +
+// the plan's billing_period (to re-resolve the active plan by variant). LEFT
+// JOIN so billing_period is nullable in this row even though the column is NOT
+// NULL on plans (payments always carry a plan in practice).
+func (q *Queries) GetPaymentForWebhook(ctx context.Context, referenceCode string) (GetPaymentForWebhookRow, error) {
+	row := q.db.QueryRow(ctx, getPaymentForWebhook, referenceCode)
+	var i GetPaymentForWebhookRow
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.PlanID,
+		&i.Status,
+		&i.Currency,
+		&i.Method,
+		&i.BillingPeriod,
+	)
+	return i, err
+}
+
 const getPlanForCheckout = `-- name: GetPlanForCheckout :one
 SELECT id, name, daily_limit, price_cents, currency, stripe_price_id, trial_days,
        billing_period, is_active, created_at, updated_at
@@ -157,6 +217,25 @@ func (q *Queries) GetPlanForCheckout(ctx context.Context, id pgtype.UUID) (GetPl
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
+	return i, err
+}
+
+const getUserEmailName = `-- name: GetUserEmailName :one
+SELECT email, name FROM users WHERE id = $1
+`
+
+type GetUserEmailNameRow struct {
+	Email string `db:"email" json:"email"`
+	Name  string `db:"name" json:"name"`
+}
+
+// activateSubscription's notify step: the webhook needs the paying user's email
+// + display name to send the "subscription active" mail. name is NOT NULL
+// (schema.sql), so sqlc generates a plain string (no pointer).
+func (q *Queries) GetUserEmailName(ctx context.Context, id pgtype.UUID) (GetUserEmailNameRow, error) {
+	row := q.db.QueryRow(ctx, getUserEmailName, id)
+	var i GetUserEmailNameRow
+	err := row.Scan(&i.Email, &i.Name)
 	return i, err
 }
 
@@ -281,6 +360,16 @@ func (q *Queries) ListPaymentsByUser(ctx context.Context, userID pgtype.UUID) ([
 	return items, nil
 }
 
+const markPaymentCompleted = `-- name: MarkPaymentCompleted :exec
+UPDATE payments SET status = 'completed', completed_at = NOW(), updated_at = NOW()
+WHERE reference_code = $1
+`
+
+func (q *Queries) MarkPaymentCompleted(ctx context.Context, referenceCode string) error {
+	_, err := q.db.Exec(ctx, markPaymentCompleted, referenceCode)
+	return err
+}
+
 const markPaymentFailed = `-- name: MarkPaymentFailed :exec
 UPDATE payments SET status = 'failed', notes = $2, updated_at = now() WHERE id = $1
 `
@@ -292,6 +381,58 @@ type MarkPaymentFailedParams struct {
 
 func (q *Queries) MarkPaymentFailed(ctx context.Context, arg MarkPaymentFailedParams) error {
 	_, err := q.db.Exec(ctx, markPaymentFailed, arg.ID, arg.Notes)
+	return err
+}
+
+const markPaymentFailedByRef = `-- name: MarkPaymentFailedByRef :exec
+UPDATE payments SET status = 'failed', updated_at = NOW()
+WHERE reference_code = $1
+`
+
+func (q *Queries) MarkPaymentFailedByRef(ctx context.Context, referenceCode string) error {
+	_, err := q.db.Exec(ctx, markPaymentFailedByRef, referenceCode)
+	return err
+}
+
+const setUserLemonSqueezyCustomerID = `-- name: SetUserLemonSqueezyCustomerID :exec
+UPDATE users SET lemonsqueezy_customer_id = $2, updated_at = NOW() WHERE id = $1
+`
+
+type SetUserLemonSqueezyCustomerIDParams struct {
+	ID                     pgtype.UUID `db:"id" json:"id"`
+	LemonsqueezyCustomerID *string     `db:"lemonsqueezy_customer_id" json:"lemonsqueezy_customer_id"`
+}
+
+func (q *Queries) SetUserLemonSqueezyCustomerID(ctx context.Context, arg SetUserLemonSqueezyCustomerIDParams) error {
+	_, err := q.db.Exec(ctx, setUserLemonSqueezyCustomerID, arg.ID, arg.LemonsqueezyCustomerID)
+	return err
+}
+
+const setUserStripeCustomerID = `-- name: SetUserStripeCustomerID :exec
+UPDATE users SET stripe_customer_id = $2, updated_at = NOW() WHERE id = $1
+`
+
+type SetUserStripeCustomerIDParams struct {
+	ID               pgtype.UUID `db:"id" json:"id"`
+	StripeCustomerID *string     `db:"stripe_customer_id" json:"stripe_customer_id"`
+}
+
+func (q *Queries) SetUserStripeCustomerID(ctx context.Context, arg SetUserStripeCustomerIDParams) error {
+	_, err := q.db.Exec(ctx, setUserStripeCustomerID, arg.ID, arg.StripeCustomerID)
+	return err
+}
+
+const updatePaymentPlan = `-- name: UpdatePaymentPlan :exec
+UPDATE payments SET plan_id = $2, updated_at = NOW() WHERE id = $1
+`
+
+type UpdatePaymentPlanParams struct {
+	ID     pgtype.UUID `db:"id" json:"id"`
+	PlanID pgtype.UUID `db:"plan_id" json:"plan_id"`
+}
+
+func (q *Queries) UpdatePaymentPlan(ctx context.Context, arg UpdatePaymentPlanParams) error {
+	_, err := q.db.Exec(ctx, updatePaymentPlan, arg.ID, arg.PlanID)
 	return err
 }
 

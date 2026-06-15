@@ -1,0 +1,9 @@
+{
+  "name": "payment-webhook-vietqr-unauth",
+  "method": "POST",
+  "path": "/payment/webhook/vietqr",
+  "headers": { "Content-Type": "application/json" },
+  "body": {},
+  "ignore_value_of": ["request_id"],
+  "_note": "Public route. With 'vietqr' present in app_settings.payment_methods_enabled (CSV), handleWebhook passes assertEnabled then the VietQR strategy's verifyWebhook throws Unauthorized because no auth header/token is present -> both backends return 401 {\"error\":\"Missing webhook authorization\",\"code\":\"invalid-token\",\"request_id\":\"<uuid>\"}. request_id is the only non-deterministic field (per-request uuid) and is ignored. error+code are deterministic and COMPARED. PREREQUISITE: 'vietqr' MUST be in payment_methods_enabled, else assertEnabled returns 404 (a different but also identical-on-both parity result; this fixture targets the 401 branch). This is the safest webhook parity check: deterministic without any provider secret configured."
+}

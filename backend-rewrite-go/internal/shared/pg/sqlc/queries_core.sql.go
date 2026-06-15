@@ -29,26 +29,34 @@ func (q *Queries) GetClientLogLevel(ctx context.Context) (string, error) {
 
 const getPaymentCredentials = `-- name: GetPaymentCredentials :one
 SELECT stripe_secret_key,
+       stripe_webhook_secret,
        vietqr_bank_id,
        vietqr_account_number,
        vietqr_account_name,
+       casso_api_key,
+       sepay_api_key,
        lemonsqueezy_api_key,
        lemonsqueezy_store_id,
        lemonsqueezy_variant_monthly,
-       lemonsqueezy_variant_yearly
+       lemonsqueezy_variant_yearly,
+       lemonsqueezy_webhook_secret
 FROM app_settings
 LIMIT 1
 `
 
 type GetPaymentCredentialsRow struct {
 	StripeSecretKey            string `db:"stripe_secret_key" json:"stripe_secret_key"`
+	StripeWebhookSecret        string `db:"stripe_webhook_secret" json:"stripe_webhook_secret"`
 	VietqrBankID               string `db:"vietqr_bank_id" json:"vietqr_bank_id"`
 	VietqrAccountNumber        string `db:"vietqr_account_number" json:"vietqr_account_number"`
 	VietqrAccountName          string `db:"vietqr_account_name" json:"vietqr_account_name"`
+	CassoApiKey                string `db:"casso_api_key" json:"casso_api_key"`
+	SepayApiKey                string `db:"sepay_api_key" json:"sepay_api_key"`
 	LemonsqueezyApiKey         string `db:"lemonsqueezy_api_key" json:"lemonsqueezy_api_key"`
 	LemonsqueezyStoreID        string `db:"lemonsqueezy_store_id" json:"lemonsqueezy_store_id"`
 	LemonsqueezyVariantMonthly string `db:"lemonsqueezy_variant_monthly" json:"lemonsqueezy_variant_monthly"`
 	LemonsqueezyVariantYearly  string `db:"lemonsqueezy_variant_yearly" json:"lemonsqueezy_variant_yearly"`
+	LemonsqueezyWebhookSecret  string `db:"lemonsqueezy_webhook_secret" json:"lemonsqueezy_webhook_secret"`
 }
 
 // Checkout-time provider credentials from the singleton app_settings row.
@@ -59,13 +67,17 @@ func (q *Queries) GetPaymentCredentials(ctx context.Context) (GetPaymentCredenti
 	var i GetPaymentCredentialsRow
 	err := row.Scan(
 		&i.StripeSecretKey,
+		&i.StripeWebhookSecret,
 		&i.VietqrBankID,
 		&i.VietqrAccountNumber,
 		&i.VietqrAccountName,
+		&i.CassoApiKey,
+		&i.SepayApiKey,
 		&i.LemonsqueezyApiKey,
 		&i.LemonsqueezyStoreID,
 		&i.LemonsqueezyVariantMonthly,
 		&i.LemonsqueezyVariantYearly,
+		&i.LemonsqueezyWebhookSecret,
 	)
 	return i, err
 }

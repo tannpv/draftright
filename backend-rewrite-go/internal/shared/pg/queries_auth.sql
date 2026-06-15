@@ -194,3 +194,41 @@ WHERE u.id = s.user_id
   AND s.status IN ('active'::subscriptions_status_enum, 'cancelled'::subscriptions_status_enum)
   AND s.expires_at < $1
 RETURNING s.user_id, u.email, s.expires_at;
+
+-- name: CancelActiveSubsByUser :exec
+UPDATE subscriptions SET status = 'cancelled'::subscriptions_status_enum, updated_at = now()
+WHERE user_id = $1 AND status = 'active'::subscriptions_status_enum;
+
+-- name: InsertGrantedSubscription :exec
+INSERT INTO subscriptions (user_id, plan_id, status, store_type, started_at, expires_at)
+VALUES ($1, $2, 'active'::subscriptions_status_enum, $3, now(), $4);
+
+-- name: StampStoreRefByReference :execrows
+UPDATE subscriptions SET store_type = $2, store_transaction_id = $3, updated_at = now()
+WHERE id = (
+  SELECT sub.id FROM subscriptions sub
+  INNER JOIN payments pay ON pay.user_id = sub.user_id AND pay.reference_code = $1
+  WHERE sub.status = 'active'::subscriptions_status_enum
+  ORDER BY sub.created_at DESC
+  LIMIT 1
+);
+
+-- name: ExtendByStoreRef :execrows
+UPDATE subscriptions SET expires_at = $3, updated_at = now()
+WHERE store_type = $1 AND store_transaction_id = $2 AND status = 'active'::subscriptions_status_enum;
+
+-- name: CancelByStoreRef :execrows
+UPDATE subscriptions SET status = 'cancelled'::subscriptions_status_enum, updated_at = now()
+WHERE store_type = $1 AND store_transaction_id = $2 AND status = 'active'::subscriptions_status_enum;
+
+-- name: ExpireByStoreRef :execrows
+UPDATE subscriptions SET status = 'expired'::subscriptions_status_enum, expires_at = now(), updated_at = now()
+WHERE store_type = $1 AND store_transaction_id = $2;
+
+-- name: FindByStoreRef :one
+SELECT sub.user_id, u.email AS user_email, u.name AS user_name, p.name AS plan_name
+FROM subscriptions sub
+JOIN users u ON u.id = sub.user_id
+JOIN plans p ON p.id = sub.plan_id
+WHERE sub.store_type = $1 AND sub.store_transaction_id = $2
+LIMIT 1;

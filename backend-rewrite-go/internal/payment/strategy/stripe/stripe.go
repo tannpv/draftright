@@ -10,7 +10,9 @@ package stripe
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 
@@ -21,7 +23,10 @@ import (
 
 // Creds ports the AppSettings-resolved Stripe credentials (env fallback applied
 // upstream by the Service via strategy.ResolveCredential).
-type Creds struct{ SecretKey string }
+type Creds struct {
+	SecretKey     string
+	WebhookSecret string
+}
 
 // Env ports the env-only wallet config (no DB column yet in Node).
 type Env struct {
@@ -206,6 +211,180 @@ func (s *Strategy) CancelSubscription(_ context.Context, subscriptionID string) 
 		return false, err
 	}
 	return true, nil
+}
+
+// VerifyWebhook ports StripeStrategy.verifyWebhook. Unset secret_key/webhook_secret
+// → Ignored. A present-but-invalid signature → 400 "Invalid Stripe webhook
+// signature". Recognised events map to actions; everything else → Ignored.
+//
+// Uses stripe.ConstructEvent with WithIgnoreAPIVersionMismatch() so the handler
+// stays forward-compatible across Stripe API version upgrades (Node's
+// constructEvent has the same behaviour — it never checks the API version).
+func (s *Strategy) VerifyWebhook(ctx context.Context, payload []byte, headers http.Header) (strategy.WebhookAction, error) {
+	if s.creds.SecretKey == "" || s.creds.WebhookSecret == "" {
+		return strategy.Ignored(), nil
+	}
+	sig := headers.Get("Stripe-Signature")
+	event, err := stripe.ConstructEvent(payload, sig, s.creds.WebhookSecret, stripe.WithIgnoreAPIVersionMismatch())
+	if err != nil {
+		return strategy.WebhookAction{}, &strategy.WebhookError{Status: 400, Message: "Invalid Stripe webhook signature"}
+	}
+
+	// event.Data.Raw is tagged json:"object" in EventData — it contains the
+	// raw JSON of data.object (the API resource), not the full data envelope.
+	// This mirrors Node's `event.data.object`.
+	var obj map[string]any
+	_ = json.Unmarshal(event.Data.Raw, &obj)
+
+	switch event.Type {
+	case stripe.EventTypeCheckoutSessionCompleted:
+		// Initial checkout success — provisions subscription for the first time.
+		// Node lines 286-293: session.metadata?.reference_code, session.subscription, session.customer.
+		return strategy.WebhookAction{
+			Type:                 strategy.ActionPaymentCompleted,
+			ReferenceCode:        digStr(obj, "metadata", "reference_code"),
+			StripeSubscriptionID: str(obj["subscription"]),
+			StripeCustomerID:     str(obj["customer"]),
+		}, nil
+
+	case stripe.EventTypePaymentIntentSucceeded:
+		// Native-wallet checkout success (Apple Pay / Google Pay path).
+		// Node lines 304-314: ignore if no reference_code.
+		ref := digStr(obj, "metadata", "reference_code")
+		if ref == "" {
+			return strategy.Ignored(), nil
+		}
+		return strategy.WebhookAction{
+			Type:             strategy.ActionPaymentCompleted,
+			ReferenceCode:    ref,
+			StripeCustomerID: str(obj["customer"]),
+		}, nil
+
+	case stripe.EventTypeInvoicePaymentSucceeded:
+		// Subscription renewal — extends expiry.
+		// Node lines 322-343: new path (invoice.parent.subscription_details.subscription)
+		// then legacy path (invoice.subscription); same dual-path for period_end.
+		subID := firstStr(
+			digStr(obj, "parent", "subscription_details", "subscription"),
+			str(obj["subscription"]),
+		)
+		line := firstLine(obj)
+		periodEnd := firstInt(
+			digInt(line, "period", "end"),
+			digInt(line, "parent", "subscription_item_details", "subscription_period", "end"),
+			toInt(obj["period_end"]),
+		)
+		if subID == "" || periodEnd == 0 {
+			return strategy.Ignored(), nil
+		}
+		return strategy.WebhookAction{
+			Type:                 strategy.ActionSubscriptionRenewed,
+			StripeSubscriptionID: subID,
+			CurrentPeriodEnd:     int64(periodEnd),
+		}, nil
+
+	case stripe.EventTypeInvoicePaymentFailed:
+		// Renewal charge failed — Node lines 350-358.
+		// New path: invoice.parent.subscription_details.metadata.reference_code
+		// Legacy path: invoice.subscription_details.metadata.reference_code
+		// Fallback: invoice.id
+		ref := firstStr(
+			digStr(obj, "parent", "subscription_details", "metadata", "reference_code"),
+			digStr(obj, "subscription_details", "metadata", "reference_code"),
+			str(obj["id"]),
+		)
+		return strategy.WebhookAction{Type: strategy.ActionPaymentFailed, ReferenceCode: ref}, nil
+
+	case stripe.EventTypeCustomerSubscriptionDeleted:
+		// Final cancellation — Node lines 361-366: sub.id.
+		return strategy.WebhookAction{Type: strategy.ActionSubscriptionCanceled, StripeSubscriptionID: str(obj["id"])}, nil
+
+	case stripe.EventTypeChargeDisputeCreated:
+		// Chargeback — Node lines 370-376: dispute.charge, dispute.amount.
+		return strategy.WebhookAction{
+			Type:           strategy.ActionDisputeCreated,
+			StripeChargeID: str(obj["charge"]),
+			Amount:         toInt(obj["amount"]),
+		}, nil
+
+	default:
+		return strategy.Ignored(), nil
+	}
+}
+
+// str safely type-asserts any to string; returns "" for non-strings.
+func str(v any) string { s, _ := v.(string); return s }
+
+// toInt converts a JSON-unmarshalled numeric (float64) or int to int.
+func toInt(v any) int {
+	switch n := v.(type) {
+	case float64:
+		return int(n)
+	case int:
+		return n
+	default:
+		return 0
+	}
+}
+
+// firstStr returns the first non-empty string from xs.
+func firstStr(xs ...string) string {
+	for _, x := range xs {
+		if x != "" {
+			return x
+		}
+	}
+	return ""
+}
+
+// firstInt returns the first non-zero int from xs.
+func firstInt(xs ...int) int {
+	for _, x := range xs {
+		if x != 0 {
+			return x
+		}
+	}
+	return 0
+}
+
+// digStr walks nested map[string]any by keys, returning the leaf string or "".
+func digStr(m map[string]any, keys ...string) string {
+	cur := any(m)
+	for _, k := range keys {
+		mm, ok := cur.(map[string]any)
+		if !ok {
+			return ""
+		}
+		cur = mm[k]
+	}
+	return str(cur)
+}
+
+// digInt walks nested map[string]any by keys, returning the leaf int or 0.
+func digInt(m map[string]any, keys ...string) int {
+	cur := any(m)
+	for _, k := range keys {
+		mm, ok := cur.(map[string]any)
+		if !ok {
+			return 0
+		}
+		cur = mm[k]
+	}
+	return toInt(cur)
+}
+
+// firstLine returns invoice.lines.data[0] as a map, or nil.
+func firstLine(obj map[string]any) map[string]any {
+	lines, ok := obj["lines"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	data, ok := lines["data"].([]any)
+	if !ok || len(data) == 0 {
+		return nil
+	}
+	m, _ := data[0].(map[string]any)
+	return m
 }
 
 var zeroDecimal = map[string]bool{"VND": true, "JPY": true, "KRW": true}

@@ -50,6 +50,8 @@ func writePaymentErr(w http.ResponseWriter, r *http.Request, err error) bool {
 	}
 	var code string
 	switch derr.Status {
+	case 401:
+		code = "invalid-token"
 	case 404:
 		code = "not-found"
 	case 400:
