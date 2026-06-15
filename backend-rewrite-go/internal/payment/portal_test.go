@@ -3,6 +3,7 @@ package payment
 import (
 	"context"
 	"errors"
+	"net/http"
 	"testing"
 	"time"
 
@@ -27,6 +28,9 @@ func (f fakeStrategyCancel) CustomerPortalURL(context.Context, strategy.PortalUs
 func (f fakeStrategyCancel) CancelSubscription(context.Context, string) (bool, error) {
 	return f.ok, nil
 }
+func (f fakeStrategyCancel) VerifyWebhook(context.Context, []byte, http.Header) (strategy.WebhookAction, error) {
+	return strategy.Ignored(), nil
+}
 
 type fakeStrategyPortal struct{ url string }
 
@@ -39,6 +43,9 @@ func (f fakeStrategyPortal) CustomerPortalURL(context.Context, strategy.PortalUs
 func (f fakeStrategyPortal) CancelSubscription(context.Context, string) (bool, error) {
 	return false, nil
 }
+func (f fakeStrategyPortal) VerifyWebhook(context.Context, []byte, http.Header) (strategy.WebhookAction, error) {
+	return strategy.Ignored(), nil
+}
 
 type fakeStrategyErr struct{ msg string }
 
@@ -50,6 +57,9 @@ func (f fakeStrategyErr) CustomerPortalURL(context.Context, strategy.PortalUser)
 }
 func (f fakeStrategyErr) CancelSubscription(context.Context, string) (bool, error) {
 	return false, errors.New(f.msg)
+}
+func (f fakeStrategyErr) VerifyWebhook(context.Context, []byte, http.Header) (strategy.WebhookAction, error) {
+	return strategy.Ignored(), nil
 }
 
 func portalSvc(repo CheckoutRepo, subs SubsPort, strategies map[string]strategy.Strategy) *Service {

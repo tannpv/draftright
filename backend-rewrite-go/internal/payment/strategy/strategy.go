@@ -7,6 +7,7 @@ package strategy
 import (
 	"context"
 	"crypto/subtle"
+	"net/http"
 )
 
 // Payment is the just-created payment row a strategy reads to build checkout.
@@ -119,6 +120,10 @@ type Strategy interface {
 	CustomerPortalURL(ctx context.Context, u PortalUser) (string, error)
 	// CancelSubscription returns false when the provider can't cancel.
 	CancelSubscription(ctx context.Context, subscriptionID string) (bool, error)
+	// VerifyWebhook authenticates a raw webhook body + headers and returns the
+	// action to take. A *WebhookError signals an HTTP 400/401 the caller must
+	// surface; any other error is treated as 500.
+	VerifyWebhook(ctx context.Context, payload []byte, headers http.Header) (WebhookAction, error)
 }
 
 // WebhookError carries an HTTP status + exact Node message out of a strategy's
