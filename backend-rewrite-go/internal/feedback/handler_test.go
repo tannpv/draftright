@@ -216,7 +216,10 @@ func TestFeedback_VoteNonFeature404(t *testing.T) {
 	const secret = "test-secret"
 	signer := auth.NewSigner(secret)
 	verifier := auth.NewVerifier(secret)
-	tok, _ := signer.Sign(auth.Claims{Sub: "user-1"}, time.Hour)
+	tok, err := signer.Sign(auth.Claims{Sub: "user-1"}, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
 	repo := newFakeRepo() // no features → not found
 	h := newHandlerT(repo, verifier)
 	rec := httptest.NewRecorder()
