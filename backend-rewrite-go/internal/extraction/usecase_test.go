@@ -3,6 +3,7 @@ package extraction
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -149,10 +150,76 @@ func TestExtract_MetaAndDisplayFallback(t *testing.T) {
 	if e.Display != "0123456789" {
 		t.Fatalf("expected display fallback to value, got %q", e.Display)
 	}
-	if e.Meta["bank"] != "Vietcombank" {
+	if e.Meta == nil || (*e.Meta)["bank"] != "Vietcombank" {
 		t.Fatalf("expected meta bank=Vietcombank, got %v", e.Meta)
 	}
 	if e.End != e.Start+lenUTF16(e.Value) {
 		t.Fatalf("end mismatch: start=%d end=%d", e.Start, e.End)
+	}
+}
+
+// Fix 1 — confidence parity with Node's `typeof raw.confidence === 'number'`.
+// A QUOTED-numeric string ("0.9") is NOT a JS number → falls back to 0.5.
+// A genuine JSON number (0.9) is accepted.
+func TestExtract_ConfidenceStringRejectedNumberAccepted(t *testing.T) {
+	text := "Hanoi is nice"
+	// string "0.9" → rejected → default 0.5.
+	outStr := `[{"kind":"address","value":"Hanoi","display":"Hanoi","confidence":"0.9"}]`
+	resp := extract(t, outStr, text)
+	if len(resp.Entities) != 1 {
+		t.Fatalf("expected 1 entity, got %d", len(resp.Entities))
+	}
+	if resp.Entities[0].Confidence != 0.5 {
+		t.Fatalf("quoted-string confidence must fall back to 0.5, got %v", resp.Entities[0].Confidence)
+	}
+	// number 0.9 → accepted.
+	outNum := `[{"kind":"address","value":"Hanoi","display":"Hanoi","confidence":0.9}]`
+	resp = extract(t, outNum, text)
+	if len(resp.Entities) != 1 {
+		t.Fatalf("expected 1 entity, got %d", len(resp.Entities))
+	}
+	if resp.Entities[0].Confidence != 0.9 {
+		t.Fatalf("numeric confidence must be 0.9, got %v", resp.Entities[0].Confidence)
+	}
+}
+
+// Fix 2 — meta presence parity (marshaled bytes).
+//   - "meta":{}            → response JSON contains "meta":{}
+//   - "meta":{"bank":"x"}  → "meta":{"bank":"x"}
+//   - no meta              → marshaled JSON has NO "meta" key
+func TestExtract_MetaPresenceMarshaledBytes(t *testing.T) {
+	text := "Hanoi is nice"
+
+	// explicit empty object → emit "meta":{}.
+	resp := extract(t, `[{"kind":"address","value":"Hanoi","display":"Hanoi","confidence":0.9,"meta":{}}]`, text)
+	if len(resp.Entities) != 1 {
+		t.Fatalf("expected 1 entity, got %d", len(resp.Entities))
+	}
+	b, err := json.Marshal(resp.Entities[0])
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(b), `"meta":{}`) {
+		t.Fatalf("explicit empty meta must marshal as \"meta\":{}, got %s", b)
+	}
+
+	// populated object → emit the key/value.
+	resp = extract(t, `[{"kind":"address","value":"Hanoi","display":"Hanoi","confidence":0.9,"meta":{"bank":"x"}}]`, text)
+	b, err = json.Marshal(resp.Entities[0])
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(b), `"meta":{"bank":"x"}`) {
+		t.Fatalf("populated meta must marshal with kv, got %s", b)
+	}
+
+	// no meta → key omitted entirely.
+	resp = extract(t, `[{"kind":"address","value":"Hanoi","display":"Hanoi","confidence":0.9}]`, text)
+	b, err = json.Marshal(resp.Entities[0])
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if strings.Contains(string(b), "meta") {
+		t.Fatalf("absent meta must omit the key, got %s", b)
 	}
 }

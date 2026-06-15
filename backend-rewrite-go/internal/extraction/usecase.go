@@ -236,9 +236,17 @@ func asString(raw json.RawMessage) (string, bool) {
 }
 
 // asNumber returns the float value of raw when it is a JSON number (JS
-// typeof === 'number'), else ok=false.
+// typeof === 'number'), else ok=false. A QUOTED-numeric string ("0.9") is
+// rejected: Go's json.Number would happily decode it, but Node's
+// `typeof raw.confidence === 'number'` is FALSE for a string, so the caller
+// must fall back to the 0.5 default. Require the first non-space byte to be a
+// sign or digit; a leading '"' (or anything else) is "not a number".
 func asNumber(raw json.RawMessage) (float64, bool) {
-	if len(raw) == 0 {
+	t := strings.TrimSpace(string(raw))
+	if t == "" {
+		return 0, false
+	}
+	if c := t[0]; c != '-' && c != '+' && (c < '0' || c > '9') {
 		return 0, false
 	}
 	var n json.Number
@@ -254,10 +262,13 @@ func asNumber(raw json.RawMessage) (float64, bool) {
 	return f, true
 }
 
-// asMeta ports the meta branch: when raw is a JSON object, return
-// map[String(k)]String(v); else nil. Mirrors Object.fromEntries(
-// Object.entries(raw.meta).map(([k,v]) => [String(k), String(v)])).
-func asMeta(raw json.RawMessage) map[string]string {
+// asMeta ports the meta branch: when raw is a JSON object, return a non-nil
+// pointer to map[String(k)]String(v) (possibly an empty map, so an explicit
+// "meta":{} marshals back as "meta":{}); else nil (absent/non-object → key
+// omitted). Mirrors Node `raw.meta && typeof raw.meta === 'object' ?
+// Object.fromEntries(Object.entries(raw.meta).map(([k,v]) =>
+// [String(k), String(v)])) : undefined`.
+func asMeta(raw json.RawMessage) *map[string]string {
 	if len(raw) == 0 || !isJSONObject(raw) {
 		return nil
 	}
@@ -269,7 +280,7 @@ func asMeta(raw json.RawMessage) map[string]string {
 	for k, v := range m {
 		out[k] = jsString(v)
 	}
-	return out
+	return &out
 }
 
 // jsString coerces a parsed JSON value to its JS String(...) form for meta

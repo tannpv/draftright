@@ -66,13 +66,16 @@ var defaultKinds = []EntityKind{KindAddress, KindPersonName, KindDateTime, KindB
 // Entity JSON key order matches Node ExtractedEntityDto:
 // kind,value,display,start,end,confidence,meta?.
 type Entity struct {
-	Kind       EntityKind        `json:"kind"`
-	Value      string            `json:"value"`
-	Display    string            `json:"display"`
-	Start      int               `json:"start"`
-	End        int               `json:"end"`
-	Confidence float64           `json:"confidence"`
-	Meta       map[string]string `json:"meta,omitempty"`
+	Kind       EntityKind `json:"kind"`
+	Value      string     `json:"value"`
+	Display    string     `json:"display"`
+	Start      int        `json:"start"`
+	End        int        `json:"end"`
+	Confidence float64    `json:"confidence"`
+	// Meta is a POINTER so omitempty distinguishes nil (absent → key omitted,
+	// mirroring Node's `undefined`) from a non-nil empty map (present → `{}`,
+	// mirroring Node emitting "meta":{} for a truthy empty object).
+	Meta *map[string]string `json:"meta,omitempty"`
 }
 
 // Response key order matches ExtractResponseDto: entities,provider,tokensUsed.
