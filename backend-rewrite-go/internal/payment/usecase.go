@@ -6,7 +6,13 @@ import (
 
 	"github.com/tannpv/draftright-rewrite/internal/payment/strategy"
 	"github.com/tannpv/draftright-rewrite/internal/shared"
+	"github.com/tannpv/draftright-rewrite/internal/subscription"
 )
+
+// SubsPort is the subscription read the portal/cancel use cases need.
+type SubsPort interface {
+	ActiveByUser(ctx context.Context, userID string) (*subscription.AccountSub, error)
+}
 
 // PaymentRepo is the consumer-side port for the read paths (satisfied by *Repo).
 type PaymentRepo interface {
@@ -42,12 +48,16 @@ type Service struct {
 	strategies   map[string]strategy.Strategy
 	now          func() time.Time
 	genRef       func() string
+
+	// subs feeds the portal + in-app cancel use cases (active-subscription read).
+	// main.go always injects the real subscription reader; read-path tests pass nil.
+	subs SubsPort
 }
 
 // NewService wires the repo, settings reader, env fallback CSV, and the
 // checkout-side collaborators (checkout repo, strategy registry, clock, and
 // reference-code generator).
-func NewService(repo PaymentRepo, settings SettingsReader, envCSV string, checkoutRepo CheckoutRepo, strategies map[string]strategy.Strategy, now func() time.Time, genRef func() string) *Service {
+func NewService(repo PaymentRepo, settings SettingsReader, envCSV string, checkoutRepo CheckoutRepo, strategies map[string]strategy.Strategy, now func() time.Time, genRef func() string, subs SubsPort) *Service {
 	if now == nil {
 		now = time.Now
 	}
@@ -62,6 +72,7 @@ func NewService(repo PaymentRepo, settings SettingsReader, envCSV string, checko
 		strategies:   strategies,
 		now:          now,
 		genRef:       genRef,
+		subs:         subs,
 	}
 }
 

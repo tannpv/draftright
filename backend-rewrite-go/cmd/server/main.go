@@ -323,6 +323,7 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 			map[string]paymentstrategy.Strategy{}, // Task 12 fills the real registry
 			time.Now,
 			paymentpkg.GeneratePaymentReference,
+			subReader, // *subpkg.Reader satisfies SubsPort (ActiveByUser) for portal/cancel
 		)
 		paymentHandler := paymentpkg.NewHandler(paymentSvc)
 		core.paymentMethods = http.HandlerFunc(paymentHandler.Methods)

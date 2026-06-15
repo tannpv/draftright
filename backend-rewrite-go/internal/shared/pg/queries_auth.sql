@@ -26,7 +26,7 @@ WHERE id = $1;
 -- Mirrors subscriptionsService.findActiveByUserId: newest ACTIVE
 -- subscription for the user, joined to its plan. ORDER BY created_at
 -- DESC + LIMIT 1 reproduces TypeORM order:{created_at:'DESC'} findOne.
-SELECT s.status, s.store_type, s.started_at, s.expires_at,
+SELECT s.status, s.store_type, s.started_at, s.expires_at, s.store_transaction_id,
        p.name AS plan_name, p.daily_limit
 FROM subscriptions s
 JOIN plans p ON p.id = s.plan_id
