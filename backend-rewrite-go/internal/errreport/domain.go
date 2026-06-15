@@ -57,6 +57,13 @@ func sliceUTF16(s string, n int) string {
 	return string(utf16.Decode(u[:n]))
 }
 
+// lenUTF16 returns the length of s in UTF-16 code units, mirroring JS
+// String.length (what class-validator's @MaxLength measures), NOT byte
+// or rune length. Same encoding sliceUTF16 uses for field capping.
+func lenUTF16(s string) int {
+	return len(utf16.Encode([]rune(s)))
+}
+
 var (
 	reBearer   = regexp.MustCompile(`Bearer\s+[a-zA-Z0-9._\-]+`)
 	rePassword = regexp.MustCompile(`(?i)password["':\s=]+["']?[^"'\s,}]+`)

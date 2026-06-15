@@ -12,7 +12,7 @@ import (
 	"github.com/tannpv/draftright-rewrite/internal/shared"
 )
 
-const maxBodyBytes = 100 * 1024 // Express default json limit → 413 past this
+const maxBodyBytes = 100 * 1024 // Express default json limit; past this → 500 internal (see Ingest)
 
 // ingestService is the handler's consumer-side port (Service satisfies it).
 type ingestService interface {
@@ -70,13 +70,25 @@ func (h *Handler) Ingest(w http.ResponseWriter, r *http.Request) {
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(&body); err != nil {
 		// MaxBytesReader trips a *http.MaxBytesError once the limit is
-		// exceeded → mirror Express's 413 (AllExceptionsFilter inferCode).
+		// exceeded. In Node there's no body-limit override and no custom
+		// oversize error class: Express's raw-body-parser throws a plain
+		// PayloadTooLargeError (NOT a Nest HttpException), so
+		// AllExceptionsFilter takes the non-HttpException branch →
+		// { status: 500, code: 'internal', message: 'request entity too large' }.
+		// PayloadTooLargeError is not a Nest HttpException → AllExceptionsFilter → 500 internal.
 		var maxErr *http.MaxBytesError
 		if errors.As(err, &maxErr) {
-			shared.WriteError(w, r, "http-413", "request entity too large")
+			shared.WriteError(w, r, "internal", "request entity too large")
 			return
 		}
 		shared.WriteError(w, r, "invalid-input", "Invalid request body")
+		return
+	}
+
+	// ValidationPipe parity: @MaxLength checks run in the middleware→pipe
+	// stage, BEFORE the controller body — so this precedes the honeypot.
+	if msg := validateErrorReport(body); msg != "" {
+		shared.WriteError(w, r, "invalid-input", msg)
 		return
 	}
 
