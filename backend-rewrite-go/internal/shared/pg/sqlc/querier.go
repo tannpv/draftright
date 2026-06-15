@@ -130,7 +130,8 @@ type Querier interface {
 	// the fields Node's /auth/me returns from the JWT-resolved user.
 	GetUserByID(ctx context.Context, id pgtype.UUID) (GetUserByIDRow, error)
 	// activateSubscription's notify step: the webhook needs the paying user's email
-	// + display name to send the "subscription active" mail. name is nullable.
+	// + display name to send the "subscription active" mail. name is NOT NULL
+	// (schema.sql), so sqlc generates a plain string (no pointer).
 	GetUserEmailName(ctx context.Context, id pgtype.UUID) (GetUserEmailNameRow, error)
 	// User fields createCheckout / portal / cancel need. No row → pgx.ErrNoRows.
 	GetUserForCheckout(ctx context.Context, id pgtype.UUID) (GetUserForCheckoutRow, error)

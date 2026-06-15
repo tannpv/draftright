@@ -230,7 +230,8 @@ type GetUserEmailNameRow struct {
 }
 
 // activateSubscription's notify step: the webhook needs the paying user's email
-// + display name to send the "subscription active" mail. name is nullable.
+// + display name to send the "subscription active" mail. name is NOT NULL
+// (schema.sql), so sqlc generates a plain string (no pointer).
 func (q *Queries) GetUserEmailName(ctx context.Context, id pgtype.UUID) (GetUserEmailNameRow, error) {
 	row := q.db.QueryRow(ctx, getUserEmailName, id)
 	var i GetUserEmailNameRow

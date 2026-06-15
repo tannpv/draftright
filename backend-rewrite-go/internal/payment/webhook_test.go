@@ -117,6 +117,8 @@ func (f *fakeSubsWriter) FindByStoreRef(ctx context.Context, storeType, transact
 type noopEmailer struct {
 	activatedTo string
 	failedTo    string
+	failed      bool
+	failedName  string
 }
 
 func (e *noopEmailer) SubscriptionActivated(ctx context.Context, to, name, planName string) {
@@ -124,6 +126,8 @@ func (e *noopEmailer) SubscriptionActivated(ctx context.Context, to, name, planN
 }
 func (e *noopEmailer) PaymentFailed(ctx context.Context, to, name, planName string) {
 	e.failedTo = to
+	e.failed = true
+	e.failedName = name
 }
 
 type fakeVariants struct {
@@ -292,4 +296,65 @@ func TestHandleWebhook_VerifyErrorPropagates(t *testing.T) {
 
 	_, err := svc.HandleWebhook(context.Background(), "stripe", nil, http.Header{})
 	assertDomainErr(t, err, 401, "Invalid signature")
+}
+
+func TestHandleWebhook_LSPaymentSuccessReResolvesPlan(t *testing.T) {
+	// Pending payment carries plan "pl_old"; the LS variant resolves to a
+	// different active plan id ("pl_new"), so the handler re-resolves the plan
+	// before completing, stamps the LS store ref, and echoes the reference.
+	repo := &fakeWebhookRepo{
+		pay: &WebhookPayment{
+			ID: "p1", UserID: "u1", PlanID: "pl_old", Status: "pending",
+			Currency: "USD", Method: "lemonsqueezy", BillingPeriod: "monthly",
+		},
+		planID: "pl_new", // FindFirstActivePlanID returns the re-resolved plan
+	}
+	subs := &fakeSubsWriter{}
+	em := &noopEmailer{}
+	svc := webhookSvc(fakeSettings{csv: "lemonsqueezy", found: true},
+		fakeVerifier{action: strategy.WebhookAction{
+			Type: strategy.ActionLSPaymentSuccess, ReferenceCode: "DR-PRO-LS",
+			LSVariantID: "var_monthly", LSSubscriptionID: "ls_sub_1",
+		}}, repo, subs, em, fakeVariants{monthly: "var_monthly", yearly: "var_yearly"})
+
+	res, err := svc.HandleWebhook(context.Background(), "lemonsqueezy", nil, http.Header{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Success || res.ReferenceCode == nil || *res.ReferenceCode != "DR-PRO-LS" {
+		t.Fatalf("bad result: %+v", res)
+	}
+	if repo.planUpdated != "p1:pl_new" {
+		t.Fatalf("plan not re-resolved: %q", repo.planUpdated)
+	}
+	if subs.stamped != "lemonsqueezy:ls_sub_1" {
+		t.Fatalf("LS store ref not stamped: %q", subs.stamped)
+	}
+}
+
+func TestHandleWebhook_LSPaymentFailedEmails(t *testing.T) {
+	// LS payment-failed: handler finds the affected subscription and emails the
+	// user. UserName is empty, so the name falls back to the email address.
+	subs := &fakeSubsWriter{found: &subscription.StoreRefSub{
+		UserEmail: "u@x.com", UserName: "", PlanName: "Pro",
+	}}
+	em := &noopEmailer{}
+	svc := webhookSvc(fakeSettings{csv: "lemonsqueezy", found: true},
+		fakeVerifier{action: strategy.WebhookAction{
+			Type: strategy.ActionLSPaymentFailed, LSSubscriptionID: "ls_sub_2",
+		}}, &fakeWebhookRepo{}, subs, em, fakeVariants{})
+
+	res, err := svc.HandleWebhook(context.Background(), "lemonsqueezy", nil, http.Header{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Success || res.ReferenceCode != nil {
+		t.Fatalf("LS payment-failed must be {success:true} with no ref: %+v", res)
+	}
+	if !em.failed {
+		t.Fatalf("payment-failed email not sent")
+	}
+	if em.failedName != "u@x.com" {
+		t.Fatalf("empty name should fall back to email, got %q", em.failedName)
+	}
 }

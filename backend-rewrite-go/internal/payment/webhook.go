@@ -69,7 +69,7 @@ func (s *Service) HandleWebhook(ctx context.Context, method string, payload []by
 			return WebhookResult{}, err
 		}
 		if action.StripeSubscriptionID != "" && done {
-			_ = s.subsWriter.StampStoreRef(ctx, action.ReferenceCode, "stripe", action.StripeSubscriptionID)
+			_ = s.subsWriter.StampStoreRef(ctx, action.ReferenceCode, string(StoreStripe), action.StripeSubscriptionID)
 		}
 		return result(done, ref), nil
 
@@ -81,11 +81,11 @@ func (s *Service) HandleWebhook(ctx context.Context, method string, payload []by
 		return result(done, ref), nil
 
 	case strategy.ActionSubscriptionRenewed:
-		_, _ = s.subsWriter.ExtendByStoreRef(ctx, "stripe", action.StripeSubscriptionID, time.Unix(action.CurrentPeriodEnd, 0))
+		_, _ = s.subsWriter.ExtendByStoreRef(ctx, string(StoreStripe), action.StripeSubscriptionID, time.Unix(action.CurrentPeriodEnd, 0))
 		return WebhookResult{Success: true}, nil
 
 	case strategy.ActionSubscriptionCanceled:
-		_, _ = s.subsWriter.CancelByStoreRef(ctx, "stripe", action.StripeSubscriptionID)
+		_, _ = s.subsWriter.CancelByStoreRef(ctx, string(StoreStripe), action.StripeSubscriptionID)
 		return WebhookResult{Success: true}, nil
 
 	case strategy.ActionLSPaymentSuccess:
@@ -109,18 +109,18 @@ func (s *Service) HandleWebhook(ctx context.Context, method string, payload []by
 				return WebhookResult{}, err
 			}
 			if done {
-				_ = s.subsWriter.StampStoreRef(ctx, action.ReferenceCode, "lemonsqueezy", action.LSSubscriptionID)
+				_ = s.subsWriter.StampStoreRef(ctx, action.ReferenceCode, string(StoreLemonSqueezy), action.LSSubscriptionID)
 			}
 			return result(done, ref), nil
 		}
 		if action.CurrentPeriodEnd > 0 {
-			_, _ = s.subsWriter.ExtendByStoreRef(ctx, "lemonsqueezy", action.LSSubscriptionID, time.Unix(action.CurrentPeriodEnd, 0))
+			_, _ = s.subsWriter.ExtendByStoreRef(ctx, string(StoreLemonSqueezy), action.LSSubscriptionID, time.Unix(action.CurrentPeriodEnd, 0))
 		}
 		ref := action.ReferenceCode
 		return WebhookResult{Success: true, ReferenceCode: &ref}, nil
 
 	case strategy.ActionLSPaymentFailed:
-		sub, _ := s.subsWriter.FindByStoreRef(ctx, "lemonsqueezy", action.LSSubscriptionID)
+		sub, _ := s.subsWriter.FindByStoreRef(ctx, string(StoreLemonSqueezy), action.LSSubscriptionID)
 		if sub != nil && sub.UserEmail != "" {
 			name := sub.UserName
 			if name == "" {
@@ -131,11 +131,11 @@ func (s *Service) HandleWebhook(ctx context.Context, method string, payload []by
 		return WebhookResult{Success: true}, nil
 
 	case strategy.ActionLSSubscriptionCanceled:
-		_, _ = s.subsWriter.CancelByStoreRef(ctx, "lemonsqueezy", action.LSSubscriptionID)
+		_, _ = s.subsWriter.CancelByStoreRef(ctx, string(StoreLemonSqueezy), action.LSSubscriptionID)
 		return WebhookResult{Success: true}, nil
 
 	case strategy.ActionLSSubscriptionExpired:
-		_, _ = s.subsWriter.ExpireByStoreRef(ctx, "lemonsqueezy", action.LSSubscriptionID)
+		_, _ = s.subsWriter.ExpireByStoreRef(ctx, string(StoreLemonSqueezy), action.LSSubscriptionID)
 		return WebhookResult{Success: true}, nil
 
 	case strategy.ActionDisputeCreated:
@@ -188,7 +188,7 @@ func (s *Service) activateSubscription(ctx context.Context, pay *WebhookPayment)
 	if billing == "yearly" {
 		exp = now.AddDate(1, 0, 0)
 	}
-	if err := s.subsWriter.Grant(ctx, pay.UserID, pay.PlanID, storeTypeForMethod(pay.Method), &exp); err != nil {
+	if err := s.subsWriter.Grant(ctx, pay.UserID, pay.PlanID, string(StoreTypeForMethod(PaymentMethod(pay.Method))), &exp); err != nil {
 		return err
 	}
 	if email, name, err := s.webhookRepo.UserEmailName(ctx, pay.UserID); err == nil && email != "" {
@@ -217,30 +217,6 @@ func (s *Service) resolvePlanIDFromLSVariant(ctx context.Context, variantID, cur
 	}
 	id, _ := s.webhookRepo.FindFirstActivePlanID(ctx, billing, currency)
 	return id
-}
-
-// storeTypeForMethod maps a payment method to the subscription store_type enum,
-// mirroring Node's store-type-mapping.ts. Wallet methods settle through Stripe;
-// anything unmapped (incl. momo) records as admin_granted.
-func storeTypeForMethod(method string) string {
-	switch method {
-	case "stripe":
-		return "stripe"
-	case "lemonsqueezy":
-		return "lemonsqueezy"
-	case "vietqr":
-		return "vietqr"
-	case "bank_transfer":
-		return "bank_transfer"
-	case "paypal":
-		return "paypal"
-	case "apple_pay", "google_pay":
-		return "stripe"
-	case "momo":
-		return "admin_granted"
-	default:
-		return "admin_granted"
-	}
 }
 
 // result builds a WebhookResult that always carries the reference code (the

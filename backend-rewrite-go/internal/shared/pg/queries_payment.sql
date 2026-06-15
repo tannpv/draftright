@@ -105,5 +105,6 @@ LIMIT 1;
 
 -- name: GetUserEmailName :one
 -- activateSubscription's notify step: the webhook needs the paying user's email
--- + display name to send the "subscription active" mail. name is nullable.
+-- + display name to send the "subscription active" mail. name is NOT NULL
+-- (schema.sql), so sqlc generates a plain string (no pointer).
 SELECT email, name FROM users WHERE id = $1;
