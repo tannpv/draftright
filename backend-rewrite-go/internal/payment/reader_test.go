@@ -23,6 +23,10 @@ type fakeQ struct {
 	createErr error
 	qrErr     error
 	failErr   error
+	// writeCalls counts invocations of the write methods (CreatePayment,
+	// UpdatePaymentQRData, MarkPaymentFailed). It is a pointer so the count
+	// survives the value-receiver copy of fakeQ.
+	writeCalls *int
 }
 
 func (f fakeQ) GetPaymentByReference(ctx context.Context, ref string) (sqlc.GetPaymentByReferenceRow, error) {
@@ -38,12 +42,21 @@ func (f fakeQ) GetUserForCheckout(ctx context.Context, id pgtype.UUID) (sqlc.Get
 	return f.user, f.userErr
 }
 func (f fakeQ) CreatePayment(ctx context.Context, arg sqlc.CreatePaymentParams) (sqlc.CreatePaymentRow, error) {
+	if f.writeCalls != nil {
+		*f.writeCalls++
+	}
 	return f.created, f.createErr
 }
 func (f fakeQ) UpdatePaymentQRData(ctx context.Context, arg sqlc.UpdatePaymentQRDataParams) error {
+	if f.writeCalls != nil {
+		*f.writeCalls++
+	}
 	return f.qrErr
 }
 func (f fakeQ) MarkPaymentFailed(ctx context.Context, arg sqlc.MarkPaymentFailedParams) error {
+	if f.writeCalls != nil {
+		*f.writeCalls++
+	}
 	return f.failErr
 }
 
@@ -126,5 +139,50 @@ func TestRepo_ListByUser_MalformedUUID(t *testing.T) {
 	}
 	if len(got) != 0 {
 		t.Fatalf("want empty slice, got %d", len(got))
+	}
+}
+
+func TestRepo_CreatePayment_MalformedUUID(t *testing.T) {
+	// Malformed user id must error before any DB write.
+	calls := 0
+	r := NewRepo(fakeQ{writeCalls: &calls})
+	got, err := r.CreatePayment(context.Background(), "not-a-uuid",
+		"00000000-0000-0000-0000-000000000001", 900, "USD", "stripe", "pending", "DR-PRO-X", time.Now())
+	if err == nil {
+		t.Fatal("malformed user id must return a non-nil error")
+	}
+	if got != nil {
+		t.Fatalf("malformed id must yield nil payment, got %+v", got)
+	}
+	// Malformed plan id (valid user id) must also error before any DB write.
+	_, err = r.CreatePayment(context.Background(), "00000000-0000-0000-0000-000000000001",
+		"not-a-uuid", 900, "USD", "stripe", "pending", "DR-PRO-X", time.Now())
+	if err == nil {
+		t.Fatal("malformed plan id must return a non-nil error")
+	}
+	if calls != 0 {
+		t.Fatalf("DB write must NOT be called on malformed id, got %d calls", calls)
+	}
+}
+
+func TestRepo_UpdateQRData_MalformedUUID(t *testing.T) {
+	calls := 0
+	r := NewRepo(fakeQ{writeCalls: &calls})
+	if err := r.UpdateQRData(context.Background(), "not-a-uuid", "qr-payload"); err == nil {
+		t.Fatal("malformed payment id must return a non-nil error")
+	}
+	if calls != 0 {
+		t.Fatalf("DB write must NOT be called on malformed id, got %d calls", calls)
+	}
+}
+
+func TestRepo_MarkFailed_MalformedUUID(t *testing.T) {
+	calls := 0
+	r := NewRepo(fakeQ{writeCalls: &calls})
+	if err := r.MarkFailed(context.Background(), "not-a-uuid", "some notes"); err == nil {
+		t.Fatal("malformed payment id must return a non-nil error")
+	}
+	if calls != 0 {
+		t.Fatalf("DB write must NOT be called on malformed id, got %d calls", calls)
 	}
 }

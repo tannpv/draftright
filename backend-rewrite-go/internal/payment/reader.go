@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -231,8 +232,14 @@ func (r *Repo) UserForCheckout(ctx context.Context, id string) (*CheckoutUser, e
 // CreatePayment inserts a pending payment and returns the server-assigned id +
 // timestamps. method/status/currency are plain varchar columns (NOT enums).
 func (r *Repo) CreatePayment(ctx context.Context, userID, planID string, amount int, currency, method, status, ref string, expiresAt time.Time) (*CreatedPayment, error) {
-	uid, _ := parseUUID(userID)
-	pid, _ := parseUUID(planID)
+	uid, ok := parseUUID(userID)
+	if !ok {
+		return nil, fmt.Errorf("payment: invalid user id %q", userID)
+	}
+	pid, ok := parseUUID(planID)
+	if !ok {
+		return nil, fmt.Errorf("payment: invalid plan id %q", planID)
+	}
 	row, err := r.q.CreatePayment(ctx, sqlc.CreatePaymentParams{
 		UserID:        uid,
 		PlanID:        pid,
@@ -255,13 +262,19 @@ func (r *Repo) CreatePayment(ctx context.Context, userID, planID string, amount 
 
 // UpdateQRData stores the rendered QR payload on a pending payment.
 func (r *Repo) UpdateQRData(ctx context.Context, paymentID, qr string) error {
-	pid, _ := parseUUID(paymentID)
+	pid, ok := parseUUID(paymentID)
+	if !ok {
+		return fmt.Errorf("payment: invalid payment id %q", paymentID)
+	}
 	return r.q.UpdatePaymentQRData(ctx, sqlc.UpdatePaymentQRDataParams{ID: pid, QrData: &qr})
 }
 
 // MarkFailed flips a payment to status='failed' with the given notes.
 func (r *Repo) MarkFailed(ctx context.Context, paymentID, notes string) error {
-	pid, _ := parseUUID(paymentID)
+	pid, ok := parseUUID(paymentID)
+	if !ok {
+		return fmt.Errorf("payment: invalid payment id %q", paymentID)
+	}
 	return r.q.MarkPaymentFailed(ctx, sqlc.MarkPaymentFailedParams{ID: pid, Notes: &notes})
 }
 
