@@ -323,7 +323,11 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 		// payment Querier and the coreSettingsQuerier ports.
 		paymentRepo := paymentpkg.NewRepo(q)
 		paymentSettings := paymentpkg.NewSettingsAdapter(q)
-		creds, _ := paymentSettings.Credentials(ctx) // startup load; missing row → zero value (env fallback)
+		creds, err := paymentSettings.Credentials(ctx) // startup load; missing row → zero value (env fallback)
+		if err != nil {
+			cleanup()
+			return usecase.RewriteDeps{}, coreHandlers{}, nil, fmt.Errorf("load payment credentials: %w", err)
+		}
 		vietqrStrat := vietqr.New(vietqr.Creds{
 			BankID:        paymentstrategy.ResolveCredential(creds.VietQRBankID, cfg.VietQRBankID),
 			AccountNumber: paymentstrategy.ResolveCredential(creds.VietQRAccountNumber, cfg.VietQRAccountNumber),
