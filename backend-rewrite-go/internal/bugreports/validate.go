@@ -57,11 +57,15 @@ func validateBugReport(f fields) string {
 
 	// description: @IsString @MinLength(1)
 	if !f.descriptionPresent {
-		// Undefined → @IsString fires, then @MinLength fires too (a
-		// non-string also fails minLength). class-validator emits both,
-		// in constraint order: isString, then minLength.
-		msgs = append(msgs, "description must be a string")
+		// Undefined → both @IsString and @MinLength fire. class-validator
+		// orders this property's constraints minLength FIRST, then isString;
+		// flattenValidationErrors preserves that order. humanizeValidation
+		// rewrites only the minLength clause. Joined with ". " this yields
+		// "Description must be at least 1 characters.. description must be a
+		// string" — the "." here is the join separator after the humanized
+		// clause's own trailing period (the double period is intentional).
 		msgs = append(msgs, humanizeMinLength("description", 1))
+		msgs = append(msgs, "description must be a string")
 	} else if lenUTF16(f.description) < 1 {
 		msgs = append(msgs, humanizeMinLength("description", 1))
 	}

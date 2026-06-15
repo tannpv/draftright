@@ -129,7 +129,7 @@ func TestBugReports_MissingDescription400(t *testing.T) {
 	if m["code"] != "invalid-input" {
 		t.Fatalf("code = %v, want invalid-input", m["code"])
 	}
-	want := "description must be a string. Description must be at least 1 characters."
+	want := "Description must be at least 1 characters.. description must be a string"
 	if m["error"] != want {
 		t.Fatalf("error = %q, want %q", m["error"], want)
 	}
