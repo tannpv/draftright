@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -20,6 +21,15 @@ import (
 )
 
 const defaultAPIBase = "https://api.lemonsqueezy.com/v1"
+
+// apiError carries the HTTP status from a non-2xx LemonSqueezy response so each
+// caller can wrap it in the EXACT message Node surfaces for that method. Node's
+// payment.service.ts re-throws the raw strategy error `.message` to the HTTP
+// client (BadRequestException(err.message)), so these per-method strings are
+// parity-load-bearing and must be byte-identical to the Node strategy.
+type apiError struct{ status int }
+
+func (e *apiError) Error() string { return fmt.Sprintf("lemonsqueezy: status %d", e.status) }
 
 // Creds is the LemonSqueezy credential set (admin-editable AppSettings in Node).
 type Creds struct {
@@ -78,14 +88,21 @@ func (s *Strategy) CreateCheckout(ctx context.Context, p strategy.Payment, plan 
 		redirectURL = fmt.Sprintf("%s/payment/success?ref=%s", s.websiteURL, p.ReferenceCode)
 	}
 
+	// Mirror Node: checkout_data.email is options?.user_email, which
+	// JSON.stringify DROPS when undefined. Only emit the key when non-empty
+	// so an empty email serializes as a dropped key (not "email":"").
+	checkoutData := map[string]any{
+		"custom": map[string]any{"reference_code": p.ReferenceCode},
+	}
+	if opts.UserEmail != "" {
+		checkoutData["email"] = opts.UserEmail
+	}
+
 	body := map[string]any{
 		"data": map[string]any{
 			"type": "checkouts",
 			"attributes": map[string]any{
-				"checkout_data": map[string]any{
-					"email":  opts.UserEmail,
-					"custom": map[string]any{"reference_code": p.ReferenceCode},
-				},
+				"checkout_data": checkoutData,
 				"product_options": map[string]any{
 					"redirect_url":     redirectURL,
 					"enabled_variants": []int{variantNum},
@@ -106,6 +123,10 @@ func (s *Strategy) CreateCheckout(ctx context.Context, p strategy.Payment, plan 
 		} `json:"data"`
 	}
 	if err := s.do(ctx, http.MethodPost, "/checkouts", body, &out); err != nil {
+		var apiErr *apiError
+		if errors.As(err, &apiErr) {
+			return strategy.Result{}, fmt.Errorf("Lemon Squeezy checkout failed (%d)", apiErr.status)
+		}
 		return strategy.Result{}, err
 	}
 	if out.Data.Attributes.URL == "" {
@@ -131,6 +152,10 @@ func (s *Strategy) CustomerPortalURL(ctx context.Context, u strategy.PortalUser)
 		} `json:"data"`
 	}
 	if err := s.do(ctx, http.MethodGet, "/customers/"+u.LemonSqueezyCustomerID, nil, &out); err != nil {
+		var apiErr *apiError
+		if errors.As(err, &apiErr) {
+			return "", fmt.Errorf("Could not load customer portal")
+		}
 		return "", err
 	}
 	return out.Data.Attributes.URLs.CustomerPortal, nil
@@ -141,6 +166,10 @@ func (s *Strategy) CancelSubscription(ctx context.Context, subscriptionID string
 		return false, fmt.Errorf("Lemon Squeezy is not configured.")
 	}
 	if err := s.do(ctx, http.MethodDelete, "/subscriptions/"+subscriptionID, nil, nil); err != nil {
+		var apiErr *apiError
+		if errors.As(err, &apiErr) {
+			return false, fmt.Errorf("Could not cancel the subscription")
+		}
 		return false, err
 	}
 	return true, nil
@@ -170,7 +199,7 @@ func (s *Strategy) do(ctx context.Context, method, path string, body any, out an
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("lemonsqueezy %s %s: status %d", method, path, resp.StatusCode)
+		return &apiError{status: resp.StatusCode}
 	}
 	if out != nil {
 		return json.NewDecoder(resp.Body).Decode(out)
