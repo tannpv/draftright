@@ -100,6 +100,28 @@ type Router struct {
 	PaymentPortal    http.Handler // GET /payment/portal          (auth)
 	PaymentCancelSub http.Handler // DELETE /payment/subscription (auth)
 
+	// Phase 4b LLM-ingest endpoints. All nil-guarded like Phase 4a.
+	//
+	//   ExtractHandler — POST /extract is the ONLY auth-gated one (Node's
+	//     @UseGuards(JwtAuthGuard)); mounted INSIDE the RequireAuth group.
+	//   EmailWebhook   — POST /webhooks/resend is PUBLIC and reads the RAW
+	//     request body for Svix/HMAC verification. Mounted at the top level
+	//     via mux.Method so NO body-consuming middleware runs on it (the
+	//     global chain is RequestID/RealIP/Recoverer/logger — none buffer or
+	//     rewrite the body), keeping the bytes intact for the signature.
+	//   BugReportIngest — POST /bug-reports is PUBLIC (multipart form).
+	//   FeedbackCreate  — POST /feedback        is PUBLIC.
+	//   FeedbackList    — GET  /feedback        is PUBLIC.
+	//   FeedbackVote    — POST /feedback/{id}/vote is PUBLIC at the route
+	//     level; the handler enforces its own JWT (Node: public route,
+	//     UnauthorizedException thrown inside when no user).
+	ExtractHandler  http.Handler // POST /extract           (auth)
+	EmailWebhook    http.Handler // POST /webhooks/resend    (public, raw body)
+	BugReportIngest http.Handler // POST /bug-reports        (public, multipart)
+	FeedbackCreate  http.Handler // POST /feedback           (public)
+	FeedbackList    http.Handler // GET  /feedback           (public)
+	FeedbackVote    http.Handler // POST /feedback/{id}/vote (public; handler enforces JWT)
+
 	// EnableTracing wraps the whole mux with otelhttp middleware so
 	// every request becomes a span. No-op when the global tracer
 	// provider is the default noop (i.e. tracing.Setup returned
@@ -208,6 +230,27 @@ func (r *Router) Build() http.Handler {
 		mux.Method(http.MethodPost, "/errors", r.ErrorsIngest)
 	}
 
+	// Phase 4b public endpoints — mounted BEFORE the auth group (no JWT).
+	// /webhooks/resend reads the RAW body for signature verification, so it
+	// MUST mount here at the top level (the global chain never buffers the
+	// body) and NEVER inside a JSON-parsing/body-rewriting middleware.
+	if r.EmailWebhook != nil {
+		mux.Method(http.MethodPost, "/webhooks/resend", r.EmailWebhook)
+	}
+	if r.BugReportIngest != nil {
+		mux.Method(http.MethodPost, "/bug-reports", r.BugReportIngest)
+	}
+	if r.FeedbackCreate != nil {
+		mux.Method(http.MethodPost, "/feedback", r.FeedbackCreate)
+	}
+	if r.FeedbackList != nil {
+		mux.Method(http.MethodGet, "/feedback", r.FeedbackList)
+	}
+	if r.FeedbackVote != nil {
+		// Public route; the handler enforces JWT itself (Node parity).
+		mux.Method(http.MethodPost, "/feedback/{id}/vote", r.FeedbackVote)
+	}
+
 	// Build the JWT middleware once so /v1/rewrite (dual-auth) and the
 	// JWT-only group share the exact same RequireAuth instance.
 	jwtMW := RequireAuth(r.Verifier, r.Log)
@@ -230,6 +273,10 @@ func (r *Router) Build() http.Handler {
 		api.Use(jwtMW)
 		if r.Me != nil {
 			api.Method(http.MethodGet, "/auth/me", r.Me)
+		}
+		if r.ExtractHandler != nil {
+			// Node: @Controller('extract') @UseGuards(JwtAuthGuard) @Post().
+			api.Method(http.MethodPost, "/extract", r.ExtractHandler)
 		}
 		if r.ChangePassword != nil {
 			api.Method(http.MethodPost, "/auth/change-password", r.ChangePassword)

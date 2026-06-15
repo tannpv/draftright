@@ -1,0 +1,9 @@
+{
+  "name": "feedback-honeypot",
+  "method": "POST",
+  "path": "/feedback",
+  "headers": { "Content-Type": "application/json" },
+  "body": { "kind": "feature", "description": "Please add dark mode", "source": "web", "website": "x" },
+  "ignore_value_of": [],
+  "_note": "Public. Honeypot drop path: a non-empty `website` triggers a silent 201 with the distinct body { id:null, message:'Received. Thanks!' } AFTER the ValidationPipe passes (kind/description/source all valid) but BEFORE any DB write — no row inserted, mutates nothing. Fully deterministic. Both Node and Go must return 201 + this exact body."
+}

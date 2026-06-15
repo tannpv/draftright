@@ -26,11 +26,15 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/tannpv/draftright-rewrite/internal/adapter/redislimit"
+	"github.com/tannpv/draftright-rewrite/internal/aicall"
 	authpkg "github.com/tannpv/draftright-rewrite/internal/auth"
+	bugreportspkg "github.com/tannpv/draftright-rewrite/internal/bugreports"
 	corepkg "github.com/tannpv/draftright-rewrite/internal/core"
 	emailpkg "github.com/tannpv/draftright-rewrite/internal/email"
 	errreportpkg "github.com/tannpv/draftright-rewrite/internal/errreport"
+	extractionpkg "github.com/tannpv/draftright-rewrite/internal/extraction"
 	exttokenpkg "github.com/tannpv/draftright-rewrite/internal/exttoken"
+	feedbackpkg "github.com/tannpv/draftright-rewrite/internal/feedback"
 	imepackspkg "github.com/tannpv/draftright-rewrite/internal/imepacks"
 	paymentpkg "github.com/tannpv/draftright-rewrite/internal/payment"
 	paymentstrategy "github.com/tannpv/draftright-rewrite/internal/payment/strategy"
@@ -169,6 +173,13 @@ func main() {
 		ImePacksManifest: core.imePacksManifest,
 		UpdatesLatest:    core.updatesLatest,
 		ErrorsIngest:     core.errorsIngest,
+
+		ExtractHandler:  core.extract,
+		EmailWebhook:    core.emailWebhook,
+		BugReportIngest: core.bugReportIngest,
+		FeedbackCreate:  core.feedbackCreate,
+		FeedbackList:    core.feedbackList,
+		FeedbackVote:    core.feedbackVote,
 	}
 	// Enable dual auth on /v1/rewrite (dr_ext_ token OR JWT) only when the
 	// extension-token service is wired (DB present). Guarded so the field
@@ -265,7 +276,10 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 	}
 
 	// --- AiProvider ------------------------------------------------
-	provider := buildProviderChain(cfg, log)
+	// provider is the streaming chain for /v1/rewrite; completer is the
+	// blocking (non-streaming) head provider for /extract. Both come from
+	// ONE selection pass so the priority order can't drift between them.
+	provider, completer := buildProviderChain(cfg, log)
 
 	// --- Core Phase 0 handlers (/health, /auth/me) -----------------
 	// /auth/me reads only verified JWT claims, so it needs no DB and is
@@ -288,6 +302,12 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 	// no DB, so it's wired unconditionally (available even without a pool).
 	core.imePacksManifest = http.HandlerFunc(imepackspkg.NewHandler().Manifest)
 
+	// Phase 4b: /extract has no DB dependency — it only needs an AI
+	// Completer. Reuse the SAME provider chain the rewrite use case uses
+	// (it satisfies extraction.Completer via Complete+Name after Task 1), so
+	// it's wired unconditionally (available even without a pool).
+	core.extract = http.HandlerFunc(extractionpkg.NewHandler(extractionpkg.NewService(completer)).Extract)
+
 	if pool != nil {
 		q := sqlc.New(pool)
 		core.health = corepkg.NewHealthHandler(corepkg.NewPgLogLevel(q), appVersion)
@@ -308,7 +328,8 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 		plansReader := planspkg.NewReader(q)
 		core.plans = http.HandlerFunc(planspkg.NewHandler(planspkg.NewService(plansReader)).List)
 		subWriter := subpkg.NewWriter(q)
-		emailSvc := emailpkg.NewService(emailpkg.NewPgRepo(q), emailpkg.Config{
+		emailRepo := emailpkg.NewPgRepo(q)
+		emailSvc := emailpkg.NewService(emailRepo, emailpkg.Config{
 			EnvAPIKey: cfg.ResendAPIKey,
 			EnvFrom:   cfg.EmailFrom,
 		})
@@ -350,6 +371,35 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 		core.updatesLatest = http.HandlerFunc(updatesHandler.Latest)
 		errHandler := errreportpkg.NewHandler(errreportpkg.NewService(errreportpkg.NewPgRepo(q)), core.accessVerifier)
 		core.errorsIngest = http.HandlerFunc(errHandler.Ingest)
+
+		// Phase 4b DB-backed ingest endpoints.
+		//
+		// bug-reports (public, multipart): screenshots land under
+		// cfg.BugReportsDir in date-bucketed subdirs. The clock MUST be UTC —
+		// Node's dir name is new Date().toISOString().slice(0,10) (UTC), and a
+		// local clock would put a report into the wrong day's folder near
+		// midnight (shadow-parity divergence).
+		bugStore := bugreportspkg.NewStorage(cfg.BugReportsDir, func() time.Time { return time.Now().UTC() })
+		bugHandler := bugreportspkg.NewHandler(
+			bugreportspkg.NewService(bugreportspkg.NewPgRepo(q), bugStore),
+			core.accessVerifier, // access (session) verifier — never refresh
+		)
+		core.bugReportIngest = http.HandlerFunc(bugHandler.Create)
+
+		// feedback (public): create + public board feed + JWT-gated vote. The
+		// handler reads the optional/required JWT via the SAME access verifier.
+		fbHandler := feedbackpkg.NewHandler(
+			feedbackpkg.NewService(feedbackpkg.NewPgRepo(q)),
+			core.accessVerifier, // access (session) verifier — never refresh
+		)
+		core.feedbackCreate = http.HandlerFunc(fbHandler.Create)
+		core.feedbackList = http.HandlerFunc(fbHandler.List)
+		core.feedbackVote = http.HandlerFunc(fbHandler.Vote)
+
+		// email webhook (public, raw body): Resend/Svix delivery events reflect
+		// onto email_logs + the suppression list. The *PgRepo satisfies the
+		// suppressor port (MarkByProviderID + Suppress).
+		core.emailWebhook = http.HandlerFunc(emailpkg.NewWebhookHandler(emailRepo, cfg.ResendWebhookSecret).Handle)
 
 		// Payment read-side (Phase 3a): methods registry + status/history reads.
 		// Read-only; no provider secrets, no checkout. q satisfies both the
@@ -512,6 +562,20 @@ type coreHandlers struct {
 	updatesLatest    http.Handler
 	errorsIngest     http.Handler
 
+	// Phase 4b handlers.
+	//   extract         — POST /extract (auth; no DB — always set).
+	//   bugReportIngest — POST /bug-reports (public; DB — set when pool != nil).
+	//   feedbackCreate  — POST /feedback (public; DB — set when pool != nil).
+	//   feedbackList    — GET  /feedback (public; DB — set when pool != nil).
+	//   feedbackVote    — POST /feedback/{id}/vote (public; DB — set when pool != nil).
+	//   emailWebhook    — POST /webhooks/resend (public, raw body; DB — set when pool != nil).
+	extract         http.Handler
+	bugReportIngest http.Handler
+	feedbackCreate  http.Handler
+	feedbackList    http.Handler
+	feedbackVote    http.Handler
+	emailWebhook    http.Handler
+
 	// accessVerifier is the single *auth.Verifier for JWT_SECRET. Shared by
 	// the Router's Verifier field (RequireAuth) and the errreport handler's
 	// optional best-effort JWT read — exactly one instance per access secret.
@@ -540,15 +604,26 @@ func (staticInfoReader) ClientLogLevel(context.Context) (string, error) { return
 // Why an env-driven list + chain wrapper (vs hardcoded chain):
 // operators want to flip the priority order without a rebuild
 // (incident response: "OpenAI is down, push Anthropic to head").
-func buildProviderChain(cfg *config.Config, log *slog.Logger) domain.AiProvider {
+//
+// Returns (chain, completer): the streaming chain for /v1/rewrite and the
+// blocking Completer (the priority HEAD provider) for /extract. Both come
+// from the SAME selection pass — one source of truth for provider order so
+// the streaming + blocking surfaces can never disagree on the head. Every
+// concrete adapter (openai/anthropic/ollama/memory) satisfies BOTH
+// domain.AiProvider (Stream) and aicall.Completer (Complete) after Task 1.
+func buildProviderChain(cfg *config.Config, log *slog.Logger) (domain.AiProvider, aicall.Completer) {
 	raw := strings.TrimSpace(cfg.AIProviders)
 	if raw == "" {
 		log.Warn("adapter selected", "port", "ai_provider", "impl", "memory (AI_PROVIDERS unset — dev fallback)")
-		return memory.NewProvider("memory-stub",
+		stub := memory.NewProvider("memory-stub",
 			[]string{"[", "stub", " ", "rewrite", "]"})
+		return stub, stub
 	}
 
+	// completers parallels providers element-for-element (same concrete
+	// adapter, viewed through its blocking port). completers[0] is the head.
 	var providers []domain.AiProvider
+	var completers []aicall.Completer
 	var picked []string
 	for _, name := range strings.Split(raw, ",") {
 		name = strings.ToLower(strings.TrimSpace(name))
@@ -560,19 +635,25 @@ func buildProviderChain(cfg *config.Config, log *slog.Logger) domain.AiProvider 
 				log.Warn("chain: skipping provider, missing credential", "provider", name, "env", "OPENAI_API_KEY")
 				continue
 			}
-			providers = append(providers, openai.New(resolveProviderID(cfg.OpenAIProviderID, log, "openai"), cfg.OpenAIKey))
+			p := openai.New(resolveProviderID(cfg.OpenAIProviderID, log, "openai"), cfg.OpenAIKey)
+			providers = append(providers, p)
+			completers = append(completers, p)
 		case "anthropic":
 			if cfg.AnthropicKey == "" {
 				log.Warn("chain: skipping provider, missing credential", "provider", name, "env", "ANTHROPIC_API_KEY")
 				continue
 			}
-			providers = append(providers, anthropic.New(resolveProviderID(cfg.AnthropicProviderID, log, "anthropic"), cfg.AnthropicKey))
+			p := anthropic.New(resolveProviderID(cfg.AnthropicProviderID, log, "anthropic"), cfg.AnthropicKey)
+			providers = append(providers, p)
+			completers = append(completers, p)
 		case "ollama":
 			if cfg.OllamaURL == "" {
 				log.Warn("chain: skipping provider, missing endpoint", "provider", name, "env", "OLLAMA_URL")
 				continue
 			}
-			providers = append(providers, ollama.New(resolveProviderID(cfg.OllamaProviderID, log, "ollama"), ollama.WithEndpoint(cfg.OllamaURL)))
+			p := ollama.New(resolveProviderID(cfg.OllamaProviderID, log, "ollama"), ollama.WithEndpoint(cfg.OllamaURL))
+			providers = append(providers, p)
+			completers = append(completers, p)
 		default:
 			log.Warn("chain: unknown provider name; ignoring", "provider", name)
 			continue
@@ -582,8 +663,9 @@ func buildProviderChain(cfg *config.Config, log *slog.Logger) domain.AiProvider 
 
 	if len(providers) == 0 {
 		log.Warn("adapter selected", "port", "ai_provider", "impl", "memory (no usable entries in AI_PROVIDERS — dev fallback)")
-		return memory.NewProvider("memory-stub",
+		stub := memory.NewProvider("memory-stub",
 			[]string{"[", "stub", " ", "rewrite", "]"})
+		return stub, stub
 	}
 
 	// Single-provider config doesn't need the failover wrapper — and
@@ -593,12 +675,15 @@ func buildProviderChain(cfg *config.Config, log *slog.Logger) domain.AiProvider 
 	// provider unwrapped so its pinned id reaches usage_logs unmodified.
 	if len(providers) == 1 {
 		log.Info("adapter selected", "port", "ai_provider", "impl", picked[0])
-		return providers[0]
+		return providers[0], completers[0]
 	}
 
 	chainName := "chain:" + strings.Join(picked, ">")
 	log.Info("adapter selected", "port", "ai_provider", "impl", chainName)
-	return chain.New(chainName, providers, chain.WithLogger(log))
+	// /extract uses the priority-HEAD provider's blocking port (completers[0]);
+	// it does not failover (the chain wrapper is streaming-only, and Node's
+	// extraction calls the single default provider, not a chain).
+	return chain.New(chainName, providers, chain.WithLogger(log)), completers[0]
 }
 
 // resolveProviderID parses an env-supplied ai_providers.id (UUID
