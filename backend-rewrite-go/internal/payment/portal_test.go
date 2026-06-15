@@ -27,6 +27,18 @@ func (f fakeStrategyCancel) CancelSubscription(context.Context, string) (bool, e
 	return f.ok, nil
 }
 
+type fakeStrategyPortal struct{ url string }
+
+func (f fakeStrategyPortal) CreateCheckout(context.Context, strategy.Payment, strategy.Plan, strategy.Options) (strategy.Result, error) {
+	return strategy.Result{}, nil
+}
+func (f fakeStrategyPortal) CustomerPortalURL(context.Context, strategy.PortalUser) (string, error) {
+	return f.url, nil
+}
+func (f fakeStrategyPortal) CancelSubscription(context.Context, string) (bool, error) {
+	return false, nil
+}
+
 func portalSvc(repo CheckoutRepo, subs SubsPort, strategies map[string]strategy.Strategy) *Service {
 	return &Service{
 		checkoutRepo: repo,
@@ -62,6 +74,19 @@ func TestPortal_StripeURLEmpty(t *testing.T) {
 		map[string]strategy.Strategy{"stripe": fakeStrategy{}})
 	_, err := s.CustomerPortalURL(context.Background(), "u1")
 	assertDomainErr(t, err, 404, "Customer portal is not available for this subscription")
+}
+
+func TestPortal_Success(t *testing.T) {
+	s := portalSvc(&fakeCheckoutRepo{user: &CheckoutUser{ID: "u1", StripeCustomerID: "cus_1"}},
+		fakeSubs{sub: &subscription.AccountSub{StoreType: "stripe"}},
+		map[string]strategy.Strategy{"stripe": fakeStrategyPortal{url: "https://portal.stripe.com/session/abc"}})
+	url, err := s.CustomerPortalURL(context.Background(), "u1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if url != "https://portal.stripe.com/session/abc" {
+		t.Fatalf("expected portal url passthrough, got %q", url)
+	}
 }
 
 func TestCancel_NoProviderRef(t *testing.T) {

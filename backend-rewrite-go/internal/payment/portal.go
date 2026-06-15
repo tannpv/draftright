@@ -48,7 +48,11 @@ func (s *Service) CustomerPortalURL(ctx context.Context, userID string) (string,
 	if !ok {
 		return "", notFound("Subscriptions sourced from '" + sub.StoreType + "' have no self-service portal")
 	}
-	url, err := s.strategies[key].CustomerPortalURL(ctx, PortalUserFrom(user))
+	strat, ok := s.strategies[key]
+	if !ok {
+		return "", notFound("Subscriptions sourced from '" + sub.StoreType + "' have no self-service portal")
+	}
+	url, err := strat.CustomerPortalURL(ctx, PortalUserFrom(user))
 	if err != nil {
 		return "", badRequest(err.Error())
 	}
@@ -101,7 +105,11 @@ func (s *Service) CancelActiveSubscription(ctx context.Context, userID string) (
 	if !ok {
 		return nil, notFound("Subscriptions sourced from '" + sub.StoreType + "' can't be cancelled in-app")
 	}
-	cancelled, err := s.strategies[key].CancelSubscription(ctx, sub.StoreTransactionID)
+	strat, ok := s.strategies[key]
+	if !ok {
+		return nil, notFound("Subscriptions sourced from '" + sub.StoreType + "' can't be cancelled in-app")
+	}
+	cancelled, err := strat.CancelSubscription(ctx, sub.StoreTransactionID)
 	if err != nil {
 		return nil, badRequest(err.Error())
 	}
