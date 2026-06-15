@@ -85,10 +85,11 @@ func (s *Service) Create(ctx context.Context, in CreateInput, file *FilePart, us
 	if in.HasContext && in.Context != "" {
 		if json.Valid([]byte(in.Context)) {
 			contextBytes = []byte(in.Context)
-		} else {
-			fallback, _ := json.Marshal(map[string]string{"raw": in.Context})
+		} else if fallback, err := json.Marshal(map[string]string{"raw": in.Context}); err == nil {
 			contextBytes = fallback
 		}
+		// On the (practically impossible) marshal failure, contextBytes stays
+		// nil → store NULL rather than invalid JSON.
 	}
 
 	// Field slicing to column widths (Node .slice() calls in create):

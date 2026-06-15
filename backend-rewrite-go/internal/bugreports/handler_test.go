@@ -99,7 +99,9 @@ func TestBugReports_HoneypotDropsSilently(t *testing.T) {
 		t.Errorf("honeypot body must not contain ref/message: %s", raw)
 	}
 	var m map[string]any
-	json.Unmarshal([]byte(raw), &m)
+	if err := json.Unmarshal([]byte(raw), &m); err != nil {
+		t.Fatalf("unmarshal body: %v", err)
+	}
 	if _, ok := m["id"]; !ok {
 		t.Fatalf("honeypot body missing id key: %s", raw)
 	}
@@ -125,7 +127,9 @@ func TestBugReports_MissingDescription400(t *testing.T) {
 		t.Fatalf("status = %d, want 400", rec.Code)
 	}
 	var m map[string]any
-	json.Unmarshal(rec.Body.Bytes(), &m)
+	if err := json.Unmarshal(rec.Body.Bytes(), &m); err != nil {
+		t.Fatalf("unmarshal body: %v", err)
+	}
 	if m["code"] != "invalid-input" {
 		t.Fatalf("code = %v, want invalid-input", m["code"])
 	}
@@ -149,7 +153,9 @@ func TestBugReports_EmptyDescription400(t *testing.T) {
 		t.Fatalf("status = %d, want 400", rec.Code)
 	}
 	var m map[string]any
-	json.Unmarshal(rec.Body.Bytes(), &m)
+	if err := json.Unmarshal(rec.Body.Bytes(), &m); err != nil {
+		t.Fatalf("unmarshal body: %v", err)
+	}
 	want := "Description must be at least 1 characters."
 	if m["error"] != want {
 		t.Fatalf("error = %q, want %q", m["error"], want)
@@ -170,7 +176,9 @@ func TestBugReports_SourceTooLong400(t *testing.T) {
 		t.Fatalf("status = %d, want 400", rec.Code)
 	}
 	var m map[string]any
-	json.Unmarshal(rec.Body.Bytes(), &m)
+	if err := json.Unmarshal(rec.Body.Bytes(), &m); err != nil {
+		t.Fatalf("unmarshal body: %v", err)
+	}
 	want := "source must be shorter than or equal to 50 characters"
 	if m["error"] != want {
 		t.Fatalf("error = %q, want %q", m["error"], want)
@@ -193,7 +201,9 @@ func TestBugReports_DisallowedMime400(t *testing.T) {
 		t.Fatalf("status = %d, want 400", rec.Code)
 	}
 	var m map[string]any
-	json.Unmarshal(rec.Body.Bytes(), &m)
+	if err := json.Unmarshal(rec.Body.Bytes(), &m); err != nil {
+		t.Fatalf("unmarshal body: %v", err)
+	}
 	if m["code"] != "invalid-input" {
 		t.Fatalf("code = %v, want invalid-input", m["code"])
 	}
@@ -225,7 +235,9 @@ func TestBugReports_WebpAllowed(t *testing.T) {
 		t.Fatalf("status = %d, want 400 (webp passes filter, fails extensionFor)", rec.Code)
 	}
 	var m map[string]any
-	json.Unmarshal(rec.Body.Bytes(), &m)
+	if err := json.Unmarshal(rec.Body.Bytes(), &m); err != nil {
+		t.Fatalf("unmarshal body: %v", err)
+	}
 	if m["error"] != "only PNG or JPEG screenshots are accepted" {
 		t.Fatalf("error = %q", m["error"])
 	}
@@ -249,7 +261,9 @@ func TestBugReports_HappyPathPNG(t *testing.T) {
 	raw := rec.Body.String()
 	assertKeyOrder(t, raw, "id", "ref", "message")
 	var m map[string]any
-	json.Unmarshal([]byte(raw), &m)
+	if err := json.Unmarshal([]byte(raw), &m); err != nil {
+		t.Fatalf("unmarshal body: %v", err)
+	}
 	if m["id"] != "abc-123" {
 		t.Errorf("id = %v, want abc-123", m["id"])
 	}
@@ -291,7 +305,9 @@ func TestBugReports_ContextRawFallback(t *testing.T) {
 		t.Fatal("expected context set")
 	}
 	var got map[string]any
-	json.Unmarshal(repo.inserted.Context, &got)
+	if err := json.Unmarshal(repo.inserted.Context, &got); err != nil {
+		t.Fatalf("unmarshal context: %v", err)
+	}
 	if got["raw"] != "not json" {
 		t.Errorf("context fallback = %s, want {\"raw\":\"not json\"}", string(repo.inserted.Context))
 	}
@@ -315,7 +331,9 @@ func TestBugReports_OversizeFile413(t *testing.T) {
 		t.Fatalf("status = %d, want 413", rec.Code)
 	}
 	var m map[string]any
-	json.Unmarshal(rec.Body.Bytes(), &m)
+	if err := json.Unmarshal(rec.Body.Bytes(), &m); err != nil {
+		t.Fatalf("unmarshal body: %v", err)
+	}
 	if m["code"] != "http-413" {
 		t.Fatalf("code = %v, want http-413", m["code"])
 	}

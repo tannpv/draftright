@@ -110,9 +110,14 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 			shared.WriteError(w, r, "internal", "bug-reports failed")
 			return
 		}
-		buf := make([]byte, fh.Size)
-		_, _ = io.ReadFull(f, buf)
+		buf, err := io.ReadAll(f)
 		_ = f.Close()
+		if err != nil {
+			// A partial/failed read of the (size-bounded) part is a
+			// malformed upload → 400, same path as a bad multipart body.
+			shared.WriteError(w, r, "invalid-input", "Multipart: Unexpected end of form")
+			return
+		}
 		file = &FilePart{Buffer: buf, OriginalName: fh.Filename, Mimetype: mime}
 	}
 
@@ -146,7 +151,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case errors.Is(err, ErrDescriptionRequired), errors.Is(err, ErrSourceRequired):
 			shared.WriteError(w, r, "invalid-input", err.Error())
-		case err.Error() == errMimeNotAllowed:
+		case errors.Is(err, errUnsupportedMime):
 			// Storage.Save rejected a mime the controller allowed (webp/heic/…).
 			shared.WriteError(w, r, "invalid-input", errMimeNotAllowed)
 		default:
