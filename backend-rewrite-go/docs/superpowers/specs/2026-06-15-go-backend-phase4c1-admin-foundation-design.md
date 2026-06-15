@@ -149,8 +149,9 @@ entity decorator order:
 { id, email, name, is_active, role, created_at, updated_at }
 ```
 
-`created_at`/`updated_at` serialized via `shared.ISOMillis` (UTC, `.000Z`).
-Ordered struct, never `map[string]any`.
+`created_at`/`updated_at` serialized via `shared.ISOMillis` — `Date.toISOString()`
+parity, actual fractional millis (`YYYY-MM-DDTHH:mm:ss.SSSZ`, UTC). Ordered
+struct, never `map[string]any`.
 
 ### Service ports (consumer-side)
 
