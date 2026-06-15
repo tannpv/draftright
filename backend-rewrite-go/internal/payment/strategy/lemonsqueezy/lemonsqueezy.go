@@ -31,6 +31,17 @@ type apiError struct{ status int }
 
 func (e *apiError) Error() string { return fmt.Sprintf("lemonsqueezy: status %d", e.status) }
 
+// wrapAPI returns msg (the Node-parity client message) when err is a non-2xx
+// *apiError, otherwise the raw err unchanged (network/marshal/decode errors
+// surface as-is, matching Node).
+func wrapAPI(err error, msg string) error {
+	var apiErr *apiError
+	if errors.As(err, &apiErr) {
+		return errors.New(msg)
+	}
+	return err
+}
+
 // Creds is the LemonSqueezy credential set (admin-editable AppSettings in Node).
 type Creds struct {
 	APIKey         string
@@ -60,7 +71,7 @@ func New(c Creds, websiteURL string) *Strategy {
 
 func (s *Strategy) CreateCheckout(ctx context.Context, p strategy.Payment, plan strategy.Plan, opts strategy.Options) (strategy.Result, error) {
 	if s.creds.APIKey == "" || s.creds.StoreID == "" {
-		return strategy.Result{}, fmt.Errorf("Lemon Squeezy is not configured. Set the API key + store ID in admin Settings → Payment.")
+		return strategy.Result{}, errors.New("Lemon Squeezy is not configured. Set the API key + store ID in admin Settings → Payment.")
 	}
 
 	isYearly := plan.BillingPeriod == "yearly"
@@ -123,6 +134,9 @@ func (s *Strategy) CreateCheckout(ctx context.Context, p strategy.Payment, plan 
 		} `json:"data"`
 	}
 	if err := s.do(ctx, http.MethodPost, "/checkouts", body, &out); err != nil {
+		// Kept inline (not via wrapAPI): the checkout message interpolates the
+		// HTTP status, which lives inside apiErr — a fixed-string helper can't
+		// carry it. Network/marshal/decode errors still surface as-is.
 		var apiErr *apiError
 		if errors.As(err, &apiErr) {
 			return strategy.Result{}, fmt.Errorf("Lemon Squeezy checkout failed (%d)", apiErr.status)
@@ -130,7 +144,7 @@ func (s *Strategy) CreateCheckout(ctx context.Context, p strategy.Payment, plan 
 		return strategy.Result{}, err
 	}
 	if out.Data.Attributes.URL == "" {
-		return strategy.Result{}, fmt.Errorf("Lemon Squeezy checkout returned no URL")
+		return strategy.Result{}, errors.New("Lemon Squeezy checkout returned no URL")
 	}
 	return strategy.Result{RedirectURL: out.Data.Attributes.URL}, nil
 }
@@ -140,7 +154,7 @@ func (s *Strategy) CustomerPortalURL(ctx context.Context, u strategy.PortalUser)
 		return "", nil
 	}
 	if s.creds.APIKey == "" {
-		return "", fmt.Errorf("Lemon Squeezy is not configured.")
+		return "", errors.New("Lemon Squeezy is not configured.")
 	}
 	var out struct {
 		Data struct {
@@ -152,25 +166,17 @@ func (s *Strategy) CustomerPortalURL(ctx context.Context, u strategy.PortalUser)
 		} `json:"data"`
 	}
 	if err := s.do(ctx, http.MethodGet, "/customers/"+u.LemonSqueezyCustomerID, nil, &out); err != nil {
-		var apiErr *apiError
-		if errors.As(err, &apiErr) {
-			return "", fmt.Errorf("Could not load customer portal")
-		}
-		return "", err
+		return "", wrapAPI(err, "Could not load customer portal")
 	}
 	return out.Data.Attributes.URLs.CustomerPortal, nil
 }
 
 func (s *Strategy) CancelSubscription(ctx context.Context, subscriptionID string) (bool, error) {
 	if s.creds.APIKey == "" {
-		return false, fmt.Errorf("Lemon Squeezy is not configured.")
+		return false, errors.New("Lemon Squeezy is not configured.")
 	}
 	if err := s.do(ctx, http.MethodDelete, "/subscriptions/"+subscriptionID, nil, nil); err != nil {
-		var apiErr *apiError
-		if errors.As(err, &apiErr) {
-			return false, fmt.Errorf("Could not cancel the subscription")
-		}
-		return false, err
+		return false, wrapAPI(err, "Could not cancel the subscription")
 	}
 	return true, nil
 }
