@@ -48,6 +48,12 @@ type Service struct {
 // checkout-side collaborators (checkout repo, strategy registry, clock, and
 // reference-code generator).
 func NewService(repo PaymentRepo, settings SettingsReader, envCSV string, checkoutRepo CheckoutRepo, strategies map[string]strategy.Strategy, now func() time.Time, genRef func() string) *Service {
+	if now == nil {
+		now = time.Now
+	}
+	if genRef == nil {
+		genRef = GeneratePaymentReference
+	}
 	return &Service{
 		repo:         repo,
 		settings:     settings,

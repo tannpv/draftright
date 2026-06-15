@@ -157,10 +157,7 @@ func (s *Service) CreateCheckout(ctx context.Context, userID, planID, method str
 		row.QRData = &res.QRData
 	}
 
-	resp := &CheckoutResponse{Payment: row}
-	if res.QRData != "" {
-		resp.QRData = &res.QRData
-	}
+	resp := &CheckoutResponse{Payment: row, QRData: row.QRData}
 	if res.RedirectURL != "" {
 		resp.RedirectURL = &res.RedirectURL
 	}
