@@ -89,6 +89,13 @@ type Router struct {
 	PaymentWebhookSepay        http.Handler // POST /payment/webhook/sepay        (public)
 	PaymentWebhookLemonSqueezy http.Handler // POST /payment/webhook/lemonsqueezy (public)
 
+	// Phase 4a ancillary endpoints. All PUBLIC (mounted before the auth
+	// group). Errors accepts an optional best-effort JWT (the handler reads
+	// the claim itself; the route is not RequireAuth-gated). All nil-guarded.
+	ImePacksManifest http.Handler // GET  /ime-packs/manifest (public)
+	UpdatesLatest    http.Handler // GET  /updates/latest     (public)
+	ErrorsIngest     http.Handler // POST /errors             (public, optional JWT)
+
 	PaymentCheckout  http.Handler // POST /payment/checkout       (auth)
 	PaymentPortal    http.Handler // GET /payment/portal          (auth)
 	PaymentCancelSub http.Handler // DELETE /payment/subscription (auth)
@@ -186,6 +193,19 @@ func (r *Router) Build() http.Handler {
 	}
 	if r.PaymentWebhookLemonSqueezy != nil {
 		mux.Method(http.MethodPost, "/payment/webhook/lemonsqueezy", r.PaymentWebhookLemonSqueezy)
+	}
+
+	// Phase 4a ancillary public endpoints — mounted BEFORE the auth group
+	// so they're reachable without a JWT (parity with Node: all three are
+	// public; /errors reads an optional best-effort JWT inside the handler).
+	if r.ImePacksManifest != nil {
+		mux.Method(http.MethodGet, "/ime-packs/manifest", r.ImePacksManifest)
+	}
+	if r.UpdatesLatest != nil {
+		mux.Method(http.MethodGet, "/updates/latest", r.UpdatesLatest)
+	}
+	if r.ErrorsIngest != nil {
+		mux.Method(http.MethodPost, "/errors", r.ErrorsIngest)
 	}
 
 	// Build the JWT middleware once so /v1/rewrite (dual-auth) and the
