@@ -161,6 +161,7 @@ CREATE TABLE public.app_releases (
     platform character varying(20) NOT NULL,
     version character varying(50) NOT NULL,
     download_url text NOT NULL,
+    sha256 character varying(64) DEFAULT ''::character varying NOT NULL,
     release_notes text DEFAULT ''::text NOT NULL,
     required boolean DEFAULT false NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,

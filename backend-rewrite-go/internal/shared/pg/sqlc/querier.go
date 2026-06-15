@@ -90,6 +90,7 @@ type Querier interface {
 	GetEmailSettings(ctx context.Context) (GetEmailSettingsRow, error)
 	// DB template override. PK column is template_key (not key).
 	GetEmailTemplateByKey(ctx context.Context, templateKey string) (GetEmailTemplateByKeyRow, error)
+	GetEnabledReleaseByChannel(ctx context.Context, arg GetEnabledReleaseByChannelParams) (AppRelease, error)
 	// updated_at of the user's most-recently expired subscription (free-tier
 	// just_expired banner). No row → caller treats as nil.
 	GetLastExpiredAt(ctx context.Context, userID pgtype.UUID) (pgtype.Timestamp, error)
@@ -122,6 +123,8 @@ type Querier interface {
 	// (daily_limit/is_active/created_at/updated_at included — Node attaches
 	// plansService.findById, the full entity). No row → pgx.ErrNoRows.
 	GetPlanForCheckout(ctx context.Context, id pgtype.UUID) (GetPlanForCheckoutRow, error)
+	// internal/shared/pg/queries_updates.sql
+	GetReleasePolicy(ctx context.Context, platform string) (AppReleasePolicy, error)
 	GetUserAuthState(ctx context.Context, email string) (GetUserAuthStateRow, error)
 	// Phase 0 core-endpoint queries (health + /auth/me). Kept separate
 	// from the rewrite module's queries.sql so the core package depends on
