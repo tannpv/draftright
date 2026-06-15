@@ -23,7 +23,8 @@ func TestClient_Complete_NonStreaming(t *testing.T) {
 	var gotBody map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, "test-key", r.Header.Get("x-api-key"))
-		raw, _ := io.ReadAll(r.Body)
+		raw, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
 		require.NoError(t, json.Unmarshal(raw, &gotBody))
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"content":[{"type":"text","text":"  hi there  "}]}`))

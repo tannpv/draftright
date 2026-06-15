@@ -22,7 +22,8 @@ func TestClient_Complete_NonStreaming(t *testing.T) {
 	t.Parallel()
 	var gotBody map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		raw, _ := io.ReadAll(r.Body)
+		raw, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
 		require.NoError(t, json.Unmarshal(raw, &gotBody))
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"message":{"role":"assistant","content":"  local reply  "},"done":true}`))

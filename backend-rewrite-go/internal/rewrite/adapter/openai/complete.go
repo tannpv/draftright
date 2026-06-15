@@ -19,6 +19,7 @@ import (
 // blocking extraction path supplies its own prompts, so no Tone →
 // systemFmt mapping happens here.
 func (c *Client) Complete(ctx context.Context, system, user string) (string, int64, error) {
+	start := time.Now()
 	body, err := json.Marshal(map[string]any{
 		"model":  c.model,
 		"stream": false,
@@ -28,10 +29,9 @@ func (c *Client) Complete(ctx context.Context, system, user string) (string, int
 		},
 	})
 	if err != nil {
-		return "", 0, fmt.Errorf("provider %s: marshal request", c.Name())
+		return "", time.Since(start).Milliseconds(), fmt.Errorf("provider %s: marshal request", c.Name())
 	}
 
-	start := time.Now()
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint, bytes.NewReader(body))
 	if err != nil {
 		return "", time.Since(start).Milliseconds(), fmt.Errorf("provider %s: build request", c.Name())
