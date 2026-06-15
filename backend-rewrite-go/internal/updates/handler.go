@@ -37,7 +37,7 @@ func (h *Handler) Latest(w http.ResponseWriter, r *http.Request) {
 
 	all, err := h.svc.listEffective(r.Context(), channel)
 	if err != nil {
-		shared.WriteError(w, r, "internal", err.Error())
+		shared.WriteError(w, r, "internal", "updates failed")
 		return
 	}
 	var anchor *Release

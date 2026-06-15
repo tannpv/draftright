@@ -56,6 +56,21 @@ func TestBuildEnvelope_Anchor(t *testing.T) {
 	}
 }
 
+func TestCompareVersions_TrailingSuffix(t *testing.T) {
+	// Node parseInt("4",10)||0 vs parseInt("4-beta")=4 → equal core, suffix ignored.
+	if compareVersions("2.4.1-beta", "2.4.1") != 0 {
+		t.Errorf("pre-release suffix must compare equal to its numeric core")
+	}
+	// "2.5rc1" → minor 5 > 4
+	if compareVersions("2.5rc1", "2.4.9") <= 0 {
+		t.Errorf("leading-digit minor must win: 2.5rc1 > 2.4.9")
+	}
+	// fully non-numeric segment → 0
+	if compareVersions("x.y.z", "0.0.0") != 0 {
+		t.Errorf("non-numeric segments parse to 0")
+	}
+}
+
 func TestBuildEnvelope_NoAnchorUsesMaxVersionButMacNotes(t *testing.T) {
 	all := map[string]*Release{
 		"mac": {Version: "2.2.9", ReleaseNotes: "mac notes", Required: true},

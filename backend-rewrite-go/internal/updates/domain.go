@@ -63,11 +63,30 @@ func segInt(parts []string, i int) int {
 	if i >= len(parts) {
 		return 0
 	}
-	v, err := strconv.Atoi(strings.TrimSpace(parts[i]))
-	if err != nil {
-		return 0 // parseInt(x,10) || 0
+	return parseIntPrefix(parts[i])
+}
+
+// parseIntPrefix mirrors JS parseInt(s, 10) || 0: trim leading spaces,
+// allow one optional +/- sign, consume the leading digit run, ignore the
+// rest; no digits → 0.
+func parseIntPrefix(s string) int {
+	s = strings.TrimLeft(s, " \t\n\r\f\v")
+	j := 0
+	if j < len(s) && (s[j] == '+' || s[j] == '-') {
+		j++
 	}
-	return v
+	start := j
+	for j < len(s) && s[j] >= '0' && s[j] <= '9' {
+		j++
+	}
+	if start == j { // no digits after optional sign
+		return 0
+	}
+	n, err := strconv.Atoi(s[:j])
+	if err != nil {
+		return 0
+	}
+	return n
 }
 
 // maxVersion ports the Node reduce: seed "", keep v only when
