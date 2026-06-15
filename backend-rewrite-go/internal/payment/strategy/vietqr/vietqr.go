@@ -57,8 +57,11 @@ func bankDisplayName(id string) string {
 	return id
 }
 
-// encodeURIComponent mirrors JS: space → %20 (not +), and the unreserved set
-// stays literal. url.QueryEscape is the closest stdlib fn; fix the space.
+// encodeURIComponent fixes url.QueryEscape's one divergence from JS that
+// matters here: space encodes as %20, not +. Note QueryEscape uses
+// form-urlencoded rules and percent-encodes some chars encodeURIComponent
+// leaves literal — fine for our inputs (reference codes are [A-Z0-9-];
+// accountName is the only variable field), but not a general equivalent.
 func encodeURIComponent(s string) string {
 	return strings.ReplaceAll(url.QueryEscape(s), "+", "%20")
 }
