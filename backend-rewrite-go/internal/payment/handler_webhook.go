@@ -29,20 +29,28 @@ func (h *Handler) webhook(w http.ResponseWriter, r *http.Request, method string)
 }
 
 // StripeWebhook: POST /payment/webhook/stripe (public).
-func (h *Handler) StripeWebhook(w http.ResponseWriter, r *http.Request) { h.webhook(w, r, "stripe") }
+func (h *Handler) StripeWebhook(w http.ResponseWriter, r *http.Request) {
+	h.webhook(w, r, string(MethodStripe))
+}
 
 // VietQRWebhook: POST /payment/webhook/vietqr (public).
-func (h *Handler) VietQRWebhook(w http.ResponseWriter, r *http.Request) { h.webhook(w, r, "vietqr") }
+func (h *Handler) VietQRWebhook(w http.ResponseWriter, r *http.Request) {
+	h.webhook(w, r, string(MethodVietQR))
+}
 
 // CassoWebhook: POST /payment/webhook/casso (public). Casso is a vietqr
 // auto-confirm source — same handler method as vietqr.
-func (h *Handler) CassoWebhook(w http.ResponseWriter, r *http.Request) { h.webhook(w, r, "vietqr") }
+func (h *Handler) CassoWebhook(w http.ResponseWriter, r *http.Request) {
+	h.webhook(w, r, string(MethodVietQR))
+}
 
 // SepayWebhook: POST /payment/webhook/sepay (public). SePay is a vietqr
 // auto-confirm source — same handler method as vietqr.
-func (h *Handler) SepayWebhook(w http.ResponseWriter, r *http.Request) { h.webhook(w, r, "vietqr") }
+func (h *Handler) SepayWebhook(w http.ResponseWriter, r *http.Request) {
+	h.webhook(w, r, string(MethodVietQR))
+}
 
 // LemonSqueezyWebhook: POST /payment/webhook/lemonsqueezy (public).
 func (h *Handler) LemonSqueezyWebhook(w http.ResponseWriter, r *http.Request) {
-	h.webhook(w, r, "lemonsqueezy")
+	h.webhook(w, r, string(MethodLemonSqueezy))
 }
