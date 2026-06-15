@@ -29,7 +29,9 @@ import (
 	authpkg "github.com/tannpv/draftright-rewrite/internal/auth"
 	corepkg "github.com/tannpv/draftright-rewrite/internal/core"
 	emailpkg "github.com/tannpv/draftright-rewrite/internal/email"
+	errreportpkg "github.com/tannpv/draftright-rewrite/internal/errreport"
 	exttokenpkg "github.com/tannpv/draftright-rewrite/internal/exttoken"
+	imepackspkg "github.com/tannpv/draftright-rewrite/internal/imepacks"
 	paymentpkg "github.com/tannpv/draftright-rewrite/internal/payment"
 	paymentstrategy "github.com/tannpv/draftright-rewrite/internal/payment/strategy"
 	"github.com/tannpv/draftright-rewrite/internal/payment/strategy/lemonsqueezy"
@@ -55,6 +57,7 @@ import (
 	"github.com/tannpv/draftright-rewrite/internal/shared"
 	sqlc "github.com/tannpv/draftright-rewrite/internal/shared/pg/sqlc"
 	subpkg "github.com/tannpv/draftright-rewrite/internal/subscription"
+	updatespkg "github.com/tannpv/draftright-rewrite/internal/updates"
 	usagepkg "github.com/tannpv/draftright-rewrite/internal/usage"
 	userpkg "github.com/tannpv/draftright-rewrite/internal/user"
 )
@@ -124,7 +127,7 @@ func main() {
 
 	rt := &shared.Router{
 		Log:            log,
-		Verifier:       auth.NewVerifier(cfg.JWTSecret),
+		Verifier:       core.accessVerifier, // single shared verifier (also used by errreport)
 		MetricsHandler: metricsHTTP,
 		EnableTracing:  cfg.OtelEndpoint != "",
 		Health:         core.health,
@@ -162,6 +165,10 @@ func main() {
 		MintExtToken:               core.mintExtToken,
 		ListExtTokens:              core.listExtTokens,
 		RevokeExtToken:             core.revokeExtToken,
+
+		ImePacksManifest: core.imePacksManifest,
+		UpdatesLatest:    core.updatesLatest,
+		ErrorsIngest:     core.errorsIngest,
 	}
 	// Enable dual auth on /v1/rewrite (dr_ext_ token OR JWT) only when the
 	// extension-token service is wired (DB present). Guarded so the field
@@ -270,6 +277,17 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 	const appVersion = "2.0.0"
 	var core coreHandlers
 	core.me = corepkg.NewMeHandler(cfg.GoBackendRampPercent)
+
+	// The single access-token verifier (JWT_SECRET). Built once here and
+	// stashed on core so both the Router's Verifier field (RequireAuth) and
+	// the errreport handler's optional best-effort JWT read share ONE
+	// instance — no second verifier for the same secret.
+	core.accessVerifier = auth.NewVerifier(cfg.JWTSecret)
+
+	// Phase 4a: the IME-pack manifest is a pure in-memory static catalog —
+	// no DB, so it's wired unconditionally (available even without a pool).
+	core.imePacksManifest = http.HandlerFunc(imepackspkg.NewHandler().Manifest)
+
 	if pool != nil {
 		q := sqlc.New(pool)
 		core.health = corepkg.NewHealthHandler(corepkg.NewPgLogLevel(q), appVersion)
@@ -323,6 +341,15 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 		core.mintExtToken = http.HandlerFunc(extHandler.Mint)
 		core.listExtTokens = http.HandlerFunc(extHandler.List)
 		core.revokeExtToken = http.HandlerFunc(extHandler.Revoke)
+
+		// Phase 4a ancillary endpoints (DB-backed; public). Updates reads
+		// app_releases/app_release_policies; errors writes/dedupes error rows.
+		// The errreport handler reuses core.accessVerifier (the SAME access
+		// verifier as RequireAuth) for its optional best-effort JWT read.
+		updatesHandler := updatespkg.NewHandler(updatespkg.NewService(updatespkg.NewPgRepo(q)))
+		core.updatesLatest = http.HandlerFunc(updatesHandler.Latest)
+		errHandler := errreportpkg.NewHandler(errreportpkg.NewService(errreportpkg.NewPgRepo(q)), core.accessVerifier)
+		core.errorsIngest = http.HandlerFunc(errHandler.Ingest)
 
 		// Payment read-side (Phase 3a): methods registry + status/history reads.
 		// Read-only; no provider secrets, no checkout. q satisfies both the
@@ -476,6 +503,19 @@ type coreHandlers struct {
 	// dual-auth middleware on /v1/rewrite can authorize presented ext tokens
 	// without re-building the service. Nil when pool == nil.
 	extSvc *exttokenpkg.Service
+
+	// Phase 4a ancillary handlers (all public).
+	//   imePacksManifest — GET /ime-packs/manifest (static; always set).
+	//   updatesLatest    — GET /updates/latest     (DB; set when pool != nil).
+	//   errorsIngest     — POST /errors            (DB; set when pool != nil).
+	imePacksManifest http.Handler
+	updatesLatest    http.Handler
+	errorsIngest     http.Handler
+
+	// accessVerifier is the single *auth.Verifier for JWT_SECRET. Shared by
+	// the Router's Verifier field (RequireAuth) and the errreport handler's
+	// optional best-effort JWT read — exactly one instance per access secret.
+	accessVerifier *auth.Verifier
 }
 
 // staticInfoReader is the dev-fallback LogLevelReader used when no

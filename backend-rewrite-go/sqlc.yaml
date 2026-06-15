@@ -22,6 +22,8 @@ sql:
       - "internal/shared/pg/queries_auth.sql"
       - "internal/shared/pg/queries_exttoken.sql"
       - "internal/shared/pg/queries_payment.sql"
+      - "internal/shared/pg/queries_updates.sql"
+      - "internal/shared/pg/queries_errors.sql"
     engine: "postgresql"
     gen:
       go:

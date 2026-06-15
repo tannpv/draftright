@@ -301,6 +301,7 @@ type AppRelease struct {
 	Platform     string             `db:"platform" json:"platform"`
 	Version      string             `db:"version" json:"version"`
 	DownloadUrl  string             `db:"download_url" json:"download_url"`
+	Sha256       string             `db:"sha256" json:"sha256"`
 	ReleaseNotes string             `db:"release_notes" json:"release_notes"`
 	Required     bool               `db:"required" json:"required"`
 	UpdatedAt    pgtype.Timestamptz `db:"updated_at" json:"updated_at"`

@@ -1,0 +1,9 @@
+{
+  "name": "errors-ingest-honeypot",
+  "method": "POST",
+  "path": "/errors",
+  "headers": { "Content-Type": "application/json" },
+  "body": { "platform": "ios", "website": "x" },
+  "ignore_value_of": [],
+  "_note": "Public. Honeypot drop path: a non-empty `website` triggers a silent 201 with the distinct body {ok:true, id:null, fingerprint:null, count:0, first_seen_at:null} (no `ref`) BEFORE any DB write or JWT read. Fully deterministic, mutates nothing — the safest errors parity check. Both Node and Go must return 201 + this exact body."
+}

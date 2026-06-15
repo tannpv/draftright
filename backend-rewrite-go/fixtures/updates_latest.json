@@ -1,0 +1,8 @@
+{
+  "name": "updates-latest",
+  "method": "GET",
+  "path": "/updates/latest",
+  "headers": {},
+  "ignore_value_of": ["updated_at"],
+  "_note": "Public; never 404. Response shape is deterministic given the seeded app_releases / app_release_policies rows; only the nested platforms.<p>.updated_at reflects the live DB write time, so it's ignored. PREREQUISITE: the shadow DB must hold identical release rows for Node and Go — automatic since both hit the same Postgres. If the DB has no release rows, both return the empty-manifest 200 (platforms:{}) which is also identical. Top-level *_url/*_sha256 are always present (\"\" when absent); platforms omits null rows."
+}

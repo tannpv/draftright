@@ -15,6 +15,7 @@ type Querier interface {
 	// AiProvidersService.findActive — keep the ORDER BY in sync there + here
 	// (is_default DESC, is_active = TRUE).
 	ActiveAIProvider(ctx context.Context) (ActiveAIProviderRow, error)
+	BumpErrorReport(ctx context.Context, arg BumpErrorReportParams) (BumpErrorReportRow, error)
 	CancelActiveSubsByUser(ctx context.Context, userID pgtype.UUID) error
 	CancelByStoreRef(ctx context.Context, arg CancelByStoreRefParams) (int64, error)
 	// Today's daily-quota tally for the user. Compared against
@@ -38,6 +39,9 @@ type Querier interface {
 	// too — Verify (T13) fires TouchTokenLastUsed by id afterwards.
 	FindActiveTokenByHash(ctx context.Context, tokenHash string) (FindActiveTokenByHashRow, error)
 	FindByStoreRef(ctx context.Context, arg FindByStoreRefParams) (FindByStoreRefRow, error)
+	// internal/shared/pg/queries_errors.sql
+	// Crash-report ingest: read-then-write dedup (no ON CONFLICT, matching Node).
+	FindErrorByFingerprint(ctx context.Context, fingerprint string) (ErrorReport, error)
 	// Ports plansService.findFirstActive({is_active, billing_period, currency},
 	// order created_at ASC). Returns the active plan id for that (period, currency).
 	FindFirstActivePlanByPeriodCurrency(ctx context.Context, arg FindFirstActivePlanByPeriodCurrencyParams) (pgtype.UUID, error)
@@ -90,6 +94,7 @@ type Querier interface {
 	GetEmailSettings(ctx context.Context) (GetEmailSettingsRow, error)
 	// DB template override. PK column is template_key (not key).
 	GetEmailTemplateByKey(ctx context.Context, templateKey string) (GetEmailTemplateByKeyRow, error)
+	GetEnabledReleaseByChannel(ctx context.Context, arg GetEnabledReleaseByChannelParams) (AppRelease, error)
 	// updated_at of the user's most-recently expired subscription (free-tier
 	// just_expired banner). No row → caller treats as nil.
 	GetLastExpiredAt(ctx context.Context, userID pgtype.UUID) (pgtype.Timestamp, error)
@@ -122,6 +127,8 @@ type Querier interface {
 	// (daily_limit/is_active/created_at/updated_at included — Node attaches
 	// plansService.findById, the full entity). No row → pgx.ErrNoRows.
 	GetPlanForCheckout(ctx context.Context, id pgtype.UUID) (GetPlanForCheckoutRow, error)
+	// internal/shared/pg/queries_updates.sql
+	GetReleasePolicy(ctx context.Context, platform string) (AppReleasePolicy, error)
 	GetUserAuthState(ctx context.Context, email string) (GetUserAuthStateRow, error)
 	// Phase 0 core-endpoint queries (health + /auth/me). Kept separate
 	// from the rewrite module's queries.sql so the core package depends on
@@ -137,6 +144,7 @@ type Querier interface {
 	GetUserForCheckout(ctx context.Context, id pgtype.UUID) (GetUserForCheckoutRow, error)
 	// Audit row for every deliver attempt (suppressed/skipped/sent/failed).
 	InsertEmailLog(ctx context.Context, arg InsertEmailLogParams) error
+	InsertErrorReport(ctx context.Context, arg InsertErrorReportParams) (InsertErrorReportRow, error)
 	// mint() insert. Returns the projection list() serializes (token_hash and
 	// user_id stripped by the controller, so omitted here).
 	InsertExtensionToken(ctx context.Context, arg InsertExtensionTokenParams) (InsertExtensionTokenRow, error)
