@@ -75,6 +75,41 @@ type Result struct {
 	WalletIntent *WalletIntent // nil → omit
 }
 
+// WebhookAction Type discriminators. Match the Node WebhookAction union tags
+// (payment-strategy.interface.ts) byte-for-byte — Service.HandleWebhook
+// switches on them.
+const (
+	ActionPaymentCompleted       = "payment_completed"
+	ActionPaymentFailed          = "payment_failed"
+	ActionSubscriptionRenewed    = "subscription_renewed"
+	ActionSubscriptionCanceled   = "subscription_canceled"
+	ActionDisputeCreated         = "dispute_created"
+	ActionLSPaymentSuccess       = "lemonsqueezy_payment_success"
+	ActionLSPaymentFailed        = "lemonsqueezy_payment_failed"
+	ActionLSSubscriptionCanceled = "lemonsqueezy_subscription_canceled"
+	ActionLSSubscriptionExpired  = "lemonsqueezy_subscription_expired"
+	ActionIgnored                = "ignored"
+)
+
+// WebhookAction is the verified-webhook outcome the Service dispatches on. It
+// flattens Node's discriminated union: only the fields relevant to Type are
+// populated; the rest stay zero. CurrentPeriodEnd is unix seconds.
+type WebhookAction struct {
+	Type                 string
+	ReferenceCode        string
+	StripeSubscriptionID string
+	StripeCustomerID     string
+	StripeChargeID       string
+	Amount               int
+	CurrentPeriodEnd     int64
+	LSSubscriptionID     string
+	LSCustomerID         string
+	LSVariantID          string
+}
+
+// Ignored is the no-op action (returned for events we don't act on).
+func Ignored() WebhookAction { return WebhookAction{Type: ActionIgnored} }
+
 // Strategy is the provider port. CreateCheckout may hit an external API and
 // return an error (the Service marks the payment failed + 400s). Portal/Cancel
 // default to "" / false for providers that don't support them.
