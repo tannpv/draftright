@@ -71,3 +71,21 @@ func TestSettingsAdapter_CredentialsNoRow(t *testing.T) {
 		t.Fatalf("no row must yield empty creds, got %+v", c)
 	}
 }
+
+func TestCredentials_CarriesWebhookSecrets(t *testing.T) {
+	a := NewSettingsAdapter(fakeCoreQ{creds: sqlc.GetPaymentCredentialsRow{
+		StripeSecretKey:           "sk_live_x",
+		StripeWebhookSecret:       "whsec_x",
+		LemonsqueezyWebhookSecret: "ls_whsec_x",
+		CassoApiKey:               "casso_x",
+		SepayApiKey:               "sepay_x",
+	}})
+	c, err := a.Credentials(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.StripeWebhookSecret != "whsec_x" || c.LemonSqueezyWebhookSecret != "ls_whsec_x" ||
+		c.CassoAPIKey != "casso_x" || c.SepayAPIKey != "sepay_x" {
+		t.Fatalf("webhook secrets not mapped: %+v", c)
+	}
+}

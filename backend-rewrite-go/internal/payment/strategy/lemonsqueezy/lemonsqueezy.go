@@ -48,6 +48,7 @@ type Creds struct {
 	StoreID        string
 	VariantMonthly string
 	VariantYearly  string
+	WebhookSecret  string
 }
 
 // Strategy implements strategy.Strategy for LemonSqueezy.

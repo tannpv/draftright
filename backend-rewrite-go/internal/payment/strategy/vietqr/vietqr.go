@@ -17,6 +17,8 @@ type Creds struct {
 	BankID        string
 	AccountNumber string
 	AccountName   string
+	CassoAPIKey   string
+	SepayAPIKey   string
 }
 
 // Strategy is the VietQR/bank-transfer provider.

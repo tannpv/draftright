@@ -42,13 +42,17 @@ func (a *SettingsAdapter) PaymentMethodsEnabled(ctx context.Context) (string, bo
 // of resolveCredential). Empty strings when the column / row is absent.
 type Credentials struct {
 	StripeSecretKey            string
+	StripeWebhookSecret        string
 	VietQRBankID               string
 	VietQRAccountNumber        string
 	VietQRAccountName          string
+	CassoAPIKey                string
+	SepayAPIKey                string
 	LemonSqueezyAPIKey         string
 	LemonSqueezyStoreID        string
 	LemonSqueezyVariantMonthly string
 	LemonSqueezyVariantYearly  string
+	LemonSqueezyWebhookSecret  string
 }
 
 // Credentials reads the singleton app_settings credential row. A missing row
@@ -64,12 +68,16 @@ func (a *SettingsAdapter) Credentials(ctx context.Context) (Credentials, error) 
 	}
 	return Credentials{
 		StripeSecretKey:            row.StripeSecretKey,
+		StripeWebhookSecret:        row.StripeWebhookSecret,
 		VietQRBankID:               row.VietqrBankID,
 		VietQRAccountNumber:        row.VietqrAccountNumber,
 		VietQRAccountName:          row.VietqrAccountName,
+		CassoAPIKey:                row.CassoApiKey,
+		SepayAPIKey:                row.SepayApiKey,
 		LemonSqueezyAPIKey:         row.LemonsqueezyApiKey,
 		LemonSqueezyStoreID:        row.LemonsqueezyStoreID,
 		LemonSqueezyVariantMonthly: row.LemonsqueezyVariantMonthly,
 		LemonSqueezyVariantYearly:  row.LemonsqueezyVariantYearly,
+		LemonSqueezyWebhookSecret:  row.LemonsqueezyWebhookSecret,
 	}, nil
 }

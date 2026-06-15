@@ -332,9 +332,14 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 			BankID:        paymentstrategy.ResolveCredential(creds.VietQRBankID, cfg.VietQRBankID),
 			AccountNumber: paymentstrategy.ResolveCredential(creds.VietQRAccountNumber, cfg.VietQRAccountNumber),
 			AccountName:   paymentstrategy.ResolveCredential(creds.VietQRAccountName, cfg.VietQRAccountName),
+			CassoAPIKey:   paymentstrategy.ResolveCredential(creds.CassoAPIKey, cfg.CassoAPIKey),
+			SepayAPIKey:   paymentstrategy.ResolveCredential(creds.SepayAPIKey, cfg.SepayAPIKey),
 		})
 		stripeStrat := stripe.New(
-			stripe.Creds{SecretKey: paymentstrategy.ResolveCredential(creds.StripeSecretKey, cfg.StripeSecretKey)},
+			stripe.Creds{
+				SecretKey:     paymentstrategy.ResolveCredential(creds.StripeSecretKey, cfg.StripeSecretKey),
+				WebhookSecret: paymentstrategy.ResolveCredential(creds.StripeWebhookSecret, cfg.StripeWebhookSecret),
+			},
 			stripe.Env{
 				PublishableKey:     cfg.StripePublishableKey,
 				ApplePayMerchantID: cfg.ApplePayMerchantID,
@@ -346,6 +351,7 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 			StoreID:        paymentstrategy.ResolveCredential(creds.LemonSqueezyStoreID, cfg.LemonSqueezyStoreID),
 			VariantMonthly: creds.LemonSqueezyVariantMonthly,
 			VariantYearly:  creds.LemonSqueezyVariantYearly,
+			WebhookSecret:  paymentstrategy.ResolveCredential(creds.LemonSqueezyWebhookSecret, cfg.LemonSqueezyWebhookSecret),
 		}, cfg.WebsiteURL)
 		strategies := map[string]paymentstrategy.Strategy{
 			"stripe":        stripeStrat,

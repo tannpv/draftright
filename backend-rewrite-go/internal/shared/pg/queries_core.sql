@@ -29,12 +29,16 @@ SELECT payment_methods_enabled FROM app_settings LIMIT 1;
 -- All columns are NOT NULL DEFAULT ''. No row → pgx.ErrNoRows (caller treats
 -- as all-empty → env fallback per resolveCredential).
 SELECT stripe_secret_key,
+       stripe_webhook_secret,
        vietqr_bank_id,
        vietqr_account_number,
        vietqr_account_name,
+       casso_api_key,
+       sepay_api_key,
        lemonsqueezy_api_key,
        lemonsqueezy_store_id,
        lemonsqueezy_variant_monthly,
-       lemonsqueezy_variant_yearly
+       lemonsqueezy_variant_yearly,
+       lemonsqueezy_webhook_secret
 FROM app_settings
 LIMIT 1;

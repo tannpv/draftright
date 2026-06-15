@@ -21,7 +21,10 @@ import (
 
 // Creds ports the AppSettings-resolved Stripe credentials (env fallback applied
 // upstream by the Service via strategy.ResolveCredential).
-type Creds struct{ SecretKey string }
+type Creds struct {
+	SecretKey     string
+	WebhookSecret string
+}
 
 // Env ports the env-only wallet config (no DB column yet in Node).
 type Env struct {
