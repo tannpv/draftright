@@ -24,6 +24,13 @@ type Querier interface {
 	CreatePayment(ctx context.Context, arg sqlc.CreatePaymentParams) (sqlc.CreatePaymentRow, error)
 	UpdatePaymentQRData(ctx context.Context, arg sqlc.UpdatePaymentQRDataParams) error
 	MarkPaymentFailed(ctx context.Context, arg sqlc.MarkPaymentFailedParams) error
+	GetPaymentForWebhook(ctx context.Context, referenceCode string) (sqlc.GetPaymentForWebhookRow, error)
+	MarkPaymentCompleted(ctx context.Context, referenceCode string) error
+	MarkPaymentFailedByRef(ctx context.Context, referenceCode string) error
+	SetUserStripeCustomerID(ctx context.Context, arg sqlc.SetUserStripeCustomerIDParams) error
+	SetUserLemonSqueezyCustomerID(ctx context.Context, arg sqlc.SetUserLemonSqueezyCustomerIDParams) error
+	UpdatePaymentPlan(ctx context.Context, arg sqlc.UpdatePaymentPlanParams) error
+	FindFirstActivePlanByPeriodCurrency(ctx context.Context, arg sqlc.FindFirstActivePlanByPeriodCurrencyParams) (pgtype.UUID, error)
 }
 
 // StatusRow is the GetByReference projection feeding the status endpoint.
@@ -284,6 +291,100 @@ func (r *Repo) MarkFailed(ctx context.Context, paymentID, notes string) error {
 		return fmt.Errorf("payment: invalid payment id %q", paymentID)
 	}
 	return r.q.MarkPaymentFailed(ctx, sqlc.MarkPaymentFailedParams{ID: pid, Notes: &notes})
+}
+
+// WebhookPayment is the payment projection the webhook Service needs to complete
+// a payment + activate a subscription. BillingPeriod is "" when the plan join is
+// null (never in practice — payments always carry a plan).
+type WebhookPayment struct {
+	ID            string
+	UserID        string
+	PlanID        string
+	Status        string
+	Currency      string
+	BillingPeriod string
+}
+
+// PaymentForWebhook resolves a payment by reference for the webhook path, or
+// (nil,nil) when none exists. Mirrors completePayment's lookup + the plan
+// billing_period it re-resolves against.
+func (r *Repo) PaymentForWebhook(ctx context.Context, ref string) (*WebhookPayment, error) {
+	row, err := r.q.GetPaymentForWebhook(ctx, ref)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &WebhookPayment{
+		ID:            uuid.UUID(row.ID.Bytes).String(),
+		UserID:        uuid.UUID(row.UserID.Bytes).String(),
+		PlanID:        uuid.UUID(row.PlanID.Bytes).String(),
+		Status:        row.Status,
+		Currency:      row.Currency,
+		BillingPeriod: derefBillingPeriod(row.BillingPeriod),
+	}, nil
+}
+
+// MarkPaymentCompleted flips a payment to completed by reference code, stamping
+// completed_at (Node completePayment line 511 sets completed_at only for
+// 'completed').
+func (r *Repo) MarkPaymentCompleted(ctx context.Context, ref string) error {
+	return r.q.MarkPaymentCompleted(ctx, ref)
+}
+
+// MarkPaymentFailedByRef flips a payment to failed by reference code. Unlike the
+// completed path, completed_at is NOT set (Node parity).
+func (r *Repo) MarkPaymentFailedByRef(ctx context.Context, ref string) error {
+	return r.q.MarkPaymentFailedByRef(ctx, ref)
+}
+
+// SetStripeCustomerID ports userRepo.update(user_id, {stripe_customer_id}).
+func (r *Repo) SetStripeCustomerID(ctx context.Context, userID, customerID string) error {
+	uid, ok := parseUUID(userID)
+	if !ok {
+		return fmt.Errorf("payment: invalid user id %q", userID)
+	}
+	return r.q.SetUserStripeCustomerID(ctx, sqlc.SetUserStripeCustomerIDParams{ID: uid, StripeCustomerID: &customerID})
+}
+
+// SetLemonSqueezyCustomerID ports userRepo.update(user_id, {lemonsqueezy_customer_id}).
+func (r *Repo) SetLemonSqueezyCustomerID(ctx context.Context, userID, customerID string) error {
+	uid, ok := parseUUID(userID)
+	if !ok {
+		return fmt.Errorf("payment: invalid user id %q", userID)
+	}
+	return r.q.SetUserLemonSqueezyCustomerID(ctx, sqlc.SetUserLemonSqueezyCustomerIDParams{ID: uid, LemonsqueezyCustomerID: &customerID})
+}
+
+// UpdatePaymentPlan repoints a payment to a re-resolved plan (Node updates
+// payment.plan_id when the webhook variant differs from the booked plan).
+func (r *Repo) UpdatePaymentPlan(ctx context.Context, paymentID, planID string) error {
+	pid, ok := parseUUID(paymentID)
+	if !ok {
+		return fmt.Errorf("payment: invalid payment id %q", paymentID)
+	}
+	plid, ok := parseUUID(planID)
+	if !ok {
+		return fmt.Errorf("payment: invalid plan id %q", planID)
+	}
+	return r.q.UpdatePaymentPlan(ctx, sqlc.UpdatePaymentPlanParams{ID: pid, PlanID: plid})
+}
+
+// FindFirstActivePlanID resolves the active plan id for (billing_period,
+// currency), or "" when none. Ports plansService.findFirstActive.
+func (r *Repo) FindFirstActivePlanID(ctx context.Context, billingPeriod, currency string) (string, error) {
+	id, err := r.q.FindFirstActivePlanByPeriodCurrency(ctx, sqlc.FindFirstActivePlanByPeriodCurrencyParams{
+		BillingPeriod: sqlc.PlansBillingPeriodEnum(billingPeriod),
+		Currency:      &currency,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return uuid.UUID(id.Bytes).String(), nil
 }
 
 // parseUUID parses a string id into a pgtype.UUID; ok=false on a malformed id.

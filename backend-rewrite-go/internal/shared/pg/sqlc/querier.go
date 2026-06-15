@@ -38,6 +38,9 @@ type Querier interface {
 	// too — Verify (T13) fires TouchTokenLastUsed by id afterwards.
 	FindActiveTokenByHash(ctx context.Context, tokenHash string) (FindActiveTokenByHashRow, error)
 	FindByStoreRef(ctx context.Context, arg FindByStoreRefParams) (FindByStoreRefRow, error)
+	// Ports plansService.findFirstActive({is_active, billing_period, currency},
+	// order created_at ASC). Returns the active plan id for that (period, currency).
+	FindFirstActivePlanByPeriodCurrency(ctx context.Context, arg FindFirstActivePlanByPeriodCurrencyParams) (pgtype.UUID, error)
 	FindFreePlan(ctx context.Context) (FindFreePlanRow, error)
 	FindUserByAppleId(ctx context.Context, appleID *string) (FindUserByAppleIdRow, error)
 	FindUserByFacebookId(ctx context.Context, facebookID *string) (FindUserByFacebookIdRow, error)
@@ -103,6 +106,12 @@ type Querier interface {
 	// All columns are NOT NULL DEFAULT ''. No row → pgx.ErrNoRows (caller treats
 	// as all-empty → env fallback per resolveCredential).
 	GetPaymentCredentials(ctx context.Context) (GetPaymentCredentialsRow, error)
+	// completePayment / activate-subscription projection: the webhook resolves a
+	// payment by reference, then needs user/plan ids + current status + currency +
+	// the plan's billing_period (to re-resolve the active plan by variant). LEFT
+	// JOIN so billing_period is nullable in this row even though the column is NOT
+	// NULL on plans (payments always carry a plan in practice).
+	GetPaymentForWebhook(ctx context.Context, referenceCode string) (GetPaymentForWebhookRow, error)
 	// payment_methods_enabled CSV from the singleton app_settings row. NOT NULL
 	// (default ''); empty string means unconfigured → caller falls back to env
 	// then default. No row at all → pgx.ErrNoRows, mapped to found=false.
@@ -147,7 +156,9 @@ type Querier interface {
 	// findByUser(userId): the user's 20 most-recent payments, newest first, each
 	// with its plan (TypeORM relations:['plan'] order:{created_at:'DESC'} take:20).
 	ListPaymentsByUser(ctx context.Context, userID pgtype.UUID) ([]ListPaymentsByUserRow, error)
+	MarkPaymentCompleted(ctx context.Context, referenceCode string) error
 	MarkPaymentFailed(ctx context.Context, arg MarkPaymentFailedParams) error
+	MarkPaymentFailedByRef(ctx context.Context, referenceCode string) error
 	ResetPasswordHash(ctx context.Context, arg ResetPasswordHashParams) error
 	// Extension-token persistence (dr_ext_* keyboard/share tokens).
 	// Read the live NestJS-owned schema as-is; mirror ExtensionTokenService
@@ -165,6 +176,8 @@ type Querier interface {
 	SetEmailVerificationCode(ctx context.Context, arg SetEmailVerificationCodeParams) error
 	SetPasswordResetAttempts(ctx context.Context, arg SetPasswordResetAttemptsParams) error
 	SetPasswordResetCode(ctx context.Context, arg SetPasswordResetCodeParams) error
+	SetUserLemonSqueezyCustomerID(ctx context.Context, arg SetUserLemonSqueezyCustomerIDParams) error
+	SetUserStripeCustomerID(ctx context.Context, arg SetUserStripeCustomerIDParams) error
 	StampStoreRefByReference(ctx context.Context, arg StampStoreRefByReferenceParams) (int64, error)
 	// Cron pass 1: active subs whose expiry falls in the reminder window.
 	// Bounds passed by caller (now+2.5d, now+3.5d) to keep tz in the Go process.
@@ -172,6 +185,7 @@ type Querier interface {
 	// validate() write-behind: bump last_used_at. Failures non-fatal (caller
 	// ignores the error so the request still succeeds).
 	TouchTokenLastUsed(ctx context.Context, id pgtype.UUID) error
+	UpdatePaymentPlan(ctx context.Context, arg UpdatePaymentPlanParams) error
 	UpdatePaymentQRData(ctx context.Context, arg UpdatePaymentQRDataParams) error
 	UpdateUserPasswordHash(ctx context.Context, arg UpdateUserPasswordHashParams) error
 	UpdateUserVerification(ctx context.Context, arg UpdateUserVerificationParams) error
