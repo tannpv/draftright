@@ -1,0 +1,9 @@
+{
+  "name": "payment-webhook-lemonsqueezy-unsigned",
+  "method": "POST",
+  "path": "/payment/webhook/lemonsqueezy",
+  "headers": { "Content-Type": "application/json" },
+  "body": {},
+  "ignore_value_of": [],
+  "_note": "Public route. When the LS signing secret is UNSET in the shadow DB+env (default test state), both backends short-circuit the unsigned/unverifiable webhook to the Ignored action -> 201 {\"success\":false}. 'success' is a deterministic boolean false on both -> COMPARED, not ignored (empty ignore list); the 201 success body carries NO request_id, so there is nothing non-deterministic to ignore. PREREQUISITE: 'lemonsqueezy' MUST be in payment_methods_enabled (else 404) AND the LS webhook signing secret UNSET. If the shadow DB seeds an LS signing secret, this fixture instead needs a valid HMAC-SHA256 hex signature over the exact body in an X-Signature header."
+}
