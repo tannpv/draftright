@@ -121,6 +121,16 @@ type Strategy interface {
 	CancelSubscription(ctx context.Context, subscriptionID string) (bool, error)
 }
 
+// WebhookError carries an HTTP status + exact Node message out of a strategy's
+// VerifyWebhook. Status 400 → BadRequestException parity; 401 →
+// UnauthorizedException parity. The Service converts it to its DomainError.
+type WebhookError struct {
+	Status  int
+	Message string
+}
+
+func (e *WebhookError) Error() string { return e.Message }
+
 // ResolveCredential ports BasePaymentStrategy.resolveCredential: DB value wins
 // when non-empty, else the env fallback, else "".
 func ResolveCredential(fromDB, env string) string {
