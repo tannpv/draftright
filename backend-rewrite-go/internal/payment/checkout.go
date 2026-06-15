@@ -114,7 +114,11 @@ func (s *Service) CreateCheckout(ctx context.Context, userID, planID, method str
 	)
 	if err != nil {
 		_ = s.checkoutRepo.MarkFailed(ctx, created.ID, err.Error())
-		return nil, badRequest(err.Error())
+		msg := err.Error()
+		if msg == "" {
+			msg = "Payment provider error"
+		}
+		return nil, badRequest(msg)
 	}
 	if res.QRData != "" {
 		if uerr := s.checkoutRepo.UpdateQRData(ctx, created.ID, res.QRData); uerr != nil {

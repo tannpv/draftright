@@ -135,6 +135,20 @@ func TestCheckout_StrategyErrorMarksFailed(t *testing.T) {
 	}
 }
 
+func TestCheckout_StrategyEmptyErrorFallsBack(t *testing.T) {
+	repo := &fakeCheckoutRepo{
+		plan:    &CheckoutPlan{PriceCents: 999, Currency: "VND"},
+		user:    &CheckoutUser{ID: "u1", Email: "u@x.com"},
+		created: &CreatedPayment{ID: "pay1"},
+	}
+	s := svcWith(repo, fakeStrategy{err: errProvider("")}, []string{"vietqr"})
+	_, err := s.CreateCheckout(context.Background(), "u1", "p1", "vietqr", CheckoutOptions{})
+	assertDomainErr(t, err, 400, "Payment provider error")
+	if repo.failCalls != 1 || repo.failNotes != "" {
+		t.Fatalf("MarkFailed must carry the raw (empty) message, calls=%d notes=%q", repo.failCalls, repo.failNotes)
+	}
+}
+
 func TestCheckout_VietQRSuccessPersistsQR(t *testing.T) {
 	repo := &fakeCheckoutRepo{
 		plan:    &CheckoutPlan{Name: "Pro", PriceCents: 124000, Currency: "VND"},
