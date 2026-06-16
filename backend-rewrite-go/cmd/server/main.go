@@ -26,6 +26,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/tannpv/draftright-rewrite/internal/adapter/redislimit"
+	adminauth "github.com/tannpv/draftright-rewrite/internal/adminauth"
 	"github.com/tannpv/draftright-rewrite/internal/aicall"
 	authpkg "github.com/tannpv/draftright-rewrite/internal/auth"
 	bugreportspkg "github.com/tannpv/draftright-rewrite/internal/bugreports"
@@ -180,6 +181,10 @@ func main() {
 		FeedbackCreate:  core.feedbackCreate,
 		FeedbackList:    core.feedbackList,
 		FeedbackVote:    core.feedbackVote,
+
+		AdminLogin:          core.adminLogin,
+		AdminChangePassword: core.adminChangePassword,
+		AdminMe:             core.adminMe,
 	}
 	// Enable dual auth on /v1/rewrite (dr_ext_ token OR JWT) only when the
 	// extension-token service is wired (DB present). Guarded so the field
@@ -401,6 +406,18 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 		// suppressor port (MarkByProviderID + Suppress).
 		core.emailWebhook = http.HandlerFunc(emailpkg.NewWebhookHandler(emailRepo, cfg.ResendWebhookSecret).Handle)
 
+		// Phase 4c-1 admin foundation: admin-auth endpoints.
+		adminAuthSvc := adminauth.NewService(
+			adminauth.NewPgRepo(q),
+			cfg.JWTSecret,
+			cfg.JWTRefreshSecret,
+			cfg.IsProduction(),
+		)
+		adminAuthHandler := adminauth.NewHandler(adminAuthSvc)
+		core.adminLogin = http.HandlerFunc(adminAuthHandler.Login)
+		core.adminChangePassword = http.HandlerFunc(adminAuthHandler.ChangePassword)
+		core.adminMe = http.HandlerFunc(adminAuthHandler.Me)
+
 		// Payment read-side (Phase 3a): methods registry + status/history reads.
 		// Read-only; no provider secrets, no checkout. q satisfies both the
 		// payment Querier and the coreSettingsQuerier ports.
@@ -575,6 +592,11 @@ type coreHandlers struct {
 	feedbackList    http.Handler
 	feedbackVote    http.Handler
 	emailWebhook    http.Handler
+
+	// Phase 4c-1 admin foundation (set when pool != nil).
+	adminLogin          http.Handler // POST /admin/auth/login           (public)
+	adminChangePassword http.Handler // POST /admin/auth/change-password (admin)
+	adminMe             http.Handler // GET  /admin/auth/me              (admin)
 
 	// accessVerifier is the single *auth.Verifier for JWT_SECRET. Shared by
 	// the Router's Verifier field (RequireAuth) and the errreport handler's
