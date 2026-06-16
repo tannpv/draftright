@@ -136,5 +136,8 @@ func TestGetProfile(t *testing.T) {
 		if got.ID != "a1" || got.Email != "a@b.c" || got.Name != "Root" || got.Role != "admin" {
 			t.Errorf("profile = %+v", got)
 		}
+		if got.PasswordHash == "" {
+			t.Error("PasswordHash must be present — stripping is the handler's job, not GetProfile's")
+		}
 	})
 }
