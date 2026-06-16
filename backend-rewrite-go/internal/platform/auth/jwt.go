@@ -25,9 +25,10 @@ import (
 // standard exp/iat/nbf fields; Sub is overridden so callers get a
 // concrete string instead of jwt.ClaimStrings.
 type Claims struct {
-	Sub   string `json:"sub"`
-	Email string `json:"email,omitempty"`
-	Role  string `json:"role,omitempty"`
+	Sub         string `json:"sub"`
+	Email       string `json:"email,omitempty"`
+	Role        string `json:"role,omitempty"`
+	IsAdminFlag bool   `json:"isAdmin,omitempty"`
 	jwt.RegisteredClaims
 }
 

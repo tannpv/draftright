@@ -41,6 +41,11 @@ type Querier interface {
 	// validate(): resolve a presented token's hash to owner + scopes. Returns id
 	// too — Verify (T13) fires TouchTokenLastUsed by id afterwards.
 	FindActiveTokenByHash(ctx context.Context, tokenHash string) (FindActiveTokenByHashRow, error)
+	// internal/shared/pg/queries_adminauth.sql
+	// Admin authentication (POST /admin/auth/login, change-password, GET me).
+	// admin_users is the portal-admin table, separate from `users` (customers).
+	FindAdminByEmailLower(ctx context.Context, lower string) (AdminUser, error)
+	FindAdminByID(ctx context.Context, id pgtype.UUID) (AdminUser, error)
 	FindByStoreRef(ctx context.Context, arg FindByStoreRefParams) (FindByStoreRefRow, error)
 	// internal/shared/pg/queries_errors.sql
 	// Crash-report ingest: read-then-write dedup (no ON CONFLICT, matching Node).
@@ -226,6 +231,7 @@ type Querier interface {
 	// validate() write-behind: bump last_used_at. Failures non-fatal (caller
 	// ignores the error so the request still succeeds).
 	TouchTokenLastUsed(ctx context.Context, id pgtype.UUID) error
+	UpdateAdminPasswordHash(ctx context.Context, arg UpdateAdminPasswordHashParams) error
 	UpdateFeatureVoteCount(ctx context.Context, arg UpdateFeatureVoteCountParams) error
 	UpdatePaymentPlan(ctx context.Context, arg UpdatePaymentPlanParams) error
 	UpdatePaymentQRData(ctx context.Context, arg UpdatePaymentQRDataParams) error
