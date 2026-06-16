@@ -122,6 +122,13 @@ type Router struct {
 	FeedbackList    http.Handler // GET  /feedback           (public)
 	FeedbackVote    http.Handler // POST /feedback/{id}/vote (public; handler enforces JWT)
 
+	// Phase 4c-1 admin foundation. AdminLogin is PUBLIC (mounted before the
+	// auth group). AdminChangePassword + AdminMe sit behind RequireAuth THEN
+	// RequireAdmin (the RolesGuard('admin') equivalent). All nil-guarded.
+	AdminLogin          http.Handler // POST   /admin/auth/login           (public)
+	AdminChangePassword http.Handler // POST   /admin/auth/change-password (admin)
+	AdminMe             http.Handler // GET    /admin/auth/me              (admin)
+
 	// EnableTracing wraps the whole mux with otelhttp middleware so
 	// every request becomes a span. No-op when the global tracer
 	// provider is the default noop (i.e. tracing.Setup returned
@@ -251,6 +258,11 @@ func (r *Router) Build() http.Handler {
 		mux.Method(http.MethodPost, "/feedback/{id}/vote", r.FeedbackVote)
 	}
 
+	// Phase 4c-1 public admin-auth endpoint (no JWT required).
+	if r.AdminLogin != nil {
+		mux.Method(http.MethodPost, "/admin/auth/login", r.AdminLogin)
+	}
+
 	// Build the JWT middleware once so /v1/rewrite (dual-auth) and the
 	// JWT-only group share the exact same RequireAuth instance.
 	jwtMW := RequireAuth(r.Verifier, r.Log)
@@ -313,6 +325,19 @@ func (r *Router) Build() http.Handler {
 		}
 		if r.PaymentCancelSub != nil {
 			api.Method(http.MethodDelete, "/payment/subscription", r.PaymentCancelSub)
+		}
+	})
+
+	// Admin group: RequireAuth (401 on no/invalid token) THEN RequireAdmin
+	// (403 'Admin access required' for non-admin tokens).
+	mux.Group(func(admin chi.Router) {
+		admin.Use(jwtMW)
+		admin.Use(RequireAdmin)
+		if r.AdminChangePassword != nil {
+			admin.Method(http.MethodPost, "/admin/auth/change-password", r.AdminChangePassword)
+		}
+		if r.AdminMe != nil {
+			admin.Method(http.MethodGet, "/admin/auth/me", r.AdminMe)
 		}
 	})
 
