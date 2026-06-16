@@ -27,6 +27,7 @@ sql:
       - "internal/shared/pg/queries_email_webhook.sql"
       - "internal/shared/pg/queries_bugreports.sql"
       - "internal/shared/pg/queries_feedback.sql"
+      - "internal/shared/pg/queries_adminauth.sql"
     engine: "postgresql"
     gen:
       go:
