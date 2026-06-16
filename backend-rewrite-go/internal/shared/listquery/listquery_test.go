@@ -56,3 +56,99 @@ func TestJsParseInt(t *testing.T) {
 		}
 	}
 }
+
+func TestBuild(t *testing.T) {
+	cols := []string{"u.email", "u.name"}
+	allow := map[string]string{"name": "u.name", "created": "u.created_at"}
+
+	t.Run("defaults: no search/status/sort", func(t *testing.T) {
+		b := Build(Query{}, cols, allow, "u.created_at", "u.is_active")
+		if b.Where != "" {
+			t.Errorf("Where = %q, want empty", b.Where)
+		}
+		if len(b.Args) != 0 {
+			t.Errorf("Args = %v, want none", b.Args)
+		}
+		if b.Order != "ORDER BY u.created_at DESC" {
+			t.Errorf("Order = %q", b.Order)
+		}
+		if b.Limit != 10 || b.Offset != 0 {
+			t.Errorf("Limit=%d Offset=%d, want 10/0", b.Limit, b.Offset)
+		}
+	})
+
+	t.Run("search OR-clause, single arg", func(t *testing.T) {
+		b := Build(Query{Search: "  bob  "}, cols, allow, "u.created_at", "u.is_active")
+		if b.Where != "WHERE (u.email ILIKE $1 OR u.name ILIKE $1)" {
+			t.Errorf("Where = %q", b.Where)
+		}
+		if len(b.Args) != 1 || b.Args[0] != "%bob%" {
+			t.Errorf("Args = %v, want [%%bob%%]", b.Args)
+		}
+	})
+
+	t.Run("status active → is_active true", func(t *testing.T) {
+		b := Build(Query{Status: "active"}, cols, allow, "u.created_at", "u.is_active")
+		if b.Where != "WHERE u.is_active = $1" {
+			t.Errorf("Where = %q", b.Where)
+		}
+		if len(b.Args) != 1 || b.Args[0] != true {
+			t.Errorf("Args = %v, want [true]", b.Args)
+		}
+	})
+
+	t.Run("status all → no filter", func(t *testing.T) {
+		b := Build(Query{Status: "all"}, cols, allow, "u.created_at", "u.is_active")
+		if b.Where != "" {
+			t.Errorf("Where = %q, want empty", b.Where)
+		}
+	})
+
+	t.Run("search + status combine, placeholders increment", func(t *testing.T) {
+		b := Build(Query{Search: "x", Status: "inactive"}, cols, allow, "u.created_at", "u.is_active")
+		if b.Where != "WHERE (u.email ILIKE $1 OR u.name ILIKE $1) AND u.is_active = $2" {
+			t.Errorf("Where = %q", b.Where)
+		}
+		if len(b.Args) != 2 || b.Args[0] != "%x%" || b.Args[1] != false {
+			t.Errorf("Args = %v", b.Args)
+		}
+	})
+
+	t.Run("sort allow-list + ASC", func(t *testing.T) {
+		b := Build(Query{SortBy: "name", SortOrder: "ASC"}, cols, allow, "u.created_at", "u.is_active")
+		if b.Order != "ORDER BY u.name ASC" {
+			t.Errorf("Order = %q", b.Order)
+		}
+	})
+
+	t.Run("sort_by not in allow-list → default DESC", func(t *testing.T) {
+		b := Build(Query{SortBy: "password; DROP TABLE", SortOrder: "ASC"}, cols, allow, "u.created_at", "u.is_active")
+		if b.Order != "ORDER BY u.created_at ASC" {
+			t.Errorf("Order = %q, injection must fall to default field (order still honored)", b.Order)
+		}
+	})
+
+	t.Run("limit cap 100, page offset math", func(t *testing.T) {
+		b := Build(Query{Page: intp(3), Limit: intp(250)}, cols, allow, "u.created_at", "u.is_active")
+		if b.Limit != 100 {
+			t.Errorf("Limit = %d, want 100", b.Limit)
+		}
+		if b.Offset != 200 {
+			t.Errorf("Offset = %d, want (3-1)*100=200", b.Offset)
+		}
+	})
+
+	t.Run("page/limit zero floor to 1", func(t *testing.T) {
+		b := Build(Query{Page: intp(0), Limit: intp(0)}, cols, allow, "u.created_at", "u.is_active")
+		if b.Limit != 1 || b.Offset != 0 {
+			t.Errorf("Limit=%d Offset=%d, want 1/0", b.Limit, b.Offset)
+		}
+	})
+
+	t.Run("status disabled when statusCol empty", func(t *testing.T) {
+		b := Build(Query{Status: "active"}, cols, allow, "u.created_at", "")
+		if b.Where != "" {
+			t.Errorf("Where = %q, want empty when statusCol disabled", b.Where)
+		}
+	})
+}

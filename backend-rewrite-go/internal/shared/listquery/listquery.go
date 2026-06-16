@@ -4,7 +4,10 @@
 // via pgxpool. The allow-listed sort map is the SQL-injection guard.
 package listquery
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 // Query is the coerced shape of the admin frontend's list params. Page/Limit
 // are *int so "absent" is distinct from a parsed 0 (matches Node's
@@ -43,6 +46,80 @@ func Parse(v map[string][]string) Query {
 		q.Limit = &n
 	}
 	return q
+}
+
+// Built is the SQL fragments Build produces. The caller composes:
+//
+//	rows : SELECT <cols> FROM <base> {Where} {Order} LIMIT {Limit} OFFSET {Offset}
+//	count: SELECT count(*) FROM <base> {Where}
+//
+// both with Args. Where is "" or starts with "WHERE "; Order always set.
+type Built struct {
+	Where  string
+	Args   []any
+	Order  string
+	Limit  int
+	Offset int
+}
+
+// Build mirrors applyListQuery. searchCols + sortAllow values are
+// caller-supplied literals (alias.field), never user input. statusCol == ""
+// disables the status filter (Node's statusColumn = null).
+func Build(q Query, searchCols []string, sortAllow map[string]string, defaultSort, statusCol string) Built {
+	var clauses []string
+	var args []any
+
+	if term := strings.TrimSpace(q.Search); term != "" && len(searchCols) > 0 {
+		args = append(args, "%"+term+"%")
+		ph := fmt.Sprintf("$%d", len(args))
+		ors := make([]string, len(searchCols))
+		for i, c := range searchCols {
+			ors[i] = c + " ILIKE " + ph
+		}
+		clauses = append(clauses, "("+strings.Join(ors, " OR ")+")")
+	}
+
+	if statusCol != "" && q.Status != "" && q.Status != "all" {
+		args = append(args, q.Status == "active")
+		clauses = append(clauses, fmt.Sprintf("%s = $%d", statusCol, len(args)))
+	}
+
+	where := ""
+	if len(clauses) > 0 {
+		where = "WHERE " + strings.Join(clauses, " AND ")
+	}
+
+	field := defaultSort
+	if mapped := sortAllow[q.SortBy]; mapped != "" {
+		field = mapped
+	}
+	order := "DESC"
+	if q.SortOrder == "ASC" {
+		order = "ASC"
+	}
+
+	page := 1
+	if q.Page != nil && *q.Page > 1 {
+		page = *q.Page
+	}
+	limit := 10
+	if q.Limit != nil {
+		limit = *q.Limit
+	}
+	if limit < 1 {
+		limit = 1
+	}
+	if limit > 100 {
+		limit = 100
+	}
+
+	return Built{
+		Where:  where,
+		Args:   args,
+		Order:  "ORDER BY " + field + " " + order,
+		Limit:  limit,
+		Offset: (page - 1) * limit,
+	}
 }
 
 // jsParseInt replicates JavaScript parseInt(s, 10): skip leading ASCII
