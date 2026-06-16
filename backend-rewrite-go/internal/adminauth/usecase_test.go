@@ -89,3 +89,52 @@ func TestLogin_Errors(t *testing.T) {
 		})
 	}
 }
+
+func TestChangePassword(t *testing.T) {
+	admin := &AdminUser{ID: "a1", PasswordHash: mustHash(t, "old"), Role: "admin", IsActive: true}
+	repo := &fakeRepo{byID: map[string]*AdminUser{"a1": admin}}
+	svc := newSvc(repo, false)
+
+	t.Run("missing admin → Unauthorized", func(t *testing.T) {
+		err := svc.ChangePassword(context.Background(), "ghost", "old", "new")
+		if err != ErrUnauthorized {
+			t.Errorf("err = %v, want Unauthorized", err)
+		}
+	})
+	t.Run("wrong current → message", func(t *testing.T) {
+		err := svc.ChangePassword(context.Background(), "a1", "WRONG", "new")
+		if err != ErrCurrentPwIncorrect {
+			t.Errorf("err = %v, want Current password is incorrect", err)
+		}
+	})
+	t.Run("success hashes + persists new", func(t *testing.T) {
+		if err := svc.ChangePassword(context.Background(), "a1", "old", "brand-new-pw"); err != nil {
+			t.Fatalf("err: %v", err)
+		}
+		ok, _ := shared.VerifyPassword("brand-new-pw", repo.newHash)
+		if !ok {
+			t.Errorf("stored hash does not verify against new password")
+		}
+	})
+}
+
+func TestGetProfile(t *testing.T) {
+	admin := &AdminUser{ID: "a1", Email: "a@b.c", Name: "Root", IsActive: true, Role: "admin", PasswordHash: "$2a$10$x"}
+	svc := newSvc(&fakeRepo{byID: map[string]*AdminUser{"a1": admin}}, false)
+
+	t.Run("missing → Unauthorized", func(t *testing.T) {
+		_, err := svc.GetProfile(context.Background(), "ghost")
+		if err != ErrUnauthorized {
+			t.Errorf("err = %v, want Unauthorized", err)
+		}
+	})
+	t.Run("success returns admin", func(t *testing.T) {
+		got, err := svc.GetProfile(context.Background(), "a1")
+		if err != nil {
+			t.Fatalf("err: %v", err)
+		}
+		if got.ID != "a1" || got.Email != "a@b.c" || got.Name != "Root" || got.Role != "admin" {
+			t.Errorf("profile = %+v", got)
+		}
+	})
+}

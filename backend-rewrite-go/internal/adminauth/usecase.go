@@ -98,3 +98,41 @@ func (s *Service) generateTokens(a *AdminUser) (access, refresh string, err erro
 	}
 	return access, refresh, nil
 }
+
+// ChangePassword verifies the current password and stores a new bcrypt hash.
+// Missing admin → ErrUnauthorized (bare Node UnauthorizedException()); wrong
+// current → ErrCurrentPwIncorrect.
+func (s *Service) ChangePassword(ctx context.Context, adminID, current, next string) error {
+	admin, err := s.repo.FindByID(ctx, adminID)
+	if err != nil {
+		return err
+	}
+	if admin == nil {
+		return ErrUnauthorized
+	}
+	ok, err := shared.VerifyPassword(current, admin.PasswordHash)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrCurrentPwIncorrect
+	}
+	hash, err := shared.HashPassword(next)
+	if err != nil {
+		return err
+	}
+	return s.repo.UpdatePasswordHash(ctx, adminID, hash)
+}
+
+// GetProfile loads the admin by id. Missing → ErrUnauthorized. The handler
+// strips password_hash before serializing.
+func (s *Service) GetProfile(ctx context.Context, adminID string) (AdminUser, error) {
+	admin, err := s.repo.FindByID(ctx, adminID)
+	if err != nil {
+		return AdminUser{}, err
+	}
+	if admin == nil {
+		return AdminUser{}, ErrUnauthorized
+	}
+	return *admin, nil
+}
