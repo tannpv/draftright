@@ -109,6 +109,15 @@ LIMIT 1;
 -- (schema.sql), so sqlc generates a plain string (no pointer).
 SELECT email, name FROM users WHERE id = $1;
 
+-- name: ConfirmPayment :exec
+-- adminConfirm(paymentId, adminNotes): flip a pending payment to completed,
+-- stamping completed_at + notes (Node sets status=COMPLETED, completed_at=new
+-- Date(), notes=adminNotes||'Manually confirmed by admin' then save()). The
+-- completed_at + notes are bound ($2,$3) — the use case computes them (now()
+-- injected for deterministic tests; notes already defaulted).
+UPDATE payments SET status = 'completed', completed_at = $2, notes = $3, updated_at = NOW()
+WHERE id = $1;
+
 -- name: PaymentStats :one
 -- getStats(): aggregate counts + completed revenue for GET /admin/payments/stats.
 -- Mirrors payment.service getStats — total/completed/pending counts plus

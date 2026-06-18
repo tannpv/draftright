@@ -11,6 +11,27 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const confirmPayment = `-- name: ConfirmPayment :exec
+UPDATE payments SET status = 'completed', completed_at = $2, notes = $3, updated_at = NOW()
+WHERE id = $1
+`
+
+type ConfirmPaymentParams struct {
+	ID          pgtype.UUID      `db:"id" json:"id"`
+	CompletedAt pgtype.Timestamp `db:"completed_at" json:"completed_at"`
+	Notes       *string          `db:"notes" json:"notes"`
+}
+
+// adminConfirm(paymentId, adminNotes): flip a pending payment to completed,
+// stamping completed_at + notes (Node sets status=COMPLETED, completed_at=new
+// Date(), notes=adminNotes||'Manually confirmed by admin' then save()). The
+// completed_at + notes are bound ($2,$3) — the use case computes them (now()
+// injected for deterministic tests; notes already defaulted).
+func (q *Queries) ConfirmPayment(ctx context.Context, arg ConfirmPaymentParams) error {
+	_, err := q.db.Exec(ctx, confirmPayment, arg.ID, arg.CompletedAt, arg.Notes)
+	return err
+}
+
 const createPayment = `-- name: CreatePayment :one
 INSERT INTO payments (user_id, plan_id, amount, currency, method, status, reference_code, expires_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)

@@ -19,6 +19,12 @@ type Querier interface {
 	BumpErrorReport(ctx context.Context, arg BumpErrorReportParams) (BumpErrorReportRow, error)
 	CancelActiveSubsByUser(ctx context.Context, userID pgtype.UUID) error
 	CancelByStoreRef(ctx context.Context, arg CancelByStoreRefParams) (int64, error)
+	// adminConfirm(paymentId, adminNotes): flip a pending payment to completed,
+	// stamping completed_at + notes (Node sets status=COMPLETED, completed_at=new
+	// Date(), notes=adminNotes||'Manually confirmed by admin' then save()). The
+	// completed_at + notes are bound ($2,$3) — the use case computes them (now()
+	// injected for deterministic tests; notes already defaulted).
+	ConfirmPayment(ctx context.Context, arg ConfirmPaymentParams) error
 	// Mirrors subscriptionsService.countActive(): COUNT where status=active.
 	CountActiveSubscriptions(ctx context.Context) (int64, error)
 	// Admin user CRUD (Phase 4c-2). GET /admin/users/:id returns the FULL

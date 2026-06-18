@@ -41,6 +41,7 @@ package payment
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -413,6 +414,121 @@ func scanPayment(row pgx.Row) (AdminPaymentRow, error) {
 	}
 
 	return out, nil
+}
+
+// paymentDetailSelect is the single-row projection for LoadPaymentWithPlan:
+// every payments column (entity order) + every plans column (PlanEntity order),
+// LEFT JOIN plans (a deleted plan → all plan columns NULL → nested plan nil →
+// JSON null), matching Node adminConfirm's findOne(relations:['plan']). NO user
+// join — adminConfirm does not load the user relation.
+const paymentDetailSelect = "SELECT " + paymentCols + ", " + paymentPlanCols + " " +
+	"FROM payments p LEFT JOIN plans pl ON pl.id = p.plan_id WHERE p.id = $1 LIMIT 1"
+
+// LoadPaymentWithPlan loads one payment by id with its plan relation (no user),
+// returning ErrPaymentNotFound when no row matches. Run on the pool (single row,
+// reusing the same scan style as FindAll) rather than via sqlc because it shares
+// the FindAll column ordering for the nested *plans.PlanEntity assembly.
+func (r *AdminRepo) LoadPaymentWithPlan(ctx context.Context, id string) (AdminPaymentDetailRow, error) {
+	uid, ok := parseUUID(id)
+	if !ok {
+		return AdminPaymentDetailRow{}, ErrPaymentNotFound
+	}
+	row, err := scanPaymentDetail(r.pool.QueryRow(ctx, paymentDetailSelect, uid))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return AdminPaymentDetailRow{}, ErrPaymentNotFound
+	}
+	if err != nil {
+		return AdminPaymentDetailRow{}, err
+	}
+	return row, nil
+}
+
+// scanPaymentDetail maps one row (paymentCols then paymentPlanCols, in order)
+// into an AdminPaymentDetailRow. The plan block is scanned into nullable
+// temporaries; the nested *plans.PlanEntity is assembled only when its id is
+// non-NULL (a LEFT-JOIN miss leaves every plan column NULL). No user block.
+func scanPaymentDetail(row pgx.Row) (AdminPaymentDetailRow, error) {
+	var (
+		pID, pUserID, pPlanID       pgtype.UUID
+		amount                      int32
+		currency, method, status    string
+		providerRef                 *string
+		referenceCode               string
+		qrData, notes               *string
+		expiresAt, completedAt      pgtype.Timestamp
+		createdAt, updatedAt        pgtype.Timestamp
+		plID                        pgtype.UUID
+		plName                      *string
+		plDailyLimit, plPriceCents  *int32
+		plCurrency, plStripePriceID *string
+		plTrialDays                 *int32
+		plBillingPeriod             *string
+		plIsActive                  *bool
+		plCreatedAt, plUpdatedAt    pgtype.Timestamp
+	)
+
+	if err := row.Scan(
+		// payments (entity order)
+		&pID, &pUserID, &pPlanID, &amount, &currency, &method, &status,
+		&providerRef, &referenceCode, &qrData, &notes, &expiresAt, &completedAt,
+		&createdAt, &updatedAt,
+		// plans (PlanEntity order)
+		&plID, &plName, &plDailyLimit, &plPriceCents, &plCurrency, &plStripePriceID,
+		&plTrialDays, &plBillingPeriod, &plIsActive, &plCreatedAt, &plUpdatedAt,
+	); err != nil {
+		return AdminPaymentDetailRow{}, err
+	}
+
+	out := AdminPaymentDetailRow{
+		ID:            uuid.UUID(pID.Bytes).String(),
+		UserID:        uuid.UUID(pUserID.Bytes).String(),
+		PlanID:        uuid.UUID(pPlanID.Bytes).String(),
+		Amount:        int(amount),
+		Currency:      currency,
+		Method:        method,
+		Status:        status,
+		ProviderRef:   providerRef,
+		ReferenceCode: referenceCode,
+		QRData:        qrData,
+		Notes:         notes,
+		ExpiresAt:     tsPtr(expiresAt),
+		CompletedAt:   tsPtr(completedAt),
+		CreatedAt:     createdAt.Time,
+		UpdatedAt:     updatedAt.Time,
+	}
+
+	if plID.Valid {
+		out.Plan = &plans.PlanEntity{
+			ID:            uuid.UUID(plID.Bytes).String(),
+			Name:          derefStr(plName),
+			DailyLimit:    derefInt(plDailyLimit),
+			PriceCents:    derefInt(plPriceCents),
+			Currency:      plCurrency,
+			StripePriceID: plStripePriceID,
+			TrialDays:     derefInt(plTrialDays),
+			BillingPeriod: derefStr(plBillingPeriod),
+			IsActive:      derefBool(plIsActive),
+			CreatedAt:     plCreatedAt.Time,
+			UpdatedAt:     plUpdatedAt.Time,
+		}
+	}
+
+	return out, nil
+}
+
+// ConfirmPayment flips the payment to completed, stamping completed_at + notes
+// (static sqlc :exec UPDATE). The use case supplies the injected now() and the
+// already-defaulted notes.
+func (r *AdminRepo) ConfirmPayment(ctx context.Context, id string, completedAt time.Time, notes string) error {
+	uid, ok := parseUUID(id)
+	if !ok {
+		return ErrPaymentNotFound
+	}
+	return r.q.ConfirmPayment(ctx, sqlc.ConfirmPaymentParams{
+		ID:          uid,
+		CompletedAt: pgtype.Timestamp{Time: completedAt, Valid: true},
+		Notes:       &notes,
+	})
 }
 
 // tstzPtr converts a nullable pgtype.Timestamptz to *time.Time (the two user

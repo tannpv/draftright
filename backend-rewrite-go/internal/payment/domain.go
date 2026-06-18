@@ -32,6 +32,16 @@ const (
 	StatusRefunded  PaymentStatus = "refunded"
 )
 
+// ErrPaymentNotFound / ErrPaymentNotPending are the adminConfirm/refund
+// sentinels. They are *DomainError values so the route handler renders the
+// canonical NestJS envelope: NotFoundException('Payment not found') → 404 and
+// BadRequestException('Payment is not pending') → 400. Compared with
+// errors.Is.
+var (
+	ErrPaymentNotFound   = notFound("Payment not found")
+	ErrPaymentNotPending = badRequest("Payment is not pending")
+)
+
 // StoreType mirrors backend/src/subscriptions/entities/subscription.entity.ts
 // StoreType — the audit field stamped on the subscription a payment grants.
 type StoreType string
