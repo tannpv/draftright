@@ -162,6 +162,22 @@ type Router struct {
 	AdminEmailTemplateReset   http.Handler // DELETE /admin/email-templates/{key}         (admin)
 	AdminEmailTemplatePreview http.Handler // GET    /admin/email-templates/{key}/preview (admin)
 
+	// Phase 4c-3 admin reporting. All http.Handler, nil-guarded, mounted in
+	// the admin group (jwtMW → RequireAdmin) like the 4c-2 routes.
+	AdminStats        http.Handler // GET  /admin/stats
+	AdminAnalytics    http.Handler // GET  /admin/analytics
+	AdminTransactions http.Handler // GET  /admin/transactions
+
+	TrainingDataStats  http.Handler // GET   /admin/training-data/stats
+	TrainingDataList   http.Handler // GET   /admin/training-data
+	TrainingDataReview http.Handler // PATCH /admin/training-data/{id}
+	TrainingDataExport http.Handler // GET   /admin/training-data/export
+
+	AdminPaymentsStats  http.Handler // GET  /admin/payments/stats
+	AdminPaymentsList   http.Handler // GET  /admin/payments
+	AdminPaymentConfirm http.Handler // POST /admin/payments/{id}/confirm
+	AdminPaymentRefund  http.Handler // POST /admin/payments/{id}/refund
+
 	// EnableTracing wraps the whole mux with otelhttp middleware so
 	// every request becomes a span. No-op when the global tracer
 	// provider is the default noop (i.e. tracing.Setup returned
@@ -455,6 +471,47 @@ func (r *Router) Build() http.Handler {
 		}
 		if r.AdminEmailTemplatePreview != nil {
 			admin.Method(http.MethodGet, "/admin/email-templates/{key}/preview", r.AdminEmailTemplatePreview)
+		}
+
+		// Phase 4c-3 admin reporting routes (Task 19). nil-guarded, same
+		// RequireAuth → RequireAdmin chain. chi prioritizes static segments
+		// over {id} wildcards, so /admin/training-data/stats and
+		// /admin/training-data/export resolve before /admin/training-data/{id}
+		// regardless of registration order.
+		if r.AdminStats != nil {
+			admin.Method(http.MethodGet, "/admin/stats", r.AdminStats)
+		}
+		if r.AdminAnalytics != nil {
+			admin.Method(http.MethodGet, "/admin/analytics", r.AdminAnalytics)
+		}
+		if r.AdminTransactions != nil {
+			admin.Method(http.MethodGet, "/admin/transactions", r.AdminTransactions)
+		}
+
+		if r.TrainingDataStats != nil {
+			admin.Method(http.MethodGet, "/admin/training-data/stats", r.TrainingDataStats)
+		}
+		if r.TrainingDataExport != nil {
+			admin.Method(http.MethodGet, "/admin/training-data/export", r.TrainingDataExport)
+		}
+		if r.TrainingDataList != nil {
+			admin.Method(http.MethodGet, "/admin/training-data", r.TrainingDataList)
+		}
+		if r.TrainingDataReview != nil {
+			admin.Method(http.MethodPatch, "/admin/training-data/{id}", r.TrainingDataReview)
+		}
+
+		if r.AdminPaymentsStats != nil {
+			admin.Method(http.MethodGet, "/admin/payments/stats", r.AdminPaymentsStats)
+		}
+		if r.AdminPaymentsList != nil {
+			admin.Method(http.MethodGet, "/admin/payments", r.AdminPaymentsList)
+		}
+		if r.AdminPaymentConfirm != nil {
+			admin.Method(http.MethodPost, "/admin/payments/{id}/confirm", r.AdminPaymentConfirm)
+		}
+		if r.AdminPaymentRefund != nil {
+			admin.Method(http.MethodPost, "/admin/payments/{id}/refund", r.AdminPaymentRefund)
 		}
 	})
 
