@@ -25,12 +25,10 @@ type AdminService struct {
 	repo paymentAdminRepo
 }
 
-// NewAdminService wires the concrete admin repo (composition-root path).
-func NewAdminService(repo *AdminRepo) *AdminService { return &AdminService{repo: repo} }
-
-// NewAdminServiceWithRepo wires any repo satisfying the consumer port — used by
-// tests to inject a fake (the concrete-typed NewAdminService can't take one).
-func NewAdminServiceWithRepo(repo paymentAdminRepo) *AdminService { return &AdminService{repo: repo} }
+// NewAdminService accepts the consumer port; *AdminRepo satisfies it for the
+// composition root, a fake satisfies it for tests (accept interfaces, return
+// structs).
+func NewAdminService(repo paymentAdminRepo) *AdminService { return &AdminService{repo: repo} }
 
 // GetStats returns aggregate payment counts + completed revenue.
 func (s *AdminService) GetStats(ctx context.Context) (PaymentStats, error) {

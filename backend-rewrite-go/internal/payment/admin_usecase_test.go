@@ -31,7 +31,7 @@ func TestAdminPaymentStats_ReturnsRepoValues(t *testing.T) {
 		Pending:   3,
 		Revenue:   1998,
 	}}
-	svc := NewAdminServiceWithRepo(repo)
+	svc := NewAdminService(repo)
 
 	got, err := svc.GetStats(context.Background())
 	if err != nil {
@@ -47,7 +47,7 @@ func TestAdminPaymentStats_ReturnsRepoValues(t *testing.T) {
 // zero-value result (no partial data).
 func TestAdminPaymentStats_PropagatesError(t *testing.T) {
 	boom := errors.New("stats query down")
-	svc := NewAdminServiceWithRepo(&fakeAdminStatsRepo{err: boom})
+	svc := NewAdminService(&fakeAdminStatsRepo{err: boom})
 
 	got, err := svc.GetStats(context.Background())
 	if !errors.Is(err, boom) {
