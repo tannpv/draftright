@@ -11,6 +11,78 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const getActiveSubFullByUser = `-- name: GetActiveSubFullByUser :one
+SELECT s.id, s.user_id, s.plan_id, s.status::text AS status, s.store_type::text AS store_type,
+       s.store_transaction_id, s.started_at, s.expires_at, s.created_at, s.updated_at,
+       p.id AS plan_id_full, p.name AS plan_name, p.daily_limit AS plan_daily_limit,
+       p.price_cents AS plan_price_cents, p.currency AS plan_currency,
+       p.stripe_price_id AS plan_stripe_price_id, p.trial_days AS plan_trial_days,
+       p.billing_period::text AS plan_billing_period, p.is_active AS plan_is_active,
+       p.created_at AS plan_created_at, p.updated_at AS plan_updated_at
+FROM subscriptions s JOIN plans p ON p.id = s.plan_id
+WHERE s.user_id = $1 AND s.status = 'active'::subscriptions_status_enum
+ORDER BY s.created_at DESC LIMIT 1
+`
+
+type GetActiveSubFullByUserRow struct {
+	ID                 pgtype.UUID      `db:"id" json:"id"`
+	UserID             pgtype.UUID      `db:"user_id" json:"user_id"`
+	PlanID             pgtype.UUID      `db:"plan_id" json:"plan_id"`
+	Status             string           `db:"status" json:"status"`
+	StoreType          string           `db:"store_type" json:"store_type"`
+	StoreTransactionID *string          `db:"store_transaction_id" json:"store_transaction_id"`
+	StartedAt          pgtype.Timestamp `db:"started_at" json:"started_at"`
+	ExpiresAt          pgtype.Timestamp `db:"expires_at" json:"expires_at"`
+	CreatedAt          pgtype.Timestamp `db:"created_at" json:"created_at"`
+	UpdatedAt          pgtype.Timestamp `db:"updated_at" json:"updated_at"`
+	PlanIDFull         pgtype.UUID      `db:"plan_id_full" json:"plan_id_full"`
+	PlanName           string           `db:"plan_name" json:"plan_name"`
+	PlanDailyLimit     int32            `db:"plan_daily_limit" json:"plan_daily_limit"`
+	PlanPriceCents     int32            `db:"plan_price_cents" json:"plan_price_cents"`
+	PlanCurrency       *string          `db:"plan_currency" json:"plan_currency"`
+	PlanStripePriceID  *string          `db:"plan_stripe_price_id" json:"plan_stripe_price_id"`
+	PlanTrialDays      int32            `db:"plan_trial_days" json:"plan_trial_days"`
+	PlanBillingPeriod  string           `db:"plan_billing_period" json:"plan_billing_period"`
+	PlanIsActive       bool             `db:"plan_is_active" json:"plan_is_active"`
+	PlanCreatedAt      pgtype.Timestamp `db:"plan_created_at" json:"plan_created_at"`
+	PlanUpdatedAt      pgtype.Timestamp `db:"plan_updated_at" json:"plan_updated_at"`
+}
+
+// GetActiveSubFullByUser backs GET /admin/users/:id's subscription field
+// (subscriptionsService.findActiveByUserId: status ACTIVE, relations ['plan'],
+// created_at DESC, take 1). The `user` relation is NOT loaded → omitted from the
+// serialised subscription. Enum columns cast ::text so sqlc scans plain Go
+// strings (mirrors the temperature::text / billing_period::text pattern). The
+// joined plan columns are aliased plan_* to feed the nested plans.PlanEntity.
+func (q *Queries) GetActiveSubFullByUser(ctx context.Context, userID pgtype.UUID) (GetActiveSubFullByUserRow, error) {
+	row := q.db.QueryRow(ctx, getActiveSubFullByUser, userID)
+	var i GetActiveSubFullByUserRow
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.PlanID,
+		&i.Status,
+		&i.StoreType,
+		&i.StoreTransactionID,
+		&i.StartedAt,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.PlanIDFull,
+		&i.PlanName,
+		&i.PlanDailyLimit,
+		&i.PlanPriceCents,
+		&i.PlanCurrency,
+		&i.PlanStripePriceID,
+		&i.PlanTrialDays,
+		&i.PlanBillingPeriod,
+		&i.PlanIsActive,
+		&i.PlanCreatedAt,
+		&i.PlanUpdatedAt,
+	)
+	return i, err
+}
+
 const getUserFull = `-- name: GetUserFull :one
 
 SELECT id, email, password_hash, name, is_active, role, auth_provider,
@@ -82,4 +154,41 @@ func (q *Queries) GetUserFull(ctx context.Context, id pgtype.UUID) (GetUserFullR
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const recentUsageByUser = `-- name: RecentUsageByUser :many
+SELECT id, user_id, tone, input_length, output_length, ai_provider_id, response_time_ms, created_at
+FROM usage_logs WHERE user_id = $1 ORDER BY created_at DESC LIMIT 20
+`
+
+// RecentUsageByUser backs GET /admin/users/:id's recent_usage field
+// (usageService.findRecentByUser, default limit 20, created_at DESC). Relations
+// (user, ai_provider) are NOT loaded by Node, so only the column fields select.
+func (q *Queries) RecentUsageByUser(ctx context.Context, userID pgtype.UUID) ([]UsageLog, error) {
+	rows, err := q.db.Query(ctx, recentUsageByUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []UsageLog{}
+	for rows.Next() {
+		var i UsageLog
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Tone,
+			&i.InputLength,
+			&i.OutputLength,
+			&i.AiProviderID,
+			&i.ResponseTimeMs,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

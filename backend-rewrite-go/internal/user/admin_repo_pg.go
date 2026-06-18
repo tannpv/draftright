@@ -37,6 +37,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/tannpv/draftright-rewrite/internal/plans"
 	sqlc "github.com/tannpv/draftright-rewrite/internal/shared/pg/sqlc"
 )
 
@@ -273,4 +274,88 @@ func (r *AdminRepo) Update(ctx context.Context, id string, p UserPatchAdmin) err
 	sql := fmt.Sprintf("UPDATE users SET %s WHERE id = $%d", strings.Join(sets, ", "), len(args))
 	_, err := r.pool.Exec(ctx, sql, args...)
 	return err
+}
+
+// ActiveSubByUser returns the user's newest ACTIVE subscription joined to its
+// plan (Node subscriptionsService.findActiveByUserId, relations:['plan']). No
+// active sub — OR a malformed user id — yields (nil, nil), mirroring
+// findOne(...) returning null. The plan is mapped into a nested
+// plans.PlanEntity; the `user` relation is not loaded so it never appears.
+func (r *AdminRepo) ActiveSubByUser(ctx context.Context, userID string) (*AdminSubView, error) {
+	uid, err := parseUUID(userID)
+	if err != nil {
+		return nil, nil
+	}
+	row, err := r.q.GetActiveSubFullByUser(ctx, uid)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &AdminSubView{
+		ID:     uuidStr(row.ID),
+		UserID: uuidStr(row.UserID),
+		PlanID: uuidStr(row.PlanID),
+		Plan: plans.PlanEntity{
+			ID:            uuidStr(row.PlanIDFull),
+			Name:          row.PlanName,
+			DailyLimit:    int(row.PlanDailyLimit),
+			PriceCents:    int(row.PlanPriceCents),
+			Currency:      row.PlanCurrency,
+			StripePriceID: row.PlanStripePriceID,
+			TrialDays:     int(row.PlanTrialDays),
+			BillingPeriod: row.PlanBillingPeriod,
+			IsActive:      row.PlanIsActive,
+			CreatedAt:     row.PlanCreatedAt.Time,
+			UpdatedAt:     row.PlanUpdatedAt.Time,
+		},
+		Status:             row.Status,
+		StoreType:          row.StoreType,
+		StoreTransactionID: row.StoreTransactionID,
+		StartedAt:          row.StartedAt.Time,
+		ExpiresAt:          tsPtr(row.ExpiresAt),
+		CreatedAt:          row.CreatedAt.Time,
+		UpdatedAt:          row.UpdatedAt.Time,
+	}, nil
+}
+
+// RecentUsageByUser returns up to 20 of the user's most-recent usage rows,
+// created_at DESC (Node usageService.findRecentByUser default take 20). A
+// malformed user id → empty slice + nil (Node would match nothing). The
+// returned slice is ALWAYS non-nil so the composite emits [] not null.
+func (r *AdminRepo) RecentUsageByUser(ctx context.Context, userID string) ([]RecentUsageRow, error) {
+	out := []RecentUsageRow{}
+	uid, err := parseUUID(userID)
+	if err != nil {
+		return out, nil
+	}
+	rows, err := r.q.RecentUsageByUser(ctx, uid)
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		out = append(out, RecentUsageRow{
+			ID:             uuidStr(row.ID),
+			UserID:         uuidStr(row.UserID),
+			Tone:           row.Tone,
+			InputLength:    int(row.InputLength),
+			OutputLength:   int(row.OutputLength),
+			AiProviderID:   uuidStr(row.AiProviderID),
+			ResponseTimeMs: int(row.ResponseTimeMs),
+			CreatedAt:      row.CreatedAt.Time,
+		})
+	}
+	return out, nil
+}
+
+// tsPtr converts a nullable pgtype.Timestamp to *time.Time (nil when invalid).
+// Distinct from tsValue, which is for Timestamptz; the new sub query's
+// expires_at column is `timestamp without time zone` → pgtype.Timestamp.
+func tsPtr(v pgtype.Timestamp) *time.Time {
+	if !v.Valid {
+		return nil
+	}
+	t := v.Time
+	return &t
 }

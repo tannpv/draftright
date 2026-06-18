@@ -79,6 +79,13 @@ type Querier interface {
 	// still grant their old plan.
 	FindUserWithPlan(ctx context.Context, id pgtype.UUID) (FindUserWithPlanRow, error)
 	FindVote(ctx context.Context, arg FindVoteParams) (pgtype.UUID, error)
+	// GetActiveSubFullByUser backs GET /admin/users/:id's subscription field
+	// (subscriptionsService.findActiveByUserId: status ACTIVE, relations ['plan'],
+	// created_at DESC, take 1). The `user` relation is NOT loaded → omitted from the
+	// serialised subscription. Enum columns cast ::text so sqlc scans plain Go
+	// strings (mirrors the temperature::text / billing_period::text pattern). The
+	// joined plan columns are aliased plan_* to feed the nested plans.PlanEntity.
+	GetActiveSubFullByUser(ctx context.Context, userID pgtype.UUID) (GetActiveSubFullByUserRow, error)
 	// GET /subscription: newest active sub + plan fields incl billing_period.
 	// Distinct from GetActiveSubscriptionByUserID (which omits billing_period
 	// and is pinned for /auth/account).
@@ -231,6 +238,10 @@ type Querier interface {
 	MarkPaymentCompleted(ctx context.Context, referenceCode string) error
 	MarkPaymentFailed(ctx context.Context, arg MarkPaymentFailedParams) error
 	MarkPaymentFailedByRef(ctx context.Context, referenceCode string) error
+	// RecentUsageByUser backs GET /admin/users/:id's recent_usage field
+	// (usageService.findRecentByUser, default limit 20, created_at DESC). Relations
+	// (user, ai_provider) are NOT loaded by Node, so only the column fields select.
+	RecentUsageByUser(ctx context.Context, userID pgtype.UUID) ([]UsageLog, error)
 	ResetPasswordHash(ctx context.Context, arg ResetPasswordHashParams) error
 	// Extension-token persistence (dr_ext_* keyboard/share tokens).
 	// Read the live NestJS-owned schema as-is; mirror ExtensionTokenService
