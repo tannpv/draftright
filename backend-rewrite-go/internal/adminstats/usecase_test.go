@@ -157,6 +157,145 @@ type errTest string
 
 func (e errTest) Error() string { return string(e) }
 
+// ─── Analytics tests ──────────────────────────────────────────────────────────
+
+// TestAnalytics_MRR is the canonical mixed-billing-period case from the plan:
+//
+//	Pro monthly  2 active × 999  cents         → 1998
+//	ProYear yearly 1 active × round(9990/12)   → 833   (Math.round parity)
+//	mrr = 2831, total_revenue = sum of monthly stats revenue
+//
+// Node authority: admin.controller.ts getAnalytics() lines 592-618.
+func TestAnalytics_MRR(t *testing.T) {
+	fixedNow := time.Date(2026, 6, 18, 0, 0, 0, 0, time.UTC)
+
+	subs := &fakeSub{
+		plansBreakdown: []subscription.PlanBreakdown{
+			{PlanName: "Pro", ActiveCount: 2, PriceCents: 999},
+			{PlanName: "ProYear", ActiveCount: 1, PriceCents: 9990},
+		},
+		monthlyStats: []subscription.MonthStat{
+			{Month: "2026-06", NewSubscriptions: 3, RevenueCents: 5000, Churned: 0},
+		},
+	}
+	pl := &fakePlanLister{plans: []plans.PlanEntity{
+		{Name: "Pro", PriceCents: 999, BillingPeriod: "monthly"},
+		{Name: "ProYear", PriceCents: 9990, BillingPeriod: "yearly"},
+	}}
+
+	svc := newService(&fakeUserCounter{}, subs, &fakeUsage{}, pl, func() time.Time { return fixedNow })
+	result, err := svc.Analytics(context.Background())
+	if err != nil {
+		t.Fatalf("Analytics() error: %v", err)
+	}
+
+	// Pro monthly: 2 * 999 = 1998
+	// ProYear yearly: 1 * round(9990/12) = 1 * round(832.5) = 1 * 833 = 833
+	// mrr = 1998 + 833 = 2831
+	if result.MRR != 2831 {
+		t.Errorf("MRR = %d, want 2831", result.MRR)
+	}
+
+	// total_revenue = sum of monthly_stats.revenue_cents = 5000
+	if result.TotalRevenue != 5000 {
+		t.Errorf("TotalRevenue = %d, want 5000", result.TotalRevenue)
+	}
+}
+
+// TestAnalytics_SkipsZeroPrice confirms that plans with price_cents == 0 are
+// excluded from MRR (parity: Node `if plan && plan.price_cents > 0`).
+func TestAnalytics_SkipsZeroPrice(t *testing.T) {
+	subs := &fakeSub{
+		plansBreakdown: []subscription.PlanBreakdown{
+			{PlanName: "Free", ActiveCount: 10, PriceCents: 0},
+			{PlanName: "Pro", ActiveCount: 1, PriceCents: 999},
+		},
+		monthlyStats: []subscription.MonthStat{},
+	}
+	pl := &fakePlanLister{plans: []plans.PlanEntity{
+		{Name: "Free", PriceCents: 0, BillingPeriod: "monthly"},
+		{Name: "Pro", PriceCents: 999, BillingPeriod: "monthly"},
+	}}
+
+	svc := newService(&fakeUserCounter{}, subs, &fakeUsage{}, pl, time.Now)
+	result, err := svc.Analytics(context.Background())
+	if err != nil {
+		t.Fatalf("Analytics() error: %v", err)
+	}
+
+	if result.MRR != 999 {
+		t.Errorf("MRR = %d, want 999 (free plan must be skipped)", result.MRR)
+	}
+}
+
+// TestAnalytics_UnknownPlanSkipped confirms that a breakdown row whose
+// plan_name doesn't match any plan in ListAll is silently skipped (no crash).
+func TestAnalytics_UnknownPlanSkipped(t *testing.T) {
+	subs := &fakeSub{
+		plansBreakdown: []subscription.PlanBreakdown{
+			{PlanName: "Orphan", ActiveCount: 5, PriceCents: 500},
+			{PlanName: "Pro", ActiveCount: 1, PriceCents: 999},
+		},
+		monthlyStats: []subscription.MonthStat{},
+	}
+	pl := &fakePlanLister{plans: []plans.PlanEntity{
+		{Name: "Pro", PriceCents: 999, BillingPeriod: "monthly"},
+	}}
+
+	svc := newService(&fakeUserCounter{}, subs, &fakeUsage{}, pl, time.Now)
+	result, err := svc.Analytics(context.Background())
+	if err != nil {
+		t.Fatalf("Analytics() error: %v", err)
+	}
+
+	// Orphan has no matching plan → skipped; only Pro contributes.
+	if result.MRR != 999 {
+		t.Errorf("MRR = %d, want 999 (orphan breakdown must be skipped)", result.MRR)
+	}
+}
+
+// TestAnalytics_ForwardsNowToMonthlyStats confirms that the injected clock
+// value is forwarded to GetMonthlyStatsAt (not time.Now() called directly).
+func TestAnalytics_ForwardsNowToMonthlyStats(t *testing.T) {
+	fixedNow := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
+	subs := &fakeSub{monthlyStats: []subscription.MonthStat{}}
+	pl := &fakePlanLister{}
+
+	svc := newService(&fakeUserCounter{}, subs, &fakeUsage{}, pl, func() time.Time { return fixedNow })
+	_, err := svc.Analytics(context.Background())
+	if err != nil {
+		t.Fatalf("Analytics() error: %v", err)
+	}
+
+	if !subs.lastNow.Equal(fixedNow) {
+		t.Errorf("GetMonthlyStatsAt now = %v, want %v (injected clock not forwarded)", subs.lastNow, fixedNow)
+	}
+}
+
+// TestAnalytics_TotalRevenueMultipleMonths verifies TotalRevenue sums all
+// monthly_stats entries (not just one).
+func TestAnalytics_TotalRevenueMultipleMonths(t *testing.T) {
+	subs := &fakeSub{
+		plansBreakdown: []subscription.PlanBreakdown{},
+		monthlyStats: []subscription.MonthStat{
+			{Month: "2026-04", RevenueCents: 1000},
+			{Month: "2026-05", RevenueCents: 2000},
+			{Month: "2026-06", RevenueCents: 3000},
+		},
+	}
+	pl := &fakePlanLister{}
+
+	svc := newService(&fakeUserCounter{}, subs, &fakeUsage{}, pl, time.Now)
+	result, err := svc.Analytics(context.Background())
+	if err != nil {
+		t.Fatalf("Analytics() error: %v", err)
+	}
+
+	if result.TotalRevenue != 6000 {
+		t.Errorf("TotalRevenue = %d, want 6000", result.TotalRevenue)
+	}
+}
+
 // TestStats_ZeroValues confirms zero values marshal cleanly (no omitempty).
 func TestStats_ZeroValues(t *testing.T) {
 	svc := newService(
