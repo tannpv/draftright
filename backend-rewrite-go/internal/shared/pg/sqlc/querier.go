@@ -88,6 +88,7 @@ type Querier interface {
 	// DESC + LIMIT 1 reproduces TypeORM order:{created_at:'DESC'} findOne.
 	GetActiveSubscriptionByUserID(ctx context.Context, userID pgtype.UUID) (GetActiveSubscriptionByUserIDRow, error)
 	GetAiProviderByID(ctx context.Context, id pgtype.UUID) (GetAiProviderByIDRow, error)
+	GetAppSettings(ctx context.Context) (AppSetting, error)
 	// The single app_settings row's token lifetimes. No row → caller uses
 	// defaults (15 / 90), matching Node's `?? 15` / `?? 90`.
 	GetAuthTokenSettings(ctx context.Context) (GetAuthTokenSettingsRow, error)
@@ -156,6 +157,7 @@ type Querier interface {
 	GetUserForCheckout(ctx context.Context, id pgtype.UUID) (GetUserForCheckoutRow, error)
 	InsertAiProvider(ctx context.Context, arg InsertAiProviderParams) (InsertAiProviderRow, error)
 	InsertBugReport(ctx context.Context, arg InsertBugReportParams) (InsertBugReportRow, error)
+	InsertDefaultAppSettings(ctx context.Context) (AppSetting, error)
 	// Audit row for every deliver attempt (suppressed/skipped/sent/failed).
 	InsertEmailLog(ctx context.Context, arg InsertEmailLogParams) error
 	InsertErrorReport(ctx context.Context, arg InsertErrorReportParams) (InsertErrorReportRow, error)
