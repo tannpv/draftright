@@ -28,6 +28,8 @@ import (
 	"github.com/tannpv/draftright-rewrite/internal/adapter/redislimit"
 	adminauth "github.com/tannpv/draftright-rewrite/internal/adminauth"
 	"github.com/tannpv/draftright-rewrite/internal/aicall"
+	aiproviderpkg "github.com/tannpv/draftright-rewrite/internal/aiprovider"
+	appsettingspkg "github.com/tannpv/draftright-rewrite/internal/appsettings"
 	authpkg "github.com/tannpv/draftright-rewrite/internal/auth"
 	bugreportspkg "github.com/tannpv/draftright-rewrite/internal/bugreports"
 	corepkg "github.com/tannpv/draftright-rewrite/internal/core"
@@ -185,6 +187,38 @@ func main() {
 		AdminLogin:          core.adminLogin,
 		AdminChangePassword: core.adminChangePassword,
 		AdminMe:             core.adminMe,
+
+		AiProvidersList:      core.aiProvidersList,
+		AiProvidersPaginated: core.aiProvidersPaginated,
+		AiProviderCreate:     core.aiProviderCreate,
+		AiProviderUpdate:     core.aiProviderUpdate,
+		AiProviderDelete:     core.aiProviderDelete,
+		AiProviderTest:       core.aiProviderTest,
+
+		AppSettingsGet:       core.appSettingsGet,
+		AppSettingsPatch:     core.appSettingsPatch,
+		AppSettingsTestEmail: core.appSettingsTestEmail,
+
+		AdminPlansList:  core.adminPlansList,
+		AdminPlanCreate: core.adminPlanCreate,
+		AdminPlanUpdate: core.adminPlanUpdate,
+		AdminPlanDelete: core.adminPlanDelete,
+
+		AdminUsersList:  core.adminUsersList,
+		AdminUserGet:    core.adminUserGet,
+		AdminUserUpdate: core.adminUserUpdate,
+
+		AdminAccountsList:  core.adminAccountsList,
+		AdminAccountCreate: core.adminAccountCreate,
+		AdminAccountUpdate: core.adminAccountUpdate,
+		AdminAccountDelete: core.adminAccountDelete,
+
+		AdminEmailLogs: core.adminEmailLogs,
+
+		AdminEmailTemplatesList:   core.adminEmailTemplatesList,
+		AdminEmailTemplateUpdate:  core.adminEmailTemplateUpdate,
+		AdminEmailTemplateReset:   core.adminEmailTemplateReset,
+		AdminEmailTemplatePreview: core.adminEmailTemplatePreview,
 	}
 	// Enable dual auth on /v1/rewrite (dr_ext_ token OR JWT) only when the
 	// extension-token service is wired (DB present). Guarded so the field
@@ -418,6 +452,67 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 		core.adminChangePassword = http.HandlerFunc(adminAuthHandler.ChangePassword)
 		core.adminMe = http.HandlerFunc(adminAuthHandler.Me)
 
+		// Phase 4c-2 admin content/ops CRUD. Each handler method is its own
+		// http.Handler route field (no concrete types on the Router — that would
+		// cycle, since these packages import internal/shared). Routes are mounted
+		// in Task 21; here we only construct + inject.
+
+		// AI providers (6 routes): CRUD + paginated list + test.
+		aiProviderSvc := aiproviderpkg.NewService(aiproviderpkg.NewPgRepo(q, pool), aiproviderpkg.Factory{})
+		aiProviderHandler := aiproviderpkg.NewHandler(aiProviderSvc)
+		core.aiProvidersList = http.HandlerFunc(aiProviderHandler.List)
+		core.aiProvidersPaginated = http.HandlerFunc(aiProviderHandler.Paginated)
+		core.aiProviderCreate = http.HandlerFunc(aiProviderHandler.Create)
+		core.aiProviderUpdate = http.HandlerFunc(aiProviderHandler.Update)
+		core.aiProviderDelete = http.HandlerFunc(aiProviderHandler.Delete)
+		core.aiProviderTest = http.HandlerFunc(aiProviderHandler.Test)
+
+		// App settings (3 routes): get/patch + test-email. The payment module's
+		// package-level AssertMethodsRegisterable is adapted to the MethodValidator
+		// port; emailSvc satisfies EmailSender (SendRaw) directly.
+		appSettingsSvc := appsettingspkg.NewService(appsettingspkg.NewPgRepo(q, pool), paymentMethodValidator{}, emailSvc)
+		appSettingsHandler := appsettingspkg.NewHandler(appSettingsSvc)
+		core.appSettingsGet = http.HandlerFunc(appSettingsHandler.Get)
+		core.appSettingsPatch = http.HandlerFunc(appSettingsHandler.Patch)
+		core.appSettingsTestEmail = http.HandlerFunc(appSettingsHandler.TestEmail)
+
+		// Plans admin (4 routes): dual-mode list + create/update/delete.
+		adminPlansSvc := planspkg.NewAdminService(planspkg.NewAdminRepo(q, pool))
+		adminPlansHandler := planspkg.NewAdminHandler(adminPlansSvc)
+		core.adminPlansList = http.HandlerFunc(adminPlansHandler.List)
+		core.adminPlanCreate = http.HandlerFunc(adminPlansHandler.Create)
+		core.adminPlanUpdate = http.HandlerFunc(adminPlansHandler.Update)
+		core.adminPlanDelete = http.HandlerFunc(adminPlansHandler.Delete)
+
+		// User admin (3 routes): the SAME *user.AdminRepo satisfies the repo,
+		// SubReader (ActiveSubByUser) and RecentUsageReader (RecentUsageByUser)
+		// ports; usageCounter is the UsageCounter.
+		userAdminRepo := userpkg.NewAdminRepo(q, pool)
+		userAdminSvc := userpkg.NewAdminService(userAdminRepo, usageCounter, userAdminRepo, userAdminRepo)
+		userAdminHandler := userpkg.NewAdminHandler(userAdminSvc)
+		core.adminUsersList = http.HandlerFunc(userAdminHandler.List)
+		core.adminUserGet = http.HandlerFunc(userAdminHandler.GetUser)
+		core.adminUserUpdate = http.HandlerFunc(userAdminHandler.UpdateUser)
+
+		// Admin-users / portal accounts (4 routes): list/create/update/delete.
+		adminAccountsSvc := adminauth.NewAdminUsersService(adminauth.NewAdminUsersRepo(q, pool))
+		adminAccountsHandler := adminauth.NewAdminUsersHandler(adminAccountsSvc)
+		core.adminAccountsList = http.HandlerFunc(adminAccountsHandler.List)
+		core.adminAccountCreate = http.HandlerFunc(adminAccountsHandler.Create)
+		core.adminAccountUpdate = http.HandlerFunc(adminAccountsHandler.Update)
+		core.adminAccountDelete = http.HandlerFunc(adminAccountsHandler.Delete)
+
+		// Email logs (1 route).
+		emailLogsHandler := emailpkg.NewAdminLogsHandler(emailpkg.NewAdminLogsService(emailpkg.NewAdminLogsRepo(pool)))
+		core.adminEmailLogs = http.HandlerFunc(emailLogsHandler.List)
+
+		// Email templates (4 routes): list/update/reset/preview.
+		emailTemplatesHandler := emailpkg.NewAdminTemplatesHandler(emailpkg.NewAdminTemplatesService(emailpkg.NewAdminTemplatesRepo(q)))
+		core.adminEmailTemplatesList = http.HandlerFunc(emailTemplatesHandler.List)
+		core.adminEmailTemplateUpdate = http.HandlerFunc(emailTemplatesHandler.Update)
+		core.adminEmailTemplateReset = http.HandlerFunc(emailTemplatesHandler.Reset)
+		core.adminEmailTemplatePreview = http.HandlerFunc(emailTemplatesHandler.Preview)
+
 		// Payment read-side (Phase 3a): methods registry + status/history reads.
 		// Read-only; no provider secrets, no checkout. q satisfies both the
 		// payment Querier and the coreSettingsQuerier ports.
@@ -598,10 +693,55 @@ type coreHandlers struct {
 	adminChangePassword http.Handler // POST /admin/auth/change-password (admin)
 	adminMe             http.Handler // GET  /admin/auth/me              (admin)
 
+	// Phase 4c-2 admin content/ops CRUD (set when pool != nil; all admin).
+	// One http.Handler per route; mounted in Task 21.
+	aiProvidersList      http.Handler // GET    /admin/ai-providers           (admin)
+	aiProvidersPaginated http.Handler // GET    /admin/ai-providers/paginated (admin)
+	aiProviderCreate     http.Handler // POST   /admin/ai-providers           (admin)
+	aiProviderUpdate     http.Handler // PATCH  /admin/ai-providers/{id}      (admin)
+	aiProviderDelete     http.Handler // DELETE /admin/ai-providers/{id}      (admin)
+	aiProviderTest       http.Handler // POST   /admin/ai-providers/{id}/test (admin)
+
+	appSettingsGet       http.Handler // GET   /admin/settings            (admin)
+	appSettingsPatch     http.Handler // PATCH /admin/settings            (admin)
+	appSettingsTestEmail http.Handler // POST  /admin/settings/test-email (admin)
+
+	adminPlansList  http.Handler // GET    /admin/plans      (admin)
+	adminPlanCreate http.Handler // POST   /admin/plans      (admin)
+	adminPlanUpdate http.Handler // PATCH  /admin/plans/{id} (admin)
+	adminPlanDelete http.Handler // DELETE /admin/plans/{id} (admin)
+
+	adminUsersList  http.Handler // GET   /admin/users      (admin)
+	adminUserGet    http.Handler // GET   /admin/users/{id} (admin)
+	adminUserUpdate http.Handler // PATCH /admin/users/{id} (admin)
+
+	adminAccountsList  http.Handler // GET    /admin/admin-users      (admin)
+	adminAccountCreate http.Handler // POST   /admin/admin-users      (admin)
+	adminAccountUpdate http.Handler // PATCH  /admin/admin-users/{id} (admin)
+	adminAccountDelete http.Handler // DELETE /admin/admin-users/{id} (admin)
+
+	adminEmailLogs http.Handler // GET /admin/email-logs (admin)
+
+	adminEmailTemplatesList   http.Handler // GET    /admin/email-templates               (admin)
+	adminEmailTemplateUpdate  http.Handler // PATCH  /admin/email-templates/{key}         (admin)
+	adminEmailTemplateReset   http.Handler // DELETE /admin/email-templates/{key}         (admin)
+	adminEmailTemplatePreview http.Handler // GET    /admin/email-templates/{key}/preview (admin)
+
 	// accessVerifier is the single *auth.Verifier for JWT_SECRET. Shared by
 	// the Router's Verifier field (RequireAuth) and the errreport handler's
 	// optional best-effort JWT read — exactly one instance per access secret.
 	accessVerifier *auth.Verifier
+}
+
+// paymentMethodValidator adapts payment.AssertMethodsRegisterable (a
+// package-level func) to appsettings.MethodValidator (a 1-method interface),
+// so PATCH /admin/settings rejects enabling a payment method with no backend
+// strategy. A tiny method-value adapter — the composition root is the only
+// place that bridges the two modules' shapes.
+type paymentMethodValidator struct{}
+
+func (paymentMethodValidator) AssertMethodsRegisterable(csv string) error {
+	return paymentpkg.AssertMethodsRegisterable(csv)
 }
 
 // staticInfoReader is the dev-fallback LogLevelReader used when no

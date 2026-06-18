@@ -129,6 +129,39 @@ type Router struct {
 	AdminChangePassword http.Handler // POST   /admin/auth/change-password (admin)
 	AdminMe             http.Handler // GET    /admin/auth/me              (admin)
 
+	// Phase 4c-2 admin content/ops CRUD. All http.Handler, mounted in Task 21. nil-guarded.
+	AiProvidersList      http.Handler // GET    /admin/ai-providers           (admin)
+	AiProvidersPaginated http.Handler // GET    /admin/ai-providers/paginated (admin)
+	AiProviderCreate     http.Handler // POST   /admin/ai-providers           (admin)
+	AiProviderUpdate     http.Handler // PATCH  /admin/ai-providers/{id}      (admin)
+	AiProviderDelete     http.Handler // DELETE /admin/ai-providers/{id}      (admin)
+	AiProviderTest       http.Handler // POST   /admin/ai-providers/{id}/test (admin)
+
+	AppSettingsGet       http.Handler // GET   /admin/settings            (admin)
+	AppSettingsPatch     http.Handler // PATCH /admin/settings            (admin)
+	AppSettingsTestEmail http.Handler // POST  /admin/settings/test-email (admin)
+
+	AdminPlansList  http.Handler // GET    /admin/plans      (admin)
+	AdminPlanCreate http.Handler // POST   /admin/plans      (admin)
+	AdminPlanUpdate http.Handler // PATCH  /admin/plans/{id} (admin)
+	AdminPlanDelete http.Handler // DELETE /admin/plans/{id} (admin)
+
+	AdminUsersList  http.Handler // GET   /admin/users      (admin)
+	AdminUserGet    http.Handler // GET   /admin/users/{id} (admin)
+	AdminUserUpdate http.Handler // PATCH /admin/users/{id} (admin)
+
+	AdminAccountsList  http.Handler // GET    /admin/admin-users      (admin)
+	AdminAccountCreate http.Handler // POST   /admin/admin-users      (admin)
+	AdminAccountUpdate http.Handler // PATCH  /admin/admin-users/{id} (admin)
+	AdminAccountDelete http.Handler // DELETE /admin/admin-users/{id} (admin)
+
+	AdminEmailLogs http.Handler // GET /admin/email-logs (admin)
+
+	AdminEmailTemplatesList   http.Handler // GET    /admin/email-templates               (admin)
+	AdminEmailTemplateUpdate  http.Handler // PATCH  /admin/email-templates/{key}         (admin)
+	AdminEmailTemplateReset   http.Handler // DELETE /admin/email-templates/{key}         (admin)
+	AdminEmailTemplatePreview http.Handler // GET    /admin/email-templates/{key}/preview (admin)
+
 	// EnableTracing wraps the whole mux with otelhttp middleware so
 	// every request becomes a span. No-op when the global tracer
 	// provider is the default noop (i.e. tracing.Setup returned
