@@ -169,6 +169,10 @@ func (e errTest) Error() string { return string(e) }
 func TestAnalytics_MRR(t *testing.T) {
 	fixedNow := time.Date(2026, 6, 18, 0, 0, 0, 0, time.UTC)
 
+	// NOTE: the breakdown rows' PriceCents is IGNORED by the MRR algorithm —
+	// price + billing_period are read from the matched plans.PlanEntity, not
+	// from the breakdown row (Node matches plan by name then reads plan.price).
+	// Values here are only realistic filler, not the source of the MRR math.
 	subs := &fakeSub{
 		plansBreakdown: []subscription.PlanBreakdown{
 			{PlanName: "Pro", ActiveCount: 2, PriceCents: 999},
@@ -294,6 +298,68 @@ func TestAnalytics_TotalRevenueMultipleMonths(t *testing.T) {
 	if result.TotalRevenue != 6000 {
 		t.Errorf("TotalRevenue = %d, want 6000", result.TotalRevenue)
 	}
+}
+
+// errSub / errPlanLister fail a single Analytics port so we can assert the
+// error is propagated with a zero-value result (symmetry with the Stats
+// error-path tests above).
+type errSub struct {
+	breakdownErr error
+	monthlyErr   error
+}
+
+func (f *errSub) CountActive(_ context.Context) (int, error) { return 0, nil }
+func (f *errSub) GetPlansBreakdown(_ context.Context) ([]subscription.PlanBreakdown, error) {
+	return nil, f.breakdownErr
+}
+func (f *errSub) GetMonthlyStatsAt(_ context.Context, _ time.Time, _ int) ([]subscription.MonthStat, error) {
+	if f.monthlyErr != nil {
+		return nil, f.monthlyErr
+	}
+	return []subscription.MonthStat{}, nil
+}
+
+type errPlanLister struct{ err error }
+
+func (f *errPlanLister) ListAll(_ context.Context) ([]plans.PlanEntity, error) { return nil, f.err }
+
+// TestAnalytics_ErrorPropagation verifies that an error from any Analytics port
+// aborts with a zero-value result and the underlying error.
+func TestAnalytics_ErrorPropagation(t *testing.T) {
+	now := func() time.Time { return time.Date(2026, 6, 18, 0, 0, 0, 0, time.UTC) }
+
+	t.Run("plans breakdown error", func(t *testing.T) {
+		svc := adminstats.NewService(&fakeUserCounter{}, &errSub{breakdownErr: errTest("breakdown down")}, &fakeUsage{}, &fakePlanLister{}, now)
+		result, err := svc.Analytics(context.Background())
+		if err == nil {
+			t.Fatal("Analytics() error = nil, want propagated error")
+		}
+		if result.MRR != 0 || result.TotalRevenue != 0 || result.PlansBreakdown != nil || result.MonthlyStats != nil {
+			t.Errorf("result = %+v, want zero value on error", result)
+		}
+	})
+
+	t.Run("monthly stats error", func(t *testing.T) {
+		svc := adminstats.NewService(&fakeUserCounter{}, &errSub{monthlyErr: errTest("monthly down")}, &fakeUsage{}, &fakePlanLister{}, now)
+		result, err := svc.Analytics(context.Background())
+		if err == nil {
+			t.Fatal("Analytics() error = nil, want propagated error")
+		}
+		if result.MRR != 0 || result.TotalRevenue != 0 || result.PlansBreakdown != nil || result.MonthlyStats != nil {
+			t.Errorf("result = %+v, want zero value on error", result)
+		}
+	})
+
+	t.Run("plan list error", func(t *testing.T) {
+		svc := adminstats.NewService(&fakeUserCounter{}, &fakeSub{}, &fakeUsage{}, &errPlanLister{err: errTest("list down")}, now)
+		result, err := svc.Analytics(context.Background())
+		if err == nil {
+			t.Fatal("Analytics() error = nil, want propagated error")
+		}
+		if result.MRR != 0 || result.TotalRevenue != 0 || result.PlansBreakdown != nil || result.MonthlyStats != nil {
+			t.Errorf("result = %+v, want zero value on error", result)
+		}
+	})
 }
 
 // TestStats_ZeroValues confirms zero values marshal cleanly (no omitempty).
