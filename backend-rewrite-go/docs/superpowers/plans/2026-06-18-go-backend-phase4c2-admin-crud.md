@@ -26,7 +26,7 @@ These are established in the codebase (4c-1 and earlier). Reuse them verbatim; d
 
 **Admin guard** — all 25 routes mount inside the existing admin group (`admin.Use(jwtMW); admin.Use(RequireAdmin)`) in `internal/shared/router.go`. Handlers themselves never re-check admin.
 
-**Staging rule (subagent-driven):** every implementer stages ONLY the files named in its task. NEVER `git add -A`.
+**Staging rule (subagent-driven):** every implementer stages ONLY the files named in its task. NEVER `git add -A`. **Any task that adds a NEW `queries_*.sql` file MUST also stage `sqlc.yaml`** — `sqlc.yaml` lists each query file explicitly under `sql.queries`, so a new query file requires a one-line registration there or `sqlc generate` won't pick it up and the CI `sqlc-check.sh` gate fails. Applies to Tasks 6, 9, 12, 14, 16.
 
 **Full gate** (run before the final review): `go build ./...`, `go vet ./...`, `gofmt -l .` prints nothing, `go test ./... -race` green.
 
