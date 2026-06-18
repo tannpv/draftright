@@ -15,6 +15,7 @@ type Querier interface {
 	// AiProvidersService.findActive — keep the ORDER BY in sync there + here
 	// (is_default DESC, is_active = TRUE).
 	ActiveAIProvider(ctx context.Context) (ActiveAIProviderRow, error)
+	AdminEmailExists(ctx context.Context, email string) (bool, error)
 	BumpErrorReport(ctx context.Context, arg BumpErrorReportParams) (BumpErrorReportRow, error)
 	CancelActiveSubsByUser(ctx context.Context, userID pgtype.UUID) error
 	CancelByStoreRef(ctx context.Context, arg CancelByStoreRefParams) (int64, error)
@@ -171,6 +172,7 @@ type Querier interface {
 	// scan lines up with user.UserDetail. The two nullable timestamps are
 	// timestamptz; the two non-null timestamps are timestamp.
 	GetUserFull(ctx context.Context, id pgtype.UUID) (GetUserFullRow, error)
+	InsertAdminUser(ctx context.Context, arg InsertAdminUserParams) (InsertAdminUserRow, error)
 	InsertAiProvider(ctx context.Context, arg InsertAiProviderParams) (InsertAiProviderRow, error)
 	InsertBugReport(ctx context.Context, arg InsertBugReportParams) (InsertBugReportRow, error)
 	InsertDefaultAppSettings(ctx context.Context) (AppSetting, error)
@@ -211,6 +213,12 @@ type Querier interface {
 	// list(): active tokens for the user, newest first
 	// (TypeORM where:{user_id, revoked_at:IsNull()} order:{created_at:'DESC'}).
 	ListActiveTokens(ctx context.Context, userID pgtype.UUID) ([]ListActiveTokensRow, error)
+	// Admin-users CRUD (Phase 4c-2). The bare full-list, INSERT, soft-delete,
+	// and exact-email dup-check are static; the paginated branch + partial
+	// UPDATE have runtime WHERE/ORDER/SET assembled in Go on the pool.
+	// Bare list orders created_at ASC (Node adminUserRepo.find order ASC).
+	// Every projection omits password_hash so the secret never leaves the DB.
+	ListAdminUsers(ctx context.Context) ([]ListAdminUsersRow, error)
 	// AI provider admin CRUD (Phase 4c-2). The temperature column is
 	// decimal(3,2); the Node entity declares it WITHOUT a numeric transformer,
 	// so TypeORM returns it as a JS string ("0.30"). To reproduce that exact
@@ -261,6 +269,7 @@ type Querier interface {
 	SetPasswordResetCode(ctx context.Context, arg SetPasswordResetCodeParams) error
 	SetUserLemonSqueezyCustomerID(ctx context.Context, arg SetUserLemonSqueezyCustomerIDParams) error
 	SetUserStripeCustomerID(ctx context.Context, arg SetUserStripeCustomerIDParams) error
+	SoftDeleteAdminUser(ctx context.Context, id pgtype.UUID) error
 	SoftDeleteAiProvider(ctx context.Context, id pgtype.UUID) error
 	SoftDeletePlan(ctx context.Context, id pgtype.UUID) error
 	StampStoreRefByReference(ctx context.Context, arg StampStoreRefByReferenceParams) (int64, error)
