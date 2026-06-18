@@ -25,7 +25,7 @@ type appSettingsService interface {
 //
 //	GET   /admin/settings             read singleton row → 200 (full 38-key row)
 //	PATCH /admin/settings             partial update → 200 (full row)
-//	POST  /admin/settings/test-email  send test email → 200 { sent, to }
+//	POST  /admin/settings/test-email  send test email → 201 { sent, to }
 type Handler struct {
 	svc appSettingsService
 }
@@ -167,7 +167,7 @@ type testEmailBody struct {
 	To string `json:"to"`
 }
 
-// TestEmail handles POST /admin/settings/test-email → 200 { sent:true, to }.
+// TestEmail handles POST /admin/settings/test-email → 201 { sent:true, to }.
 //
 // Bad recipient: Node throws a PLAIN `new Error('Valid recipient email
 // required')` (NOT a NestException), which AllExceptionsFilter classifies as
@@ -186,7 +186,7 @@ func (h *Handler) TestEmail(w http.ResponseWriter, r *http.Request) {
 		shared.WriteError(w, r, "internal", err.Error())
 		return
 	}
-	shared.WriteJSON(w, http.StatusOK, struct {
+	shared.WriteJSON(w, http.StatusCreated, struct {
 		Sent bool   `json:"sent"`
 		To   string `json:"to"`
 	}{true, body.To})

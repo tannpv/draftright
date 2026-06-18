@@ -135,12 +135,12 @@ func TestTestEmail_BadRecipient500(t *testing.T) {
 	}
 }
 
-func TestTestEmail_OK200(t *testing.T) {
+func TestTestEmail_OK201(t *testing.T) {
 	h := NewHandler(NewService(&fakeRepo{}, fakeValidator{}, &fakeSender{}))
 	rec := httptest.NewRecorder()
 	h.TestEmail(rec, httptest.NewRequest(http.MethodPost, "/admin/settings/test-email", strings.NewReader(`{"to":"a@b.com"}`)))
-	if rec.Code != 200 {
-		t.Fatalf("status=%d", rec.Code)
+	if rec.Code != 201 {
+		t.Fatalf("status=%d, want 201", rec.Code)
 	}
 	raw := rec.Body.String()
 	assertKeyOrder(t, raw, "sent", "to")
