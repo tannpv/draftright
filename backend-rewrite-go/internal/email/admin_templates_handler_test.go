@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/go-chi/chi/v5"
 )
 
 // fakeTemplatesRepo satisfies AdminTemplatesService's consumer-side port. It
@@ -14,6 +16,14 @@ import (
 // a DB.
 type fakeTemplatesRepo struct {
 	custom map[string]DBTemplate
+
+	// recorded write activity
+	upserted   bool
+	upsertKey  string
+	upsertSubj string
+	upsertHTML string
+	deleted    bool
+	deletedKey string
 }
 
 func (f *fakeTemplatesRepo) ListCustomizations(ctx context.Context) (map[string]DBTemplate, error) {
@@ -21,6 +31,27 @@ func (f *fakeTemplatesRepo) ListCustomizations(ctx context.Context) (map[string]
 		return map[string]DBTemplate{}, nil
 	}
 	return f.custom, nil
+}
+
+func (f *fakeTemplatesRepo) Upsert(ctx context.Context, key, subject, html string) error {
+	f.upserted = true
+	f.upsertKey = key
+	f.upsertSubj = subject
+	f.upsertHTML = html
+	return nil
+}
+
+func (f *fakeTemplatesRepo) Delete(ctx context.Context, key string) error {
+	f.deleted = true
+	f.deletedKey = key
+	return nil
+}
+
+// routeWithKey injects a chi route param so chi.URLParam(r,"key") resolves.
+func routeWithKey(req *http.Request, key string) *http.Request {
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("key", key)
+	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 }
 
 func newTemplatesHandler(repo *fakeTemplatesRepo) *AdminTemplatesHandler {
@@ -168,4 +199,165 @@ func TestTemplatesList_KeyOrder(t *testing.T) {
 	assertTemplatesKeyOrder(t, raw,
 		"key", "label", "variables", "subject", "html",
 		"customized", "default_subject", "default_html")
+}
+
+// TestUpdateTemplate_UnknownKey404: PATCH with an unknown builtin key → 404
+// not-found "Unknown template"; the repo is NOT upserted.
+func TestUpdateTemplate_UnknownKey404(t *testing.T) {
+	repo := &fakeTemplatesRepo{}
+	h := newTemplatesHandler(repo)
+	req := httptest.NewRequest(http.MethodPatch, "/admin/email-templates/nope",
+		strings.NewReader(`{"subject":"x"}`))
+	req = routeWithKey(req, "nope")
+	rec := httptest.NewRecorder()
+	h.Update(rec, req)
+
+	if rec.Code != 404 {
+		t.Fatalf("status = %d, want 404; body=%s", rec.Code, rec.Body.String())
+	}
+	raw := rec.Body.String()
+	if !strings.Contains(raw, `"code":"not-found"`) {
+		t.Fatalf("body missing code not-found: %s", raw)
+	}
+	if !strings.Contains(raw, `"error":"Unknown template"`) {
+		t.Fatalf("body missing error Unknown template: %s", raw)
+	}
+	if repo.upserted {
+		t.Fatalf("repo was upserted for unknown key")
+	}
+}
+
+// TestUpdateTemplate_OK: PATCH a real key → 200 {"ok":true}; the repo records
+// the upsert with the right subject/html.
+func TestUpdateTemplate_OK(t *testing.T) {
+	repo := &fakeTemplatesRepo{}
+	h := newTemplatesHandler(repo)
+	req := httptest.NewRequest(http.MethodPatch, "/admin/email-templates/verification",
+		strings.NewReader(`{"subject":"Hi","html":"<b>x</b>"}`))
+	req = routeWithKey(req, "verification")
+	rec := httptest.NewRecorder()
+	h.Update(rec, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"ok":true`) {
+		t.Fatalf("body missing ok:true: %s", rec.Body.String())
+	}
+	if !repo.upserted {
+		t.Fatalf("repo was not upserted")
+	}
+	if repo.upsertKey != "verification" || repo.upsertSubj != "Hi" || repo.upsertHTML != "<b>x</b>" {
+		t.Fatalf("upsert args = (%q,%q,%q), want (verification,Hi,<b>x</b>)",
+			repo.upsertKey, repo.upsertSubj, repo.upsertHTML)
+	}
+}
+
+// TestResetTemplate_OK: DELETE a real key → 200 {"ok":true}; the repo records
+// the delete. An unknown key is idempotent — still 200, NO 404.
+func TestResetTemplate_OK(t *testing.T) {
+	repo := &fakeTemplatesRepo{}
+	h := newTemplatesHandler(repo)
+	req := httptest.NewRequest(http.MethodDelete, "/admin/email-templates/verification", nil)
+	req = routeWithKey(req, "verification")
+	rec := httptest.NewRecorder()
+	h.Reset(rec, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"ok":true`) {
+		t.Fatalf("body missing ok:true: %s", rec.Body.String())
+	}
+	if !repo.deleted || repo.deletedKey != "verification" {
+		t.Fatalf("delete = (%v,%q), want (true,verification)", repo.deleted, repo.deletedKey)
+	}
+
+	// Unknown key is idempotent — still 200 {ok:true}, no 404.
+	repo2 := &fakeTemplatesRepo{}
+	h2 := newTemplatesHandler(repo2)
+	req2 := httptest.NewRequest(http.MethodDelete, "/admin/email-templates/nope", nil)
+	req2 = routeWithKey(req2, "nope")
+	rec2 := httptest.NewRecorder()
+	h2.Reset(rec2, req2)
+	if rec2.Code != 200 {
+		t.Fatalf("unknown-key reset status = %d, want 200; body=%s", rec2.Code, rec2.Body.String())
+	}
+	if !strings.Contains(rec2.Body.String(), `"ok":true`) {
+		t.Fatalf("unknown-key reset body missing ok:true: %s", rec2.Body.String())
+	}
+}
+
+// TestPreviewTemplate_RendersSubjectHTML: GET preview of a real key → 200,
+// {subject,html} in order, with {{vars}} substituted (html greets {{name}} → Tan).
+func TestPreviewTemplate_RendersSubjectHTML(t *testing.T) {
+	repo := &fakeTemplatesRepo{}
+	h := newTemplatesHandler(repo)
+	req := httptest.NewRequest(http.MethodGet, "/admin/email-templates/verification/preview", nil)
+	req = routeWithKey(req, "verification")
+	rec := httptest.NewRecorder()
+	h.Preview(rec, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	raw := rec.Body.String()
+	assertTemplatesKeyOrder(t, raw, "subject", "html")
+
+	var body map[string]any
+	if err := json.Unmarshal([]byte(raw), &body); err != nil {
+		t.Fatalf("body not JSON: %v (%s)", err, raw)
+	}
+	if body["subject"] != builtinTemplates["verification"].subject {
+		t.Fatalf("subject = %v, want builtin verification subject", body["subject"])
+	}
+	html, _ := body["html"].(string)
+	if !strings.Contains(html, "Tan") {
+		t.Fatalf("html did not substitute {{name}} → Tan: %s", html)
+	}
+}
+
+// TestPreviewTemplate_UnknownKey404: GET preview of an unknown key → 404.
+func TestPreviewTemplate_UnknownKey404(t *testing.T) {
+	repo := &fakeTemplatesRepo{}
+	h := newTemplatesHandler(repo)
+	req := httptest.NewRequest(http.MethodGet, "/admin/email-templates/nope/preview", nil)
+	req = routeWithKey(req, "nope")
+	rec := httptest.NewRecorder()
+	h.Preview(rec, req)
+
+	if rec.Code != 404 {
+		t.Fatalf("status = %d, want 404; body=%s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"code":"not-found"`) {
+		t.Fatalf("body missing code not-found: %s", rec.Body.String())
+	}
+}
+
+// TestPreviewTemplate_UsesCustomization: a DB customization for verification
+// overrides the subject; the preview reflects the CUSTOM subject (DB-override-aware).
+func TestPreviewTemplate_UsesCustomization(t *testing.T) {
+	repo := &fakeTemplatesRepo{custom: map[string]DBTemplate{
+		"verification": {Subject: "Custom subject for {{name}}", HTML: "<p>custom {{name}}</p>"},
+	}}
+	h := newTemplatesHandler(repo)
+	req := httptest.NewRequest(http.MethodGet, "/admin/email-templates/verification/preview", nil)
+	req = routeWithKey(req, "verification")
+	rec := httptest.NewRecorder()
+	h.Preview(rec, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("body not JSON: %v", err)
+	}
+	if body["subject"] != "Custom subject for Tan" {
+		t.Fatalf("subject = %v, want custom (Custom subject for Tan)", body["subject"])
+	}
+	html, _ := body["html"].(string)
+	if !strings.Contains(html, "custom") {
+		t.Fatalf("html did not use custom template: %s", html)
+	}
 }

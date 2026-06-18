@@ -9,6 +9,15 @@ import (
 	"context"
 )
 
+const deleteEmailTemplate = `-- name: DeleteEmailTemplate :exec
+DELETE FROM email_templates WHERE template_key = $1
+`
+
+func (q *Queries) DeleteEmailTemplate(ctx context.Context, templateKey string) error {
+	_, err := q.db.Exec(ctx, deleteEmailTemplate, templateKey)
+	return err
+}
+
 const listEmailTemplates = `-- name: ListEmailTemplates :many
 SELECT template_key, subject, html FROM email_templates
 `
@@ -37,4 +46,22 @@ func (q *Queries) ListEmailTemplates(ctx context.Context) ([]ListEmailTemplatesR
 		return nil, err
 	}
 	return items, nil
+}
+
+const upsertEmailTemplate = `-- name: UpsertEmailTemplate :exec
+INSERT INTO email_templates (template_key, subject, html, updated_at)
+VALUES ($1, $2, $3, now())
+ON CONFLICT (template_key) DO UPDATE
+SET subject = EXCLUDED.subject, html = EXCLUDED.html, updated_at = now()
+`
+
+type UpsertEmailTemplateParams struct {
+	TemplateKey string `db:"template_key" json:"template_key"`
+	Subject     string `db:"subject" json:"subject"`
+	Html        string `db:"html" json:"html"`
+}
+
+func (q *Queries) UpsertEmailTemplate(ctx context.Context, arg UpsertEmailTemplateParams) error {
+	_, err := q.db.Exec(ctx, upsertEmailTemplate, arg.TemplateKey, arg.Subject, arg.Html)
+	return err
 }

@@ -22,7 +22,14 @@ package email
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"time"
 )
+
+// ErrUnknownTemplate is returned by Update/Preview when the path key is not a
+// known builtin template. Message mirrors Node's NotFoundException('Unknown
+// template') exactly — the handler maps it to 404 not-found.
+var ErrUnknownTemplate = errors.New("Unknown template")
 
 // DBTemplate is one email_templates customization row (the columns the merge
 // needs). Exported so the repo + handler ports share it.
@@ -92,6 +99,8 @@ func (tr TemplateRow) MarshalJSON() ([]byte, error) {
 // satisfies it. One method returns the customization map keyed by template_key.
 type adminTemplatesRepo interface {
 	ListCustomizations(ctx context.Context) (map[string]DBTemplate, error)
+	Upsert(ctx context.Context, key, subject, html string) error
+	Delete(ctx context.Context, key string) error
 }
 
 // AdminTemplatesService is the merged-templates list use case.
@@ -132,4 +141,51 @@ func (s *AdminTemplatesService) List(ctx context.Context) ([]TemplateRow, error)
 		rows = append(rows, row)
 	}
 	return rows, nil
+}
+
+// Update saves a customization for an existing builtin key (UPSERT on
+// template_key). An unknown builtin key → ErrUnknownTemplate (Node throws
+// NotFoundException before saving).
+func (s *AdminTemplatesService) Update(ctx context.Context, key, subject, html string) error {
+	if _, ok := builtinTemplates[key]; !ok {
+		return ErrUnknownTemplate
+	}
+	return s.repo.Upsert(ctx, key, subject, html)
+}
+
+// Reset deletes any customization for the key, restoring the builtin. Node does
+// NOT validate the key — it accepts ANY key and is idempotent (no 404).
+func (s *AdminTemplatesService) Reset(ctx context.Context, key string) error {
+	return s.repo.Delete(ctx, key)
+}
+
+// Preview renders the template for the key with sample vars, DB-override-aware.
+// Unknown key → ErrUnknownTemplate. Mirrors Node renderTemplate(key, sample):
+// the DB customization (if any) overrides the builtin def, then {{vars}} are
+// substituted (subject unescaped, html escaped).
+func (s *AdminTemplatesService) Preview(ctx context.Context, key string) (subject, html string, err error) {
+	def, ok := builtinTemplates[key]
+	if !ok {
+		return "", "", ErrUnknownTemplate
+	}
+	// Sample vars — byte-for-byte parity with Node's previewEmailTemplate.
+	sample := map[string]string{
+		"name":    "Tan",
+		"code":    "123456",
+		"plan":    "Pro",
+		"amount":  "124.000 ₫",
+		"expires": time.Now().Add(30 * 24 * time.Hour).Format("Mon Jan 02 2006"),
+	}
+
+	subjTpl := def.subject
+	htmlTpl := def.html
+	customs, err := s.repo.ListCustomizations(ctx)
+	if err != nil {
+		return "", "", err
+	}
+	if c, ok := customs[key]; ok {
+		subjTpl = c.Subject
+		htmlTpl = c.HTML
+	}
+	return substitute(subjTpl, sample, false), substitute(htmlTpl, sample, true), nil
 }

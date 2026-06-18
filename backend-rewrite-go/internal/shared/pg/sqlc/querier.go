@@ -33,6 +33,7 @@ type Querier interface {
 	// Insert a pending payment. Defaults (id, created_at, updated_at) are returned.
 	CreatePayment(ctx context.Context, arg CreatePaymentParams) (CreatePaymentRow, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
+	DeleteEmailTemplate(ctx context.Context, templateKey string) error
 	DeleteVote(ctx context.Context, arg DeleteVoteParams) error
 	DemoteDefaultAiProviders(ctx context.Context) error
 	ExpireByStoreRef(ctx context.Context, arg ExpireByStoreRefParams) (int64, error)
@@ -289,6 +290,7 @@ type Querier interface {
 	UpdatePaymentQRData(ctx context.Context, arg UpdatePaymentQRDataParams) error
 	UpdateUserPasswordHash(ctx context.Context, arg UpdateUserPasswordHashParams) error
 	UpdateUserVerification(ctx context.Context, arg UpdateUserVerificationParams) error
+	UpsertEmailTemplate(ctx context.Context, arg UpsertEmailTemplateParams) error
 	// internal/shared/pg/queries_bugreports.sql
 	// Public bug-report ingest (POST /bug-reports, multipart with optional
 	// screenshot). user_id is nulled when the JWT outlives its user.

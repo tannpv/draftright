@@ -35,3 +35,19 @@ func (r *AdminTemplatesRepo) ListCustomizations(ctx context.Context) (map[string
 	}
 	return out, nil
 }
+
+// Upsert inserts or updates the customization row for template_key (PK), mirroring
+// Node's emailTemplateRepo.save(create({template_key, subject, html})).
+func (r *AdminTemplatesRepo) Upsert(ctx context.Context, key, subject, html string) error {
+	return r.q.UpsertEmailTemplate(ctx, sqlc.UpsertEmailTemplateParams{
+		TemplateKey: key,
+		Subject:     subject,
+		Html:        html,
+	})
+}
+
+// Delete removes the customization row for template_key (reset to builtin),
+// mirroring Node's emailTemplateRepo.delete({template_key}). Idempotent.
+func (r *AdminTemplatesRepo) Delete(ctx context.Context, key string) error {
+	return r.q.DeleteEmailTemplate(ctx, key)
+}
