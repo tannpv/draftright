@@ -372,6 +372,90 @@ func (r *Router) Build() http.Handler {
 		if r.AdminMe != nil {
 			admin.Method(http.MethodGet, "/admin/auth/me", r.AdminMe)
 		}
+
+		// Phase 4c-2 admin content/ops CRUD (Task 21). All nil-guarded,
+		// behind the same RequireAuth → RequireAdmin chain.
+		if r.AiProvidersList != nil {
+			admin.Method(http.MethodGet, "/admin/ai-providers", r.AiProvidersList)
+		}
+		if r.AiProvidersPaginated != nil {
+			admin.Method(http.MethodGet, "/admin/ai-providers/paginated", r.AiProvidersPaginated)
+		}
+		if r.AiProviderCreate != nil {
+			admin.Method(http.MethodPost, "/admin/ai-providers", r.AiProviderCreate)
+		}
+		if r.AiProviderUpdate != nil {
+			admin.Method(http.MethodPatch, "/admin/ai-providers/{id}", r.AiProviderUpdate)
+		}
+		if r.AiProviderDelete != nil {
+			admin.Method(http.MethodDelete, "/admin/ai-providers/{id}", r.AiProviderDelete)
+		}
+		if r.AiProviderTest != nil {
+			admin.Method(http.MethodPost, "/admin/ai-providers/{id}/test", r.AiProviderTest)
+		}
+
+		if r.AppSettingsGet != nil {
+			admin.Method(http.MethodGet, "/admin/settings", r.AppSettingsGet)
+		}
+		if r.AppSettingsPatch != nil {
+			admin.Method(http.MethodPatch, "/admin/settings", r.AppSettingsPatch)
+		}
+		if r.AppSettingsTestEmail != nil {
+			admin.Method(http.MethodPost, "/admin/settings/test-email", r.AppSettingsTestEmail)
+		}
+
+		if r.AdminPlansList != nil {
+			admin.Method(http.MethodGet, "/admin/plans", r.AdminPlansList)
+		}
+		if r.AdminPlanCreate != nil {
+			admin.Method(http.MethodPost, "/admin/plans", r.AdminPlanCreate)
+		}
+		if r.AdminPlanUpdate != nil {
+			admin.Method(http.MethodPatch, "/admin/plans/{id}", r.AdminPlanUpdate)
+		}
+		if r.AdminPlanDelete != nil {
+			admin.Method(http.MethodDelete, "/admin/plans/{id}", r.AdminPlanDelete)
+		}
+
+		if r.AdminUsersList != nil {
+			admin.Method(http.MethodGet, "/admin/users", r.AdminUsersList)
+		}
+		if r.AdminUserGet != nil {
+			admin.Method(http.MethodGet, "/admin/users/{id}", r.AdminUserGet)
+		}
+		if r.AdminUserUpdate != nil {
+			admin.Method(http.MethodPatch, "/admin/users/{id}", r.AdminUserUpdate)
+		}
+
+		if r.AdminAccountsList != nil {
+			admin.Method(http.MethodGet, "/admin/admin-users", r.AdminAccountsList)
+		}
+		if r.AdminAccountCreate != nil {
+			admin.Method(http.MethodPost, "/admin/admin-users", r.AdminAccountCreate)
+		}
+		if r.AdminAccountUpdate != nil {
+			admin.Method(http.MethodPatch, "/admin/admin-users/{id}", r.AdminAccountUpdate)
+		}
+		if r.AdminAccountDelete != nil {
+			admin.Method(http.MethodDelete, "/admin/admin-users/{id}", r.AdminAccountDelete)
+		}
+
+		if r.AdminEmailLogs != nil {
+			admin.Method(http.MethodGet, "/admin/email-logs", r.AdminEmailLogs)
+		}
+
+		if r.AdminEmailTemplatesList != nil {
+			admin.Method(http.MethodGet, "/admin/email-templates", r.AdminEmailTemplatesList)
+		}
+		if r.AdminEmailTemplateUpdate != nil {
+			admin.Method(http.MethodPatch, "/admin/email-templates/{key}", r.AdminEmailTemplateUpdate)
+		}
+		if r.AdminEmailTemplateReset != nil {
+			admin.Method(http.MethodDelete, "/admin/email-templates/{key}", r.AdminEmailTemplateReset)
+		}
+		if r.AdminEmailTemplatePreview != nil {
+			admin.Method(http.MethodGet, "/admin/email-templates/{key}/preview", r.AdminEmailTemplatePreview)
+		}
 	})
 
 	if r.EnableTracing {
