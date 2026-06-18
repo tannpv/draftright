@@ -11,6 +11,28 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countAllUsers = `-- name: CountAllUsers :one
+
+SELECT COUNT(*) FROM users
+`
+
+// Admin user CRUD (Phase 4c-2). GET /admin/users/:id returns the FULL
+// TypeORM User entity (the `user` field); PATCH /admin/users/:id re-reads
+// it. Only the full-row GET is static — the bespoke paginated list, its
+// COUNT, and the partial UPDATE have runtime WHERE/ORDER/SET and so are
+// assembled in Go on the pool (NOT here). Columns are listed in
+// entity-declaration order (src/users/entities/user.entity.ts) so the
+// scan lines up with user.UserDetail. The two nullable timestamps are
+// timestamptz; the two non-null timestamps are timestamp.
+// CountAllUsers mirrors usersService.count() used by GET /admin/stats:
+// usersRepo.count() = SELECT COUNT(*) FROM users (no WHERE, all rows).
+func (q *Queries) CountAllUsers(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countAllUsers)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const getActiveSubFullByUser = `-- name: GetActiveSubFullByUser :one
 SELECT s.id, s.user_id, s.plan_id, s.status::text AS status, s.store_type::text AS store_type,
        s.store_transaction_id, s.started_at, s.expires_at, s.created_at, s.updated_at,
@@ -84,7 +106,6 @@ func (q *Queries) GetActiveSubFullByUser(ctx context.Context, userID pgtype.UUID
 }
 
 const getUserFull = `-- name: GetUserFull :one
-
 SELECT id, email, password_hash, name, is_active, role, auth_provider,
        google_id, facebook_id, tiktok_id, apple_id, avatar_url,
        stripe_customer_id, email_verified, email_verification_code,
@@ -118,14 +139,6 @@ type GetUserFullRow struct {
 	UpdatedAt                pgtype.Timestamp      `db:"updated_at" json:"updated_at"`
 }
 
-// Admin user CRUD (Phase 4c-2). GET /admin/users/:id returns the FULL
-// TypeORM User entity (the `user` field); PATCH /admin/users/:id re-reads
-// it. Only the full-row GET is static — the bespoke paginated list, its
-// COUNT, and the partial UPDATE have runtime WHERE/ORDER/SET and so are
-// assembled in Go on the pool (NOT here). Columns are listed in
-// entity-declaration order (src/users/entities/user.entity.ts) so the
-// scan lines up with user.UserDetail. The two nullable timestamps are
-// timestamptz; the two non-null timestamps are timestamp.
 func (q *Queries) GetUserFull(ctx context.Context, id pgtype.UUID) (GetUserFullRow, error) {
 	row := q.db.QueryRow(ctx, getUserFull, id)
 	var i GetUserFullRow

@@ -21,6 +21,17 @@ type Querier interface {
 	CancelByStoreRef(ctx context.Context, arg CancelByStoreRefParams) (int64, error)
 	// Mirrors subscriptionsService.countActive(): COUNT where status=active.
 	CountActiveSubscriptions(ctx context.Context) (int64, error)
+	// Admin user CRUD (Phase 4c-2). GET /admin/users/:id returns the FULL
+	// TypeORM User entity (the `user` field); PATCH /admin/users/:id re-reads
+	// it. Only the full-row GET is static — the bespoke paginated list, its
+	// COUNT, and the partial UPDATE have runtime WHERE/ORDER/SET and so are
+	// assembled in Go on the pool (NOT here). Columns are listed in
+	// entity-declaration order (src/users/entities/user.entity.ts) so the
+	// scan lines up with user.UserDetail. The two nullable timestamps are
+	// timestamptz; the two non-null timestamps are timestamp.
+	// CountAllUsers mirrors usersService.count() used by GET /admin/stats:
+	// usersRepo.count() = SELECT COUNT(*) FROM users (no WHERE, all rows).
+	CountAllUsers(ctx context.Context) (int64, error)
 	// Mirrors getMonthlyStats churned sub-query: subs with status cancelled or expired
 	// whose updated_at falls in [start, end). Node:
 	// .where('sub.status IN (:...statuses)', {statuses:['cancelled','expired']})
@@ -197,14 +208,6 @@ type Querier interface {
 	GetUserEmailName(ctx context.Context, id pgtype.UUID) (GetUserEmailNameRow, error)
 	// User fields createCheckout / portal / cancel need. No row → pgx.ErrNoRows.
 	GetUserForCheckout(ctx context.Context, id pgtype.UUID) (GetUserForCheckoutRow, error)
-	// Admin user CRUD (Phase 4c-2). GET /admin/users/:id returns the FULL
-	// TypeORM User entity (the `user` field); PATCH /admin/users/:id re-reads
-	// it. Only the full-row GET is static — the bespoke paginated list, its
-	// COUNT, and the partial UPDATE have runtime WHERE/ORDER/SET and so are
-	// assembled in Go on the pool (NOT here). Columns are listed in
-	// entity-declaration order (src/users/entities/user.entity.ts) so the
-	// scan lines up with user.UserDetail. The two nullable timestamps are
-	// timestamptz; the two non-null timestamps are timestamp.
 	GetUserFull(ctx context.Context, id pgtype.UUID) (GetUserFullRow, error)
 	InsertAdminUser(ctx context.Context, arg InsertAdminUserParams) (InsertAdminUserRow, error)
 	InsertAiProvider(ctx context.Context, arg InsertAiProviderParams) (InsertAiProviderRow, error)

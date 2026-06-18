@@ -7,6 +7,11 @@
 -- scan lines up with user.UserDetail. The two nullable timestamps are
 -- timestamptz; the two non-null timestamps are timestamp.
 
+-- CountAllUsers mirrors usersService.count() used by GET /admin/stats:
+-- usersRepo.count() = SELECT COUNT(*) FROM users (no WHERE, all rows).
+-- name: CountAllUsers :one
+SELECT COUNT(*) FROM users;
+
 -- name: GetUserFull :one
 SELECT id, email, password_hash, name, is_active, role, auth_provider,
        google_id, facebook_id, tiktok_id, apple_id, avatar_url,
