@@ -333,6 +333,92 @@ func TestUpdateUser_ReturnsFullEntity(t *testing.T) {
 	}
 }
 
+// TestUpdateUser_Validation mirrors Node's global ValidationPipe
+// (whitelist + forbidNonWhitelisted) over UpdateUserDto. Each rejected
+// body → 400, code invalid-input, exact constraint message; each accepted
+// body → 200. Single-error cases are the realistic ones the shadow gate
+// cares about byte-for-byte.
+func TestUpdateUser_Validation(t *testing.T) {
+	cases := []struct {
+		name    string
+		body    string
+		wantErr string // "" means expect 200
+	}{
+		{"role admin rejected", `{"role":"admin"}`, "role must be one of the following values: user"},
+		{"role user ok", `{"role":"user"}`, ""},
+		{"is_active wrong type", `{"is_active":"yes"}`, "is_active must be a boolean value"},
+		{"is_active false ok", `{"is_active":false}`, ""},
+		{"name wrong type", `{"name":123}`, "name must be a string"},
+		{"unknown key", `{"foo":"bar"}`, "property foo should not exist"},
+		{"all valid", `{"name":"Tan","is_active":true,"role":"user"}`, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			now := time.Now()
+			repo := &fakeAdminUserRepo{getFull: UserDetail{
+				ID: "u1", Email: "a@b.c", Name: "Al", Role: "user", IsActive: true,
+				CreatedAt: now, UpdatedAt: now,
+			}}
+			h := newHandler(repo, &fakeSubReader{}, &fakeUsage{}, &fakeRecent{})
+
+			rec := httptest.NewRecorder()
+			req := routeWithID(httptest.NewRequest(http.MethodPatch, "/admin/users/u1",
+				strings.NewReader(tc.body)), "u1")
+			h.UpdateUser(rec, req)
+
+			if tc.wantErr == "" {
+				if rec.Code != 200 {
+					t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+				}
+				return
+			}
+			if rec.Code != 400 {
+				t.Fatalf("status = %d, want 400; body=%s", rec.Code, rec.Body.String())
+			}
+			m := decodeBody(t, rec.Body.String())
+			if m["code"] != "invalid-input" {
+				t.Fatalf("code = %v, want invalid-input; body=%s", m["code"], rec.Body.String())
+			}
+			if m["error"] != tc.wantErr {
+				t.Fatalf("error = %q, want %q", m["error"], tc.wantErr)
+			}
+		})
+	}
+}
+
+// TestUpdateUser_FullEntityKeyOrder: a valid PATCH returns the re-read full
+// entity (verified richer than UserListRow via password_hash) — guards the
+// success path still proceeds after validation.
+func TestUpdateUser_FullEntityKeyOrder(t *testing.T) {
+	now := time.Now()
+	repo := &fakeAdminUserRepo{getFull: UserDetail{
+		ID: "u1", Email: "a@b.c", Name: "Tan", Role: "user", IsActive: true,
+		CreatedAt: now, UpdatedAt: now,
+	}}
+	h := newHandler(repo, &fakeSubReader{}, &fakeUsage{}, &fakeRecent{})
+	rec := httptest.NewRecorder()
+	req := routeWithID(httptest.NewRequest(http.MethodPatch, "/admin/users/u1",
+		strings.NewReader(`{"name":"Tan","is_active":true,"role":"user"}`)), "u1")
+	h.UpdateUser(rec, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	if repo.updated.Name == nil || *repo.updated.Name != "Tan" {
+		t.Fatalf("name patch not passed: %+v", repo.updated)
+	}
+	if repo.updated.Role == nil || *repo.updated.Role != "user" {
+		t.Fatalf("role patch not passed: %+v", repo.updated)
+	}
+	if repo.updated.IsActive == nil || *repo.updated.IsActive != true {
+		t.Fatalf("is_active patch not passed: %+v", repo.updated)
+	}
+	m := decodeBody(t, rec.Body.String())
+	if _, ok := m["password_hash"]; !ok {
+		t.Fatalf("response is not the full UserDetail: %s", rec.Body.String())
+	}
+}
+
 // TestUpdateUser_MissingIs500: re-read ErrNotFound → 500 internal (Node
 // findOneOrFail parity, NOT a 404).
 func TestUpdateUser_MissingIs500(t *testing.T) {

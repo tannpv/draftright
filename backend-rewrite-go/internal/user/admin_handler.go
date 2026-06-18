@@ -13,7 +13,7 @@ package user
 
 import (
 	"context"
-	"encoding/json"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -45,15 +45,6 @@ func NewAdminHandler(svc *AdminService) *AdminHandler { return &AdminHandler{svc
 type adminUsersListResponse struct {
 	Users []AdminUserRow `json:"users"`
 	Total int            `json:"total"`
-}
-
-// updateUserBody decodes the PATCH body. Snake-case tags bind the admin UI's
-// keys; pointers distinguish absent (nil = unchanged, TypeORM partial update)
-// from present. Mirrors UpdateUserDto (is_active, role, name — all optional).
-type updateUserBody struct {
-	IsActive *bool   `json:"is_active"`
-	Role     *string `json:"role"`
-	Name     *string `json:"name"`
 }
 
 // List handles GET /admin/users. Bespoke parse → svc.List → { users, total }.
@@ -121,15 +112,19 @@ func (h *AdminHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 // AllExceptionsFilter, NOT a 404.
 func (h *AdminHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	var body updateUserBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	raw, err := io.ReadAll(r.Body)
+	if err != nil {
 		shared.WriteError(w, r, "invalid-input", "Invalid request body")
 		return
 	}
-	patch := UserPatchAdmin{
-		IsActive: body.IsActive,
-		Role:     body.Role,
-		Name:     body.Name,
+	// Mirror Node's global ValidationPipe (whitelist + forbidNonWhitelisted)
+	// over UpdateUserDto: any unknown key, type mismatch, or role != "user"
+	// → 400 invalid-input with the exact class-validator message(s) joined
+	// by ". ". Missing key = nil pointer = column untouched (TypeORM partial).
+	patch, msg := validateUpdateUser(raw)
+	if msg != "" {
+		shared.WriteError(w, r, "invalid-input", msg)
+		return
 	}
 	user, err := h.svc.Update(r.Context(), id, patch)
 	if err != nil {
