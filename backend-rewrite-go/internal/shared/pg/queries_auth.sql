@@ -279,3 +279,47 @@ WHERE s.started_at >= $1 AND s.started_at < $2;
 SELECT COUNT(*) FROM subscriptions
 WHERE status IN ('cancelled'::subscriptions_status_enum, 'expired'::subscriptions_status_enum)
   AND updated_at >= $1 AND updated_at < $2;
+
+-- name: ListSubscriptionsPaginated :many
+-- Mirrors subscriptionsService.findAllPaginated (admin transactions list):
+-- LEFT JOIN users + plans, ORDER BY created_at DESC, optional ILIKE search.
+-- When search IS NULL the WHERE branch matches all rows (Node omits WHERE entirely).
+-- Limit/offset passed by caller; default limit 20 (bespoke, not shared 10).
+SELECT s.id,
+       u.email  AS user_email,
+       u.name   AS user_name,
+       s.user_id,
+       p.name   AS plan_name,
+       p.price_cents,
+       s.store_type,
+       s.store_transaction_id,
+       s.status,
+       s.started_at,
+       s.expires_at,
+       s.created_at
+FROM subscriptions s
+LEFT JOIN users u ON u.id = s.user_id
+LEFT JOIN plans p ON p.id = s.plan_id
+WHERE (sqlc.narg('search')::text IS NULL
+       OR u.email ILIKE '%' || sqlc.narg('search') || '%'
+       OR u.name  ILIKE '%' || sqlc.narg('search') || '%')
+ORDER BY s.created_at DESC
+LIMIT $1 OFFSET $2;
+
+-- name: CountSubscriptionsPaginated :one
+-- Count twin of ListSubscriptionsPaginated — no LIMIT/OFFSET.
+-- Same optional search filter; LEFT JOIN users only (no plans needed for count).
+SELECT COUNT(*) FROM subscriptions s
+LEFT JOIN users u ON u.id = s.user_id
+WHERE (sqlc.narg('search')::text IS NULL
+       OR u.email ILIKE '%' || sqlc.narg('search') || '%'
+       OR u.name  ILIKE '%' || sqlc.narg('search') || '%');
+
+-- name: FindLatestStripeForUserPlan :one
+-- Newest Stripe subscription for a (user, plan) pair — used by admin refund flow.
+-- Any status is fine (the sub may be cancelled/expired after the charge).
+-- Returns (id, store_transaction_id); no row → pgx.ErrNoRows.
+SELECT id, store_transaction_id FROM subscriptions
+WHERE user_id = $1 AND plan_id = $2
+  AND store_type = 'stripe'::subscriptions_store_type_enum
+ORDER BY created_at DESC LIMIT 1;

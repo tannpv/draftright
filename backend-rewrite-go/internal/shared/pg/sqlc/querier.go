@@ -32,6 +32,9 @@ type Querier interface {
 	// .where('sub.started_at >= :start AND sub.started_at < :end').getCount()
 	// No status filter — matches Node exactly.
 	CountNewSubsInWindow(ctx context.Context, arg CountNewSubsInWindowParams) (int64, error)
+	// Count twin of ListSubscriptionsPaginated — no LIMIT/OFFSET.
+	// Same optional search filter; LEFT JOIN users only (no plans needed for count).
+	CountSubscriptionsPaginated(ctx context.Context, search *string) (int64, error)
 	// Today's daily-quota tally for the user. Compared against
 	// plan.daily_limit in the application layer (so the limit can come
 	// from a fallback when the user has no subscription).
@@ -74,6 +77,10 @@ type Querier interface {
 	// order created_at ASC). Returns the active plan id for that (period, currency).
 	FindFirstActivePlanByPeriodCurrency(ctx context.Context, arg FindFirstActivePlanByPeriodCurrencyParams) (pgtype.UUID, error)
 	FindFreePlan(ctx context.Context) (FindFreePlanRow, error)
+	// Newest Stripe subscription for a (user, plan) pair — used by admin refund flow.
+	// Any status is fine (the sub may be cancelled/expired after the charge).
+	// Returns (id, store_transaction_id); no row → pgx.ErrNoRows.
+	FindLatestStripeForUserPlan(ctx context.Context, arg FindLatestStripeForUserPlanParams) (FindLatestStripeForUserPlanRow, error)
 	FindUserByAppleId(ctx context.Context, appleID *string) (FindUserByAppleIdRow, error)
 	FindUserByFacebookId(ctx context.Context, facebookID *string) (FindUserByFacebookIdRow, error)
 	FindUserByGoogleId(ctx context.Context, googleID *string) (FindUserByGoogleIdRow, error)
@@ -255,6 +262,11 @@ type Querier interface {
 	// with its plan (TypeORM relations:['plan'] order:{created_at:'DESC'} take:20).
 	ListPaymentsByUser(ctx context.Context, userID pgtype.UUID) ([]ListPaymentsByUserRow, error)
 	ListPublicFeatures(ctx context.Context, arg ListPublicFeaturesParams) ([]ListPublicFeaturesRow, error)
+	// Mirrors subscriptionsService.findAllPaginated (admin transactions list):
+	// LEFT JOIN users + plans, ORDER BY created_at DESC, optional ILIKE search.
+	// When search IS NULL the WHERE branch matches all rows (Node omits WHERE entirely).
+	// Limit/offset passed by caller; default limit 20 (bespoke, not shared 10).
+	ListSubscriptionsPaginated(ctx context.Context, arg ListSubscriptionsPaginatedParams) ([]ListSubscriptionsPaginatedRow, error)
 	// Reflect a Resend delivery event onto email_logs.status (by Resend
 	// message id). error is only overwritten when a reason is supplied —
 	// a NULL reason leaves the existing error untouched, mirroring the

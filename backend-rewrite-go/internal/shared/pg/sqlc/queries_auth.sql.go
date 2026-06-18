@@ -94,6 +94,23 @@ func (q *Queries) CountNewSubsInWindow(ctx context.Context, arg CountNewSubsInWi
 	return count, err
 }
 
+const countSubscriptionsPaginated = `-- name: CountSubscriptionsPaginated :one
+SELECT COUNT(*) FROM subscriptions s
+LEFT JOIN users u ON u.id = s.user_id
+WHERE ($1::text IS NULL
+       OR u.email ILIKE '%' || $1 || '%'
+       OR u.name  ILIKE '%' || $1 || '%')
+`
+
+// Count twin of ListSubscriptionsPaginated — no LIMIT/OFFSET.
+// Same optional search filter; LEFT JOIN users only (no plans needed for count).
+func (q *Queries) CountSubscriptionsPaginated(ctx context.Context, search *string) (int64, error) {
+	row := q.db.QueryRow(ctx, countSubscriptionsPaginated, search)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countUsageThisMonthAll = `-- name: CountUsageThisMonthAll :one
 SELECT COUNT(*) FROM usage_logs WHERE created_at >= $1
 `
@@ -336,6 +353,33 @@ func (q *Queries) FindFreePlan(ctx context.Context) (FindFreePlanRow, error) {
 	row := q.db.QueryRow(ctx, findFreePlan)
 	var i FindFreePlanRow
 	err := row.Scan(&i.ID, &i.Name, &i.DailyLimit)
+	return i, err
+}
+
+const findLatestStripeForUserPlan = `-- name: FindLatestStripeForUserPlan :one
+SELECT id, store_transaction_id FROM subscriptions
+WHERE user_id = $1 AND plan_id = $2
+  AND store_type = 'stripe'::subscriptions_store_type_enum
+ORDER BY created_at DESC LIMIT 1
+`
+
+type FindLatestStripeForUserPlanParams struct {
+	UserID pgtype.UUID `db:"user_id" json:"user_id"`
+	PlanID pgtype.UUID `db:"plan_id" json:"plan_id"`
+}
+
+type FindLatestStripeForUserPlanRow struct {
+	ID                 pgtype.UUID `db:"id" json:"id"`
+	StoreTransactionID *string     `db:"store_transaction_id" json:"store_transaction_id"`
+}
+
+// Newest Stripe subscription for a (user, plan) pair — used by admin refund flow.
+// Any status is fine (the sub may be cancelled/expired after the charge).
+// Returns (id, store_transaction_id); no row → pgx.ErrNoRows.
+func (q *Queries) FindLatestStripeForUserPlan(ctx context.Context, arg FindLatestStripeForUserPlanParams) (FindLatestStripeForUserPlanRow, error) {
+	row := q.db.QueryRow(ctx, findLatestStripeForUserPlan, arg.UserID, arg.PlanID)
+	var i FindLatestStripeForUserPlanRow
+	err := row.Scan(&i.ID, &i.StoreTransactionID)
 	return i, err
 }
 
@@ -921,6 +965,87 @@ func (q *Queries) ListActivePlans(ctx context.Context) ([]ListActivePlansRow, er
 			&i.IsActive,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSubscriptionsPaginated = `-- name: ListSubscriptionsPaginated :many
+SELECT s.id,
+       u.email  AS user_email,
+       u.name   AS user_name,
+       s.user_id,
+       p.name   AS plan_name,
+       p.price_cents,
+       s.store_type,
+       s.store_transaction_id,
+       s.status,
+       s.started_at,
+       s.expires_at,
+       s.created_at
+FROM subscriptions s
+LEFT JOIN users u ON u.id = s.user_id
+LEFT JOIN plans p ON p.id = s.plan_id
+WHERE ($3::text IS NULL
+       OR u.email ILIKE '%' || $3 || '%'
+       OR u.name  ILIKE '%' || $3 || '%')
+ORDER BY s.created_at DESC
+LIMIT $1 OFFSET $2
+`
+
+type ListSubscriptionsPaginatedParams struct {
+	Limit  int32   `db:"limit" json:"limit"`
+	Offset int32   `db:"offset" json:"offset"`
+	Search *string `db:"search" json:"search"`
+}
+
+type ListSubscriptionsPaginatedRow struct {
+	ID                 pgtype.UUID                `db:"id" json:"id"`
+	UserEmail          *string                    `db:"user_email" json:"user_email"`
+	UserName           *string                    `db:"user_name" json:"user_name"`
+	UserID             pgtype.UUID                `db:"user_id" json:"user_id"`
+	PlanName           *string                    `db:"plan_name" json:"plan_name"`
+	PriceCents         *int32                     `db:"price_cents" json:"price_cents"`
+	StoreType          SubscriptionsStoreTypeEnum `db:"store_type" json:"store_type"`
+	StoreTransactionID *string                    `db:"store_transaction_id" json:"store_transaction_id"`
+	Status             SubscriptionsStatusEnum    `db:"status" json:"status"`
+	StartedAt          pgtype.Timestamp           `db:"started_at" json:"started_at"`
+	ExpiresAt          pgtype.Timestamp           `db:"expires_at" json:"expires_at"`
+	CreatedAt          pgtype.Timestamp           `db:"created_at" json:"created_at"`
+}
+
+// Mirrors subscriptionsService.findAllPaginated (admin transactions list):
+// LEFT JOIN users + plans, ORDER BY created_at DESC, optional ILIKE search.
+// When search IS NULL the WHERE branch matches all rows (Node omits WHERE entirely).
+// Limit/offset passed by caller; default limit 20 (bespoke, not shared 10).
+func (q *Queries) ListSubscriptionsPaginated(ctx context.Context, arg ListSubscriptionsPaginatedParams) ([]ListSubscriptionsPaginatedRow, error) {
+	rows, err := q.db.Query(ctx, listSubscriptionsPaginated, arg.Limit, arg.Offset, arg.Search)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListSubscriptionsPaginatedRow{}
+	for rows.Next() {
+		var i ListSubscriptionsPaginatedRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserEmail,
+			&i.UserName,
+			&i.UserID,
+			&i.PlanName,
+			&i.PriceCents,
+			&i.StoreType,
+			&i.StoreTransactionID,
+			&i.Status,
+			&i.StartedAt,
+			&i.ExpiresAt,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}

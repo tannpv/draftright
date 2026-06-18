@@ -5,12 +5,14 @@ package subscription
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/tannpv/draftright-rewrite/internal/shared"
 	sqlc "github.com/tannpv/draftright-rewrite/internal/shared/pg/sqlc"
 )
 
@@ -46,6 +48,89 @@ type Querier interface {
 	CountNewSubsInWindow(ctx context.Context, arg sqlc.CountNewSubsInWindowParams) (int64, error)
 	SumRevenueInWindow(ctx context.Context, arg sqlc.SumRevenueInWindowParams) (int64, error)
 	CountChurnedInWindow(ctx context.Context, arg sqlc.CountChurnedInWindowParams) (int64, error)
+	ListSubscriptionsPaginated(ctx context.Context, arg sqlc.ListSubscriptionsPaginatedParams) ([]sqlc.ListSubscriptionsPaginatedRow, error)
+	CountSubscriptionsPaginated(ctx context.Context, search *string) (int64, error)
+	FindLatestStripeForUserPlan(ctx context.Context, arg sqlc.FindLatestStripeForUserPlanParams) (sqlc.FindLatestStripeForUserPlanRow, error)
+}
+
+// ─── Admin transactions list types (Phase 4c-3) ──────────────────────────────
+
+// TxQuery is the input for FindAllPaginated. Page is 1-based; Limit defaults
+// to 20 (bespoke). An empty Search passes NULL to the DB (matches all rows).
+type TxQuery struct {
+	Search string
+	Page   int
+	Limit  int
+}
+
+// TransactionRow is one row of the admin transactions list. It mirrors Node's
+// listTransactions mapped object exactly:
+//   - NULL user email/name/plan_name → "—" (U+2014, matching Node's `|| '—'`)
+//   - NULL price_cents → 0
+//   - store_transaction_id: pass-through (nullable → JSON null, not "—")
+//   - timestamps: ISOMillis format (ms precision, trailing Z), expires_at is nullable
+type TransactionRow struct {
+	ID                 string
+	UserEmail          string
+	UserName           string
+	UserID             string
+	PlanName           string
+	PriceCents         int
+	StoreType          string
+	StoreTransactionID *string
+	Status             string
+	StartedAt          *time.Time
+	ExpiresAt          *time.Time
+	CreatedAt          *time.Time
+}
+
+// MarshalJSON pins TransactionRow to Node's listTransactions field order and
+// timestamp format (ISOMillis). expires_at is null when nil.
+func (t TransactionRow) MarshalJSON() ([]byte, error) {
+	type wire struct {
+		ID                 string  `json:"id"`
+		UserEmail          string  `json:"user_email"`
+		UserName           string  `json:"user_name"`
+		UserID             string  `json:"user_id"`
+		PlanName           string  `json:"plan_name"`
+		PriceCents         int     `json:"price_cents"`
+		StoreType          string  `json:"store_type"`
+		StoreTransactionID *string `json:"store_transaction_id"`
+		Status             string  `json:"status"`
+		StartedAt          *string `json:"started_at"`
+		ExpiresAt          *string `json:"expires_at"`
+		CreatedAt          *string `json:"created_at"`
+	}
+	w := wire{
+		ID:                 t.ID,
+		UserEmail:          t.UserEmail,
+		UserName:           t.UserName,
+		UserID:             t.UserID,
+		PlanName:           t.PlanName,
+		PriceCents:         t.PriceCents,
+		StoreType:          t.StoreType,
+		StoreTransactionID: t.StoreTransactionID,
+		Status:             t.Status,
+	}
+	if t.StartedAt != nil {
+		s := shared.ISOMillis(*t.StartedAt)
+		w.StartedAt = &s
+	}
+	if t.ExpiresAt != nil {
+		s := shared.ISOMillis(*t.ExpiresAt)
+		w.ExpiresAt = &s
+	}
+	if t.CreatedAt != nil {
+		s := shared.ISOMillis(*t.CreatedAt)
+		w.CreatedAt = &s
+	}
+	return json.Marshal(w)
+}
+
+// TxPage is the paginated result for FindAllPaginated.
+type TxPage struct {
+	Transactions []TransactionRow
+	Total        int
 }
 
 // Reader resolves the active subscription.
@@ -288,4 +373,104 @@ func (r *Reader) GetMonthlyStatsAt(ctx context.Context, now time.Time, months in
 		})
 	}
 	return out, nil
+}
+
+// ─── FindAllPaginated (Phase 4c-3) ───────────────────────────────────────────
+
+// emDash is the Unicode em-dash character (U+2014), matching Node's
+// `sub.user?.email || '—'` fallback in listTransactions.
+const emDash = "—"
+
+// derefOrEmDash returns the dereferenced string or emDash when nil.
+func derefOrEmDash(s *string) string {
+	if s == nil {
+		return emDash
+	}
+	return *s
+}
+
+// toTimePtr converts a pgtype.Timestamp to a *time.Time, returning nil when
+// the Timestamp is not valid (NULL column).
+func toTimePtr(ts pgtype.Timestamp) *time.Time {
+	if !ts.Valid {
+		return nil
+	}
+	t := ts.Time
+	return &t
+}
+
+// FindAllPaginated mirrors subscriptionsService.findAllPaginated + the
+// listTransactions row mapping. Two queries (list + count = getManyAndCount).
+// Default limit is 20 (bespoke — caller must set TxQuery.Limit).
+// When Search is empty, nil is passed to the DB so the IS NULL branch fires
+// (matches all rows, parity with Node omitting the WHERE clause).
+func (r *Reader) FindAllPaginated(ctx context.Context, q TxQuery) (TxPage, error) {
+	var searchPtr *string
+	if q.Search != "" {
+		searchPtr = &q.Search
+	}
+	offset := int32((q.Page - 1) * q.Limit)
+	limit := int32(q.Limit)
+
+	rows, err := r.q.ListSubscriptionsPaginated(ctx, sqlc.ListSubscriptionsPaginatedParams{
+		Limit:  limit,
+		Offset: offset,
+		Search: searchPtr,
+	})
+	if err != nil {
+		return TxPage{}, err
+	}
+
+	total, err := r.q.CountSubscriptionsPaginated(ctx, searchPtr)
+	if err != nil {
+		return TxPage{}, err
+	}
+
+	out := make([]TransactionRow, 0, len(rows))
+	for _, row := range rows {
+		tx := TransactionRow{
+			ID:                 uuid.UUID(row.ID.Bytes).String(),
+			UserEmail:          derefOrEmDash(row.UserEmail),
+			UserName:           derefOrEmDash(row.UserName),
+			UserID:             uuid.UUID(row.UserID.Bytes).String(),
+			PlanName:           derefOrEmDash(row.PlanName),
+			PriceCents:         derefInt32(row.PriceCents),
+			StoreType:          string(row.StoreType),
+			StoreTransactionID: row.StoreTransactionID,
+			Status:             string(row.Status),
+			StartedAt:          toTimePtr(row.StartedAt),
+			ExpiresAt:          toTimePtr(row.ExpiresAt),
+			CreatedAt:          toTimePtr(row.CreatedAt),
+		}
+		out = append(out, tx)
+	}
+	return TxPage{Transactions: out, Total: int(total)}, nil
+}
+
+// ─── FindLatestStripeForUserPlan (Phase 4c-3) ────────────────────────────────
+
+// FindLatestStripeForUserPlan mirrors subscriptionsService.findLatestStripeForUserPlan:
+// returns the store_transaction_id of the most-recent Stripe subscription for
+// a (user, plan) pair. Used by the admin refund flow.
+// No row → ("", false, nil). Other DB errors propagate.
+func (r *Reader) FindLatestStripeForUserPlan(ctx context.Context, userID, planID string) (storeTxID string, found bool, err error) {
+	var uid, pid pgtype.UUID
+	if scanErr := uid.Scan(userID); scanErr != nil {
+		return "", false, nil
+	}
+	if scanErr := pid.Scan(planID); scanErr != nil {
+		return "", false, nil
+	}
+	row, err := r.q.FindLatestStripeForUserPlan(ctx, sqlc.FindLatestStripeForUserPlanParams{
+		UserID: uid,
+		PlanID: pid,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	txID := derefStr(row.StoreTransactionID)
+	return txID, true, nil
 }
