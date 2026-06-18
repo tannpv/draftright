@@ -28,6 +28,7 @@ sql:
       - "internal/shared/pg/queries_bugreports.sql"
       - "internal/shared/pg/queries_feedback.sql"
       - "internal/shared/pg/queries_adminauth.sql"
+      - "internal/shared/pg/queries_aiprovider.sql"
     engine: "postgresql"
     gen:
       go:

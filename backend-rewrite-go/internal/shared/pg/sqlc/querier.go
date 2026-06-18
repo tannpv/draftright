@@ -33,6 +33,7 @@ type Querier interface {
 	CreatePayment(ctx context.Context, arg CreatePaymentParams) (CreatePaymentRow, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
 	DeleteVote(ctx context.Context, arg DeleteVoteParams) error
+	DemoteDefaultAiProviders(ctx context.Context) error
 	ExpireByStoreRef(ctx context.Context, arg ExpireByStoreRefParams) (int64, error)
 	// Cron pass 2: flip active|cancelled subs past expiry to expired, returning
 	// the affected rows so the caller can email each. expires_at left untouched.
@@ -86,6 +87,7 @@ type Querier interface {
 	// subscription for the user, joined to its plan. ORDER BY created_at
 	// DESC + LIMIT 1 reproduces TypeORM order:{created_at:'DESC'} findOne.
 	GetActiveSubscriptionByUserID(ctx context.Context, userID pgtype.UUID) (GetActiveSubscriptionByUserIDRow, error)
+	GetAiProviderByID(ctx context.Context, id pgtype.UUID) (GetAiProviderByIDRow, error)
 	// The single app_settings row's token lifetimes. No row → caller uses
 	// defaults (15 / 90), matching Node's `?? 15` / `?? 90`.
 	GetAuthTokenSettings(ctx context.Context) (GetAuthTokenSettingsRow, error)
@@ -152,6 +154,7 @@ type Querier interface {
 	GetUserEmailName(ctx context.Context, id pgtype.UUID) (GetUserEmailNameRow, error)
 	// User fields createCheckout / portal / cancel need. No row → pgx.ErrNoRows.
 	GetUserForCheckout(ctx context.Context, id pgtype.UUID) (GetUserForCheckoutRow, error)
+	InsertAiProvider(ctx context.Context, arg InsertAiProviderParams) (InsertAiProviderRow, error)
 	InsertBugReport(ctx context.Context, arg InsertBugReportParams) (InsertBugReportRow, error)
 	// Audit row for every deliver attempt (suppressed/skipped/sent/failed).
 	InsertEmailLog(ctx context.Context, arg InsertEmailLogParams) error
@@ -189,6 +192,13 @@ type Querier interface {
 	// list(): active tokens for the user, newest first
 	// (TypeORM where:{user_id, revoked_at:IsNull()} order:{created_at:'DESC'}).
 	ListActiveTokens(ctx context.Context, userID pgtype.UUID) ([]ListActiveTokensRow, error)
+	// AI provider admin CRUD (Phase 4c-2). The temperature column is
+	// decimal(3,2); the Node entity declares it WITHOUT a numeric transformer,
+	// so TypeORM returns it as a JS string ("0.30"). To reproduce that exact
+	// 2-decimal string in Go (and dodge pgtype.Numeric formatting), every read
+	// casts `temperature::text AS temperature` so sqlc types it as a Go string
+	// with Postgres-preserved scale-2 text.
+	ListAiProviders(ctx context.Context) ([]ListAiProvidersRow, error)
 	// findByUser(userId): the user's 20 most-recent payments, newest first, each
 	// with its plan (TypeORM relations:['plan'] order:{created_at:'DESC'} take:20).
 	ListPaymentsByUser(ctx context.Context, userID pgtype.UUID) ([]ListPaymentsByUserRow, error)
@@ -221,6 +231,7 @@ type Querier interface {
 	SetPasswordResetCode(ctx context.Context, arg SetPasswordResetCodeParams) error
 	SetUserLemonSqueezyCustomerID(ctx context.Context, arg SetUserLemonSqueezyCustomerIDParams) error
 	SetUserStripeCustomerID(ctx context.Context, arg SetUserStripeCustomerIDParams) error
+	SoftDeleteAiProvider(ctx context.Context, id pgtype.UUID) error
 	StampStoreRefByReference(ctx context.Context, arg StampStoreRefByReferenceParams) (int64, error)
 	// Cron pass 1: active subs whose expiry falls in the reminder window.
 	// Bounds passed by caller (now+2.5d, now+3.5d) to keep tz in the Go process.

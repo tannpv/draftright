@@ -39,6 +39,41 @@ type AiProvider struct {
 	UpdatedAt   time.Time
 }
 
+// NewProvider is the repo's insert input. The admin create body
+// (admin.controller.ts → createProvider) accepts
+// { name, type, endpoint_url, api_key?, model, temperature? }; the
+// service passes it straight to TypeORM .create()/.save(), so the DB
+// defaults supply is_default (false) and is_active (true). The repo layer
+// always writes all 8 columns — the usecase (Task 3) decides the
+// is_default/is_active values it hands in. Temperature is the formatted
+// 2-decimal string ("0.30"); pgx parses it into the numeric(3,2) column.
+type NewProvider struct {
+	Name        string
+	Type        string
+	EndpointURL string
+	APIKey      string
+	Model       string
+	Temperature string
+	IsDefault   bool
+	IsActive    bool
+}
+
+// ProviderPatch is the repo's partial update input. Mirrors the admin
+// update body (admin.controller.ts → updateProvider): every field of
+// { name, type, endpoint_url, api_key, model, temperature, is_default,
+// is_active } is optional. nil pointer = "not set" (column untouched),
+// matching TypeORM's partial .update() which only writes provided keys.
+type ProviderPatch struct {
+	Name        *string
+	Type        *string
+	EndpointURL *string
+	APIKey      *string
+	Model       *string
+	Temperature *string
+	IsDefault   *bool
+	IsActive    *bool
+}
+
 func (p AiProvider) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
 		ID          string `json:"id"`
