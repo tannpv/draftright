@@ -531,6 +531,20 @@ func (r *AdminRepo) ConfirmPayment(ctx context.Context, id string, completedAt t
 	})
 }
 
+// RefundPayment flips the payment to refunded, overwriting notes with the
+// composed refund note (static sqlc :exec UPDATE). The use case supplies the
+// already-composed final notes string.
+func (r *AdminRepo) RefundPayment(ctx context.Context, id, notes string) error {
+	uid, ok := parseUUID(id)
+	if !ok {
+		return ErrPaymentNotFound
+	}
+	return r.q.RefundPayment(ctx, sqlc.RefundPaymentParams{
+		ID:    uid,
+		Notes: &notes,
+	})
+}
+
 // tstzPtr converts a nullable pgtype.Timestamptz to *time.Time (the two user
 // reset/verification timestamps are timestamptz; tsPtr in reader.go covers the
 // payment-side timestamp columns).

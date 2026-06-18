@@ -447,6 +447,24 @@ func (q *Queries) PaymentStats(ctx context.Context) (PaymentStatsRow, error) {
 	return i, err
 }
 
+const refundPayment = `-- name: RefundPayment :exec
+UPDATE payments SET status = 'refunded', notes = $2, updated_at = NOW() WHERE id = $1
+`
+
+type RefundPaymentParams struct {
+	ID    pgtype.UUID `db:"id" json:"id"`
+	Notes *string     `db:"notes" json:"notes"`
+}
+
+// refund(paymentId): flip a payment to refunded, overwriting notes with the
+// composed refund note (Node sets payment.status=REFUNDED, payment.notes=<note>
+// then save()). notes is bound $2; the use case composes it (existing notes +
+// 'Refunded by admin...' joined by ' | ').
+func (q *Queries) RefundPayment(ctx context.Context, arg RefundPaymentParams) error {
+	_, err := q.db.Exec(ctx, refundPayment, arg.ID, arg.Notes)
+	return err
+}
+
 const setUserLemonSqueezyCustomerID = `-- name: SetUserLemonSqueezyCustomerID :exec
 UPDATE users SET lemonsqueezy_customer_id = $2, updated_at = NOW() WHERE id = $1
 `

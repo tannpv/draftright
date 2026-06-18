@@ -314,6 +314,11 @@ type Querier interface {
 	// (usageService.findRecentByUser, default limit 20, created_at DESC). Relations
 	// (user, ai_provider) are NOT loaded by Node, so only the column fields select.
 	RecentUsageByUser(ctx context.Context, userID pgtype.UUID) ([]UsageLog, error)
+	// refund(paymentId): flip a payment to refunded, overwriting notes with the
+	// composed refund note (Node sets payment.status=REFUNDED, payment.notes=<note>
+	// then save()). notes is bound $2; the use case composes it (existing notes +
+	// 'Refunded by admin...' joined by ' | ').
+	RefundPayment(ctx context.Context, arg RefundPaymentParams) error
 	ResetPasswordHash(ctx context.Context, arg ResetPasswordHashParams) error
 	// Extension-token persistence (dr_ext_* keyboard/share tokens).
 	// Read the live NestJS-owned schema as-is; mirror ExtensionTokenService

@@ -118,6 +118,13 @@ SELECT email, name FROM users WHERE id = $1;
 UPDATE payments SET status = 'completed', completed_at = $2, notes = $3, updated_at = NOW()
 WHERE id = $1;
 
+-- name: RefundPayment :exec
+-- refund(paymentId): flip a payment to refunded, overwriting notes with the
+-- composed refund note (Node sets payment.status=REFUNDED, payment.notes=<note>
+-- then save()). notes is bound $2; the use case composes it (existing notes +
+-- 'Refunded by admin...' joined by ' | ').
+UPDATE payments SET status = 'refunded', notes = $2, updated_at = NOW() WHERE id = $1;
+
 -- name: PaymentStats :one
 -- getStats(): aggregate counts + completed revenue for GET /admin/payments/stats.
 -- Mirrors payment.service getStats — total/completed/pending counts plus

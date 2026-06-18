@@ -3,6 +3,9 @@ package payment
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/tannpv/draftright-rewrite/internal/plans"
@@ -46,6 +49,29 @@ type paymentAdminRepo interface {
 	FindAll(ctx context.Context, p FindAllParams) ([]AdminPaymentRow, int, error)
 	LoadPaymentWithPlan(ctx context.Context, id string) (AdminPaymentDetailRow, error)
 	ConfirmPayment(ctx context.Context, id string, completedAt time.Time, notes string) error
+	RefundPayment(ctx context.Context, id, notes string) error
+}
+
+// The refund() consumer-side ports. Kept small (1 method each); main.go injects
+// the concretes (payment settings adapter, subscription Reader, subscription
+// WebhookWriter) — that wiring is a later task. stripeRefunder is declared in
+// refund_stripe.go (Task 16) and reused here.
+type stripeSecretSource interface {
+	// StripeSecretKey resolves the active Stripe secret key (settings override
+	// then env fallback). "" means "not configured".
+	StripeSecretKey(ctx context.Context) (string, error)
+}
+type stripeSubLookup interface {
+	// FindLatestStripeForUserPlan mirrors
+	// subscriptionsService.findLatestStripeForUserPlan: the store_transaction_id
+	// (Stripe sub id) of the latest stripe subscription for (user, plan). found
+	// is false when no row matches.
+	FindLatestStripeForUserPlan(ctx context.Context, userID, planID string) (subID string, found bool, err error)
+}
+type subscriptionCanceller interface {
+	// CancelByStoreRef mirrors subscriptionsService.cancelByStripeSubId — marks
+	// our DB subscription cancelled so the quota guard demotes the user.
+	CancelByStoreRef(ctx context.Context, storeType, storeRef string) error
 }
 
 // subscriptionActivator is the AdminService's port onto the webhook activation
@@ -60,17 +86,36 @@ type subscriptionActivator interface {
 // refund added by a later task). Separate from the webhook Service to keep that
 // 12-dep struct untouched.
 type AdminService struct {
-	repo      paymentAdminRepo
-	activator subscriptionActivator
-	now       func() time.Time
+	repo         paymentAdminRepo
+	activator    subscriptionActivator
+	refunder     stripeRefunder
+	secretSource stripeSecretSource
+	subLookup    stripeSubLookup
+	subCanceller subscriptionCanceller
+	log          *slog.Logger
+	now          func() time.Time
 }
 
-// NewAdminService accepts the consumer ports + a now() clock; *AdminRepo and the
-// webhook *Service satisfy the interfaces for the composition root, fakes
-// satisfy them for tests (accept interfaces, return structs). now is injected so
-// completed_at is deterministic in tests.
-func NewAdminService(repo paymentAdminRepo, activator subscriptionActivator, now func() time.Time) *AdminService {
-	return &AdminService{repo: repo, activator: activator, now: now}
+// NewAdminService accepts the consumer ports + a logger + a now() clock;
+// *AdminRepo and the webhook *Service satisfy the interfaces for the composition
+// root, fakes satisfy them for tests (accept interfaces, return structs). now is
+// injected so completed_at is deterministic in tests. A nil logger defaults to
+// slog.Default(). The refund-only deps (refunder/secretSource/subLookup/
+// subCanceller) may be nil for paths that never call Refund (e.g. confirm tests).
+func NewAdminService(repo paymentAdminRepo, activator subscriptionActivator, refunder stripeRefunder, secretSource stripeSecretSource, subLookup stripeSubLookup, subCanceller subscriptionCanceller, log *slog.Logger, now func() time.Time) *AdminService {
+	if log == nil {
+		log = slog.Default()
+	}
+	return &AdminService{
+		repo:         repo,
+		activator:    activator,
+		refunder:     refunder,
+		secretSource: secretSource,
+		subLookup:    subLookup,
+		subCanceller: subCanceller,
+		log:          log,
+		now:          now,
+	}
 }
 
 // GetStats returns aggregate payment counts + completed revenue.
@@ -196,5 +241,105 @@ func (s *AdminService) AdminConfirm(ctx context.Context, id, notes string) (Admi
 	row.Status = string(StatusCompleted)
 	row.CompletedAt = &completedAt
 	row.Notes = &notes
+	return row, nil
+}
+
+// Refund refunds a completed Stripe payment and cancels its subscription so the
+// user loses access immediately. Ports payment.service refund():
+//
+//	load by id (relations:['plan']) → 404 if missing
+//	already-refunded → no-op return (no persist, no Stripe)
+//	not completed → 400 'Only completed payments can be refunded'
+//	non-stripe → 400 `Refund not supported for method '<method>'`
+//	resolve secret key (settings || env) → 400 if empty
+//	find latest stripe sub → if present: refund latest invoice charge (skip if
+//	  none), then cancel the Stripe sub (non-fatal); else metadata-only
+//	mutate status=refunded + compose notes, persist, cancel our DB sub
+//	return the in-memory mutated payment (plan loaded, no reload).
+func (s *AdminService) Refund(ctx context.Context, id, reason string) (AdminPaymentDetailRow, error) {
+	row, err := s.repo.LoadPaymentWithPlan(ctx, id)
+	if err != nil {
+		return AdminPaymentDetailRow{}, err // ErrPaymentNotFound propagates (404)
+	}
+	if row.Status == string(StatusRefunded) {
+		return row, nil // no-op: already refunded (no persist, no Stripe)
+	}
+	if row.Status != string(StatusCompleted) {
+		return AdminPaymentDetailRow{}, ErrRefundNotCompleted
+	}
+	if row.Method != string(MethodStripe) {
+		return AdminPaymentDetailRow{}, badRequest(fmt.Sprintf("Refund not supported for method '%s'", row.Method))
+	}
+
+	key, err := s.secretSource.StripeSecretKey(ctx)
+	if err != nil {
+		return AdminPaymentDetailRow{}, err // settings lookup error → 500
+	}
+	if key == "" {
+		return AdminPaymentDetailRow{}, ErrStripeKeyMissing
+	}
+
+	subID, found, err := s.subLookup.FindLatestStripeForUserPlan(ctx, row.UserID, row.PlanID)
+	if err != nil {
+		return AdminPaymentDetailRow{}, err
+	}
+	hasSub := found && subID != ""
+
+	refundedCharge := ""
+	if hasSub {
+		chargeID, err := s.refunder.LatestInvoiceCharge(ctx, key, subID)
+		if err != nil {
+			return AdminPaymentDetailRow{}, err // Node retrieve throw → 500
+		}
+		if chargeID != "" {
+			refundID, err := s.refunder.CreateRefund(ctx, key, chargeID, reason)
+			if err != nil {
+				return AdminPaymentDetailRow{}, err // Node refunds.create throw → 500
+			}
+			refundedCharge = refundID
+			s.log.Info("refunded stripe charge", "charge", chargeID, "refund", refundID, "payment", id)
+		} else {
+			s.log.Warn("no charge found on latest invoice; skipping Stripe refund", "sub", subID)
+		}
+		// Cancel the Stripe subscription IMMEDIATELY. Runs even when no charge
+		// was found, and is NON-FATAL (Node wraps it in try/catch).
+		if err := s.refunder.CancelSubscription(ctx, key, subID); err != nil {
+			s.log.Warn("stripe sub cancel failed", "sub", subID, "err", err)
+		}
+	} else {
+		s.log.Warn("no Stripe subscription linked to payment; refunding metadata only", "payment", id)
+	}
+
+	// Compose the note: ['<existing>', 'Refunded by admin (reason) — Stripe refund <id>']
+	// .filter(Boolean).join(' | '). The em-dash is U+2014 with surrounding spaces.
+	note := "Refunded by admin"
+	if reason != "" {
+		note += " (" + reason + ")"
+	}
+	if refundedCharge != "" {
+		note += " — Stripe refund " + refundedCharge
+	}
+	parts := []string{}
+	if row.Notes != nil && *row.Notes != "" {
+		parts = append(parts, *row.Notes)
+	}
+	parts = append(parts, note)
+	final := strings.Join(parts, " | ")
+
+	row.Status = string(StatusRefunded)
+	row.Notes = &final
+
+	if err := s.repo.RefundPayment(ctx, id, final); err != nil {
+		return AdminPaymentDetailRow{}, err
+	}
+
+	// Mark our DB subscription cancelled (Node cancelByStripeSubId — NOT wrapped
+	// in try/catch, so an error propagates → 500).
+	if hasSub {
+		if err := s.subCanceller.CancelByStoreRef(ctx, string(StoreStripe), subID); err != nil {
+			return AdminPaymentDetailRow{}, err
+		}
+	}
+
 	return row, nil
 }

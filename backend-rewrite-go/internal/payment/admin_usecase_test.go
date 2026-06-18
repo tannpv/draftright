@@ -40,6 +40,12 @@ type fakeAdminStatsRepo struct {
 	confirmID       string
 	confirmComplete time.Time
 	confirmNotes    string
+
+	// RefundPayment knobs.
+	refundErr   error
+	refundCalls int
+	refundID    string
+	refundNotes string
 }
 
 func (f *fakeAdminStatsRepo) Stats(_ context.Context) (PaymentStats, error) {
@@ -64,6 +70,13 @@ func (f *fakeAdminStatsRepo) ConfirmPayment(_ context.Context, id string, comple
 	return f.confirmErr
 }
 
+func (f *fakeAdminStatsRepo) RefundPayment(_ context.Context, id, notes string) error {
+	f.refundCalls++
+	f.refundID = id
+	f.refundNotes = notes
+	return f.refundErr
+}
+
 // fakeActivator captures the Activate args + call count and returns a canned
 // error. Satisfies subscriptionActivator.
 type fakeActivator struct {
@@ -84,8 +97,86 @@ func (f *fakeActivator) Activate(_ context.Context, billing, userID, planID, met
 // fixedNow is the deterministic clock injected into AdminConfirm tests.
 var fixedNow = time.Date(2026, 6, 18, 9, 30, 0, 0, time.UTC)
 
+// fakeRefunder captures every stripeRefunder call + returns canned results.
+type fakeRefunder struct {
+	chargeID  string
+	chargeErr error
+	chargeCalls,
+	createCalls,
+	cancelCalls int
+	gotChargeSub,
+	gotRefundCharge,
+	gotRefundReason,
+	gotCancelSub string
+	refundID  string
+	createErr error
+	cancelErr error
+}
+
+func (f *fakeRefunder) LatestInvoiceCharge(_ context.Context, _, subID string) (string, error) {
+	f.chargeCalls++
+	f.gotChargeSub = subID
+	return f.chargeID, f.chargeErr
+}
+
+func (f *fakeRefunder) CreateRefund(_ context.Context, _, chargeID, reason string) (string, error) {
+	f.createCalls++
+	f.gotRefundCharge, f.gotRefundReason = chargeID, reason
+	return f.refundID, f.createErr
+}
+
+func (f *fakeRefunder) CancelSubscription(_ context.Context, _, subID string) error {
+	f.cancelCalls++
+	f.gotCancelSub = subID
+	return f.cancelErr
+}
+
+// fakeSecretSource returns a canned Stripe secret key / error.
+type fakeSecretSource struct {
+	key string
+	err error
+}
+
+func (f *fakeSecretSource) StripeSecretKey(_ context.Context) (string, error) {
+	return f.key, f.err
+}
+
+// fakeSubLookup returns a canned latest-Stripe-sub lookup result.
+type fakeSubLookup struct {
+	subID string
+	found bool
+	err   error
+	gotUserID,
+	gotPlanID string
+}
+
+func (f *fakeSubLookup) FindLatestStripeForUserPlan(_ context.Context, userID, planID string) (string, bool, error) {
+	f.gotUserID, f.gotPlanID = userID, planID
+	return f.subID, f.found, f.err
+}
+
+// fakeSubCanceller captures the CancelByStoreRef call.
+type fakeSubCanceller struct {
+	err   error
+	calls int
+	gotStoreType,
+	gotStoreRef string
+}
+
+func (f *fakeSubCanceller) CancelByStoreRef(_ context.Context, storeType, storeRef string) error {
+	f.calls++
+	f.gotStoreType, f.gotStoreRef = storeType, storeRef
+	return f.err
+}
+
 func newConfirmSvc(repo paymentAdminRepo, act subscriptionActivator) *AdminService {
-	return NewAdminService(repo, act, func() time.Time { return fixedNow })
+	return NewAdminService(repo, act, nil, nil, nil, nil, nil, func() time.Time { return fixedNow })
+}
+
+// newRefundSvc wires the refund-side deps; the activator is unused by Refund so
+// a default fake is fine.
+func newRefundSvc(repo paymentAdminRepo, ref stripeRefunder, sec stripeSecretSource, lookup stripeSubLookup, canceller subscriptionCanceller) *AdminService {
+	return NewAdminService(repo, &fakeActivator{}, ref, sec, lookup, canceller, nil, func() time.Time { return fixedNow })
 }
 
 // TestAdminPaymentStats_ReturnsRepoValues verifies GetStats passes the repo's
@@ -574,5 +665,339 @@ func TestPaymentRow_MarshalJSON_KeyOrder(t *testing.T) {
 	b2, _ := json.Marshal(row)
 	if !strings.Contains(string(b2), `"plan":null`) {
 		t.Fatalf(`nil plan must render null, got %s`, b2)
+	}
+}
+
+// ── Refund ────────────────────────────────────────────────────────────────
+
+// completedStripeRow builds a completed stripe payment, the canonical refund
+// happy-path input.
+func completedStripeRow() AdminPaymentDetailRow {
+	r := pendingDetailRow()
+	r.Status = string(StatusCompleted)
+	r.Method = string(MethodStripe)
+	return r
+}
+
+// TestRefund_NotFound: a not-found load returns ErrPaymentNotFound and no
+// Stripe / persist call fires.
+func TestRefund_NotFound(t *testing.T) {
+	repo := &fakeAdminStatsRepo{loadErr: ErrPaymentNotFound}
+	ref := &fakeRefunder{}
+	svc := newRefundSvc(repo, ref, &fakeSecretSource{key: "sk"}, &fakeSubLookup{}, &fakeSubCanceller{})
+
+	_, err := svc.Refund(context.Background(), "missing", "")
+	if !errors.Is(err, ErrPaymentNotFound) {
+		t.Fatalf("err = %v, want ErrPaymentNotFound", err)
+	}
+	if ref.chargeCalls+ref.createCalls+ref.cancelCalls != 0 || repo.refundCalls != 0 {
+		t.Fatalf("no stripe/persist calls expected on not-found")
+	}
+}
+
+// TestRefund_AlreadyRefunded: a refunded payment is a no-op — returns the row,
+// nil error, NO persist, NO stripe.
+func TestRefund_AlreadyRefunded(t *testing.T) {
+	row := completedStripeRow()
+	row.Status = string(StatusRefunded)
+	repo := &fakeAdminStatsRepo{loadRow: row}
+	ref := &fakeRefunder{}
+	svc := newRefundSvc(repo, ref, &fakeSecretSource{key: "sk"}, &fakeSubLookup{}, &fakeSubCanceller{})
+
+	got, err := svc.Refund(context.Background(), "pay1", "")
+	if err != nil {
+		t.Fatalf("Refund() error: %v", err)
+	}
+	if got.Status != string(StatusRefunded) {
+		t.Fatalf("status = %q, want refunded", got.Status)
+	}
+	if ref.chargeCalls+ref.createCalls+ref.cancelCalls != 0 || repo.refundCalls != 0 {
+		t.Fatalf("already-refunded must not call stripe or persist")
+	}
+}
+
+// TestRefund_NotCompleted: a pending payment returns ErrRefundNotCompleted.
+func TestRefund_NotCompleted(t *testing.T) {
+	repo := &fakeAdminStatsRepo{loadRow: pendingDetailRow()} // status=pending, method=bank_transfer
+	svc := newRefundSvc(repo, &fakeRefunder{}, &fakeSecretSource{key: "sk"}, &fakeSubLookup{}, &fakeSubCanceller{})
+
+	_, err := svc.Refund(context.Background(), "pay1", "")
+	if !errors.Is(err, ErrRefundNotCompleted) {
+		t.Fatalf("err = %v, want ErrRefundNotCompleted", err)
+	}
+	if err.Error() != "Only completed payments can be refunded" {
+		t.Fatalf("msg = %q", err.Error())
+	}
+}
+
+// TestRefund_UnsupportedMethod: a completed non-stripe payment returns a dynamic
+// 400 with the method interpolated, single-quoted.
+func TestRefund_UnsupportedMethod(t *testing.T) {
+	row := completedStripeRow()
+	row.Method = "paypal"
+	repo := &fakeAdminStatsRepo{loadRow: row}
+	svc := newRefundSvc(repo, &fakeRefunder{}, &fakeSecretSource{key: "sk"}, &fakeSubLookup{}, &fakeSubCanceller{})
+
+	_, err := svc.Refund(context.Background(), "pay1", "")
+	if err == nil || err.Error() != "Refund not supported for method 'paypal'" {
+		t.Fatalf("err = %v, want \"Refund not supported for method 'paypal'\"", err)
+	}
+	var de *DomainError
+	if !errors.As(err, &de) || de.Status != 400 {
+		t.Fatalf("want a 400 DomainError, got %v", err)
+	}
+}
+
+// TestRefund_MissingKey: an empty Stripe key returns ErrStripeKeyMissing.
+func TestRefund_MissingKey(t *testing.T) {
+	repo := &fakeAdminStatsRepo{loadRow: completedStripeRow()}
+	svc := newRefundSvc(repo, &fakeRefunder{}, &fakeSecretSource{key: ""}, &fakeSubLookup{}, &fakeSubCanceller{})
+
+	_, err := svc.Refund(context.Background(), "pay1", "")
+	if !errors.Is(err, ErrStripeKeyMissing) {
+		t.Fatalf("err = %v, want ErrStripeKeyMissing", err)
+	}
+	if err.Error() != "Stripe secret_key is not configured" {
+		t.Fatalf("msg = %q", err.Error())
+	}
+}
+
+// TestRefund_SecretSourceError: a settings lookup error propagates (500).
+func TestRefund_SecretSourceError(t *testing.T) {
+	boom := errors.New("settings down")
+	repo := &fakeAdminStatsRepo{loadRow: completedStripeRow()}
+	svc := newRefundSvc(repo, &fakeRefunder{}, &fakeSecretSource{err: boom}, &fakeSubLookup{}, &fakeSubCanceller{})
+
+	if _, err := svc.Refund(context.Background(), "pay1", ""); !errors.Is(err, boom) {
+		t.Fatalf("err = %v, want %v", err, boom)
+	}
+}
+
+// emDashNote is the exact em-dash segment Node emits: space U+2014 space.
+const emDashNote = " — Stripe refund "
+
+// TestRefund_HappySubWithCharge: full happy path — charge resolved, refund
+// created, sub cancelled, note carries reason + " — Stripe refund re_1", our DB
+// sub cancelled, RefundPayment persisted with the final note.
+func TestRefund_HappySubWithCharge(t *testing.T) {
+	repo := &fakeAdminStatsRepo{loadRow: completedStripeRow()}
+	ref := &fakeRefunder{chargeID: "ch_1", refundID: "re_1"}
+	lookup := &fakeSubLookup{subID: "sub_1", found: true}
+	canceller := &fakeSubCanceller{}
+	svc := newRefundSvc(repo, ref, &fakeSecretSource{key: "sk"}, lookup, canceller)
+
+	got, err := svc.Refund(context.Background(), "pay1", "vip")
+	if err != nil {
+		t.Fatalf("Refund() error: %v", err)
+	}
+	if ref.chargeCalls != 1 || ref.gotChargeSub != "sub_1" {
+		t.Fatalf("LatestInvoiceCharge calls=%d sub=%q", ref.chargeCalls, ref.gotChargeSub)
+	}
+	if ref.createCalls != 1 || ref.gotRefundCharge != "ch_1" || ref.gotRefundReason != "vip" {
+		t.Fatalf("CreateRefund calls=%d charge=%q reason=%q", ref.createCalls, ref.gotRefundCharge, ref.gotRefundReason)
+	}
+	if ref.cancelCalls != 1 || ref.gotCancelSub != "sub_1" {
+		t.Fatalf("CancelSubscription calls=%d sub=%q", ref.cancelCalls, ref.gotCancelSub)
+	}
+	want := "Refunded by admin (vip)" + emDashNote + "re_1"
+	if got.Status != string(StatusRefunded) {
+		t.Fatalf("status = %q, want refunded", got.Status)
+	}
+	if got.Notes == nil || *got.Notes != want {
+		t.Fatalf("notes = %v, want %q", got.Notes, want)
+	}
+	// Byte-exact em-dash assertion (U+2014 = 0xE2 0x80 0x94).
+	if !strings.Contains(*got.Notes, "—") || !strings.Contains(*got.Notes, " — Stripe refund re_1") {
+		t.Fatalf("em-dash segment missing/mismatched in %q", *got.Notes)
+	}
+	if repo.refundCalls != 1 || repo.refundID != "pay1" || repo.refundNotes != want {
+		t.Fatalf("RefundPayment calls=%d id=%q notes=%q", repo.refundCalls, repo.refundID, repo.refundNotes)
+	}
+	if canceller.calls != 1 || canceller.gotStoreType != "stripe" || canceller.gotStoreRef != "sub_1" {
+		t.Fatalf("CancelByStoreRef calls=%d type=%q ref=%q", canceller.calls, canceller.gotStoreType, canceller.gotStoreRef)
+	}
+}
+
+// TestRefund_HappySubNoCharge: sub present but no charge → CreateRefund NOT
+// called, note has no "Stripe refund", CancelSubscription STILL called,
+// CancelByStoreRef STILL called.
+func TestRefund_HappySubNoCharge(t *testing.T) {
+	repo := &fakeAdminStatsRepo{loadRow: completedStripeRow()}
+	ref := &fakeRefunder{chargeID: ""} // no charge resolvable
+	lookup := &fakeSubLookup{subID: "sub_1", found: true}
+	canceller := &fakeSubCanceller{}
+	svc := newRefundSvc(repo, ref, &fakeSecretSource{key: "sk"}, lookup, canceller)
+
+	got, err := svc.Refund(context.Background(), "pay1", "")
+	if err != nil {
+		t.Fatalf("Refund() error: %v", err)
+	}
+	if ref.createCalls != 0 {
+		t.Fatalf("CreateRefund must NOT be called without a charge")
+	}
+	if ref.cancelCalls != 1 {
+		t.Fatalf("CancelSubscription must still run, calls=%d", ref.cancelCalls)
+	}
+	if got.Notes == nil || *got.Notes != "Refunded by admin" {
+		t.Fatalf("notes = %v, want \"Refunded by admin\"", got.Notes)
+	}
+	if strings.Contains(*got.Notes, "Stripe refund") {
+		t.Fatalf("note must NOT mention Stripe refund, got %q", *got.Notes)
+	}
+	if canceller.calls != 1 {
+		t.Fatalf("CancelByStoreRef must still run, calls=%d", canceller.calls)
+	}
+}
+
+// TestRefund_NoSub: no linked sub → zero stripe calls, status refunded, note
+// has no "Stripe refund", CancelByStoreRef NOT called.
+func TestRefund_NoSub(t *testing.T) {
+	repo := &fakeAdminStatsRepo{loadRow: completedStripeRow()}
+	ref := &fakeRefunder{}
+	lookup := &fakeSubLookup{found: false}
+	canceller := &fakeSubCanceller{}
+	svc := newRefundSvc(repo, ref, &fakeSecretSource{key: "sk"}, lookup, canceller)
+
+	got, err := svc.Refund(context.Background(), "pay1", "")
+	if err != nil {
+		t.Fatalf("Refund() error: %v", err)
+	}
+	if ref.chargeCalls+ref.createCalls+ref.cancelCalls != 0 {
+		t.Fatalf("no-sub must make zero stripe calls")
+	}
+	if got.Status != string(StatusRefunded) {
+		t.Fatalf("status = %q, want refunded", got.Status)
+	}
+	if got.Notes == nil || *got.Notes != "Refunded by admin" {
+		t.Fatalf("notes = %v, want \"Refunded by admin\"", got.Notes)
+	}
+	if strings.Contains(*got.Notes, "Stripe refund") {
+		t.Fatalf("no-sub note must not mention Stripe refund")
+	}
+	if canceller.calls != 0 {
+		t.Fatalf("CancelByStoreRef must NOT run without a sub, calls=%d", canceller.calls)
+	}
+	if repo.refundCalls != 1 || repo.refundNotes != "Refunded by admin" {
+		t.Fatalf("RefundPayment calls=%d notes=%q", repo.refundCalls, repo.refundNotes)
+	}
+}
+
+// TestRefund_NotesJoinExisting: a payment with existing notes prepends them via
+// " | ".
+func TestRefund_NotesJoinExisting(t *testing.T) {
+	row := completedStripeRow()
+	row.Notes = sp("old")
+	repo := &fakeAdminStatsRepo{loadRow: row}
+	ref := &fakeRefunder{chargeID: "ch_1", refundID: "re_1"}
+	lookup := &fakeSubLookup{subID: "sub_1", found: true}
+	svc := newRefundSvc(repo, ref, &fakeSecretSource{key: "sk"}, lookup, &fakeSubCanceller{})
+
+	got, err := svc.Refund(context.Background(), "pay1", "vip")
+	if err != nil {
+		t.Fatalf("Refund() error: %v", err)
+	}
+	want := "old | Refunded by admin (vip)" + emDashNote + "re_1"
+	if got.Notes == nil || *got.Notes != want {
+		t.Fatalf("notes = %v, want %q", got.Notes, want)
+	}
+}
+
+// TestRefund_NotesNilExisting: a nil existing notes → just the new note (no
+// leading separator).
+func TestRefund_NotesNilExisting(t *testing.T) {
+	row := completedStripeRow() // Notes is nil
+	repo := &fakeAdminStatsRepo{loadRow: row}
+	ref := &fakeRefunder{chargeID: "ch_1", refundID: "re_1"}
+	lookup := &fakeSubLookup{subID: "sub_1", found: true}
+	svc := newRefundSvc(repo, ref, &fakeSecretSource{key: "sk"}, lookup, &fakeSubCanceller{})
+
+	got, err := svc.Refund(context.Background(), "pay1", "")
+	if err != nil {
+		t.Fatalf("Refund() error: %v", err)
+	}
+	want := "Refunded by admin" + emDashNote + "re_1"
+	if got.Notes == nil || *got.Notes != want {
+		t.Fatalf("notes = %v, want %q", got.Notes, want)
+	}
+}
+
+// TestRefund_CancelSubscriptionNonFatal: a Stripe sub-cancel error is swallowed
+// — refund still succeeds, status refunded, persist + DB cancel still run.
+func TestRefund_CancelSubscriptionNonFatal(t *testing.T) {
+	repo := &fakeAdminStatsRepo{loadRow: completedStripeRow()}
+	ref := &fakeRefunder{chargeID: "ch_1", refundID: "re_1", cancelErr: errors.New("already cancelled")}
+	lookup := &fakeSubLookup{subID: "sub_1", found: true}
+	canceller := &fakeSubCanceller{}
+	svc := newRefundSvc(repo, ref, &fakeSecretSource{key: "sk"}, lookup, canceller)
+
+	got, err := svc.Refund(context.Background(), "pay1", "")
+	if err != nil {
+		t.Fatalf("Refund() error: %v (cancel error must be non-fatal)", err)
+	}
+	if got.Status != string(StatusRefunded) {
+		t.Fatalf("status = %q, want refunded", got.Status)
+	}
+	if repo.refundCalls != 1 || canceller.calls != 1 {
+		t.Fatalf("persist/DB-cancel must still run, refundCalls=%d cancelByRef=%d", repo.refundCalls, canceller.calls)
+	}
+}
+
+// TestRefund_ChargeLookupError: a LatestInvoiceCharge error propagates (500).
+func TestRefund_ChargeLookupError(t *testing.T) {
+	boom := errors.New("stripe retrieve failed")
+	repo := &fakeAdminStatsRepo{loadRow: completedStripeRow()}
+	ref := &fakeRefunder{chargeErr: boom}
+	lookup := &fakeSubLookup{subID: "sub_1", found: true}
+	svc := newRefundSvc(repo, ref, &fakeSecretSource{key: "sk"}, lookup, &fakeSubCanceller{})
+
+	if _, err := svc.Refund(context.Background(), "pay1", ""); !errors.Is(err, boom) {
+		t.Fatalf("err = %v, want %v", err, boom)
+	}
+	if repo.refundCalls != 0 {
+		t.Fatalf("no persist on charge-lookup error")
+	}
+}
+
+// TestRefund_CreateRefundError: a CreateRefund error propagates (500).
+func TestRefund_CreateRefundError(t *testing.T) {
+	boom := errors.New("refund create failed")
+	repo := &fakeAdminStatsRepo{loadRow: completedStripeRow()}
+	ref := &fakeRefunder{chargeID: "ch_1", createErr: boom}
+	lookup := &fakeSubLookup{subID: "sub_1", found: true}
+	svc := newRefundSvc(repo, ref, &fakeSecretSource{key: "sk"}, lookup, &fakeSubCanceller{})
+
+	if _, err := svc.Refund(context.Background(), "pay1", ""); !errors.Is(err, boom) {
+		t.Fatalf("err = %v, want %v", err, boom)
+	}
+	if repo.refundCalls != 0 {
+		t.Fatalf("no persist on create-refund error")
+	}
+}
+
+// TestRefund_PersistError: a RefundPayment error propagates (500).
+func TestRefund_PersistError(t *testing.T) {
+	boom := errors.New("update failed")
+	repo := &fakeAdminStatsRepo{loadRow: completedStripeRow(), refundErr: boom}
+	ref := &fakeRefunder{chargeID: "ch_1", refundID: "re_1"}
+	lookup := &fakeSubLookup{subID: "sub_1", found: true}
+	svc := newRefundSvc(repo, ref, &fakeSecretSource{key: "sk"}, lookup, &fakeSubCanceller{})
+
+	if _, err := svc.Refund(context.Background(), "pay1", ""); !errors.Is(err, boom) {
+		t.Fatalf("err = %v, want %v", err, boom)
+	}
+}
+
+// TestRefund_CancelByStoreRefError: a CancelByStoreRef error propagates (500,
+// Node's cancelByStripeSubId is not wrapped in try/catch).
+func TestRefund_CancelByStoreRefError(t *testing.T) {
+	boom := errors.New("db cancel failed")
+	repo := &fakeAdminStatsRepo{loadRow: completedStripeRow()}
+	ref := &fakeRefunder{chargeID: "ch_1", refundID: "re_1"}
+	lookup := &fakeSubLookup{subID: "sub_1", found: true}
+	canceller := &fakeSubCanceller{err: boom}
+	svc := newRefundSvc(repo, ref, &fakeSecretSource{key: "sk"}, lookup, canceller)
+
+	if _, err := svc.Refund(context.Background(), "pay1", ""); !errors.Is(err, boom) {
+		t.Fatalf("err = %v, want %v", err, boom)
 	}
 }

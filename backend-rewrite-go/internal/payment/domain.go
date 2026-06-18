@@ -40,6 +40,11 @@ const (
 var (
 	ErrPaymentNotFound   = notFound("Payment not found")
 	ErrPaymentNotPending = badRequest("Payment is not pending")
+	// ErrRefundNotCompleted / ErrStripeKeyMissing are the refund() guard
+	// sentinels: BadRequestException('Only completed payments can be refunded')
+	// and BadRequestException('Stripe secret_key is not configured') → both 400.
+	ErrRefundNotCompleted = badRequest("Only completed payments can be refunded")
+	ErrStripeKeyMissing   = badRequest("Stripe secret_key is not configured")
 )
 
 // StoreType mirrors backend/src/subscriptions/entities/subscription.entity.ts
