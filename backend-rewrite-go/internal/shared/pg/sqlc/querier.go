@@ -233,6 +233,7 @@ type Querier interface {
 	// the generated PlansBillingPeriodEnum, so InsertPlan binds the enum value
 	// directly (no SQL cast needed — the param already carries the enum type).
 	ListAllPlans(ctx context.Context) ([]ListAllPlansRow, error)
+	ListEmailTemplates(ctx context.Context) ([]ListEmailTemplatesRow, error)
 	// findByUser(userId): the user's 20 most-recent payments, newest first, each
 	// with its plan (TypeORM relations:['plan'] order:{created_at:'DESC'} take:20).
 	ListPaymentsByUser(ctx context.Context, userID pgtype.UUID) ([]ListPaymentsByUserRow, error)
