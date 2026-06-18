@@ -156,25 +156,25 @@ func (h *Handler) Review(w http.ResponseWriter, r *http.Request) {
 // Body is the raw JSONL string from ExportJSONL. Empty approved set → 200
 // with an empty body (not WriteJSON — raw write avoids the application/json
 // envelope and preserves the Node Content-Type override).
+//
+// Headers are set ONLY after ExportJSONL succeeds. Node calls res.setHeader
+// after `await service.export()`, so on an export error Node's response carries
+// no jsonl headers (clean AllExceptionsFilter JSON). Setting them earlier here
+// would leak Content-Disposition onto the 500 — a parity break.
 func (h *Handler) Export(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/jsonl")
-	w.Header().Set("Content-Disposition", "attachment; filename=draftright-training-data.jsonl")
-
 	jsonl, err := h.svc.ExportJSONL(r.Context())
 	if err != nil {
-		// WriteError overwrites headers already set above; that's fine — the
-		// caller never sees a partial response because headers haven't been
-		// flushed yet (httptest.ResponseRecorder + real net/http both buffer
-		// until the first Write or explicit WriteHeader).
 		shared.WriteError(w, r, "internal", err.Error())
 		return
 	}
+
+	w.Header().Set("Content-Type", "application/jsonl")
+	w.Header().Set("Content-Disposition", "attachment; filename=draftright-training-data.jsonl")
 	if jsonl == "" {
 		// Empty dataset → 200 empty body. WriteHeader locks the status to 200
 		// explicitly (net/http default, but explicit is clearer).
 		w.WriteHeader(http.StatusOK)
 		return
 	}
-	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(jsonl)) //nolint:errcheck — same pattern as std-lib examples
 }

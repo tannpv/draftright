@@ -418,7 +418,7 @@ func TestExport_Empty(t *testing.T) {
 	}
 }
 
-// TestExport_ServiceError: export service error → 500 internal.
+// TestExport_ServiceError: export service error → 500 internal, no jsonl headers.
 func TestExport_ServiceError(t *testing.T) {
 	svc := &fakeService{exportErr: errors.New("db down")}
 	h := newH(svc)
@@ -428,5 +428,14 @@ func TestExport_ServiceError(t *testing.T) {
 
 	if rec.Code != 500 {
 		t.Fatalf("status = %d, want 500; body=%s", rec.Code, rec.Body.String())
+	}
+	// Node sets the jsonl headers only AFTER export() resolves, so an export
+	// error carries none. Setting them before the error check would leak
+	// Content-Disposition onto the 500 — a parity break.
+	if cd := rec.Header().Get("Content-Disposition"); cd != "" {
+		t.Fatalf("error response leaked Content-Disposition = %q, want empty", cd)
+	}
+	if ct := rec.Header().Get("Content-Type"); ct == "application/jsonl" {
+		t.Fatalf("error response leaked Content-Type = %q (jsonl), want JSON envelope", ct)
 	}
 }
