@@ -30,19 +30,24 @@ import (
 //     byte-exact; exotic multi-error ordering is pinned separately by the
 //     shadow gate and intentionally not over-engineered here.
 //
-// Returns the validated patch and an empty string on success; a non-empty
-// string (the joined message) means reject with 400 invalid-input.
-func validateUpdateUser(raw []byte) (UserPatchAdmin, string) {
-	var patch UserPatchAdmin
-
+// Three outcomes (the caller must distinguish all three):
+//   - malformed == true: the body is not a JSON object (parse error, a JSON
+//     array/scalar, or literal null → fields == nil). The caller rejects with
+//     400 "Invalid request body". This restores the pre-c8c32f75 behavior; the
+//     earlier code collapsed this into the success path, turning a 400 into a
+//     silent 200 no-op write (a regression). 🟡 Node's Express body-parser
+//     SyntaxError → 500 internal while we reply 400 here — a separate
+//     pre-existing parity gap, intentionally NOT closed in this fix.
+//   - malformed == false, msg != "": a parsed object that fails field
+//     validation. The caller rejects with 400 invalid-input + the joined msg.
+//   - malformed == false, msg == "": a valid object (incl. empty {} — all DTO
+//     fields optional) → the caller proceeds with patch.
+func validateUpdateUser(raw []byte) (patch UserPatchAdmin, malformed bool, msg string) {
 	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &fields); err != nil {
-		// Malformed / non-object JSON: not a validation concern. The caller
-		// keeps the pre-existing handling. 🟡 Node's Express body-parser
-		// SyntaxError → 500 internal, while the Go handler currently replies
-		// 400 "Invalid request body" — a separate pre-existing parity gap,
-		// deliberately left untouched by this fix.
-		return patch, ""
+	if err := json.Unmarshal(raw, &fields); err != nil || fields == nil {
+		// Parse error, or a non-object/null body (null unmarshals into a nil map
+		// with no error). Either way: not a valid UpdateUserDto object.
+		return patch, true, ""
 	}
 
 	known := map[string]struct{}{"is_active": {}, "role": {}, "name": {}}
@@ -86,7 +91,7 @@ func validateUpdateUser(raw []byte) (UserPatchAdmin, string) {
 	}
 
 	if len(msgs) > 0 {
-		return UserPatchAdmin{}, strings.Join(msgs, ". ")
+		return UserPatchAdmin{}, false, strings.Join(msgs, ". ")
 	}
-	return patch, ""
+	return patch, false, ""
 }

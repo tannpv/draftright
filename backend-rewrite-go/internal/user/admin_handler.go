@@ -117,11 +117,18 @@ func (h *AdminHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		shared.WriteError(w, r, "invalid-input", "Invalid request body")
 		return
 	}
-	// Mirror Node's global ValidationPipe (whitelist + forbidNonWhitelisted)
+	// A malformed or non-object body (parse error, array/scalar, null, empty)
+	// → 400 "Invalid request body" (restores pre-c8c32f75 behavior; never a
+	// silent 200 no-op write). A valid object — including empty {} — proceeds.
+	// Then mirror Node's global ValidationPipe (whitelist + forbidNonWhitelisted)
 	// over UpdateUserDto: any unknown key, type mismatch, or role != "user"
 	// → 400 invalid-input with the exact class-validator message(s) joined
 	// by ". ". Missing key = nil pointer = column untouched (TypeORM partial).
-	patch, msg := validateUpdateUser(raw)
+	patch, malformed, msg := validateUpdateUser(raw)
+	if malformed {
+		shared.WriteError(w, r, "invalid-input", "Invalid request body")
+		return
+	}
 	if msg != "" {
 		shared.WriteError(w, r, "invalid-input", msg)
 		return

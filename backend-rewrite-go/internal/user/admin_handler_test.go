@@ -386,6 +386,55 @@ func TestUpdateUser_Validation(t *testing.T) {
 	}
 }
 
+// TestUpdateUser_MalformedBody: a body that is malformed JSON or non-object
+// JSON (incl. null) → 400 invalid-input "Invalid request body" — NOT a silent
+// 200 no-op write. Regression guard for c8c32f75. A valid empty object {} is
+// NOT malformed: all DTO fields are optional, so it proceeds → 200 full entity.
+func TestUpdateUser_MalformedBody(t *testing.T) {
+	cases := []struct {
+		name     string
+		body     string
+		wantCode int
+	}{
+		{"malformed brace", `{bad`, 400},
+		{"non-object array", `[]`, 400},
+		{"non-object string", `"x"`, 400},
+		{"non-object number", `123`, 400},
+		{"non-object bool", `true`, 400},
+		{"null body", `null`, 400},
+		{"empty body", ``, 400},
+		{"valid empty object", `{}`, 200},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			now := time.Now()
+			repo := &fakeAdminUserRepo{getFull: UserDetail{
+				ID: "u1", Email: "a@b.c", Name: "Al", Role: "user", IsActive: true,
+				CreatedAt: now, UpdatedAt: now,
+			}}
+			h := newHandler(repo, &fakeSubReader{}, &fakeUsage{}, &fakeRecent{})
+
+			rec := httptest.NewRecorder()
+			req := routeWithID(httptest.NewRequest(http.MethodPatch, "/admin/users/u1",
+				strings.NewReader(tc.body)), "u1")
+			h.UpdateUser(rec, req)
+
+			if rec.Code != tc.wantCode {
+				t.Fatalf("status = %d, want %d; body=%s", rec.Code, tc.wantCode, rec.Body.String())
+			}
+			if tc.wantCode == 400 {
+				m := decodeBody(t, rec.Body.String())
+				if m["code"] != "invalid-input" {
+					t.Fatalf("code = %v, want invalid-input; body=%s", m["code"], rec.Body.String())
+				}
+				if m["error"] != "Invalid request body" {
+					t.Fatalf("error = %q, want %q", m["error"], "Invalid request body")
+				}
+			}
+		})
+	}
+}
+
 // TestUpdateUser_FullEntityKeyOrder: a valid PATCH returns the re-read full
 // entity (verified richer than UserListRow via password_hash) — guards the
 // success path still proceeds after validation.
