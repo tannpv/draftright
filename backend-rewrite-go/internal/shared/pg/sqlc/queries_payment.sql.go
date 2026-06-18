@@ -394,6 +394,38 @@ func (q *Queries) MarkPaymentFailedByRef(ctx context.Context, referenceCode stri
 	return err
 }
 
+const paymentStats = `-- name: PaymentStats :one
+SELECT
+  COUNT(*) AS total,
+  COUNT(*) FILTER (WHERE status = 'completed') AS completed,
+  COUNT(*) FILTER (WHERE status = 'pending') AS pending,
+  COALESCE(SUM(amount) FILTER (WHERE status = 'completed'), 0)::bigint AS revenue
+FROM payments
+`
+
+type PaymentStatsRow struct {
+	Total     int64 `db:"total" json:"total"`
+	Completed int64 `db:"completed" json:"completed"`
+	Pending   int64 `db:"pending" json:"pending"`
+	Revenue   int64 `db:"revenue" json:"revenue"`
+}
+
+// getStats(): aggregate counts + completed revenue for GET /admin/payments/stats.
+// Mirrors payment.service getStats — total/completed/pending counts plus
+// COALESCE(SUM(amount),0) over completed rows. revenue is cast ::bigint so sqlc
+// types it int64 (no numeric); the repo narrows to int (Node parseInt).
+func (q *Queries) PaymentStats(ctx context.Context) (PaymentStatsRow, error) {
+	row := q.db.QueryRow(ctx, paymentStats)
+	var i PaymentStatsRow
+	err := row.Scan(
+		&i.Total,
+		&i.Completed,
+		&i.Pending,
+		&i.Revenue,
+	)
+	return i, err
+}
+
 const setUserLemonSqueezyCustomerID = `-- name: SetUserLemonSqueezyCustomerID :exec
 UPDATE users SET lemonsqueezy_customer_id = $2, updated_at = NOW() WHERE id = $1
 `

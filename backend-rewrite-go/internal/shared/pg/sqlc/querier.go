@@ -296,6 +296,11 @@ type Querier interface {
 	MarkPaymentCompleted(ctx context.Context, referenceCode string) error
 	MarkPaymentFailed(ctx context.Context, arg MarkPaymentFailedParams) error
 	MarkPaymentFailedByRef(ctx context.Context, referenceCode string) error
+	// getStats(): aggregate counts + completed revenue for GET /admin/payments/stats.
+	// Mirrors payment.service getStats — total/completed/pending counts plus
+	// COALESCE(SUM(amount),0) over completed rows. revenue is cast ::bigint so sqlc
+	// types it int64 (no numeric); the repo narrows to int (Node parseInt).
+	PaymentStats(ctx context.Context) (PaymentStatsRow, error)
 	// Mirrors subscriptionsService.getPlansBreakdown(): active subs grouped by plan.
 	// LEFT JOIN so subs with no plan row (data-quality gap) still appear.
 	PlansBreakdown(ctx context.Context) ([]PlansBreakdownRow, error)

@@ -108,3 +108,15 @@ LIMIT 1;
 -- + display name to send the "subscription active" mail. name is NOT NULL
 -- (schema.sql), so sqlc generates a plain string (no pointer).
 SELECT email, name FROM users WHERE id = $1;
+
+-- name: PaymentStats :one
+-- getStats(): aggregate counts + completed revenue for GET /admin/payments/stats.
+-- Mirrors payment.service getStats — total/completed/pending counts plus
+-- COALESCE(SUM(amount),0) over completed rows. revenue is cast ::bigint so sqlc
+-- types it int64 (no numeric); the repo narrows to int (Node parseInt).
+SELECT
+  COUNT(*) AS total,
+  COUNT(*) FILTER (WHERE status = 'completed') AS completed,
+  COUNT(*) FILTER (WHERE status = 'pending') AS pending,
+  COALESCE(SUM(amount) FILTER (WHERE status = 'completed'), 0)::bigint AS revenue
+FROM payments;
