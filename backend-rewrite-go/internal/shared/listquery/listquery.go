@@ -122,6 +122,10 @@ func Build(q Query, searchCols []string, sortAllow map[string]string, defaultSor
 	}
 }
 
+// JSParseInt exposes jsParseInt for bespoke (non-listquery) admin handlers
+// that mirror Node's parseInt(). Same semantics as listquery's page/limit parse.
+func JSParseInt(s string) (int, bool) { return jsParseInt(s) }
+
 // jsParseInt replicates JavaScript parseInt(s, 10): skip leading ASCII
 // whitespace, accept one optional +/- sign, consume base-10 digits, and STOP
 // at the first non-digit (so "12abc"→12). Returns ok=false when no digit is
