@@ -19,6 +19,8 @@ type Querier interface {
 	BumpErrorReport(ctx context.Context, arg BumpErrorReportParams) (BumpErrorReportRow, error)
 	CancelActiveSubsByUser(ctx context.Context, userID pgtype.UUID) error
 	CancelByStoreRef(ctx context.Context, arg CancelByStoreRefParams) (int64, error)
+	// Mirrors subscriptionsService.countActive(): COUNT where status=active.
+	CountActiveSubscriptions(ctx context.Context) (int64, error)
 	CountFeatures(ctx context.Context, arg CountFeaturesParams) (int64, error)
 	// Today's daily-quota tally for the user. Compared against
 	// plan.daily_limit in the application layer (so the limit can come
@@ -252,6 +254,9 @@ type Querier interface {
 	MarkPaymentCompleted(ctx context.Context, referenceCode string) error
 	MarkPaymentFailed(ctx context.Context, arg MarkPaymentFailedParams) error
 	MarkPaymentFailedByRef(ctx context.Context, referenceCode string) error
+	// Mirrors subscriptionsService.getPlansBreakdown(): active subs grouped by plan.
+	// LEFT JOIN so subs with no plan row (data-quality gap) still appear.
+	PlansBreakdown(ctx context.Context) ([]PlansBreakdownRow, error)
 	// RecentUsageByUser backs GET /admin/users/:id's recent_usage field
 	// (usageService.findRecentByUser, default limit 20, created_at DESC). Relations
 	// (user, ai_provider) are NOT loaded by Node, so only the column fields select.

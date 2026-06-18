@@ -39,6 +39,18 @@ func (q *Queries) CancelByStoreRef(ctx context.Context, arg CancelByStoreRefPara
 	return result.RowsAffected(), nil
 }
 
+const countActiveSubscriptions = `-- name: CountActiveSubscriptions :one
+SELECT COUNT(*) FROM subscriptions WHERE status = 'active'::subscriptions_status_enum
+`
+
+// Mirrors subscriptionsService.countActive(): COUNT where status=active.
+func (q *Queries) CountActiveSubscriptions(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countActiveSubscriptions)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countUsageThisMonthAll = `-- name: CountUsageThisMonthAll :one
 SELECT COUNT(*) FROM usage_logs WHERE created_at >= $1
 `
@@ -867,6 +879,42 @@ func (q *Queries) ListActivePlans(ctx context.Context) ([]ListActivePlansRow, er
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const plansBreakdown = `-- name: PlansBreakdown :many
+SELECT p.name AS plan_name, p.price_cents AS price_cents, COUNT(*) AS active_count
+FROM subscriptions s
+LEFT JOIN plans p ON p.id = s.plan_id
+WHERE s.status = 'active'::subscriptions_status_enum
+GROUP BY p.name, p.price_cents
+`
+
+type PlansBreakdownRow struct {
+	PlanName    *string `db:"plan_name" json:"plan_name"`
+	PriceCents  *int32  `db:"price_cents" json:"price_cents"`
+	ActiveCount int64   `db:"active_count" json:"active_count"`
+}
+
+// Mirrors subscriptionsService.getPlansBreakdown(): active subs grouped by plan.
+// LEFT JOIN so subs with no plan row (data-quality gap) still appear.
+func (q *Queries) PlansBreakdown(ctx context.Context) ([]PlansBreakdownRow, error) {
+	rows, err := q.db.Query(ctx, plansBreakdown)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PlansBreakdownRow{}
+	for rows.Next() {
+		var i PlansBreakdownRow
+		if err := rows.Scan(&i.PlanName, &i.PriceCents, &i.ActiveCount); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

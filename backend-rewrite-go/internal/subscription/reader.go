@@ -26,6 +26,14 @@ type AccountSub struct {
 	DailyLimit         int
 }
 
+// PlanBreakdown is one row returned by GetPlansBreakdown.
+// PlanName is "" and PriceCents is 0 when the plan row is missing (LEFT JOIN NULL).
+type PlanBreakdown struct {
+	PlanName    string `json:"plan_name"`
+	ActiveCount int    `json:"active_count"`
+	PriceCents  int    `json:"price_cents"`
+}
+
 // Querier is the sqlc subset this reader needs.
 type Querier interface {
 	GetActiveSubscriptionByUserID(ctx context.Context, id pgtype.UUID) (sqlc.GetActiveSubscriptionByUserIDRow, error)
@@ -33,6 +41,8 @@ type Querier interface {
 	GetLastExpiredAt(ctx context.Context, userID pgtype.UUID) (pgtype.Timestamp, error)
 	SubsDueForRenewal(ctx context.Context, arg sqlc.SubsDueForRenewalParams) ([]sqlc.SubsDueForRenewalRow, error)
 	ExpireLapsedSubs(ctx context.Context, expiresAt pgtype.Timestamp) ([]sqlc.ExpireLapsedSubsRow, error)
+	CountActiveSubscriptions(ctx context.Context) (int64, error)
+	PlansBreakdown(ctx context.Context) ([]sqlc.PlansBreakdownRow, error)
 }
 
 // Reader resolves the active subscription.
@@ -168,6 +178,42 @@ func (r *Reader) ExpireLapsed(ctx context.Context, now time.Time) ([]ExpiredRow,
 			UserID:    uuid.UUID(row.UserID.Bytes).String(),
 			Email:     row.Email,
 			ExpiresAt: row.ExpiresAt.Time,
+		})
+	}
+	return out, nil
+}
+
+// CountActive mirrors subscriptionsService.countActive(): total active subscriptions.
+func (r *Reader) CountActive(ctx context.Context) (int, error) {
+	n, err := r.q.CountActiveSubscriptions(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return int(n), nil
+}
+
+// derefInt32 returns 0 when p is nil.
+func derefInt32(p *int32) int {
+	if p == nil {
+		return 0
+	}
+	return int(*p)
+}
+
+// GetPlansBreakdown mirrors subscriptionsService.getPlansBreakdown(): active subs
+// grouped by plan, returning plan name, price, and count. Empty DB result → non-nil
+// empty slice. NULL plan_name/price_cents (orphaned sub) maps to "" / 0.
+func (r *Reader) GetPlansBreakdown(ctx context.Context) ([]PlanBreakdown, error) {
+	rows, err := r.q.PlansBreakdown(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]PlanBreakdown, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, PlanBreakdown{
+			PlanName:    derefStr(row.PlanName),
+			ActiveCount: int(row.ActiveCount),
+			PriceCents:  derefInt32(row.PriceCents),
 		})
 	}
 	return out, nil

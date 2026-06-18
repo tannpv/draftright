@@ -2,6 +2,7 @@ package subscription_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -25,6 +26,11 @@ type fakeQ struct {
 	dueErr      error
 	expiredRows []sqlc.ExpireLapsedSubsRow
 	expiredErr  error
+
+	countActiveN   int64
+	countActiveErr error
+	breakdownRows  []sqlc.PlansBreakdownRow
+	breakdownErr   error
 }
 
 func (f fakeQ) GetActiveSubscriptionByUserID(ctx context.Context, id pgtype.UUID) (sqlc.GetActiveSubscriptionByUserIDRow, error) {
@@ -45,6 +51,14 @@ func (f fakeQ) SubsDueForRenewal(ctx context.Context, arg sqlc.SubsDueForRenewal
 
 func (f fakeQ) ExpireLapsedSubs(ctx context.Context, expiresAt pgtype.Timestamp) ([]sqlc.ExpireLapsedSubsRow, error) {
 	return f.expiredRows, f.expiredErr
+}
+
+func (f fakeQ) CountActiveSubscriptions(ctx context.Context) (int64, error) {
+	return f.countActiveN, f.countActiveErr
+}
+
+func (f fakeQ) PlansBreakdown(ctx context.Context) ([]sqlc.PlansBreakdownRow, error) {
+	return f.breakdownRows, f.breakdownErr
 }
 
 func TestActiveByUser_Found(t *testing.T) {
@@ -219,5 +233,102 @@ func TestExpireLapsed_MapsRows(t *testing.T) {
 	if len(rows) != 1 || rows[0].UserID != "22222222-2222-2222-2222-222222222222" ||
 		rows[0].Email != "c@d.com" || !rows[0].ExpiresAt.Equal(exp) {
 		t.Fatalf("bad mapping: %+v", rows)
+	}
+}
+
+// ---------- CountActive ----------
+
+func TestCountActive_ReturnsInt(t *testing.T) {
+	r := sub.NewReader(fakeQ{countActiveN: 42})
+	n, err := r.CountActive(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 42 {
+		t.Fatalf("expected 42, got %d", n)
+	}
+}
+
+func TestCountActive_PropagatesError(t *testing.T) {
+	sentinel := errors.New("db down")
+	r := sub.NewReader(fakeQ{countActiveErr: sentinel})
+	_, err := r.CountActive(context.Background())
+	if err != sentinel {
+		t.Fatalf("expected sentinel error, got %v", err)
+	}
+}
+
+// ---------- GetPlansBreakdown ----------
+
+func ptr[T any](v T) *T { return &v }
+
+func TestGetPlansBreakdown_MapsRows(t *testing.T) {
+	rows := []sqlc.PlansBreakdownRow{
+		{PlanName: ptr("Pro"), PriceCents: ptr(int32(999)), ActiveCount: 3},
+		{PlanName: ptr("Free"), PriceCents: ptr(int32(0)), ActiveCount: 7},
+	}
+	r := sub.NewReader(fakeQ{breakdownRows: rows})
+	got, err := r.GetPlansBreakdown(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []sub.PlanBreakdown{
+		{PlanName: "Pro", ActiveCount: 3, PriceCents: 999},
+		{PlanName: "Free", ActiveCount: 7, PriceCents: 0},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("expected %d rows, got %d: %+v", len(want), len(got), got)
+	}
+	for i, w := range want {
+		g := got[i]
+		if g.PlanName != w.PlanName || g.ActiveCount != w.ActiveCount || g.PriceCents != w.PriceCents {
+			t.Errorf("row %d: got %+v, want %+v", i, g, w)
+		}
+	}
+}
+
+func TestGetPlansBreakdown_Empty_NonNilSlice(t *testing.T) {
+	r := sub.NewReader(fakeQ{breakdownRows: nil})
+	got, err := r.GetPlansBreakdown(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == nil {
+		t.Fatal("expected non-nil empty slice, got nil")
+	}
+	if len(got) != 0 {
+		t.Fatalf("expected empty slice, got %+v", got)
+	}
+}
+
+func TestGetPlansBreakdown_NullPlanName_EmptyString(t *testing.T) {
+	rows := []sqlc.PlansBreakdownRow{
+		{PlanName: nil, PriceCents: nil, ActiveCount: 5},
+	}
+	r := sub.NewReader(fakeQ{breakdownRows: rows})
+	got, err := r.GetPlansBreakdown(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(got))
+	}
+	if got[0].PlanName != "" {
+		t.Errorf("expected empty PlanName, got %q", got[0].PlanName)
+	}
+	if got[0].PriceCents != 0 {
+		t.Errorf("expected 0 PriceCents, got %d", got[0].PriceCents)
+	}
+	if got[0].ActiveCount != 5 {
+		t.Errorf("expected 5 ActiveCount, got %d", got[0].ActiveCount)
+	}
+}
+
+func TestGetPlansBreakdown_PropagatesError(t *testing.T) {
+	sentinel := errors.New("breakdown failed")
+	r := sub.NewReader(fakeQ{breakdownErr: sentinel})
+	_, err := r.GetPlansBreakdown(context.Background())
+	if err != sentinel {
+		t.Fatalf("expected sentinel error, got %v", err)
 	}
 }

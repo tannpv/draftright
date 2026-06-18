@@ -240,3 +240,16 @@ JOIN users u ON u.id = sub.user_id
 JOIN plans p ON p.id = sub.plan_id
 WHERE sub.store_type = $1 AND sub.store_transaction_id = $2
 LIMIT 1;
+
+-- name: CountActiveSubscriptions :one
+-- Mirrors subscriptionsService.countActive(): COUNT where status=active.
+SELECT COUNT(*) FROM subscriptions WHERE status = 'active'::subscriptions_status_enum;
+
+-- name: PlansBreakdown :many
+-- Mirrors subscriptionsService.getPlansBreakdown(): active subs grouped by plan.
+-- LEFT JOIN so subs with no plan row (data-quality gap) still appear.
+SELECT p.name AS plan_name, p.price_cents AS price_cents, COUNT(*) AS active_count
+FROM subscriptions s
+LEFT JOIN plans p ON p.id = s.plan_id
+WHERE s.status = 'active'::subscriptions_status_enum
+GROUP BY p.name, p.price_cents;
