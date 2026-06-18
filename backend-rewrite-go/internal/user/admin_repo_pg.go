@@ -359,3 +359,13 @@ func tsPtr(v pgtype.Timestamp) *time.Time {
 	t := v.Time
 	return &t
 }
+
+// Count mirrors usersService.count() (usersRepo.count() = SELECT COUNT(*) FROM
+// users, no WHERE). Used by GET /admin/stats via the adminstats.userCounter port.
+func (r *AdminRepo) Count(ctx context.Context) (int, error) {
+	n, err := r.q.CountAllUsers(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return int(n), nil
+}

@@ -61,6 +61,14 @@ LIMIT 1;
 SELECT COUNT(*) FROM usage_logs
 WHERE user_id = $1 AND created_at >= $2;
 
+-- name: CountUsageTodayAll :one
+-- Global rewrite count since local midnight (Node usageService.countToday()).
+SELECT COUNT(*) FROM usage_logs WHERE created_at >= $1;
+
+-- name: CountUsageThisMonthAll :one
+-- Global rewrite count since local first-of-month (Node usageService.countThisMonth()).
+SELECT COUNT(*) FROM usage_logs WHERE created_at >= $1;
+
 -- name: GetAuthTokenSettings :one
 -- The single app_settings row's token lifetimes. No row → caller uses
 -- defaults (15 / 90), matching Node's `?? 15` / `?? 90`.
@@ -232,3 +240,86 @@ JOIN users u ON u.id = sub.user_id
 JOIN plans p ON p.id = sub.plan_id
 WHERE sub.store_type = $1 AND sub.store_transaction_id = $2
 LIMIT 1;
+
+-- name: CountActiveSubscriptions :one
+-- Mirrors subscriptionsService.countActive(): COUNT where status=active.
+SELECT COUNT(*) FROM subscriptions WHERE status = 'active'::subscriptions_status_enum;
+
+-- name: PlansBreakdown :many
+-- Mirrors subscriptionsService.getPlansBreakdown(): active subs grouped by plan.
+-- LEFT JOIN so subs with no plan row (data-quality gap) still appear.
+SELECT p.name AS plan_name, p.price_cents AS price_cents, COUNT(*) AS active_count
+FROM subscriptions s
+LEFT JOIN plans p ON p.id = s.plan_id
+WHERE s.status = 'active'::subscriptions_status_enum
+GROUP BY p.name, p.price_cents;
+
+-- name: CountNewSubsInWindow :one
+-- Mirrors getMonthlyStats new-subs sub-query: ALL subs started in [start, end).
+-- Node uses subsRepo.createQueryBuilder('sub').leftJoin('sub.plan','plan')
+-- .where('sub.started_at >= :start AND sub.started_at < :end').getCount()
+-- No status filter — matches Node exactly.
+SELECT COUNT(*) FROM subscriptions
+WHERE started_at >= $1 AND started_at < $2;
+
+-- name: SumRevenueInWindow :one
+-- Mirrors getMonthlyStats revenue sub-query: SUM(plan.price_cents) for subs
+-- started in [start, end). Node: COALESCE(SUM(plan.price_cents),0) via leftJoin.
+-- No status filter — matches Node exactly. Cast to bigint for pgx scan.
+SELECT COALESCE(SUM(p.price_cents), 0)::bigint AS total
+FROM subscriptions s
+LEFT JOIN plans p ON p.id = s.plan_id
+WHERE s.started_at >= $1 AND s.started_at < $2;
+
+-- name: CountChurnedInWindow :one
+-- Mirrors getMonthlyStats churned sub-query: subs with status cancelled or expired
+-- whose updated_at falls in [start, end). Node:
+-- .where('sub.status IN (:...statuses)', {statuses:['cancelled','expired']})
+-- .andWhere('sub.updated_at >= :start AND sub.updated_at < :end').getCount()
+SELECT COUNT(*) FROM subscriptions
+WHERE status IN ('cancelled'::subscriptions_status_enum, 'expired'::subscriptions_status_enum)
+  AND updated_at >= $1 AND updated_at < $2;
+
+-- name: ListSubscriptionsPaginated :many
+-- Mirrors subscriptionsService.findAllPaginated (admin transactions list):
+-- LEFT JOIN users + plans, ORDER BY created_at DESC, optional ILIKE search.
+-- When search IS NULL the WHERE branch matches all rows (Node omits WHERE entirely).
+-- Limit/offset passed by caller; default limit 20 (bespoke, not shared 10).
+SELECT s.id,
+       u.email  AS user_email,
+       u.name   AS user_name,
+       s.user_id,
+       p.name   AS plan_name,
+       p.price_cents,
+       s.store_type,
+       s.store_transaction_id,
+       s.status,
+       s.started_at,
+       s.expires_at,
+       s.created_at
+FROM subscriptions s
+LEFT JOIN users u ON u.id = s.user_id
+LEFT JOIN plans p ON p.id = s.plan_id
+WHERE (sqlc.narg('search')::text IS NULL
+       OR u.email ILIKE '%' || sqlc.narg('search') || '%'
+       OR u.name  ILIKE '%' || sqlc.narg('search') || '%')
+ORDER BY s.created_at DESC
+LIMIT $1 OFFSET $2;
+
+-- name: CountSubscriptionsPaginated :one
+-- Count twin of ListSubscriptionsPaginated — no LIMIT/OFFSET.
+-- Same optional search filter; LEFT JOIN users only (no plans needed for count).
+SELECT COUNT(*) FROM subscriptions s
+LEFT JOIN users u ON u.id = s.user_id
+WHERE (sqlc.narg('search')::text IS NULL
+       OR u.email ILIKE '%' || sqlc.narg('search') || '%'
+       OR u.name  ILIKE '%' || sqlc.narg('search') || '%');
+
+-- name: FindLatestStripeForUserPlan :one
+-- Newest Stripe subscription for a (user, plan) pair — used by admin refund flow.
+-- Any status is fine (the sub may be cancelled/expired after the charge).
+-- Returns (id, store_transaction_id); no row → pgx.ErrNoRows.
+SELECT id, store_transaction_id FROM subscriptions
+WHERE user_id = $1 AND plan_id = $2
+  AND store_type = 'stripe'::subscriptions_store_type_enum
+ORDER BY created_at DESC LIMIT 1;

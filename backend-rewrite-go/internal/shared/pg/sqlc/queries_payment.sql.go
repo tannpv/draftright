@@ -11,6 +11,27 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const confirmPayment = `-- name: ConfirmPayment :exec
+UPDATE payments SET status = 'completed', completed_at = $2, notes = $3, updated_at = NOW()
+WHERE id = $1
+`
+
+type ConfirmPaymentParams struct {
+	ID          pgtype.UUID      `db:"id" json:"id"`
+	CompletedAt pgtype.Timestamp `db:"completed_at" json:"completed_at"`
+	Notes       *string          `db:"notes" json:"notes"`
+}
+
+// adminConfirm(paymentId, adminNotes): flip a pending payment to completed,
+// stamping completed_at + notes (Node sets status=COMPLETED, completed_at=new
+// Date(), notes=adminNotes||'Manually confirmed by admin' then save()). The
+// completed_at + notes are bound ($2,$3) — the use case computes them (now()
+// injected for deterministic tests; notes already defaulted).
+func (q *Queries) ConfirmPayment(ctx context.Context, arg ConfirmPaymentParams) error {
+	_, err := q.db.Exec(ctx, confirmPayment, arg.ID, arg.CompletedAt, arg.Notes)
+	return err
+}
+
 const createPayment = `-- name: CreatePayment :one
 INSERT INTO payments (user_id, plan_id, amount, currency, method, status, reference_code, expires_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -391,6 +412,56 @@ WHERE reference_code = $1
 
 func (q *Queries) MarkPaymentFailedByRef(ctx context.Context, referenceCode string) error {
 	_, err := q.db.Exec(ctx, markPaymentFailedByRef, referenceCode)
+	return err
+}
+
+const paymentStats = `-- name: PaymentStats :one
+SELECT
+  COUNT(*) AS total,
+  COUNT(*) FILTER (WHERE status = 'completed') AS completed,
+  COUNT(*) FILTER (WHERE status = 'pending') AS pending,
+  COALESCE(SUM(amount) FILTER (WHERE status = 'completed'), 0)::bigint AS revenue
+FROM payments
+`
+
+type PaymentStatsRow struct {
+	Total     int64 `db:"total" json:"total"`
+	Completed int64 `db:"completed" json:"completed"`
+	Pending   int64 `db:"pending" json:"pending"`
+	Revenue   int64 `db:"revenue" json:"revenue"`
+}
+
+// getStats(): aggregate counts + completed revenue for GET /admin/payments/stats.
+// Mirrors payment.service getStats — total/completed/pending counts plus
+// COALESCE(SUM(amount),0) over completed rows. revenue is cast ::bigint so sqlc
+// types it int64 (no numeric); the repo narrows to int (Node parseInt).
+func (q *Queries) PaymentStats(ctx context.Context) (PaymentStatsRow, error) {
+	row := q.db.QueryRow(ctx, paymentStats)
+	var i PaymentStatsRow
+	err := row.Scan(
+		&i.Total,
+		&i.Completed,
+		&i.Pending,
+		&i.Revenue,
+	)
+	return i, err
+}
+
+const refundPayment = `-- name: RefundPayment :exec
+UPDATE payments SET status = 'refunded', notes = $2, updated_at = NOW() WHERE id = $1
+`
+
+type RefundPaymentParams struct {
+	ID    pgtype.UUID `db:"id" json:"id"`
+	Notes *string     `db:"notes" json:"notes"`
+}
+
+// refund(paymentId): flip a payment to refunded, overwriting notes with the
+// composed refund note (Node sets payment.status=REFUNDED, payment.notes=<note>
+// then save()). notes is bound $2; the use case composes it (existing notes +
+// 'Refunded by admin...' joined by ' | ').
+func (q *Queries) RefundPayment(ctx context.Context, arg RefundPaymentParams) error {
+	_, err := q.db.Exec(ctx, refundPayment, arg.ID, arg.Notes)
 	return err
 }
 

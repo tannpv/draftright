@@ -11,9 +11,13 @@ import (
 	sqlc "github.com/tannpv/draftright-rewrite/internal/shared/pg/sqlc"
 )
 
-// Querier is the one-method sqlc subset.
+// Querier is the sqlc subset used by Counter.
 type Querier interface {
 	CountUsageToday(ctx context.Context, arg sqlc.CountUsageTodayParams) (int64, error)
+	// Global variants (no user_id filter) — mirror Node usageService.countToday()
+	// and usageService.countThisMonth() used by admin stats.
+	CountUsageTodayAll(ctx context.Context, createdAt pgtype.Timestamp) (int64, error)
+	CountUsageThisMonthAll(ctx context.Context, createdAt pgtype.Timestamp) (int64, error)
 }
 
 // Counter counts a user's rewrites since local midnight.
@@ -36,6 +40,28 @@ func (c *Counter) CountToday(ctx context.Context, userID string) (int, error) {
 		UserID:    uid,
 		CreatedAt: pgtype.Timestamp{Time: midnight, Valid: true},
 	})
+	if err != nil {
+		return 0, err
+	}
+	return int(n), nil
+}
+
+// CountTodayAllAt mirrors Node usageService.countToday(): all users' rewrites
+// since local midnight of now.
+func (c *Counter) CountTodayAllAt(ctx context.Context, now time.Time) (int, error) {
+	midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	n, err := c.q.CountUsageTodayAll(ctx, pgtype.Timestamp{Time: midnight, Valid: true})
+	if err != nil {
+		return 0, err
+	}
+	return int(n), nil
+}
+
+// CountThisMonthAllAt mirrors Node usageService.countThisMonth(): all users'
+// rewrites since local first-of-month of now.
+func (c *Counter) CountThisMonthAllAt(ctx context.Context, now time.Time) (int, error) {
+	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+	n, err := c.q.CountUsageThisMonthAll(ctx, pgtype.Timestamp{Time: monthStart, Valid: true})
 	if err != nil {
 		return 0, err
 	}

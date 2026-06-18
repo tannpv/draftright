@@ -39,6 +39,90 @@ func (q *Queries) CancelByStoreRef(ctx context.Context, arg CancelByStoreRefPara
 	return result.RowsAffected(), nil
 }
 
+const countActiveSubscriptions = `-- name: CountActiveSubscriptions :one
+SELECT COUNT(*) FROM subscriptions WHERE status = 'active'::subscriptions_status_enum
+`
+
+// Mirrors subscriptionsService.countActive(): COUNT where status=active.
+func (q *Queries) CountActiveSubscriptions(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countActiveSubscriptions)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countChurnedInWindow = `-- name: CountChurnedInWindow :one
+SELECT COUNT(*) FROM subscriptions
+WHERE status IN ('cancelled'::subscriptions_status_enum, 'expired'::subscriptions_status_enum)
+  AND updated_at >= $1 AND updated_at < $2
+`
+
+type CountChurnedInWindowParams struct {
+	UpdatedAt   pgtype.Timestamp `db:"updated_at" json:"updated_at"`
+	UpdatedAt_2 pgtype.Timestamp `db:"updated_at_2" json:"updated_at_2"`
+}
+
+// Mirrors getMonthlyStats churned sub-query: subs with status cancelled or expired
+// whose updated_at falls in [start, end). Node:
+// .where('sub.status IN (:...statuses)', {statuses:['cancelled','expired']})
+// .andWhere('sub.updated_at >= :start AND sub.updated_at < :end').getCount()
+func (q *Queries) CountChurnedInWindow(ctx context.Context, arg CountChurnedInWindowParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countChurnedInWindow, arg.UpdatedAt, arg.UpdatedAt_2)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countNewSubsInWindow = `-- name: CountNewSubsInWindow :one
+SELECT COUNT(*) FROM subscriptions
+WHERE started_at >= $1 AND started_at < $2
+`
+
+type CountNewSubsInWindowParams struct {
+	StartedAt   pgtype.Timestamp `db:"started_at" json:"started_at"`
+	StartedAt_2 pgtype.Timestamp `db:"started_at_2" json:"started_at_2"`
+}
+
+// Mirrors getMonthlyStats new-subs sub-query: ALL subs started in [start, end).
+// Node uses subsRepo.createQueryBuilder('sub').leftJoin('sub.plan','plan')
+// .where('sub.started_at >= :start AND sub.started_at < :end').getCount()
+// No status filter — matches Node exactly.
+func (q *Queries) CountNewSubsInWindow(ctx context.Context, arg CountNewSubsInWindowParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countNewSubsInWindow, arg.StartedAt, arg.StartedAt_2)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countSubscriptionsPaginated = `-- name: CountSubscriptionsPaginated :one
+SELECT COUNT(*) FROM subscriptions s
+LEFT JOIN users u ON u.id = s.user_id
+WHERE ($1::text IS NULL
+       OR u.email ILIKE '%' || $1 || '%'
+       OR u.name  ILIKE '%' || $1 || '%')
+`
+
+// Count twin of ListSubscriptionsPaginated — no LIMIT/OFFSET.
+// Same optional search filter; LEFT JOIN users only (no plans needed for count).
+func (q *Queries) CountSubscriptionsPaginated(ctx context.Context, search *string) (int64, error) {
+	row := q.db.QueryRow(ctx, countSubscriptionsPaginated, search)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countUsageThisMonthAll = `-- name: CountUsageThisMonthAll :one
+SELECT COUNT(*) FROM usage_logs WHERE created_at >= $1
+`
+
+// Global rewrite count since local first-of-month (Node usageService.countThisMonth()).
+func (q *Queries) CountUsageThisMonthAll(ctx context.Context, createdAt pgtype.Timestamp) (int64, error) {
+	row := q.db.QueryRow(ctx, countUsageThisMonthAll, createdAt)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countUsageToday = `-- name: CountUsageToday :one
 SELECT COUNT(*) FROM usage_logs
 WHERE user_id = $1 AND created_at >= $2
@@ -54,6 +138,18 @@ type CountUsageTodayParams struct {
 // the Node process (new Date(); setHours(0,0,0,0)).
 func (q *Queries) CountUsageToday(ctx context.Context, arg CountUsageTodayParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countUsageToday, arg.UserID, arg.CreatedAt)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countUsageTodayAll = `-- name: CountUsageTodayAll :one
+SELECT COUNT(*) FROM usage_logs WHERE created_at >= $1
+`
+
+// Global rewrite count since local midnight (Node usageService.countToday()).
+func (q *Queries) CountUsageTodayAll(ctx context.Context, createdAt pgtype.Timestamp) (int64, error) {
+	row := q.db.QueryRow(ctx, countUsageTodayAll, createdAt)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -257,6 +353,33 @@ func (q *Queries) FindFreePlan(ctx context.Context) (FindFreePlanRow, error) {
 	row := q.db.QueryRow(ctx, findFreePlan)
 	var i FindFreePlanRow
 	err := row.Scan(&i.ID, &i.Name, &i.DailyLimit)
+	return i, err
+}
+
+const findLatestStripeForUserPlan = `-- name: FindLatestStripeForUserPlan :one
+SELECT id, store_transaction_id FROM subscriptions
+WHERE user_id = $1 AND plan_id = $2
+  AND store_type = 'stripe'::subscriptions_store_type_enum
+ORDER BY created_at DESC LIMIT 1
+`
+
+type FindLatestStripeForUserPlanParams struct {
+	UserID pgtype.UUID `db:"user_id" json:"user_id"`
+	PlanID pgtype.UUID `db:"plan_id" json:"plan_id"`
+}
+
+type FindLatestStripeForUserPlanRow struct {
+	ID                 pgtype.UUID `db:"id" json:"id"`
+	StoreTransactionID *string     `db:"store_transaction_id" json:"store_transaction_id"`
+}
+
+// Newest Stripe subscription for a (user, plan) pair — used by admin refund flow.
+// Any status is fine (the sub may be cancelled/expired after the charge).
+// Returns (id, store_transaction_id); no row → pgx.ErrNoRows.
+func (q *Queries) FindLatestStripeForUserPlan(ctx context.Context, arg FindLatestStripeForUserPlanParams) (FindLatestStripeForUserPlanRow, error) {
+	row := q.db.QueryRow(ctx, findLatestStripeForUserPlan, arg.UserID, arg.PlanID)
+	var i FindLatestStripeForUserPlanRow
+	err := row.Scan(&i.ID, &i.StoreTransactionID)
 	return i, err
 }
 
@@ -853,6 +976,123 @@ func (q *Queries) ListActivePlans(ctx context.Context) ([]ListActivePlansRow, er
 	return items, nil
 }
 
+const listSubscriptionsPaginated = `-- name: ListSubscriptionsPaginated :many
+SELECT s.id,
+       u.email  AS user_email,
+       u.name   AS user_name,
+       s.user_id,
+       p.name   AS plan_name,
+       p.price_cents,
+       s.store_type,
+       s.store_transaction_id,
+       s.status,
+       s.started_at,
+       s.expires_at,
+       s.created_at
+FROM subscriptions s
+LEFT JOIN users u ON u.id = s.user_id
+LEFT JOIN plans p ON p.id = s.plan_id
+WHERE ($3::text IS NULL
+       OR u.email ILIKE '%' || $3 || '%'
+       OR u.name  ILIKE '%' || $3 || '%')
+ORDER BY s.created_at DESC
+LIMIT $1 OFFSET $2
+`
+
+type ListSubscriptionsPaginatedParams struct {
+	Limit  int32   `db:"limit" json:"limit"`
+	Offset int32   `db:"offset" json:"offset"`
+	Search *string `db:"search" json:"search"`
+}
+
+type ListSubscriptionsPaginatedRow struct {
+	ID                 pgtype.UUID                `db:"id" json:"id"`
+	UserEmail          *string                    `db:"user_email" json:"user_email"`
+	UserName           *string                    `db:"user_name" json:"user_name"`
+	UserID             pgtype.UUID                `db:"user_id" json:"user_id"`
+	PlanName           *string                    `db:"plan_name" json:"plan_name"`
+	PriceCents         *int32                     `db:"price_cents" json:"price_cents"`
+	StoreType          SubscriptionsStoreTypeEnum `db:"store_type" json:"store_type"`
+	StoreTransactionID *string                    `db:"store_transaction_id" json:"store_transaction_id"`
+	Status             SubscriptionsStatusEnum    `db:"status" json:"status"`
+	StartedAt          pgtype.Timestamp           `db:"started_at" json:"started_at"`
+	ExpiresAt          pgtype.Timestamp           `db:"expires_at" json:"expires_at"`
+	CreatedAt          pgtype.Timestamp           `db:"created_at" json:"created_at"`
+}
+
+// Mirrors subscriptionsService.findAllPaginated (admin transactions list):
+// LEFT JOIN users + plans, ORDER BY created_at DESC, optional ILIKE search.
+// When search IS NULL the WHERE branch matches all rows (Node omits WHERE entirely).
+// Limit/offset passed by caller; default limit 20 (bespoke, not shared 10).
+func (q *Queries) ListSubscriptionsPaginated(ctx context.Context, arg ListSubscriptionsPaginatedParams) ([]ListSubscriptionsPaginatedRow, error) {
+	rows, err := q.db.Query(ctx, listSubscriptionsPaginated, arg.Limit, arg.Offset, arg.Search)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListSubscriptionsPaginatedRow{}
+	for rows.Next() {
+		var i ListSubscriptionsPaginatedRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserEmail,
+			&i.UserName,
+			&i.UserID,
+			&i.PlanName,
+			&i.PriceCents,
+			&i.StoreType,
+			&i.StoreTransactionID,
+			&i.Status,
+			&i.StartedAt,
+			&i.ExpiresAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const plansBreakdown = `-- name: PlansBreakdown :many
+SELECT p.name AS plan_name, p.price_cents AS price_cents, COUNT(*) AS active_count
+FROM subscriptions s
+LEFT JOIN plans p ON p.id = s.plan_id
+WHERE s.status = 'active'::subscriptions_status_enum
+GROUP BY p.name, p.price_cents
+`
+
+type PlansBreakdownRow struct {
+	PlanName    *string `db:"plan_name" json:"plan_name"`
+	PriceCents  *int32  `db:"price_cents" json:"price_cents"`
+	ActiveCount int64   `db:"active_count" json:"active_count"`
+}
+
+// Mirrors subscriptionsService.getPlansBreakdown(): active subs grouped by plan.
+// LEFT JOIN so subs with no plan row (data-quality gap) still appear.
+func (q *Queries) PlansBreakdown(ctx context.Context) ([]PlansBreakdownRow, error) {
+	rows, err := q.db.Query(ctx, plansBreakdown)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PlansBreakdownRow{}
+	for rows.Next() {
+		var i PlansBreakdownRow
+		if err := rows.Scan(&i.PlanName, &i.PriceCents, &i.ActiveCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const resetPasswordHash = `-- name: ResetPasswordHash :exec
 UPDATE users SET password_hash = $2, password_reset_code = null,
   password_reset_expires = null, password_reset_attempts = 0,
@@ -992,6 +1232,28 @@ func (q *Queries) SubsDueForRenewal(ctx context.Context, arg SubsDueForRenewalPa
 		return nil, err
 	}
 	return items, nil
+}
+
+const sumRevenueInWindow = `-- name: SumRevenueInWindow :one
+SELECT COALESCE(SUM(p.price_cents), 0)::bigint AS total
+FROM subscriptions s
+LEFT JOIN plans p ON p.id = s.plan_id
+WHERE s.started_at >= $1 AND s.started_at < $2
+`
+
+type SumRevenueInWindowParams struct {
+	StartedAt   pgtype.Timestamp `db:"started_at" json:"started_at"`
+	StartedAt_2 pgtype.Timestamp `db:"started_at_2" json:"started_at_2"`
+}
+
+// Mirrors getMonthlyStats revenue sub-query: SUM(plan.price_cents) for subs
+// started in [start, end). Node: COALESCE(SUM(plan.price_cents),0) via leftJoin.
+// No status filter — matches Node exactly. Cast to bigint for pgx scan.
+func (q *Queries) SumRevenueInWindow(ctx context.Context, arg SumRevenueInWindowParams) (int64, error) {
+	row := q.db.QueryRow(ctx, sumRevenueInWindow, arg.StartedAt, arg.StartedAt_2)
+	var total int64
+	err := row.Scan(&total)
+	return total, err
 }
 
 const updateUserPasswordHash = `-- name: UpdateUserPasswordHash :exec

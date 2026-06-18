@@ -108,3 +108,31 @@ LIMIT 1;
 -- + display name to send the "subscription active" mail. name is NOT NULL
 -- (schema.sql), so sqlc generates a plain string (no pointer).
 SELECT email, name FROM users WHERE id = $1;
+
+-- name: ConfirmPayment :exec
+-- adminConfirm(paymentId, adminNotes): flip a pending payment to completed,
+-- stamping completed_at + notes (Node sets status=COMPLETED, completed_at=new
+-- Date(), notes=adminNotes||'Manually confirmed by admin' then save()). The
+-- completed_at + notes are bound ($2,$3) — the use case computes them (now()
+-- injected for deterministic tests; notes already defaulted).
+UPDATE payments SET status = 'completed', completed_at = $2, notes = $3, updated_at = NOW()
+WHERE id = $1;
+
+-- name: RefundPayment :exec
+-- refund(paymentId): flip a payment to refunded, overwriting notes with the
+-- composed refund note (Node sets payment.status=REFUNDED, payment.notes=<note>
+-- then save()). notes is bound $2; the use case composes it (existing notes +
+-- 'Refunded by admin...' joined by ' | ').
+UPDATE payments SET status = 'refunded', notes = $2, updated_at = NOW() WHERE id = $1;
+
+-- name: PaymentStats :one
+-- getStats(): aggregate counts + completed revenue for GET /admin/payments/stats.
+-- Mirrors payment.service getStats — total/completed/pending counts plus
+-- COALESCE(SUM(amount),0) over completed rows. revenue is cast ::bigint so sqlc
+-- types it int64 (no numeric); the repo narrows to int (Node parseInt).
+SELECT
+  COUNT(*) AS total,
+  COUNT(*) FILTER (WHERE status = 'completed') AS completed,
+  COUNT(*) FILTER (WHERE status = 'pending') AS pending,
+  COALESCE(SUM(amount) FILTER (WHERE status = 'completed'), 0)::bigint AS revenue
+FROM payments;

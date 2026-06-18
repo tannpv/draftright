@@ -165,7 +165,7 @@ func (s *Service) completePayment(ctx context.Context, ref, status string) (bool
 		if err := s.webhookRepo.MarkPaymentCompleted(ctx, ref); err != nil {
 			return false, ref, err
 		}
-		if err := s.activateSubscription(ctx, pay); err != nil {
+		if err := s.activateSubscription(ctx, pay.BillingPeriod, pay.UserID, pay.PlanID, pay.Method); err != nil {
 			return false, ref, err
 		}
 	} else {
@@ -178,8 +178,9 @@ func (s *Service) completePayment(ctx context.Context, ref, status string) (bool
 
 // activateSubscription grants the Pro subscription for a completed payment and
 // fires the activation email. expires_at = now + 1mo (monthly) or 1yr (yearly).
-func (s *Service) activateSubscription(ctx context.Context, pay *WebhookPayment) error {
-	billing := pay.BillingPeriod
+// It takes primitives (not a *WebhookPayment) so both the webhook completion
+// path and the admin-confirm path funnel through ONE function — no logic fork.
+func (s *Service) activateSubscription(ctx context.Context, billing, userID, planID, method string) error {
 	if billing == "" {
 		billing = "monthly"
 	}
@@ -188,13 +189,21 @@ func (s *Service) activateSubscription(ctx context.Context, pay *WebhookPayment)
 	if billing == "yearly" {
 		exp = now.AddDate(1, 0, 0)
 	}
-	if err := s.subsWriter.Grant(ctx, pay.UserID, pay.PlanID, string(StoreTypeForMethod(PaymentMethod(pay.Method))), &exp); err != nil {
+	if err := s.subsWriter.Grant(ctx, userID, planID, string(StoreTypeForMethod(PaymentMethod(method))), &exp); err != nil {
 		return err
 	}
-	if email, name, err := s.webhookRepo.UserEmailName(ctx, pay.UserID); err == nil && email != "" {
+	if email, name, err := s.webhookRepo.UserEmailName(ctx, userID); err == nil && email != "" {
 		s.emailer.SubscriptionActivated(ctx, email, name, "Pro")
 	}
 	return nil
+}
+
+// Activate is the exported wrapper the payment AdminService consumes (it lives
+// in the same package but talks to the webhook Service through this small
+// surface). It delegates to the unexported activateSubscription so the webhook
+// and admin-confirm paths share one activation implementation.
+func (s *Service) Activate(ctx context.Context, billing, userID, planID, method string) error {
+	return s.activateSubscription(ctx, billing, userID, planID, method)
 }
 
 // resolvePlanIDFromLSVariant maps a Lemon Squeezy variant id to the active plan

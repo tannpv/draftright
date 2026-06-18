@@ -19,15 +19,61 @@ type Querier interface {
 	BumpErrorReport(ctx context.Context, arg BumpErrorReportParams) (BumpErrorReportRow, error)
 	CancelActiveSubsByUser(ctx context.Context, userID pgtype.UUID) error
 	CancelByStoreRef(ctx context.Context, arg CancelByStoreRefParams) (int64, error)
+	// adminConfirm(paymentId, adminNotes): flip a pending payment to completed,
+	// stamping completed_at + notes (Node sets status=COMPLETED, completed_at=new
+	// Date(), notes=adminNotes||'Manually confirmed by admin' then save()). The
+	// completed_at + notes are bound ($2,$3) — the use case computes them (now()
+	// injected for deterministic tests; notes already defaulted).
+	ConfirmPayment(ctx context.Context, arg ConfirmPaymentParams) error
+	// Mirrors subscriptionsService.countActive(): COUNT where status=active.
+	CountActiveSubscriptions(ctx context.Context) (int64, error)
+	// Admin user CRUD (Phase 4c-2). GET /admin/users/:id returns the FULL
+	// TypeORM User entity (the `user` field); PATCH /admin/users/:id re-reads
+	// it. Only the full-row GET is static — the bespoke paginated list, its
+	// COUNT, and the partial UPDATE have runtime WHERE/ORDER/SET and so are
+	// assembled in Go on the pool (NOT here). Columns are listed in
+	// entity-declaration order (src/users/entities/user.entity.ts) so the
+	// scan lines up with user.UserDetail. The two nullable timestamps are
+	// timestamptz; the two non-null timestamps are timestamp.
+	// CountAllUsers mirrors usersService.count() used by GET /admin/stats:
+	// usersRepo.count() = SELECT COUNT(*) FROM users (no WHERE, all rows).
+	CountAllUsers(ctx context.Context) (int64, error)
+	// Mirrors getMonthlyStats churned sub-query: subs with status cancelled or expired
+	// whose updated_at falls in [start, end). Node:
+	// .where('sub.status IN (:...statuses)', {statuses:['cancelled','expired']})
+	// .andWhere('sub.updated_at >= :start AND sub.updated_at < :end').getCount()
+	CountChurnedInWindow(ctx context.Context, arg CountChurnedInWindowParams) (int64, error)
 	CountFeatures(ctx context.Context, arg CountFeaturesParams) (int64, error)
+	// Mirrors getMonthlyStats new-subs sub-query: ALL subs started in [start, end).
+	// Node uses subsRepo.createQueryBuilder('sub').leftJoin('sub.plan','plan')
+	// .where('sub.started_at >= :start AND sub.started_at < :end').getCount()
+	// No status filter — matches Node exactly.
+	CountNewSubsInWindow(ctx context.Context, arg CountNewSubsInWindowParams) (int64, error)
+	// Count twin of ListPendingRewriteLogs (no LIMIT/OFFSET).
+	CountPendingRewriteLogs(ctx context.Context) (int64, error)
+	// internal/shared/pg/queries_rewritelog.sql
+	// Admin training-data endpoints (GET /admin/training-data/stats,
+	// GET /admin/training-data, PATCH /admin/training-data/:id,
+	// GET /admin/training-data/export).
+	// Mirrors RewriteLogService (backend/src/rewrite/rewrite-log.service.ts).
+	CountRewriteLogs(ctx context.Context) (int64, error)
+	// One row per distinct quality value — caller maps to (pending, approved, rejected).
+	CountRewriteLogsByQuality(ctx context.Context) ([]CountRewriteLogsByQualityRow, error)
+	// Count twin of ListSubscriptionsPaginated — no LIMIT/OFFSET.
+	// Same optional search filter; LEFT JOIN users only (no plans needed for count).
+	CountSubscriptionsPaginated(ctx context.Context, search *string) (int64, error)
 	// Today's daily-quota tally for the user. Compared against
 	// plan.daily_limit in the application layer (so the limit can come
 	// from a fallback when the user has no subscription).
 	CountTodayUsage(ctx context.Context, userID pgtype.UUID) (int64, error)
+	// Global rewrite count since local first-of-month (Node usageService.countThisMonth()).
+	CountUsageThisMonthAll(ctx context.Context, createdAt pgtype.Timestamp) (int64, error)
 	// Mirrors usageService.countTodayByUser: rows since local midnight.
 	// The caller passes the midnight boundary so timezone handling matches
 	// the Node process (new Date(); setHours(0,0,0,0)).
 	CountUsageToday(ctx context.Context, arg CountUsageTodayParams) (int64, error)
+	// Global rewrite count since local midnight (Node usageService.countToday()).
+	CountUsageTodayAll(ctx context.Context, createdAt pgtype.Timestamp) (int64, error)
 	CountVotes(ctx context.Context, featureID pgtype.UUID) (int64, error)
 	CreateFreeSubscription(ctx context.Context, arg CreateFreeSubscriptionParams) error
 	// Insert a pending payment. Defaults (id, created_at, updated_at) are returned.
@@ -58,6 +104,10 @@ type Querier interface {
 	// order created_at ASC). Returns the active plan id for that (period, currency).
 	FindFirstActivePlanByPeriodCurrency(ctx context.Context, arg FindFirstActivePlanByPeriodCurrencyParams) (pgtype.UUID, error)
 	FindFreePlan(ctx context.Context) (FindFreePlanRow, error)
+	// Newest Stripe subscription for a (user, plan) pair — used by admin refund flow.
+	// Any status is fine (the sub may be cancelled/expired after the charge).
+	// Returns (id, store_transaction_id); no row → pgx.ErrNoRows.
+	FindLatestStripeForUserPlan(ctx context.Context, arg FindLatestStripeForUserPlanParams) (FindLatestStripeForUserPlanRow, error)
 	FindUserByAppleId(ctx context.Context, appleID *string) (FindUserByAppleIdRow, error)
 	FindUserByFacebookId(ctx context.Context, facebookID *string) (FindUserByFacebookIdRow, error)
 	FindUserByGoogleId(ctx context.Context, googleID *string) (FindUserByGoogleIdRow, error)
@@ -164,14 +214,6 @@ type Querier interface {
 	GetUserEmailName(ctx context.Context, id pgtype.UUID) (GetUserEmailNameRow, error)
 	// User fields createCheckout / portal / cancel need. No row → pgx.ErrNoRows.
 	GetUserForCheckout(ctx context.Context, id pgtype.UUID) (GetUserForCheckoutRow, error)
-	// Admin user CRUD (Phase 4c-2). GET /admin/users/:id returns the FULL
-	// TypeORM User entity (the `user` field); PATCH /admin/users/:id re-reads
-	// it. Only the full-row GET is static — the bespoke paginated list, its
-	// COUNT, and the partial UPDATE have runtime WHERE/ORDER/SET and so are
-	// assembled in Go on the pool (NOT here). Columns are listed in
-	// entity-declaration order (src/users/entities/user.entity.ts) so the
-	// scan lines up with user.UserDetail. The two nullable timestamps are
-	// timestamptz; the two non-null timestamps are timestamp.
 	GetUserFull(ctx context.Context, id pgtype.UUID) (GetUserFullRow, error)
 	InsertAdminUser(ctx context.Context, arg InsertAdminUserParams) (InsertAdminUserRow, error)
 	InsertAiProvider(ctx context.Context, arg InsertAiProviderParams) (InsertAiProviderRow, error)
@@ -234,11 +276,23 @@ type Querier interface {
 	// the generated PlansBillingPeriodEnum, so InsertPlan binds the enum value
 	// directly (no SQL cast needed — the param already carries the enum type).
 	ListAllPlans(ctx context.Context) ([]ListAllPlansRow, error)
+	// exportApproved / exportAll: quality='approved', oldest first.
+	// Node: find({ where: { quality: 'approved' }, order: { created_at: 'ASC' } })
+	ListApprovedRewriteLogsAsc(ctx context.Context) ([]RewriteLog, error)
 	ListEmailTemplates(ctx context.Context) ([]ListEmailTemplatesRow, error)
 	// findByUser(userId): the user's 20 most-recent payments, newest first, each
 	// with its plan (TypeORM relations:['plan'] order:{created_at:'DESC'} take:20).
 	ListPaymentsByUser(ctx context.Context, userID pgtype.UUID) ([]ListPaymentsByUserRow, error)
+	// findPending: quality='pending', newest first, with LIMIT/OFFSET pagination.
+	// Node: findAndCount({ where: { quality: 'pending' }, order: { created_at: 'DESC' },
+	//         skip: (page-1)*limit, take: limit })
+	ListPendingRewriteLogs(ctx context.Context, arg ListPendingRewriteLogsParams) ([]RewriteLog, error)
 	ListPublicFeatures(ctx context.Context, arg ListPublicFeaturesParams) ([]ListPublicFeaturesRow, error)
+	// Mirrors subscriptionsService.findAllPaginated (admin transactions list):
+	// LEFT JOIN users + plans, ORDER BY created_at DESC, optional ILIKE search.
+	// When search IS NULL the WHERE branch matches all rows (Node omits WHERE entirely).
+	// Limit/offset passed by caller; default limit 20 (bespoke, not shared 10).
+	ListSubscriptionsPaginated(ctx context.Context, arg ListSubscriptionsPaginatedParams) ([]ListSubscriptionsPaginatedRow, error)
 	// Reflect a Resend delivery event onto email_logs.status (by Resend
 	// message id). error is only overwritten when a reason is supplied —
 	// a NULL reason leaves the existing error untouched, mirroring the
@@ -248,10 +302,23 @@ type Querier interface {
 	MarkPaymentCompleted(ctx context.Context, referenceCode string) error
 	MarkPaymentFailed(ctx context.Context, arg MarkPaymentFailedParams) error
 	MarkPaymentFailedByRef(ctx context.Context, referenceCode string) error
+	// getStats(): aggregate counts + completed revenue for GET /admin/payments/stats.
+	// Mirrors payment.service getStats — total/completed/pending counts plus
+	// COALESCE(SUM(amount),0) over completed rows. revenue is cast ::bigint so sqlc
+	// types it int64 (no numeric); the repo narrows to int (Node parseInt).
+	PaymentStats(ctx context.Context) (PaymentStatsRow, error)
+	// Mirrors subscriptionsService.getPlansBreakdown(): active subs grouped by plan.
+	// LEFT JOIN so subs with no plan row (data-quality gap) still appear.
+	PlansBreakdown(ctx context.Context) ([]PlansBreakdownRow, error)
 	// RecentUsageByUser backs GET /admin/users/:id's recent_usage field
 	// (usageService.findRecentByUser, default limit 20, created_at DESC). Relations
 	// (user, ai_provider) are NOT loaded by Node, so only the column fields select.
 	RecentUsageByUser(ctx context.Context, userID pgtype.UUID) ([]UsageLog, error)
+	// refund(paymentId): flip a payment to refunded, overwriting notes with the
+	// composed refund note (Node sets payment.status=REFUNDED, payment.notes=<note>
+	// then save()). notes is bound $2; the use case composes it (existing notes +
+	// 'Refunded by admin...' joined by ' | ').
+	RefundPayment(ctx context.Context, arg RefundPaymentParams) error
 	ResetPasswordHash(ctx context.Context, arg ResetPasswordHashParams) error
 	// Extension-token persistence (dr_ext_* keyboard/share tokens).
 	// Read the live NestJS-owned schema as-is; mirror ExtensionTokenService
@@ -278,6 +345,10 @@ type Querier interface {
 	// Cron pass 1: active subs whose expiry falls in the reminder window.
 	// Bounds passed by caller (now+2.5d, now+3.5d) to keep tz in the Go process.
 	SubsDueForRenewal(ctx context.Context, arg SubsDueForRenewalParams) ([]SubsDueForRenewalRow, error)
+	// Mirrors getMonthlyStats revenue sub-query: SUM(plan.price_cents) for subs
+	// started in [start, end). Node: COALESCE(SUM(plan.price_cents),0) via leftJoin.
+	// No status filter — matches Node exactly. Cast to bigint for pgx scan.
+	SumRevenueInWindow(ctx context.Context, arg SumRevenueInWindowParams) (int64, error)
 	// Add an address to the suppression list (idempotent). Mirrors the
 	// NestJS suppress() orIgnore() → bare ON CONFLICT DO NOTHING.
 	SuppressEmail(ctx context.Context, arg SuppressEmailParams) error
@@ -288,6 +359,11 @@ type Querier interface {
 	UpdateFeatureVoteCount(ctx context.Context, arg UpdateFeatureVoteCountParams) error
 	UpdatePaymentPlan(ctx context.Context, arg UpdatePaymentPlanParams) error
 	UpdatePaymentQRData(ctx context.Context, arg UpdatePaymentQRDataParams) error
+	// updateQuality(id, quality): update the quality field for one row.
+	// Node: rewriteLogRepo.update(id, { quality }) — TypeORM silently no-ops on
+	// a missing UUID (0 rows affected, no error). Go mirrors: valid UUID → run UPDATE
+	// (0-row no-op is fine); invalid UUID → caller returns nil without touching DB.
+	UpdateRewriteLogQuality(ctx context.Context, arg UpdateRewriteLogQualityParams) error
 	UpdateUserPasswordHash(ctx context.Context, arg UpdateUserPasswordHashParams) error
 	UpdateUserVerification(ctx context.Context, arg UpdateUserVerificationParams) error
 	UpsertEmailTemplate(ctx context.Context, arg UpsertEmailTemplateParams) error
