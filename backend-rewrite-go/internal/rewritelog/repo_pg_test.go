@@ -165,8 +165,10 @@ func TestFindPending_OffsetAndTotal(t *testing.T) {
 
 // ── Test 4: UpdateQuality bad UUID ───────────────────────────────────────────
 
-// UpdateQuality with a malformed id must return nil without calling the querier.
-func TestUpdateQuality_BadUUID_NoopNilError(t *testing.T) {
+// UpdateQuality with a malformed id must return a non-nil error without calling
+// the querier. Node 500s because Postgres throws "invalid input syntax for type
+// uuid"; Go must surface an error so the handler can 500 too.
+func TestUpdateQuality_BadUUID_ReturnsError(t *testing.T) {
 	called := false
 	q := &fakeQuerier{
 		updateQualityFn: func(_ context.Context, _ sqlc.UpdateRewriteLogQualityParams) error {
@@ -176,8 +178,8 @@ func TestUpdateQuality_BadUUID_NoopNilError(t *testing.T) {
 	}
 	repo := NewPgRepo(q)
 	err := repo.UpdateQuality(context.Background(), "not-a-uuid", "approved")
-	if err != nil {
-		t.Fatalf("expected nil error for bad UUID, got: %v", err)
+	if err == nil {
+		t.Fatal("expected non-nil error for malformed UUID, got nil")
 	}
 	if called {
 		t.Fatal("querier must NOT be called for a malformed UUID")

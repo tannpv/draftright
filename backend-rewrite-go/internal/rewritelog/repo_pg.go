@@ -9,13 +9,15 @@
 //   - Count()         → rewriteLogRepo.count()           (no filter)
 //   - CountByQuality() → 3 × count({where:{quality}})    (per-value)
 //   - FindPending()   → findAndCount({where,order,skip,take})
-//   - UpdateQuality() → update(id, {quality})            — TypeORM ignores
-//     bad UUID silently (0 rows, no error); Go returns nil without hitting DB.
+//   - UpdateQuality() → update(id, {quality})            — malformed uuid →
+//     error (Node 500s via Postgres invalid-uuid); a valid-but-absent uuid →
+//     0 rows updated, nil error (Node 200 success).
 //   - FindApprovedAsc() → find({where:{quality:'approved'},order:{created_at:'ASC'}})
 package rewritelog
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -99,15 +101,16 @@ func (r *PgRepo) FindPending(ctx context.Context, page, limit int) ([]RewriteLog
 }
 
 // UpdateQuality sets the quality field for the given log id.
-// A malformed id returns nil without touching the DB, mirroring TypeORM's
-// silent no-op on bad UUID input (0 rows affected, no error).
+// A malformed id returns an error without touching the DB — Node 500s via
+// Postgres "invalid input syntax for type uuid". A valid-but-absent id
+// results in 0 rows updated and nil error (Node 200 success).
 // Mirrors Node: rewriteLogRepo.update(id, { quality })
 func (r *PgRepo) UpdateQuality(ctx context.Context, id, quality string) error {
 	uid, err := parseUUID(id)
 	if err != nil {
-		// Bad UUID: TypeORM does update(id,{}) with a non-uuid and gets 0 rows,
-		// no error. Mirror that by returning nil without hitting the DB.
-		return nil
+		// Bad UUID: Postgres would throw "invalid input syntax for type uuid",
+		// causing Node to 500. Surface the error so our handler can 500 too.
+		return fmt.Errorf("invalid uuid %q: %w", id, err)
 	}
 	return r.q.UpdateRewriteLogQuality(ctx, sqlc.UpdateRewriteLogQualityParams{
 		ID:      uid,
