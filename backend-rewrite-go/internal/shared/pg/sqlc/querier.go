@@ -177,6 +177,7 @@ type Querier interface {
 	// allow-list check).
 	InsertFeedback(ctx context.Context, arg InsertFeedbackParams) (InsertFeedbackRow, error)
 	InsertGrantedSubscription(ctx context.Context, arg InsertGrantedSubscriptionParams) error
+	InsertPlan(ctx context.Context, arg InsertPlanParams) (InsertPlanRow, error)
 	// Records one /rewrite call for daily quota tracking + analytics.
 	// Mirrors NestJS UsageService.log: same columns, same names, same
 	// precision so the two backends populate identical rows.
@@ -201,6 +202,13 @@ type Querier interface {
 	// casts `temperature::text AS temperature` so sqlc types it as a Go string
 	// with Postgres-preserved scale-2 text.
 	ListAiProviders(ctx context.Context) ([]ListAiProvidersRow, error)
+	// Plans admin CRUD (Phase 4c-2). GET /plans (reader.go) is cheapest-first
+	// (price_cents ASC); the ADMIN findAll orders by created_at ASC — see
+	// Node plansService.findAll() (`order: { created_at: 'ASC' }`). The
+	// billing_period column is the plans_billing_period_enum; sqlc types it as
+	// the generated PlansBillingPeriodEnum, so InsertPlan binds the enum value
+	// directly (no SQL cast needed — the param already carries the enum type).
+	ListAllPlans(ctx context.Context) ([]ListAllPlansRow, error)
 	// findByUser(userId): the user's 20 most-recent payments, newest first, each
 	// with its plan (TypeORM relations:['plan'] order:{created_at:'DESC'} take:20).
 	ListPaymentsByUser(ctx context.Context, userID pgtype.UUID) ([]ListPaymentsByUserRow, error)
@@ -234,6 +242,7 @@ type Querier interface {
 	SetUserLemonSqueezyCustomerID(ctx context.Context, arg SetUserLemonSqueezyCustomerIDParams) error
 	SetUserStripeCustomerID(ctx context.Context, arg SetUserStripeCustomerIDParams) error
 	SoftDeleteAiProvider(ctx context.Context, id pgtype.UUID) error
+	SoftDeletePlan(ctx context.Context, id pgtype.UUID) error
 	StampStoreRefByReference(ctx context.Context, arg StampStoreRefByReferenceParams) (int64, error)
 	// Cron pass 1: active subs whose expiry falls in the reminder window.
 	// Bounds passed by caller (now+2.5d, now+3.5d) to keep tz in the Go process.
