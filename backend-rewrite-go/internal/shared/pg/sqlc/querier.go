@@ -15,6 +15,7 @@ type Querier interface {
 	// AiProvidersService.findActive — keep the ORDER BY in sync there + here
 	// (is_default DESC, is_active = TRUE).
 	ActiveAIProvider(ctx context.Context) (ActiveAIProviderRow, error)
+	AdminEmailExists(ctx context.Context, email string) (bool, error)
 	BumpErrorReport(ctx context.Context, arg BumpErrorReportParams) (BumpErrorReportRow, error)
 	CancelActiveSubsByUser(ctx context.Context, userID pgtype.UUID) error
 	CancelByStoreRef(ctx context.Context, arg CancelByStoreRefParams) (int64, error)
@@ -32,7 +33,9 @@ type Querier interface {
 	// Insert a pending payment. Defaults (id, created_at, updated_at) are returned.
 	CreatePayment(ctx context.Context, arg CreatePaymentParams) (CreatePaymentRow, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
+	DeleteEmailTemplate(ctx context.Context, templateKey string) error
 	DeleteVote(ctx context.Context, arg DeleteVoteParams) error
+	DemoteDefaultAiProviders(ctx context.Context) error
 	ExpireByStoreRef(ctx context.Context, arg ExpireByStoreRefParams) (int64, error)
 	// Cron pass 2: flip active|cancelled subs past expiry to expired, returning
 	// the affected rows so the caller can email each. expires_at left untouched.
@@ -78,6 +81,13 @@ type Querier interface {
 	// still grant their old plan.
 	FindUserWithPlan(ctx context.Context, id pgtype.UUID) (FindUserWithPlanRow, error)
 	FindVote(ctx context.Context, arg FindVoteParams) (pgtype.UUID, error)
+	// GetActiveSubFullByUser backs GET /admin/users/:id's subscription field
+	// (subscriptionsService.findActiveByUserId: status ACTIVE, relations ['plan'],
+	// created_at DESC, take 1). The `user` relation is NOT loaded → omitted from the
+	// serialised subscription. Enum columns cast ::text so sqlc scans plain Go
+	// strings (mirrors the temperature::text / billing_period::text pattern). The
+	// joined plan columns are aliased plan_* to feed the nested plans.PlanEntity.
+	GetActiveSubFullByUser(ctx context.Context, userID pgtype.UUID) (GetActiveSubFullByUserRow, error)
 	// GET /subscription: newest active sub + plan fields incl billing_period.
 	// Distinct from GetActiveSubscriptionByUserID (which omits billing_period
 	// and is pinned for /auth/account).
@@ -86,6 +96,8 @@ type Querier interface {
 	// subscription for the user, joined to its plan. ORDER BY created_at
 	// DESC + LIMIT 1 reproduces TypeORM order:{created_at:'DESC'} findOne.
 	GetActiveSubscriptionByUserID(ctx context.Context, userID pgtype.UUID) (GetActiveSubscriptionByUserIDRow, error)
+	GetAiProviderByID(ctx context.Context, id pgtype.UUID) (GetAiProviderByIDRow, error)
+	GetAppSettings(ctx context.Context) (AppSetting, error)
 	// The single app_settings row's token lifetimes. No row → caller uses
 	// defaults (15 / 90), matching Node's `?? 15` / `?? 90`.
 	GetAuthTokenSettings(ctx context.Context) (GetAuthTokenSettingsRow, error)
@@ -152,7 +164,19 @@ type Querier interface {
 	GetUserEmailName(ctx context.Context, id pgtype.UUID) (GetUserEmailNameRow, error)
 	// User fields createCheckout / portal / cancel need. No row → pgx.ErrNoRows.
 	GetUserForCheckout(ctx context.Context, id pgtype.UUID) (GetUserForCheckoutRow, error)
+	// Admin user CRUD (Phase 4c-2). GET /admin/users/:id returns the FULL
+	// TypeORM User entity (the `user` field); PATCH /admin/users/:id re-reads
+	// it. Only the full-row GET is static — the bespoke paginated list, its
+	// COUNT, and the partial UPDATE have runtime WHERE/ORDER/SET and so are
+	// assembled in Go on the pool (NOT here). Columns are listed in
+	// entity-declaration order (src/users/entities/user.entity.ts) so the
+	// scan lines up with user.UserDetail. The two nullable timestamps are
+	// timestamptz; the two non-null timestamps are timestamp.
+	GetUserFull(ctx context.Context, id pgtype.UUID) (GetUserFullRow, error)
+	InsertAdminUser(ctx context.Context, arg InsertAdminUserParams) (InsertAdminUserRow, error)
+	InsertAiProvider(ctx context.Context, arg InsertAiProviderParams) (InsertAiProviderRow, error)
 	InsertBugReport(ctx context.Context, arg InsertBugReportParams) (InsertBugReportRow, error)
+	InsertDefaultAppSettings(ctx context.Context) (AppSetting, error)
 	// Audit row for every deliver attempt (suppressed/skipped/sent/failed).
 	InsertEmailLog(ctx context.Context, arg InsertEmailLogParams) error
 	InsertErrorReport(ctx context.Context, arg InsertErrorReportParams) (InsertErrorReportRow, error)
@@ -172,6 +196,7 @@ type Querier interface {
 	// allow-list check).
 	InsertFeedback(ctx context.Context, arg InsertFeedbackParams) (InsertFeedbackRow, error)
 	InsertGrantedSubscription(ctx context.Context, arg InsertGrantedSubscriptionParams) error
+	InsertPlan(ctx context.Context, arg InsertPlanParams) (InsertPlanRow, error)
 	// Records one /rewrite call for daily quota tracking + analytics.
 	// Mirrors NestJS UsageService.log: same columns, same names, same
 	// precision so the two backends populate identical rows.
@@ -189,6 +214,27 @@ type Querier interface {
 	// list(): active tokens for the user, newest first
 	// (TypeORM where:{user_id, revoked_at:IsNull()} order:{created_at:'DESC'}).
 	ListActiveTokens(ctx context.Context, userID pgtype.UUID) ([]ListActiveTokensRow, error)
+	// Admin-users CRUD (Phase 4c-2). The bare full-list, INSERT, soft-delete,
+	// and exact-email dup-check are static; the paginated branch + partial
+	// UPDATE have runtime WHERE/ORDER/SET assembled in Go on the pool.
+	// Bare list orders created_at ASC (Node adminUserRepo.find order ASC).
+	// Every projection omits password_hash so the secret never leaves the DB.
+	ListAdminUsers(ctx context.Context) ([]ListAdminUsersRow, error)
+	// AI provider admin CRUD (Phase 4c-2). The temperature column is
+	// decimal(3,2); the Node entity declares it WITHOUT a numeric transformer,
+	// so TypeORM returns it as a JS string ("0.30"). To reproduce that exact
+	// 2-decimal string in Go (and dodge pgtype.Numeric formatting), every read
+	// casts `temperature::text AS temperature` so sqlc types it as a Go string
+	// with Postgres-preserved scale-2 text.
+	ListAiProviders(ctx context.Context) ([]ListAiProvidersRow, error)
+	// Plans admin CRUD (Phase 4c-2). GET /plans (reader.go) is cheapest-first
+	// (price_cents ASC); the ADMIN findAll orders by created_at ASC — see
+	// Node plansService.findAll() (`order: { created_at: 'ASC' }`). The
+	// billing_period column is the plans_billing_period_enum; sqlc types it as
+	// the generated PlansBillingPeriodEnum, so InsertPlan binds the enum value
+	// directly (no SQL cast needed — the param already carries the enum type).
+	ListAllPlans(ctx context.Context) ([]ListAllPlansRow, error)
+	ListEmailTemplates(ctx context.Context) ([]ListEmailTemplatesRow, error)
 	// findByUser(userId): the user's 20 most-recent payments, newest first, each
 	// with its plan (TypeORM relations:['plan'] order:{created_at:'DESC'} take:20).
 	ListPaymentsByUser(ctx context.Context, userID pgtype.UUID) ([]ListPaymentsByUserRow, error)
@@ -202,6 +248,10 @@ type Querier interface {
 	MarkPaymentCompleted(ctx context.Context, referenceCode string) error
 	MarkPaymentFailed(ctx context.Context, arg MarkPaymentFailedParams) error
 	MarkPaymentFailedByRef(ctx context.Context, referenceCode string) error
+	// RecentUsageByUser backs GET /admin/users/:id's recent_usage field
+	// (usageService.findRecentByUser, default limit 20, created_at DESC). Relations
+	// (user, ai_provider) are NOT loaded by Node, so only the column fields select.
+	RecentUsageByUser(ctx context.Context, userID pgtype.UUID) ([]UsageLog, error)
 	ResetPasswordHash(ctx context.Context, arg ResetPasswordHashParams) error
 	// Extension-token persistence (dr_ext_* keyboard/share tokens).
 	// Read the live NestJS-owned schema as-is; mirror ExtensionTokenService
@@ -221,6 +271,9 @@ type Querier interface {
 	SetPasswordResetCode(ctx context.Context, arg SetPasswordResetCodeParams) error
 	SetUserLemonSqueezyCustomerID(ctx context.Context, arg SetUserLemonSqueezyCustomerIDParams) error
 	SetUserStripeCustomerID(ctx context.Context, arg SetUserStripeCustomerIDParams) error
+	SoftDeleteAdminUser(ctx context.Context, id pgtype.UUID) error
+	SoftDeleteAiProvider(ctx context.Context, id pgtype.UUID) error
+	SoftDeletePlan(ctx context.Context, id pgtype.UUID) error
 	StampStoreRefByReference(ctx context.Context, arg StampStoreRefByReferenceParams) (int64, error)
 	// Cron pass 1: active subs whose expiry falls in the reminder window.
 	// Bounds passed by caller (now+2.5d, now+3.5d) to keep tz in the Go process.
@@ -237,6 +290,7 @@ type Querier interface {
 	UpdatePaymentQRData(ctx context.Context, arg UpdatePaymentQRDataParams) error
 	UpdateUserPasswordHash(ctx context.Context, arg UpdateUserPasswordHashParams) error
 	UpdateUserVerification(ctx context.Context, arg UpdateUserVerificationParams) error
+	UpsertEmailTemplate(ctx context.Context, arg UpsertEmailTemplateParams) error
 	// internal/shared/pg/queries_bugreports.sql
 	// Public bug-report ingest (POST /bug-reports, multipart with optional
 	// screenshot). user_id is nulled when the JWT outlives its user.

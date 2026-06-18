@@ -24,6 +24,37 @@ type PlanEntity struct {
 	UpdatedAt     time.Time
 }
 
+// NewPlan is the admin create payload — mirrors Node POST /admin/plans
+// @Body { name, daily_limit, price_cents, billing_period, currency?,
+// trial_days?, stripe_price_id? }. is_active is not a create field (the DB
+// default true applies). Defaulting of absent optionals (trial_days,
+// currency, billing_period) happens in the usecase/handler; the repo binds
+// whatever NewPlan carries.
+type NewPlan struct {
+	Name          string
+	DailyLimit    int
+	PriceCents    int
+	BillingPeriod string
+	Currency      *string
+	TrialDays     int
+	StripePriceID *string
+}
+
+// PlanPatch is the admin update payload — mirrors Node PATCH
+// /admin/plans/:id @Body Partial<{ name, daily_limit, price_cents,
+// billing_period, is_active, currency, trial_days, stripe_price_id }>. A
+// nil pointer = field unchanged (TypeORM partial .update()).
+type PlanPatch struct {
+	Name          *string
+	DailyLimit    *int
+	PriceCents    *int
+	BillingPeriod *string
+	Currency      *string
+	TrialDays     *int
+	StripePriceID *string
+	IsActive      *bool
+}
+
 func (p PlanEntity) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
 		ID            string  `json:"id"`

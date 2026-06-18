@@ -129,6 +129,39 @@ type Router struct {
 	AdminChangePassword http.Handler // POST   /admin/auth/change-password (admin)
 	AdminMe             http.Handler // GET    /admin/auth/me              (admin)
 
+	// Phase 4c-2 admin content/ops CRUD. All http.Handler, mounted in Task 21. nil-guarded.
+	AiProvidersList      http.Handler // GET    /admin/ai-providers           (admin)
+	AiProvidersPaginated http.Handler // GET    /admin/ai-providers/paginated (admin)
+	AiProviderCreate     http.Handler // POST   /admin/ai-providers           (admin)
+	AiProviderUpdate     http.Handler // PATCH  /admin/ai-providers/{id}      (admin)
+	AiProviderDelete     http.Handler // DELETE /admin/ai-providers/{id}      (admin)
+	AiProviderTest       http.Handler // POST   /admin/ai-providers/{id}/test (admin)
+
+	AppSettingsGet       http.Handler // GET   /admin/settings            (admin)
+	AppSettingsPatch     http.Handler // PATCH /admin/settings            (admin)
+	AppSettingsTestEmail http.Handler // POST  /admin/settings/test-email (admin)
+
+	AdminPlansList  http.Handler // GET    /admin/plans      (admin)
+	AdminPlanCreate http.Handler // POST   /admin/plans      (admin)
+	AdminPlanUpdate http.Handler // PATCH  /admin/plans/{id} (admin)
+	AdminPlanDelete http.Handler // DELETE /admin/plans/{id} (admin)
+
+	AdminUsersList  http.Handler // GET   /admin/users      (admin)
+	AdminUserGet    http.Handler // GET   /admin/users/{id} (admin)
+	AdminUserUpdate http.Handler // PATCH /admin/users/{id} (admin)
+
+	AdminAccountsList  http.Handler // GET    /admin/admin-users      (admin)
+	AdminAccountCreate http.Handler // POST   /admin/admin-users      (admin)
+	AdminAccountUpdate http.Handler // PATCH  /admin/admin-users/{id} (admin)
+	AdminAccountDelete http.Handler // DELETE /admin/admin-users/{id} (admin)
+
+	AdminEmailLogs http.Handler // GET /admin/email-logs (admin)
+
+	AdminEmailTemplatesList   http.Handler // GET    /admin/email-templates               (admin)
+	AdminEmailTemplateUpdate  http.Handler // PATCH  /admin/email-templates/{key}         (admin)
+	AdminEmailTemplateReset   http.Handler // DELETE /admin/email-templates/{key}         (admin)
+	AdminEmailTemplatePreview http.Handler // GET    /admin/email-templates/{key}/preview (admin)
+
 	// EnableTracing wraps the whole mux with otelhttp middleware so
 	// every request becomes a span. No-op when the global tracer
 	// provider is the default noop (i.e. tracing.Setup returned
@@ -338,6 +371,90 @@ func (r *Router) Build() http.Handler {
 		}
 		if r.AdminMe != nil {
 			admin.Method(http.MethodGet, "/admin/auth/me", r.AdminMe)
+		}
+
+		// Phase 4c-2 admin content/ops CRUD (Task 21). All nil-guarded,
+		// behind the same RequireAuth → RequireAdmin chain.
+		if r.AiProvidersList != nil {
+			admin.Method(http.MethodGet, "/admin/ai-providers", r.AiProvidersList)
+		}
+		if r.AiProvidersPaginated != nil {
+			admin.Method(http.MethodGet, "/admin/ai-providers/paginated", r.AiProvidersPaginated)
+		}
+		if r.AiProviderCreate != nil {
+			admin.Method(http.MethodPost, "/admin/ai-providers", r.AiProviderCreate)
+		}
+		if r.AiProviderUpdate != nil {
+			admin.Method(http.MethodPatch, "/admin/ai-providers/{id}", r.AiProviderUpdate)
+		}
+		if r.AiProviderDelete != nil {
+			admin.Method(http.MethodDelete, "/admin/ai-providers/{id}", r.AiProviderDelete)
+		}
+		if r.AiProviderTest != nil {
+			admin.Method(http.MethodPost, "/admin/ai-providers/{id}/test", r.AiProviderTest)
+		}
+
+		if r.AppSettingsGet != nil {
+			admin.Method(http.MethodGet, "/admin/settings", r.AppSettingsGet)
+		}
+		if r.AppSettingsPatch != nil {
+			admin.Method(http.MethodPatch, "/admin/settings", r.AppSettingsPatch)
+		}
+		if r.AppSettingsTestEmail != nil {
+			admin.Method(http.MethodPost, "/admin/settings/test-email", r.AppSettingsTestEmail)
+		}
+
+		if r.AdminPlansList != nil {
+			admin.Method(http.MethodGet, "/admin/plans", r.AdminPlansList)
+		}
+		if r.AdminPlanCreate != nil {
+			admin.Method(http.MethodPost, "/admin/plans", r.AdminPlanCreate)
+		}
+		if r.AdminPlanUpdate != nil {
+			admin.Method(http.MethodPatch, "/admin/plans/{id}", r.AdminPlanUpdate)
+		}
+		if r.AdminPlanDelete != nil {
+			admin.Method(http.MethodDelete, "/admin/plans/{id}", r.AdminPlanDelete)
+		}
+
+		if r.AdminUsersList != nil {
+			admin.Method(http.MethodGet, "/admin/users", r.AdminUsersList)
+		}
+		if r.AdminUserGet != nil {
+			admin.Method(http.MethodGet, "/admin/users/{id}", r.AdminUserGet)
+		}
+		if r.AdminUserUpdate != nil {
+			admin.Method(http.MethodPatch, "/admin/users/{id}", r.AdminUserUpdate)
+		}
+
+		if r.AdminAccountsList != nil {
+			admin.Method(http.MethodGet, "/admin/admin-users", r.AdminAccountsList)
+		}
+		if r.AdminAccountCreate != nil {
+			admin.Method(http.MethodPost, "/admin/admin-users", r.AdminAccountCreate)
+		}
+		if r.AdminAccountUpdate != nil {
+			admin.Method(http.MethodPatch, "/admin/admin-users/{id}", r.AdminAccountUpdate)
+		}
+		if r.AdminAccountDelete != nil {
+			admin.Method(http.MethodDelete, "/admin/admin-users/{id}", r.AdminAccountDelete)
+		}
+
+		if r.AdminEmailLogs != nil {
+			admin.Method(http.MethodGet, "/admin/email-logs", r.AdminEmailLogs)
+		}
+
+		if r.AdminEmailTemplatesList != nil {
+			admin.Method(http.MethodGet, "/admin/email-templates", r.AdminEmailTemplatesList)
+		}
+		if r.AdminEmailTemplateUpdate != nil {
+			admin.Method(http.MethodPatch, "/admin/email-templates/{key}", r.AdminEmailTemplateUpdate)
+		}
+		if r.AdminEmailTemplateReset != nil {
+			admin.Method(http.MethodDelete, "/admin/email-templates/{key}", r.AdminEmailTemplateReset)
+		}
+		if r.AdminEmailTemplatePreview != nil {
+			admin.Method(http.MethodGet, "/admin/email-templates/{key}/preview", r.AdminEmailTemplatePreview)
 		}
 	})
 
