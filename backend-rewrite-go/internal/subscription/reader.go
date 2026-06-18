@@ -247,8 +247,9 @@ func (r *Reader) GetMonthlyStatsAt(ctx context.Context, now time.Time, months in
 	out := make([]MonthStat, 0, months)
 	for i := months - 1; i >= 0; i-- {
 		// JS: new Date(now.getFullYear(), now.getMonth()-i, 1)
-		// now.Month() is 1-based; JS getMonth() is 0-based, so subtract 1 to align,
-		// then subtract i to go back i months.
+		// Go Month() is 1-based; JS getMonth() is 0-based. The difference cancels:
+		// Month(6)-0 == month(5)+1 == June. time.Date normalizes underflow
+		// identically to JS new Date, so going back i months is just Month()-i.
 		mStart := time.Date(now.Year(), time.Month(int(now.Month())-i), 1, 0, 0, 0, 0, now.Location())
 		mEnd := time.Date(mStart.Year(), mStart.Month()+1, 1, 0, 0, 0, 0, now.Location())
 
