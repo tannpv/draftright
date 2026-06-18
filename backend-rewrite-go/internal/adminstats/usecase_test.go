@@ -258,6 +258,35 @@ func TestAnalytics_UnknownPlanSkipped(t *testing.T) {
 	}
 }
 
+// TestAnalytics_DuplicateNameUsesFirst confirms that when two active plans
+// share a name, MRR reads the FIRST match in catalog order (ListAll is
+// created_at ASC) — mirroring Node's Array.find, which returns the oldest.
+// A name-keyed map would keep the LAST entry (399) and diverge.
+func TestAnalytics_DuplicateNameUsesFirst(t *testing.T) {
+	subs := &fakeSub{
+		plansBreakdown: []subscription.PlanBreakdown{
+			{PlanName: "Pro", ActiveCount: 1, PriceCents: 0},
+		},
+		monthlyStats: []subscription.MonthStat{},
+	}
+	// Two "Pro" plans; ListAll order = created_at ASC, so index 0 (price 999) is
+	// the oldest and must win. The newer duplicate (399) must NOT be used.
+	pl := &fakePlanLister{plans: []plans.PlanEntity{
+		{Name: "Pro", PriceCents: 999, BillingPeriod: "monthly"},
+		{Name: "Pro", PriceCents: 399, BillingPeriod: "monthly"},
+	}}
+
+	svc := newService(&fakeUserCounter{}, subs, &fakeUsage{}, pl, time.Now)
+	result, err := svc.Analytics(context.Background())
+	if err != nil {
+		t.Fatalf("Analytics() error: %v", err)
+	}
+
+	if result.MRR != 999 {
+		t.Errorf("MRR = %d, want 999 (first/oldest duplicate plan must win, not 399)", result.MRR)
+	}
+}
+
 // TestAnalytics_ForwardsNowToMonthlyStats confirms that the injected clock
 // value is forwarded to GetMonthlyStatsAt (not time.Now() called directly).
 func TestAnalytics_ForwardsNowToMonthlyStats(t *testing.T) {

@@ -185,15 +185,22 @@ func (s *Service) Analytics(ctx context.Context) (AnalyticsResult, error) {
 		return AnalyticsResult{}, err
 	}
 
-	// Build a name→plan lookup to mirror Node's Array.find.
-	planByName := make(map[string]plans.PlanEntity, len(allPlans))
-	for _, p := range allPlans {
-		planByName[p.Name] = p
+	// findPlan mirrors Node's Array.find(p => p.name === b.plan_name): returns the
+	// FIRST plan whose name matches in catalog order (ListAll is created_at ASC).
+	// A map keyed by name would keep the LAST match on a duplicate name, diverging
+	// from Node when two active plans share a name but differ in price/period.
+	findPlan := func(name string) (plans.PlanEntity, bool) {
+		for _, p := range allPlans {
+			if p.Name == name {
+				return p, true
+			}
+		}
+		return plans.PlanEntity{}, false
 	}
 
 	var mrr int
 	for _, b := range breakdown {
-		p, ok := planByName[b.PlanName]
+		p, ok := findPlan(b.PlanName)
 		if !ok {
 			// No matching plan — skip (Node: plan is undefined → condition fails).
 			continue
