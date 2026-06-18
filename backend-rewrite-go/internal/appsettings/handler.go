@@ -3,9 +3,9 @@ package appsettings
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
-	"strings"
 
 	"github.com/tannpv/draftright-rewrite/internal/shared"
 )
@@ -95,12 +95,12 @@ type patchBody struct {
 //   - repo / DB failure                              → 500 internal
 //     (Node TypeORM throws a plain error → AllExceptionsFilter 500)
 //
-// svc.Patch returns ONE error type for both the validation failure and a repo
-// failure (Task 7's usecase returns each raw). They are NOT distinguishable by
-// Go type. To match Node's distinct statuses without editing usecase.go, the
-// validation case is recognised by the validator's fixed message prefix
-// (owned by internal/payment.AssertMethodsRegisterable — a byte-for-byte port
-// of the Node message). Any other Patch error is a repo failure → 500.
+// svc.Patch wraps a payment-method validation failure in InvalidSettingsError
+// (Error() forwards the validator's verbatim message). The handler recognises
+// it via errors.As → 400 invalid-input. Any other Patch error is a repo
+// failure → 500 internal. Matching on the typed error (not a message prefix)
+// means a future wording change in the validator can't silently flip the
+// status code.
 func (h *Handler) Patch(w http.ResponseWriter, r *http.Request) {
 	var body patchBody
 	// Empty body (io.EOF) = no fields supplied = all columns untouched, which
@@ -151,7 +151,8 @@ func (h *Handler) Patch(w http.ResponseWriter, r *http.Request) {
 
 	settings, err := h.svc.Patch(r.Context(), p)
 	if err != nil {
-		if strings.HasPrefix(err.Error(), "Cannot enable payment method(s) with no backend strategy:") {
+		var inv InvalidSettingsError
+		if errors.As(err, &inv) {
 			shared.WriteError(w, r, "invalid-input", err.Error())
 			return
 		}

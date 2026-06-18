@@ -39,6 +39,25 @@ func TestPatch_RejectsBadPaymentMethods(t *testing.T) {
 	}
 }
 
+// The usecase must wrap a validator failure in InvalidSettingsError so the
+// handler can errors.As it to a 400 — while Error() forwards the validator's
+// message verbatim (byte-identical to Node's BadRequestException payload).
+func TestPatch_Usecase_WrapsValidationError(t *testing.T) {
+	const msg = "Cannot enable payment method(s) with no backend strategy: bogus"
+	svc := NewService(&fakeRepo{}, fakeValidator{err: errors.New(msg)}, &fakeSender{})
+	_, err := svc.Patch(context.Background(), Patch{PaymentMethodsEnabled: ptr("bogus")})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	var inv InvalidSettingsError
+	if !errors.As(err, &inv) {
+		t.Fatalf("err %T is not InvalidSettingsError", err)
+	}
+	if err.Error() != msg {
+		t.Fatalf("Error()=%q, want byte-identical %q", err.Error(), msg)
+	}
+}
+
 func TestPatch_PersistsWhenValid(t *testing.T) {
 	repo := &fakeRepo{}
 	svc := NewService(repo, fakeValidator{}, &fakeSender{})

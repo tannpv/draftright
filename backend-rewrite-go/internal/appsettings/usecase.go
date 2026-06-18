@@ -41,13 +41,24 @@ func NewService(repo Repo, v MethodValidator, s EmailSender) *Service {
 
 func (s *Service) Get(ctx context.Context) (AppSettings, error) { return s.repo.GetOrCreate(ctx) }
 
+// InvalidSettingsError marks a Patch failure caused by request-data validation
+// (e.g. payment_methods_enabled naming an unregisterable method). The handler
+// maps it to HTTP 400; a bare repo error maps to 500. Error() forwards the
+// wrapped message verbatim so the client body stays byte-identical to Node's
+// BadRequestException payload.
+type InvalidSettingsError struct{ Err error }
+
+func (e InvalidSettingsError) Error() string { return e.Err.Error() }
+func (e InvalidSettingsError) Unwrap() error { return e.Err }
+
 // Patch validates payment_methods_enabled (when supplied) BEFORE persisting,
 // matching Node updateSettings: assertMethodsRegisterable runs first, then
-// the row is updated.
+// the row is updated. A validation failure is wrapped in InvalidSettingsError
+// (handler → 400); a repo failure propagates raw (handler → 500).
 func (s *Service) Patch(ctx context.Context, p Patch) (AppSettings, error) {
 	if p.PaymentMethodsEnabled != nil {
 		if err := s.validator.AssertMethodsRegisterable(*p.PaymentMethodsEnabled); err != nil {
-			return AppSettings{}, err
+			return AppSettings{}, InvalidSettingsError{Err: err}
 		}
 	}
 	return s.repo.Patch(ctx, p)
