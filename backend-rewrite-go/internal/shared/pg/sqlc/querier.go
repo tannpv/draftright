@@ -155,6 +155,15 @@ type Querier interface {
 	GetUserEmailName(ctx context.Context, id pgtype.UUID) (GetUserEmailNameRow, error)
 	// User fields createCheckout / portal / cancel need. No row → pgx.ErrNoRows.
 	GetUserForCheckout(ctx context.Context, id pgtype.UUID) (GetUserForCheckoutRow, error)
+	// Admin user CRUD (Phase 4c-2). GET /admin/users/:id returns the FULL
+	// TypeORM User entity (the `user` field); PATCH /admin/users/:id re-reads
+	// it. Only the full-row GET is static — the bespoke paginated list, its
+	// COUNT, and the partial UPDATE have runtime WHERE/ORDER/SET and so are
+	// assembled in Go on the pool (NOT here). Columns are listed in
+	// entity-declaration order (src/users/entities/user.entity.ts) so the
+	// scan lines up with user.UserDetail. The two nullable timestamps are
+	// timestamptz; the two non-null timestamps are timestamp.
+	GetUserFull(ctx context.Context, id pgtype.UUID) (GetUserFullRow, error)
 	InsertAiProvider(ctx context.Context, arg InsertAiProviderParams) (InsertAiProviderRow, error)
 	InsertBugReport(ctx context.Context, arg InsertBugReportParams) (InsertBugReportRow, error)
 	InsertDefaultAppSettings(ctx context.Context) (AppSetting, error)

@@ -31,6 +31,7 @@ sql:
       - "internal/shared/pg/queries_aiprovider.sql"
       - "internal/shared/pg/queries_appsettings.sql"
       - "internal/shared/pg/queries_plans_admin.sql"
+      - "internal/shared/pg/queries_users_admin.sql"
     engine: "postgresql"
     gen:
       go:
