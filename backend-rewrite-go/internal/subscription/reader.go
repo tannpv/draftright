@@ -43,6 +43,9 @@ type Querier interface {
 	ExpireLapsedSubs(ctx context.Context, expiresAt pgtype.Timestamp) ([]sqlc.ExpireLapsedSubsRow, error)
 	CountActiveSubscriptions(ctx context.Context) (int64, error)
 	PlansBreakdown(ctx context.Context) ([]sqlc.PlansBreakdownRow, error)
+	CountNewSubsInWindow(ctx context.Context, arg sqlc.CountNewSubsInWindowParams) (int64, error)
+	SumRevenueInWindow(ctx context.Context, arg sqlc.SumRevenueInWindowParams) (int64, error)
+	CountChurnedInWindow(ctx context.Context, arg sqlc.CountChurnedInWindowParams) (int64, error)
 }
 
 // Reader resolves the active subscription.
@@ -200,6 +203,16 @@ func derefInt32(p *int32) int {
 	return int(*p)
 }
 
+// MonthStat is one month bucket for GET /admin/analytics monthly_stats.
+// JSON keys match Node getMonthlyStats exactly: month, new_subscriptions,
+// revenue_cents, churned.
+type MonthStat struct {
+	Month            string `json:"month"`
+	NewSubscriptions int    `json:"new_subscriptions"`
+	RevenueCents     int    `json:"revenue_cents"`
+	Churned          int    `json:"churned"`
+}
+
 // GetPlansBreakdown mirrors subscriptionsService.getPlansBreakdown(): active subs
 // grouped by plan, returning plan name, price, and count. Empty DB result → non-nil
 // empty slice. NULL plan_name/price_cents (orphaned sub) maps to "" / 0.
@@ -214,6 +227,63 @@ func (r *Reader) GetPlansBreakdown(ctx context.Context) ([]PlanBreakdown, error)
 			PlanName:    derefStr(row.PlanName),
 			ActiveCount: int(row.ActiveCount),
 			PriceCents:  derefInt32(row.PriceCents),
+		})
+	}
+	return out, nil
+}
+
+// GetMonthlyStatsAt mirrors Node subscriptionsService.getMonthlyStats(months):
+// returns `months` entries oldest→newest, each covering one calendar month
+// [mStart, mEnd) in now's timezone.
+//
+// Node loop: for i = months-1; i >= 0; i--
+//
+//	monthStart = new Date(year, month-i, 1)   ← JS 0-based month
+//	monthEnd   = new Date(year, month-i+1, 1)
+//
+// time.Date normalizes month underflow/overflow identically (e.g. month 0
+// → December of prior year), so Go mirrors JS new Date(y, m, 1) exactly.
+func (r *Reader) GetMonthlyStatsAt(ctx context.Context, now time.Time, months int) ([]MonthStat, error) {
+	out := make([]MonthStat, 0, months)
+	for i := months - 1; i >= 0; i-- {
+		// JS: new Date(now.getFullYear(), now.getMonth()-i, 1)
+		// now.Month() is 1-based; JS getMonth() is 0-based, so subtract 1 to align,
+		// then subtract i to go back i months.
+		mStart := time.Date(now.Year(), time.Month(int(now.Month())-i), 1, 0, 0, 0, 0, now.Location())
+		mEnd := time.Date(mStart.Year(), mStart.Month()+1, 1, 0, 0, 0, 0, now.Location())
+
+		mStartTS := pgtype.Timestamp{Time: mStart, Valid: true}
+		mEndTS := pgtype.Timestamp{Time: mEnd, Valid: true}
+
+		newSubs, err := r.q.CountNewSubsInWindow(ctx, sqlc.CountNewSubsInWindowParams{
+			StartedAt:   mStartTS,
+			StartedAt_2: mEndTS,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		revenue, err := r.q.SumRevenueInWindow(ctx, sqlc.SumRevenueInWindowParams{
+			StartedAt:   mStartTS,
+			StartedAt_2: mEndTS,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		churned, err := r.q.CountChurnedInWindow(ctx, sqlc.CountChurnedInWindowParams{
+			UpdatedAt:   mStartTS,
+			UpdatedAt_2: mEndTS,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		out = append(out, MonthStat{
+			Month:            mStart.Format("2006-01"),
+			NewSubscriptions: int(newSubs),
+			RevenueCents:     int(revenue),
+			Churned:          int(churned),
 		})
 	}
 	return out, nil

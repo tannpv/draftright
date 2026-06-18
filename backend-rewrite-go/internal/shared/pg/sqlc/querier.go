@@ -21,7 +21,17 @@ type Querier interface {
 	CancelByStoreRef(ctx context.Context, arg CancelByStoreRefParams) (int64, error)
 	// Mirrors subscriptionsService.countActive(): COUNT where status=active.
 	CountActiveSubscriptions(ctx context.Context) (int64, error)
+	// Mirrors getMonthlyStats churned sub-query: subs with status cancelled or expired
+	// whose updated_at falls in [start, end). Node:
+	// .where('sub.status IN (:...statuses)', {statuses:['cancelled','expired']})
+	// .andWhere('sub.updated_at >= :start AND sub.updated_at < :end').getCount()
+	CountChurnedInWindow(ctx context.Context, arg CountChurnedInWindowParams) (int64, error)
 	CountFeatures(ctx context.Context, arg CountFeaturesParams) (int64, error)
+	// Mirrors getMonthlyStats new-subs sub-query: ALL subs started in [start, end).
+	// Node uses subsRepo.createQueryBuilder('sub').leftJoin('sub.plan','plan')
+	// .where('sub.started_at >= :start AND sub.started_at < :end').getCount()
+	// No status filter — matches Node exactly.
+	CountNewSubsInWindow(ctx context.Context, arg CountNewSubsInWindowParams) (int64, error)
 	// Today's daily-quota tally for the user. Compared against
 	// plan.daily_limit in the application layer (so the limit can come
 	// from a fallback when the user has no subscription).
@@ -287,6 +297,10 @@ type Querier interface {
 	// Cron pass 1: active subs whose expiry falls in the reminder window.
 	// Bounds passed by caller (now+2.5d, now+3.5d) to keep tz in the Go process.
 	SubsDueForRenewal(ctx context.Context, arg SubsDueForRenewalParams) ([]SubsDueForRenewalRow, error)
+	// Mirrors getMonthlyStats revenue sub-query: SUM(plan.price_cents) for subs
+	// started in [start, end). Node: COALESCE(SUM(plan.price_cents),0) via leftJoin.
+	// No status filter — matches Node exactly. Cast to bigint for pgx scan.
+	SumRevenueInWindow(ctx context.Context, arg SumRevenueInWindowParams) (int64, error)
 	// Add an address to the suppression list (idempotent). Mirrors the
 	// NestJS suppress() orIgnore() → bare ON CONFLICT DO NOTHING.
 	SuppressEmail(ctx context.Context, arg SuppressEmailParams) error

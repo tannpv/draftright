@@ -253,3 +253,29 @@ FROM subscriptions s
 LEFT JOIN plans p ON p.id = s.plan_id
 WHERE s.status = 'active'::subscriptions_status_enum
 GROUP BY p.name, p.price_cents;
+
+-- name: CountNewSubsInWindow :one
+-- Mirrors getMonthlyStats new-subs sub-query: ALL subs started in [start, end).
+-- Node uses subsRepo.createQueryBuilder('sub').leftJoin('sub.plan','plan')
+-- .where('sub.started_at >= :start AND sub.started_at < :end').getCount()
+-- No status filter — matches Node exactly.
+SELECT COUNT(*) FROM subscriptions
+WHERE started_at >= $1 AND started_at < $2;
+
+-- name: SumRevenueInWindow :one
+-- Mirrors getMonthlyStats revenue sub-query: SUM(plan.price_cents) for subs
+-- started in [start, end). Node: COALESCE(SUM(plan.price_cents),0) via leftJoin.
+-- No status filter — matches Node exactly. Cast to bigint for pgx scan.
+SELECT COALESCE(SUM(p.price_cents), 0)::bigint AS total
+FROM subscriptions s
+LEFT JOIN plans p ON p.id = s.plan_id
+WHERE s.started_at >= $1 AND s.started_at < $2;
+
+-- name: CountChurnedInWindow :one
+-- Mirrors getMonthlyStats churned sub-query: subs with status cancelled or expired
+-- whose updated_at falls in [start, end). Node:
+-- .where('sub.status IN (:...statuses)', {statuses:['cancelled','expired']})
+-- .andWhere('sub.updated_at >= :start AND sub.updated_at < :end').getCount()
+SELECT COUNT(*) FROM subscriptions
+WHERE status IN ('cancelled'::subscriptions_status_enum, 'expired'::subscriptions_status_enum)
+  AND updated_at >= $1 AND updated_at < $2;

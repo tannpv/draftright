@@ -51,6 +51,49 @@ func (q *Queries) CountActiveSubscriptions(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const countChurnedInWindow = `-- name: CountChurnedInWindow :one
+SELECT COUNT(*) FROM subscriptions
+WHERE status IN ('cancelled'::subscriptions_status_enum, 'expired'::subscriptions_status_enum)
+  AND updated_at >= $1 AND updated_at < $2
+`
+
+type CountChurnedInWindowParams struct {
+	UpdatedAt   pgtype.Timestamp `db:"updated_at" json:"updated_at"`
+	UpdatedAt_2 pgtype.Timestamp `db:"updated_at_2" json:"updated_at_2"`
+}
+
+// Mirrors getMonthlyStats churned sub-query: subs with status cancelled or expired
+// whose updated_at falls in [start, end). Node:
+// .where('sub.status IN (:...statuses)', {statuses:['cancelled','expired']})
+// .andWhere('sub.updated_at >= :start AND sub.updated_at < :end').getCount()
+func (q *Queries) CountChurnedInWindow(ctx context.Context, arg CountChurnedInWindowParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countChurnedInWindow, arg.UpdatedAt, arg.UpdatedAt_2)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countNewSubsInWindow = `-- name: CountNewSubsInWindow :one
+SELECT COUNT(*) FROM subscriptions
+WHERE started_at >= $1 AND started_at < $2
+`
+
+type CountNewSubsInWindowParams struct {
+	StartedAt   pgtype.Timestamp `db:"started_at" json:"started_at"`
+	StartedAt_2 pgtype.Timestamp `db:"started_at_2" json:"started_at_2"`
+}
+
+// Mirrors getMonthlyStats new-subs sub-query: ALL subs started in [start, end).
+// Node uses subsRepo.createQueryBuilder('sub').leftJoin('sub.plan','plan')
+// .where('sub.started_at >= :start AND sub.started_at < :end').getCount()
+// No status filter — matches Node exactly.
+func (q *Queries) CountNewSubsInWindow(ctx context.Context, arg CountNewSubsInWindowParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countNewSubsInWindow, arg.StartedAt, arg.StartedAt_2)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countUsageThisMonthAll = `-- name: CountUsageThisMonthAll :one
 SELECT COUNT(*) FROM usage_logs WHERE created_at >= $1
 `
@@ -1064,6 +1107,28 @@ func (q *Queries) SubsDueForRenewal(ctx context.Context, arg SubsDueForRenewalPa
 		return nil, err
 	}
 	return items, nil
+}
+
+const sumRevenueInWindow = `-- name: SumRevenueInWindow :one
+SELECT COALESCE(SUM(p.price_cents), 0)::bigint AS total
+FROM subscriptions s
+LEFT JOIN plans p ON p.id = s.plan_id
+WHERE s.started_at >= $1 AND s.started_at < $2
+`
+
+type SumRevenueInWindowParams struct {
+	StartedAt   pgtype.Timestamp `db:"started_at" json:"started_at"`
+	StartedAt_2 pgtype.Timestamp `db:"started_at_2" json:"started_at_2"`
+}
+
+// Mirrors getMonthlyStats revenue sub-query: SUM(plan.price_cents) for subs
+// started in [start, end). Node: COALESCE(SUM(plan.price_cents),0) via leftJoin.
+// No status filter — matches Node exactly. Cast to bigint for pgx scan.
+func (q *Queries) SumRevenueInWindow(ctx context.Context, arg SumRevenueInWindowParams) (int64, error) {
+	row := q.db.QueryRow(ctx, sumRevenueInWindow, arg.StartedAt, arg.StartedAt_2)
+	var total int64
+	err := row.Scan(&total)
+	return total, err
 }
 
 const updateUserPasswordHash = `-- name: UpdateUserPasswordHash :exec
