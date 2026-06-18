@@ -40,21 +40,25 @@ func (f *fakeSub) GetMonthlyStatsAt(_ context.Context, now time.Time, _ int) ([]
 	return f.monthlyStats, nil
 }
 
-// fakeUsage satisfies usageGlobal. Records the `now` arg to each call so
-// tests can assert the injected clock value was forwarded.
+// fakeUsage satisfies usageGlobal. Records the `now` arg to EACH call
+// separately so a test can assert both forwarded clock values independently
+// (a single shared field would mask one call receiving the wrong value).
 type fakeUsage struct {
-	today   int
-	month   int
-	lastNow time.Time // last `now` forwarded to either call
+	today        int
+	month        int
+	todayErr     error
+	monthErr     error
+	lastNowToday time.Time
+	lastNowMonth time.Time
 }
 
 func (f *fakeUsage) CountTodayAllAt(_ context.Context, now time.Time) (int, error) {
-	f.lastNow = now
-	return f.today, nil
+	f.lastNowToday = now
+	return f.today, f.todayErr
 }
 func (f *fakeUsage) CountThisMonthAllAt(_ context.Context, now time.Time) (int, error) {
-	f.lastNow = now
-	return f.month, nil
+	f.lastNowMonth = now
+	return f.month, f.monthErr
 }
 
 // fakePlanLister satisfies planLister. Not exercised by Stats() but required
@@ -103,11 +107,55 @@ func TestStats_AllCounts(t *testing.T) {
 		t.Errorf("RewritesThisMonth = %d, want 300", result.RewritesThisMonth)
 	}
 
-	// The injected clock value must flow through to usage calls.
-	if !usage.lastNow.Equal(fixedNow) {
-		t.Errorf("usage lastNow = %v, want %v (injected clock not forwarded)", usage.lastNow, fixedNow)
+	// The injected clock value must flow through to BOTH usage calls.
+	if !usage.lastNowToday.Equal(fixedNow) {
+		t.Errorf("CountTodayAllAt now = %v, want %v (injected clock not forwarded)", usage.lastNowToday, fixedNow)
+	}
+	if !usage.lastNowMonth.Equal(fixedNow) {
+		t.Errorf("CountThisMonthAllAt now = %v, want %v (injected clock not forwarded)", usage.lastNowMonth, fixedNow)
 	}
 }
+
+// fakeUserCounterErr / fakeSubErr let a single port fail so we can assert
+// Stats propagates the error and returns a zero-value result.
+type fakeUserCounterErr struct{ err error }
+
+func (f *fakeUserCounterErr) Count(_ context.Context) (int, error) { return 0, f.err }
+
+// TestStats_ErrorPropagation verifies that an error from any port aborts Stats
+// with a zero-value result and the underlying error (no partial result).
+func TestStats_ErrorPropagation(t *testing.T) {
+	now := func() time.Time { return time.Date(2026, 6, 18, 0, 0, 0, 0, time.UTC) }
+
+	t.Run("user count error", func(t *testing.T) {
+		boom := errTest("user count down")
+		svc := adminstats.NewService(&fakeUserCounterErr{err: boom}, &fakeSub{}, &fakeUsage{}, &fakePlanLister{}, now)
+		result, err := svc.Stats(context.Background())
+		if err == nil {
+			t.Fatal("Stats() error = nil, want propagated error")
+		}
+		if (result != adminstats.StatsResult{}) {
+			t.Errorf("result = %+v, want zero value on error", result)
+		}
+	})
+
+	t.Run("usage today error", func(t *testing.T) {
+		boom := errTest("usage today down")
+		svc := adminstats.NewService(&fakeUserCounter{n: 1}, &fakeSub{active: 1}, &fakeUsage{todayErr: boom}, &fakePlanLister{}, now)
+		result, err := svc.Stats(context.Background())
+		if err == nil {
+			t.Fatal("Stats() error = nil, want propagated error")
+		}
+		if (result != adminstats.StatsResult{}) {
+			t.Errorf("result = %+v, want zero value on error", result)
+		}
+	})
+}
+
+// errTest is a tiny sentinel error type so the test needs no extra import.
+type errTest string
+
+func (e errTest) Error() string { return string(e) }
 
 // TestStats_ZeroValues confirms zero values marshal cleanly (no omitempty).
 func TestStats_ZeroValues(t *testing.T) {
