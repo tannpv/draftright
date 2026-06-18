@@ -39,6 +39,18 @@ func (q *Queries) CancelByStoreRef(ctx context.Context, arg CancelByStoreRefPara
 	return result.RowsAffected(), nil
 }
 
+const countUsageThisMonthAll = `-- name: CountUsageThisMonthAll :one
+SELECT COUNT(*) FROM usage_logs WHERE created_at >= $1
+`
+
+// Global rewrite count since local first-of-month (Node usageService.countThisMonth()).
+func (q *Queries) CountUsageThisMonthAll(ctx context.Context, createdAt pgtype.Timestamp) (int64, error) {
+	row := q.db.QueryRow(ctx, countUsageThisMonthAll, createdAt)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countUsageToday = `-- name: CountUsageToday :one
 SELECT COUNT(*) FROM usage_logs
 WHERE user_id = $1 AND created_at >= $2
@@ -54,6 +66,18 @@ type CountUsageTodayParams struct {
 // the Node process (new Date(); setHours(0,0,0,0)).
 func (q *Queries) CountUsageToday(ctx context.Context, arg CountUsageTodayParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countUsageToday, arg.UserID, arg.CreatedAt)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countUsageTodayAll = `-- name: CountUsageTodayAll :one
+SELECT COUNT(*) FROM usage_logs WHERE created_at >= $1
+`
+
+// Global rewrite count since local midnight (Node usageService.countToday()).
+func (q *Queries) CountUsageTodayAll(ctx context.Context, createdAt pgtype.Timestamp) (int64, error) {
+	row := q.db.QueryRow(ctx, countUsageTodayAll, createdAt)
 	var count int64
 	err := row.Scan(&count)
 	return count, err

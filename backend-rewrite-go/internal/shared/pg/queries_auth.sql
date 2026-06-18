@@ -61,6 +61,14 @@ LIMIT 1;
 SELECT COUNT(*) FROM usage_logs
 WHERE user_id = $1 AND created_at >= $2;
 
+-- name: CountUsageTodayAll :one
+-- Global rewrite count since local midnight (Node usageService.countToday()).
+SELECT COUNT(*) FROM usage_logs WHERE created_at >= $1;
+
+-- name: CountUsageThisMonthAll :one
+-- Global rewrite count since local first-of-month (Node usageService.countThisMonth()).
+SELECT COUNT(*) FROM usage_logs WHERE created_at >= $1;
+
 -- name: GetAuthTokenSettings :one
 -- The single app_settings row's token lifetimes. No row → caller uses
 -- defaults (15 / 90), matching Node's `?? 15` / `?? 90`.

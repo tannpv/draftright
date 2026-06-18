@@ -24,10 +24,14 @@ type Querier interface {
 	// plan.daily_limit in the application layer (so the limit can come
 	// from a fallback when the user has no subscription).
 	CountTodayUsage(ctx context.Context, userID pgtype.UUID) (int64, error)
+	// Global rewrite count since local first-of-month (Node usageService.countThisMonth()).
+	CountUsageThisMonthAll(ctx context.Context, createdAt pgtype.Timestamp) (int64, error)
 	// Mirrors usageService.countTodayByUser: rows since local midnight.
 	// The caller passes the midnight boundary so timezone handling matches
 	// the Node process (new Date(); setHours(0,0,0,0)).
 	CountUsageToday(ctx context.Context, arg CountUsageTodayParams) (int64, error)
+	// Global rewrite count since local midnight (Node usageService.countToday()).
+	CountUsageTodayAll(ctx context.Context, createdAt pgtype.Timestamp) (int64, error)
 	CountVotes(ctx context.Context, featureID pgtype.UUID) (int64, error)
 	CreateFreeSubscription(ctx context.Context, arg CreateFreeSubscriptionParams) error
 	// Insert a pending payment. Defaults (id, created_at, updated_at) are returned.
