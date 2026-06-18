@@ -106,6 +106,12 @@ func NewAdminService(repo paymentAdminRepo, activator subscriptionActivator, ref
 	if log == nil {
 		log = slog.Default()
 	}
+	if refunder == nil {
+		// Production passes nil; default to the package's real Stripe SDK
+		// refunder. Tests inject a fake (non-nil), so this branch is the
+		// composition-root path only — same pattern as the log default above.
+		refunder = newStripeSDKRefunder()
+	}
 	return &AdminService{
 		repo:         repo,
 		activator:    activator,

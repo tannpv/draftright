@@ -27,6 +27,7 @@ import (
 
 	"github.com/tannpv/draftright-rewrite/internal/adapter/redislimit"
 	adminauth "github.com/tannpv/draftright-rewrite/internal/adminauth"
+	adminstatspkg "github.com/tannpv/draftright-rewrite/internal/adminstats"
 	"github.com/tannpv/draftright-rewrite/internal/aicall"
 	aiproviderpkg "github.com/tannpv/draftright-rewrite/internal/aiprovider"
 	appsettingspkg "github.com/tannpv/draftright-rewrite/internal/appsettings"
@@ -61,6 +62,7 @@ import (
 	"github.com/tannpv/draftright-rewrite/internal/rewrite/domain"
 	"github.com/tannpv/draftright-rewrite/internal/rewrite/transport"
 	"github.com/tannpv/draftright-rewrite/internal/rewrite/usecase"
+	rewritelogpkg "github.com/tannpv/draftright-rewrite/internal/rewritelog"
 	"github.com/tannpv/draftright-rewrite/internal/shared"
 	sqlc "github.com/tannpv/draftright-rewrite/internal/shared/pg/sqlc"
 	subpkg "github.com/tannpv/draftright-rewrite/internal/subscription"
@@ -219,6 +221,20 @@ func main() {
 		AdminEmailTemplateUpdate:  core.adminEmailTemplateUpdate,
 		AdminEmailTemplateReset:   core.adminEmailTemplateReset,
 		AdminEmailTemplatePreview: core.adminEmailTemplatePreview,
+
+		AdminStats:        core.adminStats,
+		AdminAnalytics:    core.adminAnalytics,
+		AdminTransactions: core.adminTransactions,
+
+		TrainingDataStats:  core.trainingDataStats,
+		TrainingDataList:   core.trainingDataList,
+		TrainingDataReview: core.trainingDataReview,
+		TrainingDataExport: core.trainingDataExport,
+
+		AdminPaymentsStats:  core.adminPaymentsStats,
+		AdminPaymentsList:   core.adminPaymentsList,
+		AdminPaymentConfirm: core.adminPaymentConfirm,
+		AdminPaymentRefund:  core.adminPaymentRefund,
 	}
 	// Enable dual auth on /v1/rewrite (dr_ext_ token OR JWT) only when the
 	// extension-token service is wired (DB present). Guarded so the field
@@ -600,6 +616,51 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 			}
 		})
 		log.Info("scheduler started", "job", "subscription-expiry", "at", "09:00 local")
+
+		// ── Phase 4c-3 admin reporting (11 routes) ─────────────────────────
+		// Reuses existing collaborators: userAdminRepo (user count), subReader
+		// (active-sub aggregates + transaction list + latest-stripe lookup),
+		// usageCounter (global usage), adminPlansSvc (plan catalog), paymentSvc
+		// (Activate on confirm), subWebhookWriter (cancel on refund),
+		// paymentSettings (live Stripe secret resolution).
+
+		// stats + analytics (GET /admin/stats, GET /admin/analytics).
+		adminStatsSvc := adminstatspkg.NewService(userAdminRepo, subReader, usageCounter, adminPlansSvc, time.Now)
+		adminStatsHandler := adminstatspkg.NewHandler(adminStatsSvc)
+		core.adminStats = http.HandlerFunc(adminStatsHandler.GetStats)
+		core.adminAnalytics = http.HandlerFunc(adminStatsHandler.GetAnalytics)
+
+		// transactions (GET /admin/transactions). subReader satisfies the
+		// adminTransactionsService port (FindAllPaginated).
+		subAdminHandler := subpkg.NewAdminHandler(subReader)
+		core.adminTransactions = http.HandlerFunc(subAdminHandler.ListTransactions)
+
+		// training-data / rewrite logs (GET stats|list|export, PATCH review).
+		rewriteLogHandler := rewritelogpkg.NewHandler(rewritelogpkg.NewService(rewritelogpkg.NewPgRepo(q)))
+		core.trainingDataStats = http.HandlerFunc(rewriteLogHandler.Stats)
+		core.trainingDataList = http.HandlerFunc(rewriteLogHandler.List)
+		core.trainingDataReview = http.HandlerFunc(rewriteLogHandler.Review)
+		core.trainingDataExport = http.HandlerFunc(rewriteLogHandler.Export)
+
+		// admin payments (GET stats|list, POST confirm|refund). refunder is nil
+		// → NewAdminService defaults to the real Stripe SDK refunder; paymentSvc
+		// supplies Activate; subReader the latest-stripe lookup; the two adapters
+		// bridge the secret-resolution and cancel shape mismatches.
+		paymentAdminSvc := paymentpkg.NewAdminService(
+			paymentpkg.NewAdminRepo(q, pool),
+			paymentSvc, // subscriptionActivator (Activate)
+			nil,        // refunder → real Stripe SDK refunder (NewAdminService default)
+			stripeSecretResolver{settings: paymentSettings, envKey: cfg.StripeSecretKey},
+			subReader, // stripeSubLookup (FindLatestStripeForUserPlan)
+			subCancelAdapter{w: subWebhookWriter},
+			log,
+			time.Now,
+		)
+		paymentAdminHandler := paymentpkg.NewAdminHandler(paymentAdminSvc)
+		core.adminPaymentsStats = http.HandlerFunc(paymentAdminHandler.Stats)
+		core.adminPaymentsList = http.HandlerFunc(paymentAdminHandler.ListPayments)
+		core.adminPaymentConfirm = http.HandlerFunc(paymentAdminHandler.Confirm)
+		core.adminPaymentRefund = http.HandlerFunc(paymentAdminHandler.Refund)
 	} else {
 		core.health = corepkg.NewHealthHandler(staticInfoReader{}, appVersion)
 		log.Warn("auth endpoints disabled", "reason", "no DATABASE_URL")
@@ -727,6 +788,21 @@ type coreHandlers struct {
 	adminEmailTemplateReset   http.Handler // DELETE /admin/email-templates/{key}         (admin)
 	adminEmailTemplatePreview http.Handler // GET    /admin/email-templates/{key}/preview (admin)
 
+	// Phase 4c-3 admin reporting (set when pool != nil; all admin).
+	adminStats        http.Handler // GET  /admin/stats
+	adminAnalytics    http.Handler // GET  /admin/analytics
+	adminTransactions http.Handler // GET  /admin/transactions
+
+	trainingDataStats  http.Handler // GET   /admin/training-data/stats
+	trainingDataList   http.Handler // GET   /admin/training-data
+	trainingDataReview http.Handler // PATCH /admin/training-data/{id}
+	trainingDataExport http.Handler // GET   /admin/training-data/export
+
+	adminPaymentsStats  http.Handler // GET  /admin/payments/stats
+	adminPaymentsList   http.Handler // GET  /admin/payments
+	adminPaymentConfirm http.Handler // POST /admin/payments/{id}/confirm
+	adminPaymentRefund  http.Handler // POST /admin/payments/{id}/refund
+
 	// accessVerifier is the single *auth.Verifier for JWT_SECRET. Shared by
 	// the Router's Verifier field (RequireAuth) and the errreport handler's
 	// optional best-effort JWT read — exactly one instance per access secret.
@@ -742,6 +818,36 @@ type paymentMethodValidator struct{}
 
 func (paymentMethodValidator) AssertMethodsRegisterable(csv string) error {
 	return paymentpkg.AssertMethodsRegisterable(csv)
+}
+
+// stripeSecretResolver adapts the payment SettingsAdapter + env fallback to the
+// payment AdminService's stripeSecretSource port. It resolves the Stripe secret
+// live per refund (settings override → env), so an operator key rotation in
+// app_settings takes effect without a restart — the same ResolveCredential
+// policy the strategy wiring applies at startup.
+type stripeSecretResolver struct {
+	settings *paymentpkg.SettingsAdapter
+	envKey   string
+}
+
+func (r stripeSecretResolver) StripeSecretKey(ctx context.Context) (string, error) {
+	creds, err := r.settings.Credentials(ctx)
+	if err != nil {
+		return "", err
+	}
+	return paymentstrategy.ResolveCredential(creds.StripeSecretKey, r.envKey), nil
+}
+
+// subCancelAdapter narrows subscription.WebhookWriter.CancelByStoreRef
+// (rows int64, err error) → error for the payment AdminService's
+// subscriptionCanceller port; the affected-row count is irrelevant to refund.
+type subCancelAdapter struct {
+	w *subpkg.WebhookWriter
+}
+
+func (a subCancelAdapter) CancelByStoreRef(ctx context.Context, storeType, storeRef string) error {
+	_, err := a.w.CancelByStoreRef(ctx, storeType, storeRef)
+	return err
 }
 
 // staticInfoReader is the dev-fallback LogLevelReader used when no
