@@ -32,6 +32,16 @@ type Querier interface {
 	// .where('sub.started_at >= :start AND sub.started_at < :end').getCount()
 	// No status filter — matches Node exactly.
 	CountNewSubsInWindow(ctx context.Context, arg CountNewSubsInWindowParams) (int64, error)
+	// Count twin of ListPendingRewriteLogs (no LIMIT/OFFSET).
+	CountPendingRewriteLogs(ctx context.Context) (int64, error)
+	// internal/shared/pg/queries_rewritelog.sql
+	// Admin training-data endpoints (GET /admin/training-data/stats,
+	// GET /admin/training-data, PATCH /admin/training-data/:id,
+	// GET /admin/training-data/export).
+	// Mirrors RewriteLogService (backend/src/rewrite/rewrite-log.service.ts).
+	CountRewriteLogs(ctx context.Context) (int64, error)
+	// One row per distinct quality value — caller maps to (pending, approved, rejected).
+	CountRewriteLogsByQuality(ctx context.Context) ([]CountRewriteLogsByQualityRow, error)
 	// Count twin of ListSubscriptionsPaginated — no LIMIT/OFFSET.
 	// Same optional search filter; LEFT JOIN users only (no plans needed for count).
 	CountSubscriptionsPaginated(ctx context.Context, search *string) (int64, error)
@@ -257,10 +267,17 @@ type Querier interface {
 	// the generated PlansBillingPeriodEnum, so InsertPlan binds the enum value
 	// directly (no SQL cast needed — the param already carries the enum type).
 	ListAllPlans(ctx context.Context) ([]ListAllPlansRow, error)
+	// exportApproved / exportAll: quality='approved', oldest first.
+	// Node: find({ where: { quality: 'approved' }, order: { created_at: 'ASC' } })
+	ListApprovedRewriteLogsAsc(ctx context.Context) ([]RewriteLog, error)
 	ListEmailTemplates(ctx context.Context) ([]ListEmailTemplatesRow, error)
 	// findByUser(userId): the user's 20 most-recent payments, newest first, each
 	// with its plan (TypeORM relations:['plan'] order:{created_at:'DESC'} take:20).
 	ListPaymentsByUser(ctx context.Context, userID pgtype.UUID) ([]ListPaymentsByUserRow, error)
+	// findPending: quality='pending', newest first, with LIMIT/OFFSET pagination.
+	// Node: findAndCount({ where: { quality: 'pending' }, order: { created_at: 'DESC' },
+	//         skip: (page-1)*limit, take: limit })
+	ListPendingRewriteLogs(ctx context.Context, arg ListPendingRewriteLogsParams) ([]RewriteLog, error)
 	ListPublicFeatures(ctx context.Context, arg ListPublicFeaturesParams) ([]ListPublicFeaturesRow, error)
 	// Mirrors subscriptionsService.findAllPaginated (admin transactions list):
 	// LEFT JOIN users + plans, ORDER BY created_at DESC, optional ILIKE search.
@@ -323,6 +340,11 @@ type Querier interface {
 	UpdateFeatureVoteCount(ctx context.Context, arg UpdateFeatureVoteCountParams) error
 	UpdatePaymentPlan(ctx context.Context, arg UpdatePaymentPlanParams) error
 	UpdatePaymentQRData(ctx context.Context, arg UpdatePaymentQRDataParams) error
+	// updateQuality(id, quality): update the quality field for one row.
+	// Node: rewriteLogRepo.update(id, { quality }) — TypeORM silently no-ops on
+	// a missing UUID (0 rows affected, no error). Go mirrors: valid UUID → run UPDATE
+	// (0-row no-op is fine); invalid UUID → caller returns nil without touching DB.
+	UpdateRewriteLogQuality(ctx context.Context, arg UpdateRewriteLogQualityParams) error
 	UpdateUserPasswordHash(ctx context.Context, arg UpdateUserPasswordHashParams) error
 	UpdateUserVerification(ctx context.Context, arg UpdateUserVerificationParams) error
 	UpsertEmailTemplate(ctx context.Context, arg UpsertEmailTemplateParams) error
