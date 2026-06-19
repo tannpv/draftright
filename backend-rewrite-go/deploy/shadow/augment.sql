@@ -288,3 +288,28 @@ SELECT
 WHERE NOT EXISTS (
     SELECT 1 FROM app_release_policies WHERE platform = 'shadow'
 );
+
+-- ─── App settings (singleton) ────────────────────────────────────────────────
+-- 0A: shadow app_settings row.
+-- GET/PATCH /admin/settings create the singleton on first request when absent,
+-- which would mint a fresh uuid id + request-time updated_at on EACH backend
+-- independently → non-deterministic and divergent. Both backends read the
+-- singleton with findOne({}) / "ORDER BY updated_at ASC LIMIT 1", so the
+-- template must contain EXACTLY ONE app_settings row with a fixed id. The dev
+-- DB this template is cloned from may already hold a lazily-created row with a
+-- random id, so we normalize: if any row exists, pin its id to the fixed value
+-- (and collapse to one); otherwise insert a fresh defaulted row. Every other
+-- column has a NOT NULL DEFAULT, so id is the only value we must pin. This
+-- freezes id + updated_at to STORED CONSTANTS → GET byte-exact, PATCH ignores
+-- only updated_at.
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM app_settings) THEN
+        -- Keep the oldest row, drop any extras, pin the survivor's id.
+        DELETE FROM app_settings
+        WHERE id <> (SELECT id FROM app_settings ORDER BY updated_at ASC, id ASC LIMIT 1);
+        UPDATE app_settings SET id = '00000000-0000-4000-8000-00000000000a';
+    ELSE
+        INSERT INTO app_settings (id) VALUES ('00000000-0000-4000-8000-00000000000a');
+    END IF;
+END $$;

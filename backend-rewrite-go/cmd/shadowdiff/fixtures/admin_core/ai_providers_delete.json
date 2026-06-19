@@ -1,0 +1,7 @@
+{
+  "name": "admin_core_ai_providers_delete",
+  "method": "DELETE",
+  "path": "/admin/ai-providers/00000000-0000-4000-8000-000000000006",
+  "headers": { "Authorization": "Bearer {{admin_token}}" },
+  "ignore_value_of": ["request_id"]
+}
