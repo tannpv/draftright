@@ -18,10 +18,12 @@
 # =============================================================================
 set -euo pipefail
 
-POSTGRES_CONTAINER="draftright-dev-postgres-1"
-POSTGRES_USER="draftright"
-SOURCE_DB="draftright_dev"
-TEMPLATE_DB="draftright_shadow_tmpl"
+# Overridable via env so the same script drives the VPS dev stack OR a fully
+# local rig (different container name / source db). Defaults = VPS dev stack.
+POSTGRES_CONTAINER="${PGCONT:-draftright-dev-postgres-1}"
+POSTGRES_USER="${PGUSER:-draftright}"
+SOURCE_DB="${SHADOW_SOURCE_DB:-draftright_dev}"
+TEMPLATE_DB="${SHADOW_TEMPLATE_DB:-draftright_shadow_tmpl}"
 
 # Resolve script directory so augment.sql path is always correct regardless of
 # where the operator calls the script from.
