@@ -3,5 +3,6 @@
   "method": "POST",
   "path": "/payment/webhook/stripe",
   "headers": { "Content-Type": "application/json" },
-  "body": { "id": "evt_test", "type": "checkout.session.completed" }
+  "body": { "id": "evt_test", "type": "checkout.session.completed" },
+  "ignore_value_of": ["request_id"]
 }

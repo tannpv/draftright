@@ -134,8 +134,8 @@ func (r *AdminPgRepo) AdminList(ctx context.Context, f AdminListFilter) ([]BugRe
 
 	limPos := len(whereArgs) + 1
 	offPos := len(whereArgs) + 2
-	rowsSQL := fmt.Sprintf("SELECT * FROM bug_reports br %s %s LIMIT $%d OFFSET $%d",
-		where, b.Order, limPos, offPos)
+	rowsSQL := fmt.Sprintf("SELECT %s FROM bug_reports br %s %s LIMIT $%d OFFSET $%d",
+		bugReportCols, where, b.Order, limPos, offPos)
 
 	rowsArgs := make([]any, 0, len(whereArgs)+2)
 	rowsArgs = append(rowsArgs, whereArgs...)
@@ -181,9 +181,20 @@ func mergeWhere(builtWhere string, custConds []string) string {
 	return builtWhere + " AND " + joined
 }
 
-// scanBugReport maps a `SELECT * FROM bug_reports` row into the sqlc model in
-// the table's column order, so mapBugEntity can reuse the same projection as
-// the static reads.
+// bugReportCols is the explicit projection for the dynamic admin list, in the
+// exact order scanBugReport reads them. It MUST match the sqlc static reads'
+// column list. A bare `SELECT *` would bind by the table's PHYSICAL column
+// order, which can differ from this logical order (e.g. columns added by later
+// migrations) → "can't scan into dest[N] (col: os_info): cannot parse UUID"
+// when a text column lands in a UUID dest. See issue #44.
+const bugReportCols = "id, source, description, screenshot_path, screenshot_filename, " +
+	"app_version, os_info, user_id, user_email, context, status, admin_notes, " +
+	"created_at, updated_at, ai_fix_proposal, ai_fix_proposed_at, kind, title, " +
+	"target_platform, vote_count, is_public, display_no"
+
+// scanBugReport maps a bug_reports row (projected via bugReportCols) into the
+// sqlc model in that column order, so mapBugEntity can reuse the same
+// projection as the static reads.
 func scanBugReport(row pgx.Row) (sqlc.BugReport, error) {
 	var b sqlc.BugReport
 	err := row.Scan(
