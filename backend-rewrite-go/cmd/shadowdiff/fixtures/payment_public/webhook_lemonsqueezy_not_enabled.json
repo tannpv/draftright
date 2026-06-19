@@ -1,0 +1,8 @@
+{
+  "name": "webhook_lemonsqueezy_not_enabled",
+  "method": "POST",
+  "path": "/payment/webhook/lemonsqueezy",
+  "headers": { "Content-Type": "application/json" },
+  "body": { "meta": { "event_name": "order_created" } },
+  "ignore_value_of": ["request_id"]
+}

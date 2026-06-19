@@ -1,0 +1,8 @@
+{
+  "name": "webhook_sepay_not_enabled",
+  "method": "POST",
+  "path": "/payment/webhook/sepay",
+  "headers": { "Content-Type": "application/json" },
+  "body": { "foo": "bar" },
+  "ignore_value_of": ["request_id"]
+}
