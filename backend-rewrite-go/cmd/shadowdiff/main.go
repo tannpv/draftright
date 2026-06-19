@@ -172,25 +172,36 @@ func main() {
 	}
 }
 
+// loadFixtures reads every *.json fixture under dir, recursing into
+// module sub-directories. The full gate (run-gate.sh) points at the
+// top-level fixtures/ dir while verify-module.sh points at one module
+// sub-dir — a recursive walk serves both. WalkDir visits entries in
+// lexical order, so loading is deterministic.
 func loadFixtures(dir string) ([]fixture, error) {
-	entries, err := filepath.Glob(filepath.Join(dir, "*.json"))
-	if err != nil {
-		return nil, err
-	}
 	var out []fixture
-	for _, p := range entries {
+	err := filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() || filepath.Ext(p) != ".json" {
+			return nil
+		}
 		raw, err := os.ReadFile(p)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		var f fixture
 		if err := json.Unmarshal(raw, &f); err != nil {
-			return nil, fmt.Errorf("%s: %w", p, err)
+			return fmt.Errorf("%s: %w", p, err)
 		}
 		if f.Name == "" {
 			f.Name = filepath.Base(p)
 		}
 		out = append(out, f)
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	return out, nil
 }
