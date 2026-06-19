@@ -2,6 +2,10 @@
   "name": "admin_auth_me_ok",
   "method": "GET",
   "path": "/admin/auth/me",
-  "headers": { "Authorization": "Bearer {{admin_token}}" },
-  "ignore_value_of": ["request_id", "created_at", "updated_at"]
+  "headers": {
+    "Authorization": "Bearer {{admin_token}}"
+  },
+  "ignore_value_of": [
+    "request_id"
+  ]
 }
