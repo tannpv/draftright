@@ -22,16 +22,24 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
 ENVFILE="${1:-$ROOT/.env.shadow}"
 
-PGCONT=draftright-dev-postgres-1
-PGUSER=draftright
 TMPL=draftright_shadow_tmpl
 DB_NODE=draftright_shadow_node
 DB_GO=draftright_shadow_go
-MAINT_DSN="postgres://draftright:password@localhost:5432/postgres"
+
+[ -f "$ENVFILE" ] || { echo "missing env file: $ENVFILE (needs JWT_SECRET + JWT_REFRESH_SECRET + NODE_DATABASE_URL + GO_DATABASE_URL + MAINT_DSN)"; exit 2; }
+
+# Source the env-file so MAINT_DSN (+ optional PGCONT/PGUSER overrides) are
+# available to this script. The same file is passed to docker compose via
+# --env-file below, so both layers read one source of truth — no creds in git.
+set -a; . "$ENVFILE"; set +a
+
+# Container + role used for in-container psql (trust/peer auth, no password).
+# Overridable from the env-file if the dev stack names them differently.
+PGCONT="${PGCONT:-draftright-dev-postgres-1}"
+PGUSER="${PGUSER:-draftright}"
+: "${MAINT_DSN:?set MAINT_DSN in $ENVFILE (host-reachable postgres-db DSN with real password)}"
 
 psql_postgres() { docker exec -i "$PGCONT" psql -U "$PGUSER" -d postgres -v ON_ERROR_STOP=1 "$@"; }
-
-[ -f "$ENVFILE" ] || { echo "missing env file: $ENVFILE (needs JWT_SECRET + JWT_REFRESH_SECRET shared by both backends)"; exit 2; }
 
 echo "== [1/5] build Go shadow image from this checkout =="
 docker build -t draftright-rewrite-go:latest "$ROOT"

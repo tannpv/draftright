@@ -51,6 +51,7 @@ func main() {
 	userPass := flag.String("user-pass", "", "bootstrap login password")
 	adminEmail := flag.String("admin-email", "", "bootstrap admin email")
 	adminPass := flag.String("admin-pass", "", "bootstrap admin password")
+	warmupPath := flag.String("warmup-path", "/plans", "cheap DB-hard GET hit after each reset to drain dead pool conns")
 	flag.Parse()
 	if *nodeBase == "" || *goBase == "" {
 		fmt.Fprintln(os.Stderr, "both --node and --go are required")
@@ -111,6 +112,19 @@ func main() {
 			}
 			if err := resetDB(context.Background(), maint, *dbGo, *template); err != nil {
 				fmt.Printf("FAIL %s: reset go db: %v\n", f.Name, err)
+				failed++
+				continue
+			}
+			// The reset terminated both backends' pool connections; warm each
+			// until it serves a non-5xx so the fixture lands on a live conn
+			// (not a just-killed one that would spuriously 5xx). See warmup.go.
+			if err := warmup(client, *nodeBase, *warmupPath, 40, 50*time.Millisecond); err != nil {
+				fmt.Printf("FAIL %s: warmup node: %v\n", f.Name, err)
+				failed++
+				continue
+			}
+			if err := warmup(client, *goBase, *warmupPath, 40, 50*time.Millisecond); err != nil {
+				fmt.Printf("FAIL %s: warmup go: %v\n", f.Name, err)
 				failed++
 				continue
 			}

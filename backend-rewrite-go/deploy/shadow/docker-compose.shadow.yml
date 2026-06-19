@@ -12,6 +12,14 @@
 #   JWT_SECRET=<same-secret-as-dev-node-backend>
 #   JWT_REFRESH_SECRET=<same-secret-as-dev-node-backend>
 #   REDIS_URL=redis://draftright-dev-redis-1:6379
+#   # Full per-backend DSNs — copy the dev backend's real DATABASE_URL (role,
+#   # password, host alias, ?sslmode) and change ONLY the db name. The dev pg
+#   # host alias on draftright-dev_default is `postgres` (NOT
+#   # draftright-dev-postgres-1) and the password is NOT literally "password".
+#   NODE_DATABASE_URL=postgres://<user>:<pass>@postgres:5432/draftright_shadow_node?sslmode=disable
+#   GO_DATABASE_URL=postgres://<user>:<pass>@postgres:5432/draftright_shadow_go?sslmode=disable
+#   # Maintenance DSN reachable from the HOST (used by run-gate.sh / shadowdiff):
+#   MAINT_DSN=postgres://<user>:<pass>@localhost:5432/postgres?sslmode=disable
 #   OPENAI_API_KEY=...          (optional — only needed for AI rewrite tests)
 #   ANTHROPIC_API_KEY=...       (optional)
 #
@@ -24,7 +32,7 @@
 #   3201 → Go shadow    (mirrors Go server on 3001)
 #
 # Both services attach to draftright-dev_default so they can reach the dev
-# Postgres container (host: draftright-dev-postgres-1) and Redis.
+# Postgres (compose-network alias: postgres) and Redis by name.
 # =============================================================================
 
 services:
@@ -39,7 +47,7 @@ services:
     ports:
       - "3200:3000"
     environment:
-      DATABASE_URL: "postgres://draftright:password@draftright-dev-postgres-1:5432/draftright_shadow_node"
+      DATABASE_URL: "${NODE_DATABASE_URL:?set NODE_DATABASE_URL in .env.shadow}"
       NODE_ENV: "production"
       PORT: "3000"
     env_file:
@@ -56,7 +64,7 @@ services:
       - "3201:3001"
     environment:
       LISTEN_ADDR: ":3001"
-      DATABASE_URL: "postgres://draftright:password@draftright-dev-postgres-1:5432/draftright_shadow_go"
+      DATABASE_URL: "${GO_DATABASE_URL:?set GO_DATABASE_URL in .env.shadow}"
     env_file:
       - ../../.env.shadow    # supplies JWT_SECRET, JWT_REFRESH_SECRET
 
