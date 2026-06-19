@@ -2,6 +2,7 @@ package subscription_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -129,4 +130,65 @@ func TestGrant_ExpiresAtStoredWhenProvided(t *testing.T) {
 	if got.ExpiresAt == nil || !got.ExpiresAt.Equal(exp) {
 		t.Fatalf("returned expires_at wrong: %+v", got.ExpiresAt)
 	}
+}
+
+// TestGrantedSub_JSONMatchesNode pins the serialized bytes to TypeORM's
+// Date.toJSON() format: fixed 3-digit millis with trailing "Z" (NOT Go's
+// default microseconds), exact Node entity key order, and expires_at null
+// when absent. Sub-second / whole-second timestamps both render ".###Z".
+func TestGrantedSub_JSONMatchesNode(t *testing.T) {
+	// started_at = whole second (must gain ".000"); created/updated carry
+	// sub-second precision (must truncate to 3 digits, NOT 6).
+	started := time.Date(2026, 6, 19, 12, 0, 0, 0, time.UTC)
+	created := time.Date(2026, 6, 19, 12, 0, 0, 123456000, time.UTC)
+	updated := time.Date(2026, 6, 19, 12, 0, 1, 0, time.UTC)
+	txn := "txn-1"
+	g := subscription.GrantedSub{
+		ID:                 "33333333-3333-3333-3333-333333333333",
+		UserID:             "11111111-1111-1111-1111-111111111111",
+		PlanID:             "22222222-2222-2222-2222-222222222222",
+		Status:             "active",
+		StoreType:          "admin_granted",
+		StoreTransactionID: &txn,
+		StartedAt:          started,
+		ExpiresAt:          nil,
+		CreatedAt:          created,
+		UpdatedAt:          updated,
+	}
+	b, err := json.Marshal(g)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `{"id":"33333333-3333-3333-3333-333333333333",` +
+		`"user_id":"11111111-1111-1111-1111-111111111111",` +
+		`"plan_id":"22222222-2222-2222-2222-222222222222",` +
+		`"status":"active","store_type":"admin_granted",` +
+		`"store_transaction_id":"txn-1",` +
+		`"started_at":"2026-06-19T12:00:00.000Z",` +
+		`"expires_at":null,` +
+		`"created_at":"2026-06-19T12:00:00.123Z",` +
+		`"updated_at":"2026-06-19T12:00:01.000Z"}`
+	if string(b) != want {
+		t.Fatalf("JSON mismatch\n got: %s\nwant: %s", b, want)
+	}
+
+	// expires_at present → ISOMillis string, not null.
+	exp := time.Date(2026, 7, 19, 0, 0, 0, 0, time.UTC)
+	g.ExpiresAt = &exp
+	b, err = json.Marshal(g)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !contains(string(b), `"expires_at":"2026-07-19T00:00:00.000Z"`) {
+		t.Fatalf("expires_at not rendered as ISOMillis: %s", b)
+	}
+}
+
+func contains(s, sub string) bool {
+	for i := 0; i+len(sub) <= len(s); i++ {
+		if s[i:i+len(sub)] == sub {
+			return true
+		}
+	}
+	return false
 }
