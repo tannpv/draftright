@@ -43,6 +43,11 @@ type CompleterFactory interface {
 	For(p AiProvider) (Completer, error)
 }
 
+// ErrNoDefaultProvider maps to Node's BadRequestException('No default AI
+// provider configured') thrown by findDefault() when no active default exists.
+// The HTTP edge translates this to 400 with that exact message.
+var ErrNoDefaultProvider = errors.New("No default AI provider configured")
+
 // TestResult mirrors the JSON body of Node's POST /admin/ai-providers/:id/test
 // route (always 200): { success, response, response_time_ms } on success;
 // { success:false, error } on failure or not-found.
@@ -124,4 +129,27 @@ func (s *Service) Test(ctx context.Context, id string) TestResult {
 		return TestResult{Success: false, Error: err.Error()}
 	}
 	return TestResult{Success: true, Response: text, ResponseTimeMs: ms}
+}
+
+// Propose resolves the active default provider and runs one blocking
+// completion. Mirrors Node: aiProviders.findDefault() then callProvider(
+// provider, system, user). Used by errreport/bugreports suggest-fix + both
+// hourly crons. Returns ErrNoDefaultProvider when no default is configured.
+func (s *Service) Propose(ctx context.Context, system, user string) (string, error) {
+	p, err := s.repo.GetDefault(ctx)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return "", ErrNoDefaultProvider
+		}
+		return "", err
+	}
+	c, err := s.factory.For(p)
+	if err != nil {
+		return "", err
+	}
+	text, _, err := c.Complete(ctx, system, user)
+	if err != nil {
+		return "", err
+	}
+	return text, nil
 }
