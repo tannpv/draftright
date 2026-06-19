@@ -79,17 +79,10 @@ func (s *Service) GetSubscription(ctx context.Context, userID string, now time.T
 	// Free-path dailyLimit comes from the Free plan row (Node:
 	// findFreePlan().daily_limit), with FreeDailyLimit as the fallback
 	// when the row is missing. Pro path keeps the sub's own limit.
-	dailyLimit := FreeDailyLimit
-	if sub != nil && tier == "pro" {
-		dailyLimit = sub.DailyLimit
-	} else {
-		limit, found, err := s.freePlans.FreePlanDailyLimit(ctx)
-		if err != nil {
-			return SubscriptionView{}, err
-		}
-		if found {
-			dailyLimit = limit
-		}
+	// Shared with ResolveDailyLimit via dailyLimitForSub (single seam).
+	dailyLimit, err := s.dailyLimitForSub(ctx, sub)
+	if err != nil {
+		return SubscriptionView{}, err
 	}
 
 	var lastExpired *time.Time
@@ -112,6 +105,34 @@ func (s *Service) GetSubscription(ctx context.Context, userID string, now time.T
 	}
 	view.Nudge = nudge
 	return view, nil
+}
+
+// dailyLimitForSub mirrors Node resolveEntitlement's dailyLimit branch:
+// PRO (active, billing_period != "none") → the sub's own plan limit (may be -1);
+// everything else → the Free plan row's daily_limit, falling back to FreeDailyLimit.
+func (s *Service) dailyLimitForSub(ctx context.Context, sub *SubView) (int, error) {
+	if sub != nil && sub.BillingPeriod != "none" {
+		return sub.DailyLimit, nil
+	}
+	limit, found, err := s.freePlans.FreePlanDailyLimit(ctx)
+	if err != nil {
+		return 0, err
+	}
+	if found {
+		return limit, nil
+	}
+	return FreeDailyLimit, nil
+}
+
+// ResolveDailyLimit returns the caller's current daily rewrite quota — the
+// single source of truth shared by GET /subscription and POST /rewrite.
+// Mirrors Node subscriptions.service.resolveEntitlement(userId).dailyLimit.
+func (s *Service) ResolveDailyLimit(ctx context.Context, userID string) (int, error) {
+	sub, err := s.r.ActiveWithPlan(ctx, userID)
+	if err != nil {
+		return 0, err
+	}
+	return s.dailyLimitForSub(ctx, sub)
 }
 
 // VerifyReceipt mirrors POST /subscription/verify-receipt: ignores the body,

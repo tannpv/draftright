@@ -193,6 +193,85 @@ func TestGetSubscription_ProPath_NudgeExpiresAtPresent(t *testing.T) {
 	}
 }
 
+func TestResolveDailyLimit_Pro_UsesPlanLimit(t *testing.T) {
+	stub := &stubReader{
+		sub: &subscription.SubView{
+			Status:        "active",
+			PlanName:      "Pro",
+			DailyLimit:    1000,
+			BillingPeriod: "monthly",
+		},
+	}
+	limit, err := newSubSvc(t, stub).ResolveDailyLimit(context.Background(), "u1")
+	if err != nil {
+		t.Fatalf("ResolveDailyLimit: %v", err)
+	}
+	if limit != 1000 {
+		t.Fatalf("limit = %d, want 1000", limit)
+	}
+}
+
+func TestResolveDailyLimit_ProUnlimited(t *testing.T) {
+	stub := &stubReader{
+		sub: &subscription.SubView{
+			Status:        "active",
+			PlanName:      "Pro",
+			DailyLimit:    -1,
+			BillingPeriod: "yearly",
+		},
+	}
+	limit, err := newSubSvc(t, stub).ResolveDailyLimit(context.Background(), "u1")
+	if err != nil {
+		t.Fatalf("ResolveDailyLimit: %v", err)
+	}
+	if limit != -1 {
+		t.Fatalf("limit = %d, want -1 (unlimited sentinel)", limit)
+	}
+}
+
+func TestResolveDailyLimit_Free_UsesFreePlanRow(t *testing.T) {
+	stub := &stubReader{sub: nil}
+	limit, err := newSubSvcWithFree(t, stub, fakeFreePlans{limit: 20, found: true}).
+		ResolveDailyLimit(context.Background(), "u1")
+	if err != nil {
+		t.Fatalf("ResolveDailyLimit: %v", err)
+	}
+	if limit != 20 {
+		t.Fatalf("limit = %d, want 20 (from Free plan row)", limit)
+	}
+}
+
+func TestResolveDailyLimit_Free_FallbackWhenRowMissing(t *testing.T) {
+	stub := &stubReader{sub: nil}
+	limit, err := newSubSvcWithFree(t, stub, fakeFreePlans{found: false}).
+		ResolveDailyLimit(context.Background(), "u1")
+	if err != nil {
+		t.Fatalf("ResolveDailyLimit: %v", err)
+	}
+	if limit != subscription.FreeDailyLimit {
+		t.Fatalf("limit = %d, want %d (fallback)", limit, subscription.FreeDailyLimit)
+	}
+}
+
+func TestResolveDailyLimit_NoneBillingTreatedAsFree(t *testing.T) {
+	stub := &stubReader{
+		sub: &subscription.SubView{
+			Status:        "active",
+			PlanName:      "Free",
+			DailyLimit:    1000,
+			BillingPeriod: "none",
+		},
+	}
+	limit, err := newSubSvcWithFree(t, stub, fakeFreePlans{limit: 20, found: true}).
+		ResolveDailyLimit(context.Background(), "u1")
+	if err != nil {
+		t.Fatalf("ResolveDailyLimit: %v", err)
+	}
+	if limit != 20 {
+		t.Fatalf("limit = %d, want 20 (billing_period='none' takes free branch, not 1000)", limit)
+	}
+}
+
 func TestVerifyReceipt_EmptyPlanNameOmitted(t *testing.T) {
 	exp := time.Date(2026, 6, 16, 12, 0, 0, 0, time.UTC)
 	stub := &stubReader{
