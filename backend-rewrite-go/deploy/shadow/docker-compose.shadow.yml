@@ -1,0 +1,69 @@
+# =============================================================================
+# deploy/shadow/docker-compose.shadow.yml
+# Purpose: Run both shadow backends (Node + Go) side-by-side against their own
+#          isolated DBs so the parity test suite can diff their JSON responses.
+#
+# KEY INVARIANT — BOTH backends MUST receive the SAME JWT_SECRET and
+# JWT_REFRESH_SECRET.  A token minted by the Node backend is then verified by
+# the Go backend (and vice-versa).  These secrets are supplied at runtime via
+# the shared .env.shadow file (never committed).  Any mismatch = auth failures.
+#
+# .env.shadow (operator-created, gitignored) must contain:
+#   JWT_SECRET=<same-secret-as-dev-node-backend>
+#   JWT_REFRESH_SECRET=<same-secret-as-dev-node-backend>
+#   REDIS_URL=redis://draftright-dev-redis-1:6379
+#   OPENAI_API_KEY=...          (optional — only needed for AI rewrite tests)
+#   ANTHROPIC_API_KEY=...       (optional)
+#
+# Invocation:
+#   docker compose -f deploy/shadow/docker-compose.shadow.yml \
+#     --env-file ../../.env.shadow up -d
+#
+# Ports:
+#   3200 → Node shadow  (mirrors production Node on 3000)
+#   3201 → Go shadow    (mirrors Go server on 3001)
+#
+# Both services attach to draftright-dev_default so they can reach the dev
+# Postgres container (host: draftright-dev-postgres-1) and Redis.
+# =============================================================================
+
+services:
+
+  # ── Node shadow backend ────────────────────────────────────────────────────
+  # Reuses the dev image built by the Node project's docker-compose.
+  # DB: draftright_shadow_node  (isolated clone; Go shadow cannot touch it)
+  backend-node-shadow:
+    image: draftright-dev-backend-dev
+    container_name: dr-backend-node-shadow
+    restart: "no"
+    ports:
+      - "3200:3000"
+    environment:
+      DATABASE_URL: "postgres://draftright:password@draftright-dev-postgres-1:5432/draftright_shadow_node"
+      NODE_ENV: "production"
+      PORT: "3000"
+    env_file:
+      - ../../.env.shadow    # supplies JWT_SECRET, JWT_REFRESH_SECRET, REDIS_URL, provider keys
+
+  # ── Go shadow backend ──────────────────────────────────────────────────────
+  # Reuses the Go rewrite image built in this repo.
+  # DB: draftright_shadow_go  (isolated clone; Node shadow cannot touch it)
+  backend-go-shadow:
+    image: draftright-rewrite-go:latest
+    container_name: dr-backend-go-shadow
+    restart: "no"
+    ports:
+      - "3201:3001"
+    environment:
+      LISTEN_ADDR: ":3001"
+      DATABASE_URL: "postgres://draftright:password@draftright-dev-postgres-1:5432/draftright_shadow_go"
+    env_file:
+      - ../../.env.shadow    # supplies JWT_SECRET, JWT_REFRESH_SECRET
+
+# ── Network ───────────────────────────────────────────────────────────────────
+# Attach to the existing dev network so both backends can reach
+# draftright-dev-postgres-1 and draftright-dev-redis-1 by container name.
+networks:
+  default:
+    name: draftright-dev_default
+    external: true
