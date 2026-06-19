@@ -121,6 +121,14 @@ type Config struct {
 	// closed). Mirrors the NestJS RESEND_WEBHOOK_SECRET.
 	ResendWebhookSecret string
 
+	// DisableFixProposalCron gates BOTH hourly AI fix-proposal crons (errors
+	// + bug-reports). Mirrors the NestJS DISABLE_FIX_PROPOSAL_CRON toggle,
+	// which is "set" ONLY when the env value is EXACTLY "1" or "true"
+	// (`disabled === '1' || disabled === 'true'`) — note this is STRICTER
+	// than envBool (no yes/on/case-folding), to match the Node check
+	// byte-for-byte.
+	DisableFixProposalCron bool
+
 	// App environment label (development | staging | production).
 	// Drives a few startup checks + the log output format choice.
 	AppEnv string
@@ -178,6 +186,7 @@ func Load() (*Config, error) {
 		GoBackendRampPercent:      envInt("GO_BACKEND_RAMP_PERCENT", 0),
 		BugReportsDir:             envOr("BUG_REPORTS_DIR", "/var/lib/draftright/bug-reports"),
 		ResendWebhookSecret:       os.Getenv("RESEND_WEBHOOK_SECRET"),
+		DisableFixProposalCron:    cronToggleSet("DISABLE_FIX_PROPOSAL_CRON"),
 		AppEnv:                    envOr("APP_ENV", "development"),
 
 		MetricsEnabled:  envBool("METRICS_ENABLED", false),
@@ -238,6 +247,15 @@ func envBool(key string, fallback bool) bool {
 	default:
 		return fallback
 	}
+}
+
+// cronToggleSet mirrors the NestJS fix-proposal cron's disabled check exactly:
+// `disabled === '1' || disabled === 'true'`. Only those two literal values (no
+// trimming, no case-folding, no yes/on) count as "set"; everything else —
+// including unset — is false. Deliberately NOT envBool, which is laxer.
+func cronToggleSet(key string) bool {
+	v := os.Getenv(key)
+	return v == "1" || v == "true"
 }
 
 // envInt parses an int env var; returns fallback on unset/parse error.
