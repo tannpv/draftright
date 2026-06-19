@@ -1,0 +1,8 @@
+{
+  "name": "admin_crud_users_update_valid",
+  "method": "PATCH",
+  "path": "/admin/users/00000000-0000-4000-8000-000000000000",
+  "headers": { "Authorization": "Bearer {{admin_token}}", "Content-Type": "application/json" },
+  "body": { "is_active": false },
+  "ignore_value_of": ["request_id", "updated_at"]
+}

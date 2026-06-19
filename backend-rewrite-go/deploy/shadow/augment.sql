@@ -84,6 +84,28 @@ VALUES (
 )
 ON CONFLICT (email) DO NOTHING;
 
+-- ─── Deletable admin user ────────────────────────────────────────────────────
+-- 0B: a SECOND admin_user that the admin-users DELETE fixture soft-deletes
+-- (is_active=false). Distinct from 02 so deleting it never disturbs the admin
+-- the {{admin_token}} belongs to. Frozen email avoids the UNIQUE(email) clash.
+INSERT INTO admin_users (
+    id,
+    email,
+    password_hash,
+    name,
+    is_active,
+    role
+)
+VALUES (
+    '00000000-0000-4000-8000-00000000000b',
+    'shadow-admin-deletable@draftright.info',
+    '$2a$10$xT9ocK0BCub.GSB9IPcqNOVdfnKgIzC10LDOeDA5/qE0tQWb7Cr/W',
+    'Shadow Deletable Admin',
+    true,
+    'admin'
+)
+ON CONFLICT (email) DO NOTHING;
+
 -- ─── Subscription ────────────────────────────────────────────────────────────
 -- Depends on: users(00), plans(04)
 -- status enum: active | cancelled | expired

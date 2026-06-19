@@ -1,0 +1,16 @@
+{
+  "name": "admin_crud_plans_create",
+  "method": "POST",
+  "path": "/admin/plans",
+  "headers": { "Authorization": "Bearer {{admin_token}}", "Content-Type": "application/json" },
+  "body": {
+    "name": "Shadow Created Plan",
+    "daily_limit": 250,
+    "price_cents": 1999,
+    "billing_period": "monthly",
+    "currency": "USD",
+    "trial_days": 14,
+    "stripe_price_id": "price_shadow_fixture"
+  },
+  "ignore_value_of": ["request_id", "id", "created_at", "updated_at"]
+}
