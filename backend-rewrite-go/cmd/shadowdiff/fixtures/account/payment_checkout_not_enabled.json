@@ -1,0 +1,11 @@
+{
+  "name": "account_payment_checkout_not_enabled",
+  "method": "POST",
+  "path": "/payment/checkout",
+  "headers": {
+    "Authorization": "Bearer {{user_token}}",
+    "Content-Type": "application/json"
+  },
+  "body": { "plan_id": "00000000-0000-4000-8000-000000000004", "method": "paypal" },
+  "ignore_value_of": ["request_id"]
+}

@@ -1,0 +1,9 @@
+{
+  "name": "account_subscription_ok",
+  "method": "GET",
+  "path": "/subscription",
+  "headers": {
+    "Authorization": "Bearer {{user_token}}"
+  },
+  "ignore_value_of": []
+}

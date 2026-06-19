@@ -1,0 +1,9 @@
+{
+  "name": "account_extension_tokens_revoke",
+  "method": "DELETE",
+  "path": "/auth/extension-tokens/00000000-0000-4000-8000-000000000003",
+  "headers": {
+    "Authorization": "Bearer {{user_token}}"
+  },
+  "ignore_value_of": []
+}
