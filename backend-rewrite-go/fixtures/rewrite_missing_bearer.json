@@ -1,0 +1,9 @@
+{
+  "name": "rewrite-missing-bearer",
+  "method": "POST",
+  "path": "/v1/rewrite",
+  "headers": { "Content-Type": "application/json" },
+  "body": { "text": "hello world", "tone": "professional" },
+  "ignore_value_of": ["request_id"],
+  "_note": "NON-mutating 401 path. No Authorization header → guard throws UnauthorizedException('Missing bearer token') BEFORE any body parse or LLM call. Expected body {error:'Missing bearer token', code:'invalid-token', request_id} — error+code byte-compared, request_id ignored. This is one of only two byte-deterministic /v1/rewrite cases; the SUCCESS path is excluded from the gate (non-deterministic LLM output)."
+}

@@ -16,6 +16,7 @@ package auth
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -24,8 +25,10 @@ import (
 // standard exp/iat/nbf fields; Sub is overridden so callers get a
 // concrete string instead of jwt.ClaimStrings.
 type Claims struct {
-	Sub  string `json:"sub"`
-	Role string `json:"role,omitempty"`
+	Sub         string `json:"sub"`
+	Email       string `json:"email,omitempty"`
+	Role        string `json:"role,omitempty"`
+	IsAdminFlag bool   `json:"isAdmin,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -95,9 +98,36 @@ func (v *Verifier) keyFunc(t *jwt.Token) (any, error) {
 // Sentinel errors — exported so middleware and tests can errors.Is
 // against them without importing the jwt library directly.
 var (
-	ErrTokenExpired           = errors.New("auth: token expired")
-	ErrTokenMalformed         = errors.New("auth: token malformed")
-	ErrTokenSignatureInvalid  = errors.New("auth: token signature invalid")
-	ErrTokenInvalid           = errors.New("auth: token invalid")
-	ErrMissingSubject         = errors.New("auth: missing sub claim")
+	ErrTokenExpired          = errors.New("auth: token expired")
+	ErrTokenMalformed        = errors.New("auth: token malformed")
+	ErrTokenSignatureInvalid = errors.New("auth: token signature invalid")
+	ErrTokenInvalid          = errors.New("auth: token invalid")
+	ErrMissingSubject        = errors.New("auth: missing sub claim")
 )
+
+// Signer issues HS256 tokens whose payload is byte-compatible with the
+// NestJS backend ({sub, email, role, iat, exp}). Phase 0 does not mint
+// tokens on any request path — this exists so Phase 1's login handler
+// drops in without re-deriving the claim shape. Same secret as the
+// Verifier; a Go-issued token verifies on Node and vice versa.
+type Signer struct {
+	secret []byte
+}
+
+// NewSigner stores the shared secret as bytes (mirrors NewVerifier).
+func NewSigner(secret string) *Signer {
+	return &Signer{secret: []byte(secret)}
+}
+
+// Sign returns a signed token for the given claims, expiring ttl from
+// now. iat/exp are stamped here so callers pass only the identity
+// fields. The caller chooses ttl (Node sources it from
+// app_settings.token_expiry_minutes).
+func (s *Signer) Sign(c Claims, ttl time.Duration) (string, error) {
+	now := time.Now()
+	c.RegisteredClaims = jwt.RegisteredClaims{
+		IssuedAt:  jwt.NewNumericDate(now),
+		ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
+	}
+	return jwt.NewWithClaims(jwt.SigningMethodHS256, c).SignedString(s.secret)
+}

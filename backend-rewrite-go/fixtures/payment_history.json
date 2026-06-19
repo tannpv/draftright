@@ -1,0 +1,8 @@
+{
+  "name": "payment-history",
+  "method": "GET",
+  "path": "/payment/history",
+  "headers": { "Authorization": "Bearer REPLACE_WITH_DEV_NODE_TOKEN" },
+  "ignore_value_of": ["id", "created_at", "updated_at", "expires_at", "completed_at"],
+  "_note": "Authed. Bare JSON array, newest first, max 20, each row = full Payment entity + nested plan (user relation NOT loaded). Per-row id + timestamps ignored (presence+non-empty, recursively — also covers nested plan.created_at/updated_at). Deterministic per row: user_id, plan_id, amount, currency, method, status, provider_ref, reference_code, qr_data, notes, and the nested plan's name/daily_limit/price_cents/currency/billing_period/is_active. If Go emits a `user` key (it must NOT — findByUser loads only plan) the gate flags it. Seed a fixed set of payments for a stable compare."
+}

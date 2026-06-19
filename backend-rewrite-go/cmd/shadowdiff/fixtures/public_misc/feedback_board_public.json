@@ -1,0 +1,8 @@
+{
+  "name": "feedback_board_public",
+  "method": "GET",
+  "path": "/feedback",
+  "headers": {
+    "Content-Type": "application/json"
+  }
+}

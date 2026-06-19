@@ -1,0 +1,11 @@
+{
+  "name": "feedback_vote_unauthenticated_401",
+  "method": "POST",
+  "path": "/feedback/00000000-0000-4000-8000-000000000007/vote",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "ignore_value_of": [
+    "request_id"
+  ]
+}

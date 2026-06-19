@@ -43,6 +43,14 @@ dev_dependencies:
   flutter_lints: ^3.0.0
   flutter_launcher_icons: ^0.14.0
 
+dependency_overrides:
+  # path_provider_foundation 2.5.0/2.6.0 switched its iOS implementation to the
+  # Dart native-assets `objective_c` package, whose framework fails to load at
+  # app bootstrap ("Couldn't resolve native function 'DOBJC_initializeApi' …
+  # Failed to load dynamic library 'objective_c.framework'") — issue #27. Pin to
+  # the last Swift/CocoaPods implementation, which embeds via pod install.
+  path_provider_foundation: 2.4.4
+
 flutter_launcher_icons:
   android: true
   ios: true

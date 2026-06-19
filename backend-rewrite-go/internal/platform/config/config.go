@@ -31,6 +31,10 @@ type Config struct {
 	// or every token rejects. Required.
 	JWTSecret string
 
+	// HS256 secret for REFRESH tokens. Mirrors the NestJS
+	// JWT_REFRESH_SECRET. Distinct from JWTSecret (access tokens).
+	JWTRefreshSecret string
+
 	// Postgres DSN. Required from Task 3 onward; permitted empty now so
 	// Task 2 tests run without spinning up Postgres.
 	DatabaseURL string
@@ -60,6 +64,18 @@ type Config struct {
 	// canonical local dev value.
 	OllamaURL string
 
+	// Resend transactional-email creds. Empty key = email disabled
+	// (sends are logged + skipped, never error the request). Mirrors
+	// the NestJS RESEND_API_KEY / EMAIL_FROM; app_settings overrides
+	// both at request time (admin portal).
+	ResendAPIKey string
+	EmailFrom    string
+
+	// APPLE_AUDIENCES — comma-separated allowed `aud` values for Apple
+	// id_token verification. Empty → the two-app default applied in the
+	// verifier. Mirrors the NestJS APPLE_AUDIENCES.
+	AppleAudiences string
+
 	// AIProviders is an ordered, comma-separated provider priority
 	// list — used by the failover chain in composeDeps. Example:
 	//   AI_PROVIDERS=openai,anthropic,ollama
@@ -67,6 +83,51 @@ type Config struct {
 	// filtered out at wiring time with a warning. Empty string =
 	// "use the memory stub" (dev convenience).
 	AIProviders string
+
+	// PaymentEnabledMethods is the PAYMENT_ENABLED_METHODS env fallback
+	// (comma-separated). Used only when app_settings has no override.
+	PaymentEnabledMethods string
+
+	// Payment (Phase 3b). Credentials prefer the app_settings DB row at
+	// runtime; these env values are the resolveCredential() fallback
+	// (first-deploy / dev). PublishableKey + ApplePayMerchantID are
+	// env-ONLY (no app_settings column).
+	WebsiteURL                string
+	StripeSecretKey           string
+	StripePublishableKey      string
+	StripeWebhookSecret       string
+	ApplePayMerchantID        string
+	LemonSqueezyAPIKey        string
+	LemonSqueezyStoreID       string
+	LemonSqueezyWebhookSecret string
+	CassoAPIKey               string
+	SepayAPIKey               string
+	VietQRBankID              string
+	VietQRAccountNumber       string
+	VietQRAccountName         string
+
+	// GoBackendRampPercent is the percentage of users bucketed onto the
+	// Go backend, surfaced via /auth/me flags.use_go_backend. Mirrors the
+	// Node GO_BACKEND_RAMP_PERCENT env var. Default 0 (no ramp).
+	GoBackendRampPercent int
+
+	// BugReportsDir is the on-disk root where bug-report screenshots are
+	// written (date-bucketed subdirs, UTC). Mirrors the NestJS
+	// BUG_REPORTS_DIR. Default /var/lib/draftright/bug-reports.
+	BugReportsDir string
+
+	// ResendWebhookSecret is the Svix signing secret for /webhooks/resend
+	// (whsec_…). Empty disables the webhook (every event 400s — fail
+	// closed). Mirrors the NestJS RESEND_WEBHOOK_SECRET.
+	ResendWebhookSecret string
+
+	// DisableFixProposalCron gates BOTH hourly AI fix-proposal crons (errors
+	// + bug-reports). Mirrors the NestJS DISABLE_FIX_PROPOSAL_CRON toggle,
+	// which is "set" ONLY when the env value is EXACTLY "1" or "true"
+	// (`disabled === '1' || disabled === 'true'`) — note this is STRICTER
+	// than envBool (no yes/on/case-folding), to match the Node check
+	// byte-for-byte.
+	DisableFixProposalCron bool
 
 	// App environment label (development | staging | production).
 	// Drives a few startup checks + the log output format choice.
@@ -92,19 +153,41 @@ type Config struct {
 // operator can fix all of them in one shot instead of one-error-at-a-time.
 func Load() (*Config, error) {
 	c := &Config{
-		Listen:       envOr("LISTEN_ADDR", ":3001"),
-		LogLevel:     envOr("LOG_LEVEL", "info"),
-		JWTSecret:    os.Getenv("JWT_SECRET"),
-		DatabaseURL:  os.Getenv("DATABASE_URL"),
-		RedisURL:     os.Getenv("REDIS_URL"),
-		OpenAIKey:           os.Getenv("OPENAI_API_KEY"),
-		AnthropicKey:        os.Getenv("ANTHROPIC_API_KEY"),
-		OpenAIProviderID:    os.Getenv("OPENAI_PROVIDER_ID"),
-		AnthropicProviderID: os.Getenv("ANTHROPIC_PROVIDER_ID"),
-		OllamaProviderID:    os.Getenv("OLLAMA_PROVIDER_ID"),
-		OllamaURL:           os.Getenv("OLLAMA_URL"),
-		AIProviders:         os.Getenv("AI_PROVIDERS"),
-		AppEnv:              envOr("APP_ENV", "development"),
+		Listen:                    envOr("LISTEN_ADDR", ":3001"),
+		LogLevel:                  envOr("LOG_LEVEL", "info"),
+		JWTSecret:                 os.Getenv("JWT_SECRET"),
+		JWTRefreshSecret:          os.Getenv("JWT_REFRESH_SECRET"),
+		DatabaseURL:               os.Getenv("DATABASE_URL"),
+		RedisURL:                  os.Getenv("REDIS_URL"),
+		OpenAIKey:                 os.Getenv("OPENAI_API_KEY"),
+		AnthropicKey:              os.Getenv("ANTHROPIC_API_KEY"),
+		OpenAIProviderID:          os.Getenv("OPENAI_PROVIDER_ID"),
+		AnthropicProviderID:       os.Getenv("ANTHROPIC_PROVIDER_ID"),
+		OllamaProviderID:          os.Getenv("OLLAMA_PROVIDER_ID"),
+		OllamaURL:                 os.Getenv("OLLAMA_URL"),
+		ResendAPIKey:              os.Getenv("RESEND_API_KEY"),
+		EmailFrom:                 os.Getenv("EMAIL_FROM"),
+		AppleAudiences:            os.Getenv("APPLE_AUDIENCES"),
+		AIProviders:               os.Getenv("AI_PROVIDERS"),
+		PaymentEnabledMethods:     os.Getenv("PAYMENT_ENABLED_METHODS"),
+		WebsiteURL:                envOr("WEBSITE_URL", "http://localhost:4000"),
+		StripeSecretKey:           os.Getenv("STRIPE_SECRET_KEY"),
+		StripePublishableKey:      os.Getenv("STRIPE_PUBLISHABLE_KEY"),
+		StripeWebhookSecret:       os.Getenv("STRIPE_WEBHOOK_SECRET"),
+		ApplePayMerchantID:        os.Getenv("APPLE_PAY_MERCHANT_ID"),
+		LemonSqueezyAPIKey:        os.Getenv("LEMONSQUEEZY_API_KEY"),
+		LemonSqueezyStoreID:       os.Getenv("LEMONSQUEEZY_STORE_ID"),
+		LemonSqueezyWebhookSecret: os.Getenv("LEMONSQUEEZY_WEBHOOK_SECRET"),
+		CassoAPIKey:               os.Getenv("CASSO_API_KEY"),
+		SepayAPIKey:               os.Getenv("SEPAY_API_KEY"),
+		VietQRBankID:              os.Getenv("VIETQR_BANK_ID"),
+		VietQRAccountNumber:       os.Getenv("VIETQR_ACCOUNT_NUMBER"),
+		VietQRAccountName:         os.Getenv("VIETQR_ACCOUNT_NAME"),
+		GoBackendRampPercent:      envInt("GO_BACKEND_RAMP_PERCENT", 0),
+		BugReportsDir:             envOr("BUG_REPORTS_DIR", "/var/lib/draftright/bug-reports"),
+		ResendWebhookSecret:       os.Getenv("RESEND_WEBHOOK_SECRET"),
+		DisableFixProposalCron:    cronToggleSet("DISABLE_FIX_PROPOSAL_CRON"),
+		AppEnv:                    envOr("APP_ENV", "development"),
 
 		MetricsEnabled:  envBool("METRICS_ENABLED", false),
 		OtelEndpoint:    os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
@@ -164,6 +247,28 @@ func envBool(key string, fallback bool) bool {
 	default:
 		return fallback
 	}
+}
+
+// cronToggleSet mirrors the NestJS fix-proposal cron's disabled check exactly:
+// `disabled === '1' || disabled === 'true'`. Only those two literal values (no
+// trimming, no case-folding, no yes/on) count as "set"; everything else —
+// including unset — is false. Deliberately NOT envBool, which is laxer.
+func cronToggleSet(key string) bool {
+	v := os.Getenv(key)
+	return v == "1" || v == "true"
+}
+
+// envInt parses an int env var; returns fallback on unset/parse error.
+func envInt(key string, fallback int) int {
+	v := strings.TrimSpace(os.Getenv(key))
+	if v == "" {
+		return fallback
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return fallback
+	}
+	return n
 }
 
 // envFloat parses a float64 env var; returns fallback on parse error.

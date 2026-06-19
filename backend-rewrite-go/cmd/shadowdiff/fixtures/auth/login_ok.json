@@ -1,0 +1,17 @@
+{
+  "name": "auth_login_ok",
+  "method": "POST",
+  "path": "/auth/login",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "email": "shadow-user@draftright.info",
+    "password": "ShadowPass123"
+  },
+  "ignore_value_of": [
+    "request_id",
+    "access_token",
+    "refresh_token"
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "name": "rewrite_trial_bad_body",
+  "method": "POST",
+  "path": "/rewrite/trial",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": {},
+  "ignore_value_of": [
+    "request_id"
+  ]
+}

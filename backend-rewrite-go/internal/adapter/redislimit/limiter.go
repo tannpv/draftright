@@ -28,7 +28,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"github.com/tannpv/draftright-rewrite/internal/domain"
+	"github.com/tannpv/draftright-rewrite/internal/rewrite/domain"
 )
 
 // Default budget. Mirrors NestJS @nestjs/throttler's per-minute limit
@@ -44,11 +44,11 @@ const (
 // safe for concurrent use across many goroutines (the underlying
 // *redis.Client is itself a connection pool).
 type Limiter struct {
-	rdb         *redis.Client
-	ratePerMin  int
-	windowSecs  int
-	timeout     time.Duration
-	failOpen    bool // when Redis is unreachable, allow through (default true)
+	rdb        *redis.Client
+	ratePerMin int
+	windowSecs int
+	timeout    time.Duration
+	failOpen   bool // when Redis is unreachable, allow through (default true)
 }
 
 // New wires a Limiter with sane defaults. Tunes via With* fluent helpers.

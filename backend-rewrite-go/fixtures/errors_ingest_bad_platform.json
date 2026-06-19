@@ -1,0 +1,9 @@
+{
+  "name": "errors-ingest-bad-platform",
+  "method": "POST",
+  "path": "/errors",
+  "headers": { "Content-Type": "application/json" },
+  "body": { "platform": "symbian" },
+  "ignore_value_of": ["request_id"],
+  "_note": "Public. Deterministic validation rejection: an unknown platform yields 400 {error:\"platform must be one of: ios, android, macos, windows, linux, web\", code:\"invalid-input\", request_id:<uuid>}. The per-request request_id is a fresh UUID so it's ignored; error + code are byte-stable. No DB/secret access on this path (runs before the honeypot drop and before any insert), so no shadow-DB prerequisite."
+}

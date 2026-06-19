@@ -1,0 +1,7 @@
+{
+  "name": "admin_triage_bug_reports_fix_proposal",
+  "method": "POST",
+  "path": "/admin/bug-reports/00000000-0000-4000-8000-000000000007/fix-proposal",
+  "headers": { "Authorization": "Bearer {{admin_token}}" },
+  "ignore_value_of": ["ai_fix_proposal", "ai_fix_proposed_at", "updated_at"]
+}

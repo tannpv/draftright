@@ -1,0 +1,7 @@
+{
+  "name": "admin_reporting_training_data_export",
+  "method": "GET",
+  "path": "/admin/training-data/export",
+  "headers": { "Authorization": "Bearer {{admin_token}}" },
+  "status_only": true
+}

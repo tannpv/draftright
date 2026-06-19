@@ -1,0 +1,8 @@
+{
+  "name": "imepacks-manifest",
+  "method": "GET",
+  "path": "/ime-packs/manifest",
+  "headers": {},
+  "ignore_value_of": [],
+  "_note": "Public. Pure in-memory static catalog — no DB, no secrets, no timestamps. The response is byte-deterministic: a fixed 10-entry `languages` array. Nothing to ignore. Both Node and Go must return the identical body verbatim. pack/wordlistPack keys are omitted for languages without a downloadable pack (parity invariant)."
+}

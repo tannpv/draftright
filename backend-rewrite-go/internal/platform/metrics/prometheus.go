@@ -7,7 +7,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.com/tannpv/draftright-rewrite/internal/domain"
+	"github.com/tannpv/draftright-rewrite/internal/rewrite/domain"
 )
 
 // Prometheus is the production domain.Metrics implementation.
@@ -18,10 +18,10 @@ import (
 // free-form user input as a label value (cardinality explosion is
 // the single biggest Prometheus footgun).
 type Prometheus struct {
-	rewriteCounter  *prometheus.CounterVec
-	rewriteHist     *prometheus.HistogramVec
-	tokensStreamed  *prometheus.CounterVec
-	registry        *prometheus.Registry
+	rewriteCounter *prometheus.CounterVec
+	rewriteHist    *prometheus.HistogramVec
+	tokensStreamed *prometheus.CounterVec
+	registry       *prometheus.Registry
 }
 
 // NewPrometheus builds + registers every metric on a fresh Registry.

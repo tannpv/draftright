@@ -1,0 +1,8 @@
+{
+  "name": "auth_resend_verification",
+  "method": "POST",
+  "path": "/auth/resend-verification",
+  "headers": { "Content-Type": "application/json" },
+  "body": { "email": "shadow-user@draftright.info" },
+  "ignore_value_of": ["request_id"]
+}

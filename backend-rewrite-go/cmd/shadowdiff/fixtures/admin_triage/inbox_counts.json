@@ -1,0 +1,7 @@
+{
+  "name": "admin_triage_inbox_counts",
+  "method": "GET",
+  "path": "/admin/inbox/counts",
+  "headers": { "Authorization": "Bearer {{admin_token}}" },
+  "ignore_value_of": []
+}

@@ -1,0 +1,9 @@
+{
+  "name": "account_extension_tokens_list",
+  "method": "GET",
+  "path": "/auth/extension-tokens",
+  "headers": {
+    "Authorization": "Bearer {{user_token}}"
+  },
+  "ignore_value_of": []
+}

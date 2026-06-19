@@ -1,0 +1,8 @@
+{
+  "name": "refresh-valid",
+  "method": "POST",
+  "path": "/auth/refresh",
+  "headers": { "Content-Type": "application/json" },
+  "body": { "refresh_token": "REPLACE_WITH_DEV_NODE_REFRESH_TOKEN" },
+  "ignore_value_of": ["request_id", "access_token", "refresh_token"]
+}

@@ -1,0 +1,9 @@
+{
+  "name": "payment-webhook-sepay-unauth",
+  "method": "POST",
+  "path": "/payment/webhook/sepay",
+  "headers": { "Content-Type": "application/json" },
+  "body": {},
+  "ignore_value_of": ["request_id"],
+  "_note": "Public route. The sepay route also dispatches method=\"vietqr\" -> same VietQR strategy -> same 401 envelope {\"error\":\"Missing webhook authorization\",\"code\":\"invalid-token\",\"request_id\":\"<uuid>\"} on both backends. request_id (per-request uuid) is ignored; error+code are deterministic and COMPARED. PREREQUISITE: 'vietqr' MUST be in payment_methods_enabled, else assertEnabled returns 404 (also identical-on-both, but this fixture targets the 401 branch)."
+}

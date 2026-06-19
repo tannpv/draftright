@@ -87,7 +87,8 @@ CREATE TYPE public.users_auth_provider_enum AS ENUM (
     'local',
     'google',
     'facebook',
-    'tiktok'
+    'tiktok',
+    'apple'
 );
 
 
@@ -160,6 +161,7 @@ CREATE TABLE public.app_releases (
     platform character varying(20) NOT NULL,
     version character varying(50) NOT NULL,
     download_url text NOT NULL,
+    sha256 character varying(64) DEFAULT ''::character varying NOT NULL,
     release_notes text DEFAULT ''::text NOT NULL,
     required boolean DEFAULT false NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
@@ -275,6 +277,18 @@ CREATE TABLE public.email_logs (
     status character varying(16) NOT NULL,
     provider_id character varying(255),
     error text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: email_suppressions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.email_suppressions (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    email character varying(255) NOT NULL,
+    reason character varying(255),
     created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
@@ -481,7 +495,11 @@ CREATE TABLE public.users (
     email_verification_code character varying(6),
     email_verification_expires timestamp with time zone,
     lemonsqueezy_customer_id character varying(64),
-    stripe_customer_id character varying(255)
+    stripe_customer_id character varying(255),
+    apple_id character varying(255),
+    password_reset_code character varying(6),
+    password_reset_expires timestamp with time zone,
+    password_reset_attempts integer DEFAULT 0 NOT NULL
 );
 
 

@@ -1,0 +1,8 @@
+{
+  "name": "ime_packs_manifest",
+  "method": "GET",
+  "path": "/ime-packs/manifest",
+  "headers": {
+    "Content-Type": "application/json"
+  }
+}

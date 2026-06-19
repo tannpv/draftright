@@ -1,0 +1,8 @@
+{
+  "name": "admin_crud_plans_update",
+  "method": "PATCH",
+  "path": "/admin/plans/00000000-0000-4000-8000-000000000004",
+  "headers": { "Authorization": "Bearer {{admin_token}}", "Content-Type": "application/json" },
+  "body": { "name": "Shadow Pro Renamed", "daily_limit": 750 },
+  "ignore_value_of": ["request_id", "updated_at"]
+}

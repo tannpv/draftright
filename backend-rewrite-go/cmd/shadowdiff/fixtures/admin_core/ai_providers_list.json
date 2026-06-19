@@ -1,0 +1,7 @@
+{
+  "name": "admin_core_ai_providers_list",
+  "method": "GET",
+  "path": "/admin/ai-providers",
+  "headers": { "Authorization": "Bearer {{admin_token}}" },
+  "ignore_value_of": ["request_id"]
+}

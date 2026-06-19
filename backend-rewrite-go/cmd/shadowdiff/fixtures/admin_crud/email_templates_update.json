@@ -1,0 +1,11 @@
+{
+  "name": "admin_crud_email_templates_update",
+  "method": "PATCH",
+  "path": "/admin/email-templates/password-reset",
+  "headers": { "Authorization": "Bearer {{admin_token}}", "Content-Type": "application/json" },
+  "body": {
+    "subject": "Shadow reset your password",
+    "html": "<p>Hi {{name}}, your shadow reset code is {{code}}.</p>"
+  },
+  "ignore_value_of": ["request_id"]
+}

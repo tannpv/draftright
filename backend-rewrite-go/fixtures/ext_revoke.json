@@ -1,0 +1,8 @@
+{
+  "name": "ext-revoke",
+  "method": "DELETE",
+  "path": "/auth/extension-tokens/REPLACE_WITH_DEV_EXT_TOKEN_ID",
+  "headers": { "Authorization": "Bearer REPLACE_WITH_DEV_NODE_TOKEN" },
+  "ignore_value_of": [],
+  "_note": "MUTATING. DELETE → 204 No Content, EMPTY body (controller @HttpCode(204), returns void). The comparator treats two empty bodies as parity. OPERATOR: substitute a real token id from ext_mint/ext_list into the path; run LAST since it revokes that row. Node's revoke is idempotent (UPDATE ... WHERE id=AND user_id=; revoking an unknown/foreign id is a no-op that still 204s) so a wrong id won't error, it just won't change state — confirm the id is one you minted if you want to verify the row actually flips to revoked."
+}

@@ -1,0 +1,13 @@
+{
+  "name": "admin_triage_release_policies_upsert",
+  "method": "POST",
+  "path": "/admin/release-policies",
+  "headers": { "Authorization": "Bearer {{admin_token}}", "Content-Type": "application/json" },
+  "body": {
+    "platform": "shadowpol",
+    "preferred": "direct",
+    "store_status": "not_submitted",
+    "notes": "Shadow POST-created release policy for parity testing."
+  },
+  "ignore_value_of": ["updated_at", "request_id"]
+}

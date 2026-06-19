@@ -1,0 +1,6 @@
+{
+  "name": "payment_methods_ok",
+  "method": "GET",
+  "path": "/payment/methods",
+  "headers": { "Content-Type": "application/json" }
+}

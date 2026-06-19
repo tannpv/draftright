@@ -1,0 +1,6 @@
+{
+  "name": "payment_status_not_found",
+  "method": "GET",
+  "path": "/payment/status/NO-SUCH-REF-XYZ",
+  "headers": { "Content-Type": "application/json" }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "admin_crud_admin_users_create",
+  "method": "POST",
+  "path": "/admin/admin-users",
+  "headers": { "Authorization": "Bearer {{admin_token}}", "Content-Type": "application/json" },
+  "body": {
+    "email": "shadow-created-admin@draftright.info",
+    "password": "ShadowPass123",
+    "name": "Shadow Created Admin",
+    "role": "admin"
+  },
+  "ignore_value_of": ["request_id", "id", "created_at", "updated_at"]
+}

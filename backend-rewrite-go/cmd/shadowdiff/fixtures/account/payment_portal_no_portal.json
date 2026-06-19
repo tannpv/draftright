@@ -1,0 +1,9 @@
+{
+  "name": "account_payment_portal_no_portal",
+  "method": "GET",
+  "path": "/payment/portal",
+  "headers": {
+    "Authorization": "Bearer {{user_token}}"
+  },
+  "ignore_value_of": ["request_id"]
+}

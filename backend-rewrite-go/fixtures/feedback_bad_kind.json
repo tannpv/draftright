@@ -1,0 +1,9 @@
+{
+  "name": "feedback-bad-kind",
+  "method": "POST",
+  "path": "/feedback",
+  "headers": { "Content-Type": "application/json" },
+  "body": { "kind": "x", "description": "hi", "source": "web" },
+  "ignore_value_of": ["request_id"],
+  "_note": "Public. Deterministic validation rejection: kind 'x' is not in @IsIn(['bug','feature']). description + source are valid here so ONLY the kind constraint trips, yielding 400 { error:'kind must be one of the following values: bug, feature', code:'invalid-input', request_id:<uuid> }. The per-request request_id is a fresh UUID (ignored); error + code are byte-stable. Runs in the ValidationPipe BEFORE the honeypot and before any DB access — no shadow-DB prerequisite, mutates nothing."
+}

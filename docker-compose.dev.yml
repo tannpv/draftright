@@ -53,6 +53,32 @@ services:
       - default
     restart: unless-stopped
 
+  # Go drop-in port of the backend (Phase 5 cutover). Same .env.dev as the
+  # Node backend-dev — Go reads DATABASE_URL / JWT_SECRET / JWT_REFRESH_SECRET
+  # / REDIS_URL from it directly. Listens on :3001 inside the container
+  # (LISTEN_ADDR) and is published on host :3101. Caddy api.dev points here.
+  backend-go-dev:
+    build: ./backend-rewrite-go
+    container_name: dr-backend-go-dev
+    ports:
+      - "3101:3001"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    env_file:
+      - .env.dev
+    environment:
+      - LISTEN_ADDR=:3001
+      - METRICS_ENABLED=true
+      - WEBSITE_URL=https://dev.draftright.info
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - default
+    restart: unless-stopped
+
   website-dev:
     build:
       context: ./website

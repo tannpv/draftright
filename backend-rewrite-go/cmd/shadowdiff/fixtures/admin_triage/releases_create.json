@@ -1,0 +1,17 @@
+{
+  "name": "admin_triage_releases_create",
+  "method": "POST",
+  "path": "/admin/releases",
+  "headers": { "Authorization": "Bearer {{admin_token}}", "Content-Type": "application/json" },
+  "body": {
+    "platform": "shadowpost",
+    "channel": "direct",
+    "version": "1.2.3",
+    "download_url": "https://draftright.info/downloads/shadowpost/1.2.3",
+    "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "release_notes": "Shadow POST-created release for parity testing.",
+    "required": false,
+    "enabled": true
+  },
+  "ignore_value_of": ["updated_at", "request_id"]
+}

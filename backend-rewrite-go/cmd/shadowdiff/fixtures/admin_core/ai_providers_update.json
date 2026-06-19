@@ -1,0 +1,8 @@
+{
+  "name": "admin_core_ai_providers_update",
+  "method": "PATCH",
+  "path": "/admin/ai-providers/00000000-0000-4000-8000-000000000006",
+  "headers": { "Authorization": "Bearer {{admin_token}}", "Content-Type": "application/json" },
+  "body": { "name": "Shadow Ollama Renamed", "model": "llama3.1" },
+  "ignore_value_of": ["request_id", "updated_at"]
+}

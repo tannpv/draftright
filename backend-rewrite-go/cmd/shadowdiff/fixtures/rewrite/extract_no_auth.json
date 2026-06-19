@@ -1,0 +1,17 @@
+{
+  "name": "extract_no_auth",
+  "method": "POST",
+  "path": "/extract",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "text": "call me at test@example.com",
+    "kinds": [
+      "email"
+    ]
+  },
+  "ignore_value_of": [
+    "request_id"
+  ]
+}

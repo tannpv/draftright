@@ -1,0 +1,11 @@
+{
+  "name": "account_verify_receipt_ok",
+  "method": "POST",
+  "path": "/subscription/verify-receipt",
+  "headers": {
+    "Authorization": "Bearer {{user_token}}",
+    "Content-Type": "application/json"
+  },
+  "body": { "store_type": "apple_iap", "receipt_data": "shadow-receipt", "product_id": "shadow.pro.monthly" },
+  "ignore_value_of": []
+}

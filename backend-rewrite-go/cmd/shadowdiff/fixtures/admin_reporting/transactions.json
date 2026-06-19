@@ -1,0 +1,7 @@
+{
+  "name": "admin_reporting_transactions",
+  "method": "GET",
+  "path": "/admin/transactions",
+  "headers": { "Authorization": "Bearer {{admin_token}}" },
+  "ignore_value_of": ["request_id"]
+}

@@ -112,3 +112,71 @@ func TestVerifier_RejectsMissingSubject(t *testing.T) {
 	require.True(t, errors.Is(err, auth.ErrMissingSubject),
 		"want ErrMissingSubject, got %v", err)
 }
+
+func TestVerify_ParsesEmailClaim(t *testing.T) {
+	secret := "test-secret-at-least-16-chars"
+	signer := auth.NewSigner(secret)
+	tok, err := signer.Sign(auth.Claims{Sub: "u-1", Email: "a@b.com", Role: "user"}, time.Hour)
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+	claims, err := auth.NewVerifier(secret).Verify(tok)
+	if err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+	if claims.Email != "a@b.com" {
+		t.Fatalf("email = %q, want a@b.com", claims.Email)
+	}
+	if claims.Sub != "u-1" || claims.Role != "user" {
+		t.Fatalf("claims = %+v, want sub=u-1 role=user", claims)
+	}
+}
+
+func TestSign_PayloadMatchesNodeShape(t *testing.T) {
+	// Node signs { sub, email, role, iat, exp } with HS256. Assert the
+	// Go-issued token decodes to exactly those claim keys so a Node
+	// verifier (and our own) accept it interchangeably.
+	secret := "test-secret-at-least-16-chars"
+	tok, err := auth.NewSigner(secret).Sign(auth.Claims{Sub: "u-9", Email: "x@y.z", Role: "admin"}, time.Minute)
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+	parsed, _ := jwt.Parse(tok, func(*jwt.Token) (any, error) { return []byte(secret), nil })
+	m, _ := parsed.Claims.(jwt.MapClaims)
+	for _, k := range []string{"sub", "email", "role", "iat", "exp"} {
+		if _, ok := m[k]; !ok {
+			t.Errorf("issued token missing claim %q", k)
+		}
+	}
+	if m["sub"] != "u-9" || m["email"] != "x@y.z" || m["role"] != "admin" {
+		t.Errorf("claim values = %v, want sub=u-9 email=x@y.z role=admin", m)
+	}
+}
+
+func TestVerify_DecodesIsAdminFlag(t *testing.T) {
+	const secret = "test-secret-at-least-16-chars-long"
+	signer := auth.NewSigner(secret)
+	tok, err := signer.Sign(auth.Claims{Sub: "admin-1", Email: "a@b.c", Role: "admin", IsAdminFlag: true}, time.Hour)
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+	claims, err := auth.NewVerifier(secret).Verify(tok)
+	if err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+	if !claims.IsAdminFlag {
+		t.Errorf("IsAdminFlag = false, want true (isAdmin claim must round-trip)")
+	}
+}
+
+func TestVerify_IsAdminFlagDefaultsFalse(t *testing.T) {
+	const secret = "test-secret-at-least-16-chars-long"
+	tok, _ := auth.NewSigner(secret).Sign(auth.Claims{Sub: "user-1", Role: "user"}, time.Hour)
+	claims, err := auth.NewVerifier(secret).Verify(tok)
+	if err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+	if claims.IsAdminFlag {
+		t.Errorf("IsAdminFlag = true, want false for a customer token")
+	}
+}

@@ -1,0 +1,15 @@
+{
+  "name": "feedback_honeypot_drop",
+  "method": "POST",
+  "path": "/feedback",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "kind": "feature",
+    "source": "web",
+    "title": "shadow fixture honeypot feature",
+    "description": "shadow fixture honeypot description",
+    "website": "spam-bot-filled-this"
+  }
+}

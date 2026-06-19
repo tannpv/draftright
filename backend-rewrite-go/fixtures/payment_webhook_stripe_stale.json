@@ -1,0 +1,17 @@
+{
+  "name": "payment-webhook-stripe-stale-sig",
+  "method": "POST",
+  "path": "/payment/webhook/stripe",
+  "headers": {
+    "Content-Type": "application/json",
+    "Stripe-Signature": "t=1700000000,v1=REPLACE_WITH_CAPTURED_OR_DUMMY_V1_HEX"
+  },
+  "body": {
+    "id": "evt_REPLACE",
+    "object": "event",
+    "type": "checkout.session.completed",
+    "data": { "object": {} }
+  },
+  "ignore_value_of": ["request_id"],
+  "_note": "Public route. A captured/stale Stripe-Signature (old t=) is rejected IDENTICALLY by both Node (stripe.webhooks.constructEvent, 300s tolerance) and Go (webhook.ConstructEvent, same 300s default tolerance) -> 400 {\"error\":\"Invalid Stripe webhook signature\",\"code\":\"invalid-input\",\"request_id\":\"<uuid>\"}, so parity holds WITHOUT a freshly-minted signature. request_id ignored (per-request uuid); error+code COMPARED. PREREQUISITES: 'stripe' in payment_methods_enabled AND the Stripe webhook signing secret SET in the shadow env (else both short-circuit to 201 {\"success\":false} — the unset-secret branch, also identical-on-both but a different assertion). To exercise the happy 201 path instead, regenerate the signature with a current t= (HMAC-SHA256 over <t>.<body> with the endpoint secret); captured webhooks always fail the tolerance window."
+}

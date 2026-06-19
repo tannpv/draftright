@@ -12,6 +12,15 @@ import 'package:draftright_mobile/services/api_client.dart';
 import 'package:draftright_mobile/services/extension_token_service.dart';
 import 'package:draftright_mobile/services/logger_service.dart';
 
+/// Thrown when the user backs out of a social sign-in (closes the Google/Apple
+/// sheet). It's normal user behaviour, not a failure — callers should treat it
+/// as a silent no-op and must NOT report it to the error tracker.
+class SignInCancelledException implements Exception {
+  const SignInCancelledException();
+  @override
+  String toString() => 'Sign-in cancelled';
+}
+
 class AuthService extends ChangeNotifier {
   static const _keyAccess = 'draftright.accessToken';
   static const _keyRefresh = 'draftright.refreshToken';
@@ -119,7 +128,7 @@ class AuthService extends ChangeNotifier {
       serverClientId: _googleServerClientId,
     );
     final account = await googleSignIn.signIn();
-    if (account == null) throw Exception('Google sign-in cancelled');
+    if (account == null) throw const SignInCancelledException();
 
     final auth = await account.authentication;
     final idToken = auth.idToken;
@@ -156,12 +165,21 @@ class AuthService extends ChangeNotifier {
   /// the backend can populate the user row; subsequent sign-ins re-
   /// use whatever was stored that first time.
   Future<void> signInWithApple() async {
-    final credential = await SignInWithApple.getAppleIDCredential(
-      scopes: const [
-        AppleIDAuthorizationScopes.email,
-        AppleIDAuthorizationScopes.fullName,
-      ],
-    );
+    final AuthorizationCredentialAppleID credential;
+    try {
+      credential = await SignInWithApple.getAppleIDCredential(
+        scopes: const [
+          AppleIDAuthorizationScopes.email,
+          AppleIDAuthorizationScopes.fullName,
+        ],
+      );
+    } on SignInWithAppleAuthorizationException catch (e) {
+      // User dismissed the Apple sheet — normal, not an error to report.
+      if (e.code == AuthorizationErrorCode.canceled) {
+        throw const SignInCancelledException();
+      }
+      rethrow;
+    }
     final idToken = credential.identityToken;
     if (idToken == null) {
       throw Exception('Failed to get Apple identity token');

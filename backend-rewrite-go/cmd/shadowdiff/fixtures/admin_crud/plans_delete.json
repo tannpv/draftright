@@ -1,0 +1,7 @@
+{
+  "name": "admin_crud_plans_delete",
+  "method": "DELETE",
+  "path": "/admin/plans/00000000-0000-4000-8000-000000000004",
+  "headers": { "Authorization": "Bearer {{admin_token}}" },
+  "ignore_value_of": ["request_id"]
+}

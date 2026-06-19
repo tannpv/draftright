@@ -26,5 +26,9 @@ coverage.txt
 .env
 .env.local
 
+# Shadow rig shared secrets (operator-created, never committed)
+.env.shadow
+
 # Stray binaries from `go build ./...` (no -o flag emits to cwd)
 /server
+/shadowdiff
