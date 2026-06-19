@@ -147,6 +147,25 @@ func (r *PgRepo) GetByID(ctx context.Context, id string) (AiProvider, error) {
 	}, nil
 }
 
+// GetDefault returns the active default provider, or ErrNotFound when none is
+// configured (Node findDefault() → callers surface 400 "No default AI provider
+// configured"). Filters is_default = true AND is_active = true in SQL.
+func (r *PgRepo) GetDefault(ctx context.Context) (AiProvider, error) {
+	row, err := r.q.GetDefaultAiProvider(ctx)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return AiProvider{}, ErrNotFound
+	}
+	if err != nil {
+		return AiProvider{}, err
+	}
+	return AiProvider{
+		ID: uuidStr(row.ID), Name: row.Name, Type: string(row.Type),
+		EndpointURL: row.EndpointUrl, APIKey: row.ApiKey, Model: row.Model,
+		Temperature: row.Temperature, IsDefault: row.IsDefault, IsActive: row.IsActive,
+		CreatedAt: tsTime(row.CreatedAt), UpdatedAt: tsTime(row.UpdatedAt),
+	}, nil
+}
+
 // DemoteDefaults clears is_default on every currently-default row. Used to
 // enforce the single-default invariant before promoting another (Node
 // demotes inside create/update when data.is_default is truthy).

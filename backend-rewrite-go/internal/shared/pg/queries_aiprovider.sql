@@ -16,6 +16,16 @@ SELECT id, name, type, endpoint_url, api_key, model, temperature::text AS temper
        is_default, is_active, created_at, updated_at
 FROM ai_providers WHERE id = $1;
 
+-- name: GetDefaultAiProvider :one
+-- Node AiProvidersService.findDefault(): the active default provider.
+-- Filters on BOTH is_default = true AND is_active = true (Node
+-- findOne({ where: { is_default: true, is_active: true } })).
+SELECT id, name, type, endpoint_url, api_key, model, temperature::text AS temperature,
+       is_default, is_active, created_at, updated_at
+FROM ai_providers
+WHERE is_default = true AND is_active = true
+LIMIT 1;
+
 -- name: DemoteDefaultAiProviders :exec
 UPDATE ai_providers SET is_default = false WHERE is_default = true;
 

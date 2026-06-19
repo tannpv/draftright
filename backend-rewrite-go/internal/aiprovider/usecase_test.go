@@ -24,6 +24,12 @@ func (f *fakeRepo) GetByID(_ context.Context, id string) (AiProvider, error) {
 	}
 	return *f.provider, nil
 }
+func (f *fakeRepo) GetDefault(context.Context) (AiProvider, error) {
+	if f.provider == nil {
+		return AiProvider{}, ErrNotFound
+	}
+	return *f.provider, nil
+}
 func (f *fakeRepo) DemoteDefaults(context.Context) error { f.demoted = true; return nil }
 func (f *fakeRepo) Insert(_ context.Context, in NewProvider) (AiProvider, error) {
 	f.inserted = in

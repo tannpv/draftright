@@ -162,6 +162,10 @@ type Querier interface {
 	// GET /health. There is exactly one settings row (Node does
 	// `findOne({ where: {} })`); LIMIT 1 matches that.
 	GetClientLogLevel(ctx context.Context) (string, error)
+	// Node AiProvidersService.findDefault(): the active default provider.
+	// Filters on BOTH is_default = true AND is_active = true (Node
+	// findOne({ where: { is_default: true, is_active: true } })).
+	GetDefaultAiProvider(ctx context.Context) (GetDefaultAiProviderRow, error)
 	// app_settings creds: both columns are NOT NULL (default '').
 	GetEmailSettings(ctx context.Context) (GetEmailSettingsRow, error)
 	// DB template override. PK column is template_key (not key).

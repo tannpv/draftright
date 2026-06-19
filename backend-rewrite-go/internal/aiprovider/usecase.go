@@ -20,6 +20,7 @@ type Repo interface {
 	List(ctx context.Context) ([]AiProvider, error)
 	ListPaginated(ctx context.Context, b listquery.Built) ([]AiProvider, int, error)
 	GetByID(ctx context.Context, id string) (AiProvider, error)
+	GetDefault(ctx context.Context) (AiProvider, error)
 	DemoteDefaults(ctx context.Context) error
 	Insert(ctx context.Context, in NewProvider) (AiProvider, error)
 	Update(ctx context.Context, id string, p ProviderPatch) (AiProvider, error)
