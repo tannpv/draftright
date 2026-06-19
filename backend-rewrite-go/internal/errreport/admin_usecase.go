@@ -93,6 +93,13 @@ func (s *AdminService) SuggestFix(ctx context.Context, id string) (ErrorReportEn
 	return s.repo.AdminSetFixProposal(ctx, id, text, 3)
 }
 
+// AdminFixCandidates returns the ids of the top un-analyzed error groups for
+// the hourly fix-proposal cron (cronSvc port). Delegates to the repo, which
+// applies the Node selection (status=0, ai_fix_proposal IS NULL, count >= 2).
+func (s *AdminService) AdminFixCandidates(ctx context.Context, limit int32) ([]string, error) {
+	return s.repo.AdminFixCandidates(ctx, limit)
+}
+
 // errorSystemPrompt is transcribed byte-for-byte from
 // src/errors/errors.service.ts suggestFix() systemPrompt.
 const errorSystemPrompt = `You are a senior software engineer reviewing a production crash report. Analyze the error and propose a concrete fix.

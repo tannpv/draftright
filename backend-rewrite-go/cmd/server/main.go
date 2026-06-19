@@ -40,6 +40,7 @@ import (
 	exttokenpkg "github.com/tannpv/draftright-rewrite/internal/exttoken"
 	feedbackpkg "github.com/tannpv/draftright-rewrite/internal/feedback"
 	imepackspkg "github.com/tannpv/draftright-rewrite/internal/imepacks"
+	inboxpkg "github.com/tannpv/draftright-rewrite/internal/inbox"
 	paymentpkg "github.com/tannpv/draftright-rewrite/internal/payment"
 	paymentstrategy "github.com/tannpv/draftright-rewrite/internal/payment/strategy"
 	"github.com/tannpv/draftright-rewrite/internal/payment/strategy/lemonsqueezy"
@@ -235,6 +236,30 @@ func main() {
 		AdminPaymentsList:   core.adminPaymentsList,
 		AdminPaymentConfirm: core.adminPaymentConfirm,
 		AdminPaymentRefund:  core.adminPaymentRefund,
+
+		AdminErrorsList:    core.adminErrorsList,
+		AdminErrorGet:      core.adminErrorGet,
+		AdminErrorPatch:    core.adminErrorPatch,
+		AdminErrorDelete:   core.adminErrorDelete,
+		AdminErrorSuggest:  core.adminErrorSuggest,
+		AdminErrorsRunCron: core.adminErrorsRunCron,
+
+		AdminBugList:        core.adminBugList,
+		AdminBugGet:         core.adminBugGet,
+		AdminBugScreenshot:  core.adminBugScreenshot,
+		AdminBugPatch:       core.adminBugPatch,
+		AdminBugDelete:      core.adminBugDelete,
+		AdminBugFixProposal: core.adminBugFixProposal,
+
+		AdminInboxCounts: core.adminInboxCounts,
+		AdminInbox:       core.adminInbox,
+
+		AdminReleasesList:  core.adminReleasesList,
+		AdminReleaseUpsert: core.adminReleaseUpsert,
+		AdminReleaseDelete: core.adminReleaseDelete,
+		AdminPolicyUpsert:  core.adminPolicyUpsert,
+
+		AdminGrantSub: core.adminGrantSub,
 	}
 	// Enable dual auth on /v1/rewrite (dr_ext_ token OR JWT) only when the
 	// extension-token service is wired (DB present). Guarded so the field
@@ -661,6 +686,76 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 		core.adminPaymentsList = http.HandlerFunc(paymentAdminHandler.ListPayments)
 		core.adminPaymentConfirm = http.HandlerFunc(paymentAdminHandler.Confirm)
 		core.adminPaymentRefund = http.HandlerFunc(paymentAdminHandler.Refund)
+
+		// ── Phase 4c-4 admin triage (19 routes) + 2 hourly crons ───────────
+		// Reuses aiProviderSvc (built above at the AI-providers wiring) as the
+		// fixProposer for BOTH the errreport and bugreports admin services — one
+		// default-provider resolver, shared. The bug admin repo needs the pool
+		// (dynamic list-query idiom); errreport's admin methods live on the same
+		// *errreport.PgRepo as the ingest path, so it only needs q.
+
+		// fixProposalDisabled closes over the DISABLE_FIX_PROPOSAL_CRON toggle.
+		// Both crons share it (Node: the same env var gates both schedulers).
+		fixProposalDisabled := func() bool { return cfg.DisableFixProposalCron }
+
+		// errreport admin (E1–E6) + its hourly fix-proposal cron.
+		errAdminSvc := errreportpkg.NewAdminService(errreportpkg.NewPgRepo(q), aiProviderSvc, time.Now)
+		errCron := errreportpkg.NewCron(errAdminSvc, fixProposalDisabled, time.Sleep)
+		errAdminHandler := errreportpkg.NewAdminHandler(errAdminSvc, errCron)
+		core.adminErrorsList = http.HandlerFunc(errAdminHandler.List)
+		core.adminErrorGet = http.HandlerFunc(errAdminHandler.Get)
+		core.adminErrorPatch = http.HandlerFunc(errAdminHandler.Patch)
+		core.adminErrorDelete = http.HandlerFunc(errAdminHandler.Delete)
+		core.adminErrorSuggest = http.HandlerFunc(errAdminHandler.SuggestFix)
+		core.adminErrorsRunCron = http.HandlerFunc(errAdminHandler.RunCron)
+
+		// bugreports admin (C1–C6) + its hourly fix-proposal cron.
+		bugAdminSvc := bugreportspkg.NewAdminService(bugreportspkg.NewAdminPgRepo(q, pool), aiProviderSvc, time.Now)
+		bugCron := bugreportspkg.NewCron(bugAdminSvc, fixProposalDisabled, time.Sleep)
+		bugAdminHandler := bugreportspkg.NewAdminHandler(bugAdminSvc)
+		core.adminBugList = http.HandlerFunc(bugAdminHandler.List)
+		core.adminBugGet = http.HandlerFunc(bugAdminHandler.Get)
+		core.adminBugScreenshot = http.HandlerFunc(bugAdminHandler.Screenshot)
+		core.adminBugPatch = http.HandlerFunc(bugAdminHandler.Patch)
+		core.adminBugDelete = http.HandlerFunc(bugAdminHandler.Delete)
+		core.adminBugFixProposal = http.HandlerFunc(bugAdminHandler.FixProposal)
+
+		// inbox (D1–D2): aggregates the two admin listers (errAdminSvc +
+		// bugAdminSvc satisfy the inbox List ports).
+		inboxHandler := inboxpkg.NewHandler(inboxpkg.NewService(errAdminSvc, bugAdminSvc))
+		core.adminInboxCounts = http.HandlerFunc(inboxHandler.Counts)
+		core.adminInbox = http.HandlerFunc(inboxHandler.Feed)
+
+		// updates admin (releases CRUD + policy upsert). The SAME *updates.PgRepo
+		// satisfies the adminRepo port.
+		updatesAdminHandler := updatespkg.NewAdminHandler(updatespkg.NewAdminService(updatespkg.NewPgRepo(q)))
+		core.adminReleasesList = http.HandlerFunc(updatesAdminHandler.ListReleases)
+		core.adminReleaseUpsert = http.HandlerFunc(updatesAdminHandler.UpsertRelease)
+		core.adminReleaseDelete = http.HandlerFunc(updatesAdminHandler.DeleteRelease)
+		core.adminPolicyUpsert = http.HandlerFunc(updatesAdminHandler.UpsertPolicy)
+
+		// subscription grant (POST /admin/subscriptions/grant). Reuses subWriter.
+		grantHandler := subpkg.NewGrantHandler(subWriter)
+		core.adminGrantSub = http.HandlerFunc(grantHandler.Grant)
+
+		// Two hourly fix-proposal crons (ports NestJS @Cron hourly schedulers).
+		// Each is a background daemon scoped to ctx; toggle-gating happens INSIDE
+		// RunOnce (it short-circuits when fixProposalDisabled() is true), so the
+		// goroutines still tick but do no work while disabled — mirroring Node,
+		// where the @Cron method early-returns on the env flag.
+		go scheduler.RunHourly(ctx, time.Local, time.Now, func(c context.Context) {
+			res := errCron.RunOnce(c)
+			if res.Success > 0 || res.Failed > 0 {
+				log.Info("error fix-proposal cron", "succeeded", res.Success, "failed", res.Failed)
+			}
+		})
+		go scheduler.RunHourly(ctx, time.Local, time.Now, func(c context.Context) {
+			res := bugCron.RunOnce(c)
+			if res.Success > 0 || res.Failed > 0 {
+				log.Info("bug fix-proposal cron", "succeeded", res.Success, "failed", res.Failed)
+			}
+		})
+		log.Info("scheduler started", "job", "fix-proposal", "interval", "hourly", "disabled", cfg.DisableFixProposalCron)
 	} else {
 		core.health = corepkg.NewHealthHandler(staticInfoReader{}, appVersion)
 		log.Warn("auth endpoints disabled", "reason", "no DATABASE_URL")
@@ -802,6 +897,33 @@ type coreHandlers struct {
 	adminPaymentsList   http.Handler // GET  /admin/payments
 	adminPaymentConfirm http.Handler // POST /admin/payments/{id}/confirm
 	adminPaymentRefund  http.Handler // POST /admin/payments/{id}/refund
+
+	// Phase 4c-4 admin triage (set when pool != nil; all admin). 19 routes:
+	// errreport admin (E1–E6), bugreports admin (C1–C6), inbox (D1–D2),
+	// updates admin (releases/policy), subscription grant.
+	adminErrorsList    http.Handler // GET    /admin/errors
+	adminErrorGet      http.Handler // GET    /admin/errors/{id}
+	adminErrorPatch    http.Handler // PATCH  /admin/errors/{id}
+	adminErrorDelete   http.Handler // DELETE /admin/errors/{id}
+	adminErrorSuggest  http.Handler // POST   /admin/errors/{id}/suggest-fix
+	adminErrorsRunCron http.Handler // POST   /admin/errors/run-fix-proposal-cron
+
+	adminBugList        http.Handler // GET    /admin/bug-reports
+	adminBugGet         http.Handler // GET    /admin/bug-reports/{id}
+	adminBugScreenshot  http.Handler // GET    /admin/bug-reports/{id}/screenshot
+	adminBugPatch       http.Handler // PATCH  /admin/bug-reports/{id}
+	adminBugDelete      http.Handler // DELETE /admin/bug-reports/{id}
+	adminBugFixProposal http.Handler // POST   /admin/bug-reports/{id}/suggest-fix
+
+	adminInboxCounts http.Handler // GET /admin/inbox/counts
+	adminInbox       http.Handler // GET /admin/inbox
+
+	adminReleasesList  http.Handler // GET    /admin/releases
+	adminReleaseUpsert http.Handler // POST   /admin/releases
+	adminReleaseDelete http.Handler // DELETE /admin/releases/{platform}/{channel}
+	adminPolicyUpsert  http.Handler // POST   /admin/release-policies
+
+	adminGrantSub http.Handler // POST /admin/subscriptions/grant
 
 	// accessVerifier is the single *auth.Verifier for JWT_SECRET. Shared by
 	// the Router's Verifier field (RequireAuth) and the errreport handler's
