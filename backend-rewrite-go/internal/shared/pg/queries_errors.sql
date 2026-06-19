@@ -20,3 +20,47 @@ UPDATE error_reports SET
   context = COALESCE(sqlc.narg('context'), context)
 WHERE fingerprint = $1
 RETURNING id, display_no, count, first_seen_at;
+
+-- name: AdminListErrors :many
+-- Node ErrorsService.list(): optional platform/status/severity filters,
+-- ORDER BY last_seen_at DESC, LIMIT/OFFSET. NULL filter param = no filter.
+SELECT * FROM error_reports
+WHERE (sqlc.narg('platform')::text IS NULL OR platform = sqlc.narg('platform'))
+  AND (sqlc.narg('status')::int IS NULL OR status = sqlc.narg('status'))
+  AND (sqlc.narg('severity')::text IS NULL OR severity = sqlc.narg('severity'))
+ORDER BY last_seen_at DESC
+LIMIT $1 OFFSET $2;
+
+-- name: AdminCountErrors :one
+SELECT COUNT(*) FROM error_reports
+WHERE (sqlc.narg('platform')::text IS NULL OR platform = sqlc.narg('platform'))
+  AND (sqlc.narg('status')::int IS NULL OR status = sqlc.narg('status'))
+  AND (sqlc.narg('severity')::text IS NULL OR severity = sqlc.narg('severity'));
+
+-- name: AdminGetError :one
+SELECT * FROM error_reports WHERE id = $1;
+
+-- name: AdminDeleteError :execrows
+DELETE FROM error_reports WHERE id = $1;
+
+-- name: AdminSetErrorStatus :one
+UPDATE error_reports
+SET status = $2,
+    resolved_at = $3,
+    resolved_by = $4
+WHERE id = $1
+RETURNING *;
+
+-- name: AdminSetErrorFixProposal :one
+UPDATE error_reports
+SET ai_fix_proposal = $2, status = $3
+WHERE id = $1
+RETURNING *;
+
+-- name: AdminErrorFixCandidates :many
+-- Cron: status=0 AND ai_fix_proposal IS NULL AND count >= 2,
+-- ORDER BY count DESC, last_seen_at DESC, LIMIT 10.
+SELECT * FROM error_reports
+WHERE status = 0 AND ai_fix_proposal IS NULL AND count >= 2
+ORDER BY count DESC, last_seen_at DESC
+LIMIT $1;

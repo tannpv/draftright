@@ -15,7 +15,18 @@ type Querier interface {
 	// AiProvidersService.findActive — keep the ORDER BY in sync there + here
 	// (is_default DESC, is_active = TRUE).
 	ActiveAIProvider(ctx context.Context) (ActiveAIProviderRow, error)
+	AdminCountErrors(ctx context.Context, arg AdminCountErrorsParams) (int64, error)
+	AdminDeleteError(ctx context.Context, id pgtype.UUID) (int64, error)
 	AdminEmailExists(ctx context.Context, email string) (bool, error)
+	// Cron: status=0 AND ai_fix_proposal IS NULL AND count >= 2,
+	// ORDER BY count DESC, last_seen_at DESC, LIMIT 10.
+	AdminErrorFixCandidates(ctx context.Context, limit int32) ([]ErrorReport, error)
+	AdminGetError(ctx context.Context, id pgtype.UUID) (ErrorReport, error)
+	// Node ErrorsService.list(): optional platform/status/severity filters,
+	// ORDER BY last_seen_at DESC, LIMIT/OFFSET. NULL filter param = no filter.
+	AdminListErrors(ctx context.Context, arg AdminListErrorsParams) ([]ErrorReport, error)
+	AdminSetErrorFixProposal(ctx context.Context, arg AdminSetErrorFixProposalParams) (ErrorReport, error)
+	AdminSetErrorStatus(ctx context.Context, arg AdminSetErrorStatusParams) (ErrorReport, error)
 	BumpErrorReport(ctx context.Context, arg BumpErrorReportParams) (BumpErrorReportRow, error)
 	CancelActiveSubsByUser(ctx context.Context, userID pgtype.UUID) error
 	CancelByStoreRef(ctx context.Context, arg CancelByStoreRefParams) (int64, error)

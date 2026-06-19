@@ -11,6 +11,271 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const adminCountErrors = `-- name: AdminCountErrors :one
+SELECT COUNT(*) FROM error_reports
+WHERE ($1::text IS NULL OR platform = $1)
+  AND ($2::int IS NULL OR status = $2)
+  AND ($3::text IS NULL OR severity = $3)
+`
+
+type AdminCountErrorsParams struct {
+	Platform *string `db:"platform" json:"platform"`
+	Status   *int32  `db:"status" json:"status"`
+	Severity *string `db:"severity" json:"severity"`
+}
+
+func (q *Queries) AdminCountErrors(ctx context.Context, arg AdminCountErrorsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, adminCountErrors, arg.Platform, arg.Status, arg.Severity)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const adminDeleteError = `-- name: AdminDeleteError :execrows
+DELETE FROM error_reports WHERE id = $1
+`
+
+func (q *Queries) AdminDeleteError(ctx context.Context, id pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, adminDeleteError, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const adminErrorFixCandidates = `-- name: AdminErrorFixCandidates :many
+SELECT id, platform, app_version, severity, error_type, message, stack_trace, context, user_id, device_id, fingerprint, count, status, ai_fix_proposal, resolved_by, resolved_at, first_seen_at, last_seen_at, display_no FROM error_reports
+WHERE status = 0 AND ai_fix_proposal IS NULL AND count >= 2
+ORDER BY count DESC, last_seen_at DESC
+LIMIT $1
+`
+
+// Cron: status=0 AND ai_fix_proposal IS NULL AND count >= 2,
+// ORDER BY count DESC, last_seen_at DESC, LIMIT 10.
+func (q *Queries) AdminErrorFixCandidates(ctx context.Context, limit int32) ([]ErrorReport, error) {
+	rows, err := q.db.Query(ctx, adminErrorFixCandidates, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ErrorReport{}
+	for rows.Next() {
+		var i ErrorReport
+		if err := rows.Scan(
+			&i.ID,
+			&i.Platform,
+			&i.AppVersion,
+			&i.Severity,
+			&i.ErrorType,
+			&i.Message,
+			&i.StackTrace,
+			&i.Context,
+			&i.UserID,
+			&i.DeviceID,
+			&i.Fingerprint,
+			&i.Count,
+			&i.Status,
+			&i.AiFixProposal,
+			&i.ResolvedBy,
+			&i.ResolvedAt,
+			&i.FirstSeenAt,
+			&i.LastSeenAt,
+			&i.DisplayNo,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminGetError = `-- name: AdminGetError :one
+SELECT id, platform, app_version, severity, error_type, message, stack_trace, context, user_id, device_id, fingerprint, count, status, ai_fix_proposal, resolved_by, resolved_at, first_seen_at, last_seen_at, display_no FROM error_reports WHERE id = $1
+`
+
+func (q *Queries) AdminGetError(ctx context.Context, id pgtype.UUID) (ErrorReport, error) {
+	row := q.db.QueryRow(ctx, adminGetError, id)
+	var i ErrorReport
+	err := row.Scan(
+		&i.ID,
+		&i.Platform,
+		&i.AppVersion,
+		&i.Severity,
+		&i.ErrorType,
+		&i.Message,
+		&i.StackTrace,
+		&i.Context,
+		&i.UserID,
+		&i.DeviceID,
+		&i.Fingerprint,
+		&i.Count,
+		&i.Status,
+		&i.AiFixProposal,
+		&i.ResolvedBy,
+		&i.ResolvedAt,
+		&i.FirstSeenAt,
+		&i.LastSeenAt,
+		&i.DisplayNo,
+	)
+	return i, err
+}
+
+const adminListErrors = `-- name: AdminListErrors :many
+SELECT id, platform, app_version, severity, error_type, message, stack_trace, context, user_id, device_id, fingerprint, count, status, ai_fix_proposal, resolved_by, resolved_at, first_seen_at, last_seen_at, display_no FROM error_reports
+WHERE ($3::text IS NULL OR platform = $3)
+  AND ($4::int IS NULL OR status = $4)
+  AND ($5::text IS NULL OR severity = $5)
+ORDER BY last_seen_at DESC
+LIMIT $1 OFFSET $2
+`
+
+type AdminListErrorsParams struct {
+	Limit    int32   `db:"limit" json:"limit"`
+	Offset   int32   `db:"offset" json:"offset"`
+	Platform *string `db:"platform" json:"platform"`
+	Status   *int32  `db:"status" json:"status"`
+	Severity *string `db:"severity" json:"severity"`
+}
+
+// Node ErrorsService.list(): optional platform/status/severity filters,
+// ORDER BY last_seen_at DESC, LIMIT/OFFSET. NULL filter param = no filter.
+func (q *Queries) AdminListErrors(ctx context.Context, arg AdminListErrorsParams) ([]ErrorReport, error) {
+	rows, err := q.db.Query(ctx, adminListErrors,
+		arg.Limit,
+		arg.Offset,
+		arg.Platform,
+		arg.Status,
+		arg.Severity,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ErrorReport{}
+	for rows.Next() {
+		var i ErrorReport
+		if err := rows.Scan(
+			&i.ID,
+			&i.Platform,
+			&i.AppVersion,
+			&i.Severity,
+			&i.ErrorType,
+			&i.Message,
+			&i.StackTrace,
+			&i.Context,
+			&i.UserID,
+			&i.DeviceID,
+			&i.Fingerprint,
+			&i.Count,
+			&i.Status,
+			&i.AiFixProposal,
+			&i.ResolvedBy,
+			&i.ResolvedAt,
+			&i.FirstSeenAt,
+			&i.LastSeenAt,
+			&i.DisplayNo,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminSetErrorFixProposal = `-- name: AdminSetErrorFixProposal :one
+UPDATE error_reports
+SET ai_fix_proposal = $2, status = $3
+WHERE id = $1
+RETURNING id, platform, app_version, severity, error_type, message, stack_trace, context, user_id, device_id, fingerprint, count, status, ai_fix_proposal, resolved_by, resolved_at, first_seen_at, last_seen_at, display_no
+`
+
+type AdminSetErrorFixProposalParams struct {
+	ID            pgtype.UUID `db:"id" json:"id"`
+	AiFixProposal *string     `db:"ai_fix_proposal" json:"ai_fix_proposal"`
+	Status        int32       `db:"status" json:"status"`
+}
+
+func (q *Queries) AdminSetErrorFixProposal(ctx context.Context, arg AdminSetErrorFixProposalParams) (ErrorReport, error) {
+	row := q.db.QueryRow(ctx, adminSetErrorFixProposal, arg.ID, arg.AiFixProposal, arg.Status)
+	var i ErrorReport
+	err := row.Scan(
+		&i.ID,
+		&i.Platform,
+		&i.AppVersion,
+		&i.Severity,
+		&i.ErrorType,
+		&i.Message,
+		&i.StackTrace,
+		&i.Context,
+		&i.UserID,
+		&i.DeviceID,
+		&i.Fingerprint,
+		&i.Count,
+		&i.Status,
+		&i.AiFixProposal,
+		&i.ResolvedBy,
+		&i.ResolvedAt,
+		&i.FirstSeenAt,
+		&i.LastSeenAt,
+		&i.DisplayNo,
+	)
+	return i, err
+}
+
+const adminSetErrorStatus = `-- name: AdminSetErrorStatus :one
+UPDATE error_reports
+SET status = $2,
+    resolved_at = $3,
+    resolved_by = $4
+WHERE id = $1
+RETURNING id, platform, app_version, severity, error_type, message, stack_trace, context, user_id, device_id, fingerprint, count, status, ai_fix_proposal, resolved_by, resolved_at, first_seen_at, last_seen_at, display_no
+`
+
+type AdminSetErrorStatusParams struct {
+	ID         pgtype.UUID        `db:"id" json:"id"`
+	Status     int32              `db:"status" json:"status"`
+	ResolvedAt pgtype.Timestamptz `db:"resolved_at" json:"resolved_at"`
+	ResolvedBy *string            `db:"resolved_by" json:"resolved_by"`
+}
+
+func (q *Queries) AdminSetErrorStatus(ctx context.Context, arg AdminSetErrorStatusParams) (ErrorReport, error) {
+	row := q.db.QueryRow(ctx, adminSetErrorStatus,
+		arg.ID,
+		arg.Status,
+		arg.ResolvedAt,
+		arg.ResolvedBy,
+	)
+	var i ErrorReport
+	err := row.Scan(
+		&i.ID,
+		&i.Platform,
+		&i.AppVersion,
+		&i.Severity,
+		&i.ErrorType,
+		&i.Message,
+		&i.StackTrace,
+		&i.Context,
+		&i.UserID,
+		&i.DeviceID,
+		&i.Fingerprint,
+		&i.Count,
+		&i.Status,
+		&i.AiFixProposal,
+		&i.ResolvedBy,
+		&i.ResolvedAt,
+		&i.FirstSeenAt,
+		&i.LastSeenAt,
+		&i.DisplayNo,
+	)
+	return i, err
+}
+
 const bumpErrorReport = `-- name: BumpErrorReport :one
 UPDATE error_reports SET
   count = count + 1,
