@@ -1,0 +1,9 @@
+{
+  "name": "bug_reports_honeypot_drop",
+  "method": "POST",
+  "path": "/bug-reports",
+  "headers": {
+    "Content-Type": "multipart/form-data; boundary=shadowbnd"
+  },
+  "raw_body": "--shadowbnd\r\nContent-Disposition: form-data; name=\"description\"\r\n\r\nshadow fixture honeypot bug\r\n--shadowbnd\r\nContent-Disposition: form-data; name=\"source\"\r\n\r\nweb\r\n--shadowbnd\r\nContent-Disposition: form-data; name=\"website\"\r\n\r\nspam-bot-filled-this\r\n--shadowbnd--\r\n"
+}

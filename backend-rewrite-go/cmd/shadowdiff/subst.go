@@ -23,5 +23,8 @@ func substitute(f fixture, vars map[string]string) fixture {
 	if len(f.Body) > 0 {
 		out.Body = []byte(repl(string(f.Body)))
 	}
+	if f.RawBody != "" {
+		out.RawBody = repl(f.RawBody)
+	}
 	return out
 }

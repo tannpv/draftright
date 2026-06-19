@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -33,6 +34,13 @@ type fixture struct {
 	Path    string            `json:"path"`
 	Headers map[string]string `json:"headers"`
 	Body    json.RawMessage   `json:"body"`
+	// RawBody is a verbatim request body sent exactly as written (after
+	// {{token}} substitution), used for non-JSON payloads the Body field
+	// can't express — chiefly multipart/form-data (POST /bug-reports). Set
+	// the boundary via a Content-Type header. When RawBody is non-empty it
+	// takes precedence over Body. JSON-string escapes (\r\n, \") decode
+	// normally, so a multipart payload can be authored as one JSON string.
+	RawBody string `json:"raw_body"`
 	// IgnoreValueOf lists response keys whose value may differ per
 	// request (compared for presence only). request_id is the usual one.
 	IgnoreValueOf []string `json:"ignore_value_of"`
@@ -208,7 +216,10 @@ func loadFixtures(dir string) ([]fixture, error) {
 
 func send(c *http.Client, base string, f fixture) (int, []byte, error) {
 	var body io.Reader
-	if len(f.Body) > 0 {
+	switch {
+	case f.RawBody != "":
+		body = strings.NewReader(f.RawBody)
+	case len(f.Body) > 0:
 		body = bytes.NewReader(f.Body)
 	}
 	req, err := http.NewRequest(f.Method, base+f.Path, body)
