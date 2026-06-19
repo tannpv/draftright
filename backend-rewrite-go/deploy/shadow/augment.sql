@@ -128,11 +128,25 @@ SELECT
     'active',
     'admin_granted',
     'shadow-txn-001',
-    now(),
-    now() + interval '365 days'
+    -- Frozen to CONSTANT literals (not now()) so reporting aggregates that
+    -- bucket by started_at (/admin/analytics monthly_stats, /admin/transactions)
+    -- are reproducible across template rebuilds and immune to month-boundary
+    -- timezone skew between Node and Go on a single shadow instant.
+    TIMESTAMP '2026-06-15 12:00:00',
+    TIMESTAMP '2027-06-15 12:00:00'
 WHERE NOT EXISTS (
     SELECT 1 FROM subscriptions WHERE id = '00000000-0000-4000-8000-000000000001'
 );
+
+-- Pin the shadow subscription's @CreateDateColumn/@UpdateDateColumn (which
+-- default to now() at insert) to constants too, so /admin/transactions returns
+-- a deterministic created_at and the /admin/analytics "churned" window (filters
+-- on updated_at) is reproducible. The row is ACTIVE so it never counts as
+-- churned, but pinning keeps the value byte-stable across rebuilds.
+UPDATE subscriptions
+SET created_at = TIMESTAMP '2026-06-15 12:00:00',
+    updated_at = TIMESTAMP '2026-06-15 12:00:00'
+WHERE id = '00000000-0000-4000-8000-000000000001';
 
 -- ─── Extension token ─────────────────────────────────────────────────────────
 -- token_hash is char(64) — use a deterministic SHA-256-length hex string
@@ -207,6 +221,17 @@ SELECT
 WHERE NOT EXISTS (
     SELECT 1 FROM payments WHERE id = '00000000-0000-4000-8000-000000000005'
 );
+
+-- Pin the shadow payment's @CreateDateColumn/@UpdateDateColumn (default now()
+-- at insert) to a constant so GET /admin/payments returns a deterministic
+-- created_at/updated_at across template rebuilds. This payment stays 'completed'
+-- with method 'admin_granted' so BOTH /admin/payments/.../confirm (requires
+-- pending → 400) and /admin/payments/.../refund (requires stripe → 400) return
+-- the same error envelope without reaching Stripe.
+UPDATE payments
+SET created_at = TIMESTAMP '2026-06-15 12:00:00',
+    updated_at = TIMESTAMP '2026-06-15 12:00:00'
+WHERE id = '00000000-0000-4000-8000-000000000005';
 
 -- ─── Bug report ──────────────────────────────────────────────────────────────
 -- source, description are NOT NULL; status default 'new', kind default 'bug'
@@ -335,3 +360,50 @@ BEGIN
         INSERT INTO app_settings (id) VALUES ('00000000-0000-4000-8000-00000000000a');
     END IF;
 END $$;
+
+-- ─── Rewrite logs (training data) ────────────────────────────────────────────
+-- 0C: a PENDING rewrite_log so GET /admin/training-data (findPending) and
+--     GET /admin/training-data/stats (countByQuality) have a deterministic row.
+-- 0D: an APPROVED rewrite_log so GET /admin/training-data/export (exportApproved)
+--     emits at least one JSONL line and stats counts an approved row.
+-- created_at is frozen to a CONSTANT literal (not now()) so the findPending
+-- ordering (created_at DESC) and any time-bucketed reads are reproducible.
+-- rewrite_logs has NO updated_at column, so PATCH /admin/training-data/:id
+-- returns only { success: true } (nothing time-stamped to ignore).
+-- Columns tone(varchar20), input_text(text), output_text(text), model(varchar100),
+-- provider_type(varchar20), response_time_ms(int) are all NOT NULL.
+INSERT INTO rewrite_logs (
+    id, tone, input_text, output_text, model, provider_type,
+    response_time_ms, quality, created_at
+)
+SELECT
+    '00000000-0000-4000-8000-00000000000c',
+    'polished',
+    'shadow pending input text',
+    'Shadow pending output text.',
+    'llama3.2',
+    'ollama',
+    123,
+    'pending',
+    TIMESTAMP '2026-06-15 12:00:00'
+WHERE NOT EXISTS (
+    SELECT 1 FROM rewrite_logs WHERE id = '00000000-0000-4000-8000-00000000000c'
+);
+
+INSERT INTO rewrite_logs (
+    id, tone, input_text, output_text, model, provider_type,
+    response_time_ms, quality, created_at
+)
+SELECT
+    '00000000-0000-4000-8000-00000000000d',
+    'concise',
+    'shadow approved input text',
+    'Shadow approved output text.',
+    'llama3.2',
+    'ollama',
+    456,
+    'approved',
+    TIMESTAMP '2026-06-15 12:00:00'
+WHERE NOT EXISTS (
+    SELECT 1 FROM rewrite_logs WHERE id = '00000000-0000-4000-8000-00000000000d'
+);
