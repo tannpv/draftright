@@ -1,0 +1,8 @@
+{
+  "name": "updates_latest",
+  "method": "GET",
+  "path": "/updates/latest",
+  "headers": {
+    "Content-Type": "application/json"
+  }
+}

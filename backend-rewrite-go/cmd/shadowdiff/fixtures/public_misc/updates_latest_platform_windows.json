@@ -1,0 +1,8 @@
+{
+  "name": "updates_latest_platform_windows",
+  "method": "GET",
+  "path": "/updates/latest?platform=windows&channel=store",
+  "headers": {
+    "Content-Type": "application/json"
+  }
+}
