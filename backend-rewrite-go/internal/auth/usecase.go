@@ -260,12 +260,12 @@ func (s *Service) Account(ctx context.Context, userID string) (*AccountView, err
 			PlanName:   sub.PlanName,
 			Status:     sub.Status,
 			StoreType:  sub.StoreType,
-			StartedAt:  sub.StartedAt.Format(time.RFC3339),
+			StartedAt:  shared.ISOMillis(sub.StartedAt),
 			DailyLimit: sub.DailyLimit,
 			UsageToday: usageToday,
 		}
 		if sub.ExpiresAt != nil {
-			e := sub.ExpiresAt.Format(time.RFC3339)
+			e := shared.ISOMillis(*sub.ExpiresAt)
 			view.Subscription.ExpiresAt = &e
 		}
 	}
