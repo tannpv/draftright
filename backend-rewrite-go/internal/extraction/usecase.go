@@ -20,18 +20,21 @@ import (
 // this condition; the handler maps it to a 400 invalid-input (wired in Task 11).
 var ErrNoDefaultProvider = errors.New("No default AI provider configured")
 
-// Completer is the consumer-side port (own copy of aicall.Completer): a
-// blocking system+user completion against the configured default provider.
-type Completer interface {
-	Complete(ctx context.Context, system, user string) (text string, ms int64, err error)
-	Name() string
+// DefaultProvider is the consumer-side port: resolve the configured default
+// AI provider and run one blocking system+user completion, returning the text
+// AND the provider's name (Node provider.name). Resolving per request (not a
+// process-static provider) mirrors Node ExtractionService, which calls
+// aiProviders.findDefault() inside extract(). The implementation surfaces
+// ErrNoDefaultProvider when no default is configured.
+type DefaultProvider interface {
+	DefaultComplete(ctx context.Context, system, user string) (text, name string, err error)
 }
 
 // Service ports ExtractionService: LLM call → JSON parse → validate → dedupe.
-type Service struct{ c Completer }
+type Service struct{ p DefaultProvider }
 
-// NewService wires the completer port.
-func NewService(c Completer) *Service { return &Service{c: c} }
+// NewService wires the default-provider port.
+func NewService(p DefaultProvider) *Service { return &Service{p: p} }
 
 // Extract ports ExtractionService.extract. On a provider/Complete error it
 // returns the zero Response + the error (Task 4 maps provider errors). All
@@ -39,7 +42,7 @@ func NewService(c Completer) *Service { return &Service{c: c} }
 // matching Node.
 func (s *Service) Extract(ctx context.Context, text string, kinds []EntityKind) (Response, error) {
 	system := buildSystemPrompt(kinds)
-	raw, _, err := s.c.Complete(ctx, system, text)
+	raw, name, err := s.p.DefaultComplete(ctx, system, text)
 	if err != nil {
 		return Response{}, err
 	}
@@ -52,7 +55,7 @@ func (s *Service) Extract(ctx context.Context, text string, kinds []EntityKind) 
 		sum := sha1.Sum([]byte(raw))
 		slog.Warn("extraction_llm_unparseable",
 			"len", lenUTF16(raw), "sha1", hex.EncodeToString(sum[:])[:8])
-		return Response{Entities: []Entity{}, Provider: s.c.Name(), TokensUsed: 0}, nil
+		return Response{Entities: []Entity{}, Provider: name, TokensUsed: 0}, nil
 	}
 
 	out := make([]Entity, 0, len(arr))
@@ -63,7 +66,7 @@ func (s *Service) Extract(ctx context.Context, text string, kinds []EntityKind) 
 	}
 	return Response{
 		Entities:   dedupe(out),
-		Provider:   s.c.Name(),
+		Provider:   name,
 		TokensUsed: estimateTokens(text + raw),
 	}, nil
 }

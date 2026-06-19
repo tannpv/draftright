@@ -88,6 +88,14 @@ var ErrTrialLimit = errors.New("Trial limit reached. Sign up for unlimited rewri
 // client; the handler renders providerUnavailableMsg.
 var ErrProviderFailed = errors.New("provider failed")
 
+// ErrNoDefaultProvider mirrors the BadRequestException thrown by
+// aiProviders.findDefault() — which Node's callAI invokes OUTSIDE the
+// provider-call try/catch (rewrite.service.ts:88). A missing default therefore
+// propagates as 400 'No default AI provider configured', NOT the 502
+// provider-failed path. The DB-resolving completer surfaces this; callAI passes
+// it through and the handler maps it to 400 invalid-input.
+var ErrNoDefaultProvider = errors.New("No default AI provider configured")
+
 // UnknownToneError mirrors callAI's resolvePrompt==null path: Node throws
 // HttpException({error:`Unknown tone: ${tone}`}, 400). Unreachable through the
 // DTO (validation rejects it first) but kept faithful.
@@ -215,6 +223,12 @@ func (s *Service) callAI(ctx context.Context, text, tone, target, source string)
 	}
 	out, _, err := s.c.Complete(ctx, prompt, text)
 	if err != nil {
+		// Node resolves the default provider OUTSIDE the callProvider try, so a
+		// missing default is a 400, not the generic 502. Pass it through;
+		// any other provider error collapses to ErrProviderFailed.
+		if errors.Is(err, ErrNoDefaultProvider) {
+			return "", err
+		}
 		return "", ErrProviderFailed
 	}
 	return out, nil

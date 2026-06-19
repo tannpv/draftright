@@ -372,10 +372,12 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 	}
 
 	// --- AiProvider ------------------------------------------------
-	// provider is the streaming chain for /v1/rewrite; completer is the
-	// blocking (non-streaming) head provider for /extract. Both come from
-	// ONE selection pass so the priority order can't drift between them.
-	provider, completer := buildProviderChain(cfg, log)
+	// provider is the ENV-built streaming chain for /v1/rewrite. The
+	// non-streaming /rewrite + /extract surfaces no longer use the static
+	// blocking completer — they resolve the DB default provider per request
+	// (dbDefaultCompleter, wired in the pool block), matching Node's
+	// findDefault() call timing. The chain's blocking head is discarded here.
+	provider, _ := buildProviderChain(cfg, log)
 
 	// --- Core Phase 0 handlers (/health, /auth/me) -----------------
 	// /auth/me reads only verified JWT claims, so it needs no DB and is
@@ -398,11 +400,9 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 	// no DB, so it's wired unconditionally (available even without a pool).
 	core.imePacksManifest = http.HandlerFunc(imepackspkg.NewHandler().Manifest)
 
-	// Phase 4b: /extract has no DB dependency — it only needs an AI
-	// Completer. Reuse the SAME provider chain the rewrite use case uses
-	// (it satisfies extraction.Completer via Complete+Name after Task 1), so
-	// it's wired unconditionally (available even without a pool).
-	core.extract = http.HandlerFunc(extractionpkg.NewHandler(extractionpkg.NewService(completer)).Extract)
+	// Phase 4b: /extract resolves the DB default provider per request, so it
+	// needs the pool — wired inside the pool block below (was unconditional
+	// when it used a static ENV completer; #45 moved it to DB resolution).
 
 	// GET /rewrite/tones is a static catalog (no DB) — wire unconditionally.
 	core.tones = http.HandlerFunc(parity.WriteTones)
@@ -410,6 +410,19 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 	if pool != nil {
 		q := sqlc.New(pool)
 		core.health = corepkg.NewHealthHandler(corepkg.NewPgLogLevel(q), appVersion)
+
+		// AI providers (DB default-provider resolver). Built FIRST in the pool
+		// block so a single instance is shared by every consumer: the
+		// non-streaming /rewrite + /extract use cases (via dbDefault), the
+		// errreport/bugreports fix-proposers (Propose), and the admin CRUD
+		// handler below. dbDefault adapts it to the rewrite + extraction
+		// completer ports — both resolve the default provider per request (#45).
+		aiProviderSvc := aiproviderpkg.NewService(aiproviderpkg.NewPgRepo(q, pool), aiproviderpkg.Factory{})
+		dbDefault := dbDefaultCompleter{svc: aiProviderSvc}
+
+		// Phase 4b: POST /extract — DB-resolved default provider per request
+		// (Node ExtractionService.findDefault()), reporting provider.name.
+		core.extract = http.HandlerFunc(extractionpkg.NewHandler(extractionpkg.NewService(dbDefault)).Extract)
 
 		if cfg.JWTRefreshSecret == "" {
 			cleanup()
@@ -454,10 +467,10 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 
 		// Parity rewrite (Node /rewrite controller): authed POST /rewrite + public
 		// POST /rewrite/trial. subSvc supplies ResolveDailyLimit; usageCounter
-		// supplies CountToday; completer is the shared blocking provider head.
-		// Trial seam wired via WithTrial (limiter from Redis/memory, limit from the
-		// NODE_ENV-equivalent).
-		paritySvc := parity.NewService(completer, subSvc, usageCounter).
+		// supplies CountToday; dbDefault resolves the DB default provider per
+		// request (Node RewriteService.callAI → findDefault). Trial seam wired via
+		// WithTrial (limiter from Redis/memory, limit from the NODE_ENV-equivalent).
+		paritySvc := parity.NewService(dbDefault, subSvc, usageCounter).
 			WithTrial(trialLimiter, trialLimit, time.Now)
 		parityHandler := parity.NewHandler(paritySvc)
 		core.rewriteParity = http.HandlerFunc(parityHandler.Rewrite)
@@ -529,8 +542,8 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 		// cycle, since these packages import internal/shared). Routes are mounted
 		// in Task 21; here we only construct + inject.
 
-		// AI providers (6 routes): CRUD + paginated list + test.
-		aiProviderSvc := aiproviderpkg.NewService(aiproviderpkg.NewPgRepo(q, pool), aiproviderpkg.Factory{})
+		// AI providers (6 routes): CRUD + paginated list + test. aiProviderSvc
+		// is built once at the top of the pool block (shared DB resolver).
 		aiProviderHandler := aiproviderpkg.NewHandler(aiProviderSvc)
 		core.aiProvidersList = http.HandlerFunc(aiProviderHandler.List)
 		core.aiProvidersPaginated = http.HandlerFunc(aiProviderHandler.Paginated)
@@ -979,6 +992,33 @@ type paymentMethodValidator struct{}
 
 func (paymentMethodValidator) AssertMethodsRegisterable(csv string) error {
 	return paymentpkg.AssertMethodsRegisterable(csv)
+}
+
+// dbDefaultCompleter routes the non-streaming rewrite + extraction use cases
+// through the DB-configured default AI provider, resolved PER REQUEST via
+// aiprovider.Service.DefaultComplete (which reads ai_providers.is_default and
+// reports provider.name). This mirrors Node, where both RewriteService.callAI
+// and ExtractionService.extract call aiProviders.findDefault() at call time —
+// not a process-static ENV provider. It satisfies parity.completer (Complete)
+// and extraction.DefaultProvider (DefaultComplete), translating aiprovider's
+// no-default sentinel into each consumer's own sentinel so the HTTP edges map
+// it to the right status (rewrite/extract → 400 invalid-input).
+type dbDefaultCompleter struct{ svc *aiproviderpkg.Service }
+
+func (d dbDefaultCompleter) Complete(ctx context.Context, system, user string) (string, int64, error) {
+	text, _, ms, err := d.svc.DefaultComplete(ctx, system, user)
+	if errors.Is(err, aiproviderpkg.ErrNoDefaultProvider) {
+		return "", 0, parity.ErrNoDefaultProvider
+	}
+	return text, ms, err
+}
+
+func (d dbDefaultCompleter) DefaultComplete(ctx context.Context, system, user string) (string, string, error) {
+	text, name, _, err := d.svc.DefaultComplete(ctx, system, user)
+	if errors.Is(err, aiproviderpkg.ErrNoDefaultProvider) {
+		return "", "", extractionpkg.ErrNoDefaultProvider
+	}
+	return text, name, err
 }
 
 // stripeSecretResolver adapts the payment SettingsAdapter + env fallback to the
