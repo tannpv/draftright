@@ -1,0 +1,19 @@
+{
+  "name": "extract_ok",
+  "method": "POST",
+  "path": "/extract",
+  "headers": {
+    "Authorization": "Bearer {{user_token}}",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "text": "call me at test@example.com",
+    "kinds": [
+      "email"
+    ]
+  },
+  "ignore_value_of": [
+    "entities",
+    "tokensUsed"
+  ]
+}

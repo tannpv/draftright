@@ -1,0 +1,15 @@
+{
+  "name": "rewrite_no_auth",
+  "method": "POST",
+  "path": "/rewrite",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "text": "hello world",
+    "tone": "simple"
+  },
+  "ignore_value_of": [
+    "request_id"
+  ]
+}

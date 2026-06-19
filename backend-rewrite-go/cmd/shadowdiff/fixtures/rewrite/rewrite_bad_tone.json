@@ -1,0 +1,16 @@
+{
+  "name": "rewrite_bad_tone",
+  "method": "POST",
+  "path": "/rewrite",
+  "headers": {
+    "Authorization": "Bearer {{user_token}}",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "text": "hi",
+    "tone": "nope"
+  },
+  "ignore_value_of": [
+    "request_id"
+  ]
+}
