@@ -1,0 +1,8 @@
+{
+  "name": "auth_register_dup",
+  "method": "POST",
+  "path": "/auth/register",
+  "headers": { "Content-Type": "application/json" },
+  "body": { "email": "shadow-user@draftright.info", "password": "Whatever12345", "name": "Dup" },
+  "ignore_value_of": ["request_id"]
+}

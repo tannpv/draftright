@@ -1,0 +1,7 @@
+{
+  "name": "auth_account_ok",
+  "method": "GET",
+  "path": "/auth/account",
+  "headers": { "Authorization": "Bearer {{user_token}}" },
+  "ignore_value_of": ["request_id", "started_at", "expires_at"]
+}

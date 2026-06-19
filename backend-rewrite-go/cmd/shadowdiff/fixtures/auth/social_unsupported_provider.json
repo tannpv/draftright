@@ -1,0 +1,8 @@
+{
+  "name": "auth_social_unsupported_provider",
+  "method": "POST",
+  "path": "/auth/social",
+  "headers": { "Content-Type": "application/json" },
+  "body": { "provider": "myspace", "id_token": "x" },
+  "ignore_value_of": ["request_id"]
+}

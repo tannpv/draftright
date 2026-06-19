@@ -1,0 +1,7 @@
+{
+  "name": "auth_me_ok",
+  "method": "GET",
+  "path": "/auth/me",
+  "headers": { "Authorization": "Bearer {{user_token}}" },
+  "ignore_value_of": ["request_id"]
+}

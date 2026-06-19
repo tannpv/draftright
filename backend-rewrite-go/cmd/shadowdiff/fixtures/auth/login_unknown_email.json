@@ -1,0 +1,8 @@
+{
+  "name": "auth_login_unknown_email",
+  "method": "POST",
+  "path": "/auth/login",
+  "headers": { "Content-Type": "application/json" },
+  "body": { "email": "nobody@draftright.info", "password": "whatever" },
+  "ignore_value_of": ["request_id"]
+}

@@ -1,0 +1,8 @@
+{
+  "name": "auth_refresh_ok",
+  "method": "POST",
+  "path": "/auth/refresh",
+  "headers": { "Content-Type": "application/json" },
+  "body": { "refresh_token": "{{user_refresh_token}}" },
+  "ignore_value_of": ["request_id", "access_token", "refresh_token"]
+}
