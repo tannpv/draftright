@@ -36,6 +36,12 @@ type fixture struct {
 	// IgnoreValueOf lists response keys whose value may differ per
 	// request (compared for presence only). request_id is the usual one.
 	IgnoreValueOf []string `json:"ignore_value_of"`
+	// StatusOnly compares the HTTP status code only and skips the body diff.
+	// For endpoints whose body is non-deterministic by nature and cannot be
+	// byte-compared even Node-vs-Node — e.g. /metrics (Prometheus text whose
+	// counter/gauge values change every scrape). NOT an escape hatch for a
+	// real body mismatch; reserve it for genuinely non-deterministic bodies.
+	StatusOnly bool `json:"status_only"`
 }
 
 func main() {
@@ -146,7 +152,9 @@ func main() {
 		if nStatus != gStatus {
 			problems = append(problems, fmt.Sprintf("status: node=%d go=%d", nStatus, gStatus))
 		}
-		problems = append(problems, diffJSON(nBody, gBody, f.IgnoreValueOf)...)
+		if !f.StatusOnly {
+			problems = append(problems, diffJSON(nBody, gBody, f.IgnoreValueOf)...)
+		}
 		if len(problems) > 0 {
 			failed++
 			fmt.Printf("FAIL %s\n", f.Name)

@@ -65,6 +65,12 @@ services:
     environment:
       LISTEN_ADDR: ":3001"
       DATABASE_URL: "${GO_DATABASE_URL:?set GO_DATABASE_URL in .env.shadow}"
+      # Node serves /metrics unconditionally; the Go port gates it behind
+      # METRICS_ENABLED (default off). Enable it here so /metrics status
+      # matches Node — and to mirror the intended prod config if Caddy ever
+      # routes /metrics to Go. The body (Prometheus text) is non-deterministic,
+      # so the /metrics fixture is status_only.
+      METRICS_ENABLED: "true"
     env_file:
       - ../../.env.shadow    # supplies JWT_SECRET, JWT_REFRESH_SECRET
 
