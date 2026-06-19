@@ -9,9 +9,12 @@
 # Caddy daemon — so HTTPS certs are issued by Caddy's ACME client
 # the same way as prod.
 
-# ── Dev backend ─────────────────────────────────────────────────
-# Points at the backend-dev container declared in
-# docker-compose.dev.yml (port 3100 on the host).
+# ── Dev backend (Go) ────────────────────────────────────────────
+# Points at the backend-go-dev container declared in
+# docker-compose.dev.yml (port 3101 on the host). Phase 5 cutover:
+# Go is the byte-identical drop-in replacement for the Node backend
+# (was localhost:3100). Node decommissioned after the shadow gate
+# proved 129/129 fixture parity.
 api.dev.draftright.info {
     # Match prod limits — 6MB so bug-report screenshots flow.  Don't
     # be more permissive than prod or we'll miss prod-only failures.
@@ -23,7 +26,7 @@ api.dev.draftright.info {
         output file /var/log/caddy/api.dev.draftright.info.log
         format json
     }
-    reverse_proxy localhost:3100
+    reverse_proxy localhost:3101
 }
 
 # ── Dev website ─────────────────────────────────────────────────
