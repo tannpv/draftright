@@ -66,13 +66,24 @@ export default function Playground() {
   const [text, setText] = useState('');
   const [tone, setTone] = useState('polished');
   const [sourceLanguage, setSourceLanguage] = useState('auto');
-  const [targetLanguage, setTargetLanguage] = useState(detectLanguage);
+  // Must match the SSR-prerendered value ('Vietnamese', detectLanguage's
+  // navigator-undefined branch) on the first client render, or the translate
+  // tone-button label ("Auto → X") hydrates differently than the server HTML
+  // → React #418 hydration mismatch. Detect the real locale in an effect,
+  // after hydration, where a divergent value is a legal state update.
+  const [targetLanguage, setTargetLanguage] = useState('Vietnamese');
   const [result, setResult] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [triesLeft, setTriesLeft] = useState(3);
   const [copied, setCopied] = useState(false);
   const [tones, setTones] = useState<ToneOption[]>(FALLBACK_TONES);
+
+  // Locale detection is client-only (reads navigator) — run it after
+  // hydration so it can't desync from the SSR HTML. See targetLanguage init.
+  useEffect(() => {
+    setTargetLanguage(detectLanguage());
+  }, []);
 
   // Render the tone list the backend actually supports (single source of
   // truth: GET /rewrite/tones), so a newly added tone shows up without a
