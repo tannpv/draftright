@@ -64,10 +64,12 @@ configured"** → build hardcoded system+user prompts (user text bounded to
 **8000 chars**) → `callProvider(provider, system, user)` → store `result.text`.
 
 ### 3.1 Default-provider lookup (the GAP)
-Node `findDefault()` = `SELECT ... FROM ai_providers WHERE is_default = true LIMIT 1`.
+Node `findDefault()` = `SELECT ... FROM ai_providers WHERE is_default = true AND
+is_active = true LIMIT 1` → throws **400 "No default AI provider configured"**
+when null. (Note: filters on BOTH `is_default` AND `is_active`.)
 Add:
 - sqlc query `GetDefaultAiProvider :one` in `queries_aiprovider.sql`
-  (`WHERE is_default = true LIMIT 1`).
+  (`WHERE is_default = true AND is_active = true LIMIT 1`).
 - `(*aiprovider.PgRepo).GetDefault(ctx) (AiProvider, error)`; add `GetDefault`
   to the module's `Repo` interface.
 - Reuse `aiprovider.Factory.For(p)` → `aicall.Completer` (the 4c-2 template at
