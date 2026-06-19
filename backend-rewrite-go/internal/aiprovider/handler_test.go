@@ -62,7 +62,8 @@ func TestList_ReturnsArray(t *testing.T) {
 	}
 }
 
-// 2. POST /admin/ai-providers/:id/test when GetByID → ErrNotFound → 200,
+// 2. POST /admin/ai-providers/:id/test when GetByID → ErrNotFound → 201
+// (Node @Post has no @HttpCode, so even the not-found path is 201),
 // key order success,error, success==false && error=="Provider not found".
 func TestTestRoute_NotFound(t *testing.T) {
 	h := NewHandler(NewService(&fakeRepo{provider: nil}, fakeFactory{}))
@@ -70,8 +71,8 @@ func TestTestRoute_NotFound(t *testing.T) {
 	req := routeWithID(httptest.NewRequest(http.MethodPost, "/admin/ai-providers/x/test", nil), "x")
 	h.Test(rec, req)
 
-	if rec.Code != 200 {
-		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	if rec.Code != 201 {
+		t.Fatalf("status = %d, want 201; body=%s", rec.Code, rec.Body.String())
 	}
 	raw := rec.Body.String()
 	assertKeyOrder(t, raw, "success", "error")
@@ -116,6 +117,14 @@ func TestCreate_Returns201(t *testing.T) {
 	// temperature absent → default "0.3" handed to the repo.
 	if repo.inserted.Temperature != "0.3" {
 		t.Fatalf("inserted temperature = %q, want %q", repo.inserted.Temperature, "0.3")
+	}
+	// is_active absent → default true (entity column default; issue #42).
+	if !repo.inserted.IsActive {
+		t.Fatalf("inserted is_active = false, want true (default)")
+	}
+	// is_default absent → default false (entity column default).
+	if repo.inserted.IsDefault {
+		t.Fatalf("inserted is_default = true, want false (default)")
 	}
 }
 
