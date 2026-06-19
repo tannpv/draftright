@@ -91,6 +91,8 @@ type Querier interface {
 	CreatePayment(ctx context.Context, arg CreatePaymentParams) (CreatePaymentRow, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
 	DeleteEmailTemplate(ctx context.Context, templateKey string) error
+	// Node deleteChannel(): releaseRepo.delete({ platform, channel }).
+	DeleteReleaseChannel(ctx context.Context, arg DeleteReleaseChannelParams) (int64, error)
 	DeleteVote(ctx context.Context, arg DeleteVoteParams) error
 	DemoteDefaultAiProviders(ctx context.Context) error
 	ExpireByStoreRef(ctx context.Context, arg ExpireByStoreRefParams) (int64, error)
@@ -214,6 +216,8 @@ type Querier interface {
 	// (daily_limit/is_active/created_at/updated_at included — Node attaches
 	// plansService.findById, the full entity). No row → pgx.ErrNoRows.
 	GetPlanForCheckout(ctx context.Context, id pgtype.UUID) (GetPlanForCheckoutRow, error)
+	// Node upsertChannel(): releaseRepo.findOne({ where: { platform, channel } }).
+	GetReleaseChannel(ctx context.Context, arg GetReleaseChannelParams) (AppRelease, error)
 	// internal/shared/pg/queries_updates.sql
 	GetReleasePolicy(ctx context.Context, platform string) (AppReleasePolicy, error)
 	GetUserAuthState(ctx context.Context, email string) (GetUserAuthStateRow, error)
@@ -254,6 +258,10 @@ type Querier interface {
 	InsertFeedback(ctx context.Context, arg InsertFeedbackParams) (InsertFeedbackRow, error)
 	InsertGrantedSubscription(ctx context.Context, arg InsertGrantedSubscriptionParams) error
 	InsertPlan(ctx context.Context, arg InsertPlanParams) (InsertPlanRow, error)
+	// Node upsertChannel() create path. The use case supplies merged values.
+	InsertReleaseChannel(ctx context.Context, arg InsertReleaseChannelParams) (AppRelease, error)
+	// Node PoliciesService.upsert() create path. The use case supplies merged values.
+	InsertReleasePolicy(ctx context.Context, arg InsertReleasePolicyParams) (AppReleasePolicy, error)
 	// Records one /rewrite call for daily quota tracking + analytics.
 	// Mirrors NestJS UsageService.log: same columns, same names, same
 	// precision so the two backends populate identical rows.
@@ -291,6 +299,10 @@ type Querier interface {
 	// the generated PlansBillingPeriodEnum, so InsertPlan binds the enum value
 	// directly (no SQL cast needed — the param already carries the enum type).
 	ListAllPlans(ctx context.Context) ([]ListAllPlansRow, error)
+	// Node ReleasesService.listAll(): policyRepo.find() — every policy row.
+	ListAllReleasePolicies(ctx context.Context) ([]AppReleasePolicy, error)
+	// Node ReleasesService.listAll(): releaseRepo.find() — every (platform, channel) row.
+	ListAllReleases(ctx context.Context) ([]AppRelease, error)
 	// exportApproved / exportAll: quality='approved', oldest first.
 	// Node: find({ where: { quality: 'approved' }, order: { created_at: 'ASC' } })
 	ListApprovedRewriteLogsAsc(ctx context.Context) ([]RewriteLog, error)
@@ -374,6 +386,10 @@ type Querier interface {
 	UpdateFeatureVoteCount(ctx context.Context, arg UpdateFeatureVoteCountParams) error
 	UpdatePaymentPlan(ctx context.Context, arg UpdatePaymentPlanParams) error
 	UpdatePaymentQRData(ctx context.Context, arg UpdatePaymentQRDataParams) error
+	// Node upsertChannel() update path. The use case supplies merged values.
+	UpdateReleaseChannel(ctx context.Context, arg UpdateReleaseChannelParams) (AppRelease, error)
+	// Node PoliciesService.upsert() update path. The use case supplies merged values.
+	UpdateReleasePolicy(ctx context.Context, arg UpdateReleasePolicyParams) (AppReleasePolicy, error)
 	// updateQuality(id, quality): update the quality field for one row.
 	// Node: rewriteLogRepo.update(id, { quality }) — TypeORM silently no-ops on
 	// a missing UUID (0 rows affected, no error). Go mirrors: valid UUID → run UPDATE

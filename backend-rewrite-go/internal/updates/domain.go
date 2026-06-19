@@ -35,6 +35,33 @@ type Release struct {
 	UpdatedAt    time.Time
 }
 
+// AppRelease is the full app_releases row returned by the admin
+// listAll/upsert/delete routes. JSON key order mirrors the Node entity
+// (src/updates/entities/app-release.entity.ts) exactly. updated_at is a
+// Date.toISOString() string (TypeORM serializes timestamps that way).
+type AppRelease struct {
+	Platform     string `json:"platform"`
+	Channel      string `json:"channel"`
+	Version      string `json:"version"`
+	DownloadURL  string `json:"download_url"`
+	SHA256       string `json:"sha256"`
+	ReleaseNotes string `json:"release_notes"`
+	Required     bool   `json:"required"`
+	Enabled      bool   `json:"enabled"`
+	UpdatedAt    string `json:"updated_at"`
+}
+
+// AppReleasePolicy is the full app_release_policies row returned by the
+// admin listAll/upsert routes. JSON key order mirrors the Node entity
+// (src/updates/entities/app-release-policy.entity.ts) exactly.
+type AppReleasePolicy struct {
+	Platform    string `json:"platform"`
+	Preferred   string `json:"preferred"`
+	StoreStatus string `json:"store_status"`
+	Notes       string `json:"notes"`
+	UpdatedAt   string `json:"updated_at"`
+}
+
 // envelope is the top-level version/notes/required summary.
 type envelope struct {
 	Version      string
