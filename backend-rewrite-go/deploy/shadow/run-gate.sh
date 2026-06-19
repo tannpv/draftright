@@ -28,15 +28,21 @@ DB_GO=draftright_shadow_go
 
 [ -f "$ENVFILE" ] || { echo "missing env file: $ENVFILE (needs JWT_SECRET + JWT_REFRESH_SECRET + NODE_DATABASE_URL + GO_DATABASE_URL + MAINT_DSN)"; exit 2; }
 
-# Source the env-file so MAINT_DSN (+ optional PGCONT/PGUSER overrides) are
-# available to this script. The same file is passed to docker compose via
-# --env-file below, so both layers read one source of truth — no creds in git.
-set -a; . "$ENVFILE"; set +a
+# Pull the three host-side vars this script needs (MAINT_DSN + optional
+# PGCONT/PGUSER) out of the env-file by KEY, WITHOUT shell-sourcing it.
+# The same file is passed to docker compose via --env-file below, so both
+# layers read one source of truth — no creds in git. We must NOT `. "$ENVFILE"`:
+# a docker env-file legitimately holds values that are illegal in shell, e.g.
+#   EMAIL_FROM=DraftRight <noreply@draftright.info>
+# where the bare `<` is parsed as a redirect → "syntax error near newline".
+# grep+cut treats every line as opaque KEY=VALUE, dodging all of that.
+envval() { grep -E "^$1=" "$ENVFILE" | head -1 | cut -d= -f2-; }
 
 # Container + role used for in-container psql (trust/peer auth, no password).
 # Overridable from the env-file if the dev stack names them differently.
-PGCONT="${PGCONT:-draftright-dev-postgres-1}"
-PGUSER="${PGUSER:-draftright}"
+PGCONT="${PGCONT:-$(envval PGCONT)}"; PGCONT="${PGCONT:-draftright-dev-postgres-1}"
+PGUSER="${PGUSER:-$(envval PGUSER)}"; PGUSER="${PGUSER:-draftright}"
+MAINT_DSN="${MAINT_DSN:-$(envval MAINT_DSN)}"
 : "${MAINT_DSN:?set MAINT_DSN in $ENVFILE (host-reachable postgres-db DSN with real password)}"
 
 psql_postgres() { docker exec -i "$PGCONT" psql -U "$PGUSER" -d postgres -v ON_ERROR_STOP=1 "$@"; }
