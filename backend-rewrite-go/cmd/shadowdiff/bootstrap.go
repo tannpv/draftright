@@ -21,6 +21,24 @@ func parseAccessToken(body []byte) (string, error) {
 	return r.AccessToken, nil
 }
 
+// parseRefreshToken extracts the refresh_token from a login response. The
+// refresh token is a stateless JWT signed with JWT_REFRESH_SECRET (no DB row),
+// so a token minted at bootstrap survives the per-fixture DB reset and verifies
+// on BOTH backends. Exposed as {{user_refresh_token}} so a /auth/refresh fixture
+// has a valid body without chaining requests.
+func parseRefreshToken(body []byte) (string, error) {
+	var r struct {
+		RefreshToken string `json:"refresh_token"`
+	}
+	if err := json.Unmarshal(body, &r); err != nil {
+		return "", err
+	}
+	if r.RefreshToken == "" {
+		return "", fmt.Errorf("no refresh_token in response: %s", body)
+	}
+	return r.RefreshToken, nil
+}
+
 func parseExtToken(body []byte) (string, error) {
 	var r struct {
 		Token string `json:"token"`
@@ -69,6 +87,9 @@ func bootstrapTokens(c *http.Client, base, userEmail, userPass, adminEmail, admi
 		return nil, err
 	}
 	if vars["user_token"], err = parseAccessToken(ub); err != nil {
+		return nil, err
+	}
+	if vars["user_refresh_token"], err = parseRefreshToken(ub); err != nil {
 		return nil, err
 	}
 	ab, err := post("/admin/auth/login", map[string]string{"email": adminEmail, "password": adminPass}, nil)
