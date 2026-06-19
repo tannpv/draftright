@@ -1,5 +1,22 @@
 package subscription
 
+import "time"
+
+// GrantedSub is the POST /admin/subscriptions/grant response. Key order
+// mirrors the Node Subscription entity.
+type GrantedSub struct {
+	ID                 string     `json:"id"`
+	UserID             string     `json:"user_id"`
+	PlanID             string     `json:"plan_id"`
+	Status             string     `json:"status"`
+	StoreType          string     `json:"store_type"`
+	StoreTransactionID *string    `json:"store_transaction_id"`
+	StartedAt          time.Time  `json:"started_at"`
+	ExpiresAt          *time.Time `json:"expires_at"`
+	CreatedAt          time.Time  `json:"created_at"`
+	UpdatedAt          time.Time  `json:"updated_at"`
+}
+
 // SubscriptionView is GET /subscription's 200 body.
 type SubscriptionView struct {
 	Plan       *PlanBrief `json:"plan"`

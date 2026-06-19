@@ -822,9 +822,10 @@ func (q *Queries) InsertEmailLog(ctx context.Context, arg InsertEmailLogParams) 
 	return err
 }
 
-const insertGrantedSubscription = `-- name: InsertGrantedSubscription :exec
+const insertGrantedSubscription = `-- name: InsertGrantedSubscription :one
 INSERT INTO subscriptions (user_id, plan_id, status, store_type, started_at, expires_at)
 VALUES ($1, $2, 'active'::subscriptions_status_enum, $3, now(), $4)
+RETURNING id, user_id, plan_id, status, store_type, store_transaction_id, started_at, expires_at, created_at, updated_at
 `
 
 type InsertGrantedSubscriptionParams struct {
@@ -834,14 +835,27 @@ type InsertGrantedSubscriptionParams struct {
 	ExpiresAt pgtype.Timestamp           `db:"expires_at" json:"expires_at"`
 }
 
-func (q *Queries) InsertGrantedSubscription(ctx context.Context, arg InsertGrantedSubscriptionParams) error {
-	_, err := q.db.Exec(ctx, insertGrantedSubscription,
+func (q *Queries) InsertGrantedSubscription(ctx context.Context, arg InsertGrantedSubscriptionParams) (Subscription, error) {
+	row := q.db.QueryRow(ctx, insertGrantedSubscription,
 		arg.UserID,
 		arg.PlanID,
 		arg.StoreType,
 		arg.ExpiresAt,
 	)
-	return err
+	var i Subscription
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.PlanID,
+		&i.Status,
+		&i.StoreType,
+		&i.StoreTransactionID,
+		&i.StartedAt,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const isEmailSuppressed = `-- name: IsEmailSuppressed :one

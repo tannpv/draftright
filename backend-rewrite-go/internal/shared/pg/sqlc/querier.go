@@ -256,7 +256,7 @@ type Querier interface {
 	// Node only adding the key to its `where` object when the value passes its
 	// allow-list check).
 	InsertFeedback(ctx context.Context, arg InsertFeedbackParams) (InsertFeedbackRow, error)
-	InsertGrantedSubscription(ctx context.Context, arg InsertGrantedSubscriptionParams) error
+	InsertGrantedSubscription(ctx context.Context, arg InsertGrantedSubscriptionParams) (Subscription, error)
 	InsertPlan(ctx context.Context, arg InsertPlanParams) (InsertPlanRow, error)
 	// Node upsertChannel() create path. The use case supplies merged values.
 	InsertReleaseChannel(ctx context.Context, arg InsertReleaseChannelParams) (AppRelease, error)
