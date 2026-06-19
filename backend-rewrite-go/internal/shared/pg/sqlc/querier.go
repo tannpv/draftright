@@ -15,7 +15,32 @@ type Querier interface {
 	// AiProvidersService.findActive — keep the ORDER BY in sync there + here
 	// (is_default DESC, is_active = TRUE).
 	ActiveAIProvider(ctx context.Context) (ActiveAIProviderRow, error)
+	// Cron: status='new' AND kind='bug' AND ai_fix_proposal IS NULL,
+	// ORDER BY created_at DESC, LIMIT $1 (5 per run).
+	AdminBugFixCandidates(ctx context.Context, limit int32) ([]BugReport, error)
+	AdminCountErrors(ctx context.Context, arg AdminCountErrorsParams) (int64, error)
+	AdminDeleteBugReport(ctx context.Context, id pgtype.UUID) (int64, error)
+	AdminDeleteError(ctx context.Context, id pgtype.UUID) (int64, error)
 	AdminEmailExists(ctx context.Context, email string) (bool, error)
+	// Cron: status=0 AND ai_fix_proposal IS NULL AND count >= 2,
+	// ORDER BY count DESC, last_seen_at DESC, LIMIT 10.
+	AdminErrorFixCandidates(ctx context.Context, limit int32) ([]ErrorReport, error)
+	// Admin triage (GET/:id, DELETE/:id, PATCH/:id, fix-proposal, cron).
+	// The admin LIST (GET /admin/bug-reports) is a parseListQuery consumer with
+	// dynamic WHERE/ORDER → assembled in Go on the pgxpool (admin_repo_pg.go),
+	// NOT a static sqlc query.
+	AdminGetBugReport(ctx context.Context, id pgtype.UUID) (BugReport, error)
+	AdminGetError(ctx context.Context, id pgtype.UUID) (ErrorReport, error)
+	// Node ErrorsService.list(): optional platform/status/severity filters,
+	// ORDER BY last_seen_at DESC, LIMIT/OFFSET. NULL filter param = no filter.
+	AdminListErrors(ctx context.Context, arg AdminListErrorsParams) ([]ErrorReport, error)
+	AdminSetBugFixProposal(ctx context.Context, arg AdminSetBugFixProposalParams) (BugReport, error)
+	AdminSetErrorFixProposal(ctx context.Context, arg AdminSetErrorFixProposalParams) (ErrorReport, error)
+	AdminSetErrorStatus(ctx context.Context, arg AdminSetErrorStatusParams) (ErrorReport, error)
+	// The use case (admin_usecase.go) does the partial-merge in Go (load → apply
+	// only the provided DTO fields → write the merged values), mirroring Node's
+	// per-field `if (dto.x !== undefined)`. This writes the already-merged values.
+	AdminUpdateBugReport(ctx context.Context, arg AdminUpdateBugReportParams) (BugReport, error)
 	BumpErrorReport(ctx context.Context, arg BumpErrorReportParams) (BumpErrorReportRow, error)
 	CancelActiveSubsByUser(ctx context.Context, userID pgtype.UUID) error
 	CancelByStoreRef(ctx context.Context, arg CancelByStoreRefParams) (int64, error)
@@ -80,6 +105,8 @@ type Querier interface {
 	CreatePayment(ctx context.Context, arg CreatePaymentParams) (CreatePaymentRow, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
 	DeleteEmailTemplate(ctx context.Context, templateKey string) error
+	// Node deleteChannel(): releaseRepo.delete({ platform, channel }).
+	DeleteReleaseChannel(ctx context.Context, arg DeleteReleaseChannelParams) (int64, error)
 	DeleteVote(ctx context.Context, arg DeleteVoteParams) error
 	DemoteDefaultAiProviders(ctx context.Context) error
 	ExpireByStoreRef(ctx context.Context, arg ExpireByStoreRefParams) (int64, error)
@@ -162,6 +189,10 @@ type Querier interface {
 	// GET /health. There is exactly one settings row (Node does
 	// `findOne({ where: {} })`); LIMIT 1 matches that.
 	GetClientLogLevel(ctx context.Context) (string, error)
+	// Node AiProvidersService.findDefault(): the active default provider.
+	// Filters on BOTH is_default = true AND is_active = true (Node
+	// findOne({ where: { is_default: true, is_active: true } })).
+	GetDefaultAiProvider(ctx context.Context) (GetDefaultAiProviderRow, error)
 	// app_settings creds: both columns are NOT NULL (default '').
 	GetEmailSettings(ctx context.Context) (GetEmailSettingsRow, error)
 	// DB template override. PK column is template_key (not key).
@@ -199,6 +230,8 @@ type Querier interface {
 	// (daily_limit/is_active/created_at/updated_at included — Node attaches
 	// plansService.findById, the full entity). No row → pgx.ErrNoRows.
 	GetPlanForCheckout(ctx context.Context, id pgtype.UUID) (GetPlanForCheckoutRow, error)
+	// Node upsertChannel(): releaseRepo.findOne({ where: { platform, channel } }).
+	GetReleaseChannel(ctx context.Context, arg GetReleaseChannelParams) (AppRelease, error)
 	// internal/shared/pg/queries_updates.sql
 	GetReleasePolicy(ctx context.Context, platform string) (AppReleasePolicy, error)
 	GetUserAuthState(ctx context.Context, email string) (GetUserAuthStateRow, error)
@@ -237,8 +270,12 @@ type Querier interface {
 	// Node only adding the key to its `where` object when the value passes its
 	// allow-list check).
 	InsertFeedback(ctx context.Context, arg InsertFeedbackParams) (InsertFeedbackRow, error)
-	InsertGrantedSubscription(ctx context.Context, arg InsertGrantedSubscriptionParams) error
+	InsertGrantedSubscription(ctx context.Context, arg InsertGrantedSubscriptionParams) (Subscription, error)
 	InsertPlan(ctx context.Context, arg InsertPlanParams) (InsertPlanRow, error)
+	// Node upsertChannel() create path. The use case supplies merged values.
+	InsertReleaseChannel(ctx context.Context, arg InsertReleaseChannelParams) (AppRelease, error)
+	// Node PoliciesService.upsert() create path. The use case supplies merged values.
+	InsertReleasePolicy(ctx context.Context, arg InsertReleasePolicyParams) (AppReleasePolicy, error)
 	// Records one /rewrite call for daily quota tracking + analytics.
 	// Mirrors NestJS UsageService.log: same columns, same names, same
 	// precision so the two backends populate identical rows.
@@ -276,6 +313,10 @@ type Querier interface {
 	// the generated PlansBillingPeriodEnum, so InsertPlan binds the enum value
 	// directly (no SQL cast needed — the param already carries the enum type).
 	ListAllPlans(ctx context.Context) ([]ListAllPlansRow, error)
+	// Node ReleasesService.listAll(): policyRepo.find() — every policy row.
+	ListAllReleasePolicies(ctx context.Context) ([]AppReleasePolicy, error)
+	// Node ReleasesService.listAll(): releaseRepo.find() — every (platform, channel) row.
+	ListAllReleases(ctx context.Context) ([]AppRelease, error)
 	// exportApproved / exportAll: quality='approved', oldest first.
 	// Node: find({ where: { quality: 'approved' }, order: { created_at: 'ASC' } })
 	ListApprovedRewriteLogsAsc(ctx context.Context) ([]RewriteLog, error)
@@ -359,6 +400,10 @@ type Querier interface {
 	UpdateFeatureVoteCount(ctx context.Context, arg UpdateFeatureVoteCountParams) error
 	UpdatePaymentPlan(ctx context.Context, arg UpdatePaymentPlanParams) error
 	UpdatePaymentQRData(ctx context.Context, arg UpdatePaymentQRDataParams) error
+	// Node upsertChannel() update path. The use case supplies merged values.
+	UpdateReleaseChannel(ctx context.Context, arg UpdateReleaseChannelParams) (AppRelease, error)
+	// Node PoliciesService.upsert() update path. The use case supplies merged values.
+	UpdateReleasePolicy(ctx context.Context, arg UpdateReleasePolicyParams) (AppReleasePolicy, error)
 	// updateQuality(id, quality): update the quality field for one row.
 	// Node: rewriteLogRepo.update(id, { quality }) — TypeORM silently no-ops on
 	// a missing UUID (0 rows affected, no error). Go mirrors: valid UUID → run UPDATE

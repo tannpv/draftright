@@ -24,6 +24,12 @@ func (f *fakeRepo) GetByID(_ context.Context, id string) (AiProvider, error) {
 	}
 	return *f.provider, nil
 }
+func (f *fakeRepo) GetDefault(context.Context) (AiProvider, error) {
+	if f.provider == nil {
+		return AiProvider{}, ErrNotFound
+	}
+	return *f.provider, nil
+}
 func (f *fakeRepo) DemoteDefaults(context.Context) error { f.demoted = true; return nil }
 func (f *fakeRepo) Insert(_ context.Context, in NewProvider) (AiProvider, error) {
 	f.inserted = in
@@ -85,5 +91,40 @@ func TestTest_CompleterError(t *testing.T) {
 	res := svc.Test(context.Background(), "1")
 	if res.Success || res.Error != "boom" {
 		t.Fatalf("error result mismatch: %+v", res)
+	}
+}
+
+func TestPropose_NoDefault(t *testing.T) {
+	// provider==nil → fakeRepo.GetDefault returns ErrNotFound, which Propose
+	// must translate to ErrNoDefaultProvider (Node 400 "No default AI provider
+	// configured").
+	svc := NewService(&fakeRepo{provider: nil}, fakeFactory{})
+	_, err := svc.Propose(context.Background(), "sys", "user")
+	if !errors.Is(err, ErrNoDefaultProvider) {
+		t.Fatalf("expected ErrNoDefaultProvider, got %v", err)
+	}
+}
+
+func TestPropose_OK(t *testing.T) {
+	p := AiProvider{ID: "1", Type: "openai"}
+	svc := NewService(&fakeRepo{provider: &p}, fakeFactory{c: fakeCompleter{text: "ANALYSIS"}})
+	got, err := svc.Propose(context.Background(), "sys", "user")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "ANALYSIS" {
+		t.Fatalf("expected completion text ANALYSIS, got %q", got)
+	}
+}
+
+func TestPropose_CompleterError(t *testing.T) {
+	p := AiProvider{ID: "1", Type: "openai"}
+	svc := NewService(&fakeRepo{provider: &p}, fakeFactory{c: fakeCompleter{err: errors.New("boom")}})
+	_, err := svc.Propose(context.Background(), "sys", "user")
+	if err == nil {
+		t.Fatal("expected an error from a failing completer")
+	}
+	if errors.Is(err, ErrNoDefaultProvider) {
+		t.Fatalf("completer error must not be reported as ErrNoDefaultProvider: %v", err)
 	}
 }

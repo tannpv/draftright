@@ -59,6 +59,50 @@ func (q *Queries) GetAiProviderByID(ctx context.Context, id pgtype.UUID) (GetAiP
 	return i, err
 }
 
+const getDefaultAiProvider = `-- name: GetDefaultAiProvider :one
+SELECT id, name, type, endpoint_url, api_key, model, temperature::text AS temperature,
+       is_default, is_active, created_at, updated_at
+FROM ai_providers
+WHERE is_default = true AND is_active = true
+LIMIT 1
+`
+
+type GetDefaultAiProviderRow struct {
+	ID          pgtype.UUID         `db:"id" json:"id"`
+	Name        string              `db:"name" json:"name"`
+	Type        AiProvidersTypeEnum `db:"type" json:"type"`
+	EndpointUrl string              `db:"endpoint_url" json:"endpoint_url"`
+	ApiKey      string              `db:"api_key" json:"api_key"`
+	Model       string              `db:"model" json:"model"`
+	Temperature string              `db:"temperature" json:"temperature"`
+	IsDefault   bool                `db:"is_default" json:"is_default"`
+	IsActive    bool                `db:"is_active" json:"is_active"`
+	CreatedAt   pgtype.Timestamp    `db:"created_at" json:"created_at"`
+	UpdatedAt   pgtype.Timestamp    `db:"updated_at" json:"updated_at"`
+}
+
+// Node AiProvidersService.findDefault(): the active default provider.
+// Filters on BOTH is_default = true AND is_active = true (Node
+// findOne({ where: { is_default: true, is_active: true } })).
+func (q *Queries) GetDefaultAiProvider(ctx context.Context) (GetDefaultAiProviderRow, error) {
+	row := q.db.QueryRow(ctx, getDefaultAiProvider)
+	var i GetDefaultAiProviderRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Type,
+		&i.EndpointUrl,
+		&i.ApiKey,
+		&i.Model,
+		&i.Temperature,
+		&i.IsDefault,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const insertAiProvider = `-- name: InsertAiProvider :one
 INSERT INTO ai_providers (name, type, endpoint_url, api_key, model, temperature, is_default, is_active)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)

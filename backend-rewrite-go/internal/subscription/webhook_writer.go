@@ -23,7 +23,7 @@ type StoreRefSub struct {
 // WebhookQuerier is the sqlc subset the webhook writer needs.
 type WebhookQuerier interface {
 	CancelActiveSubsByUser(ctx context.Context, id pgtype.UUID) error
-	InsertGrantedSubscription(ctx context.Context, arg sqlc.InsertGrantedSubscriptionParams) error
+	InsertGrantedSubscription(ctx context.Context, arg sqlc.InsertGrantedSubscriptionParams) (sqlc.Subscription, error)
 	StampStoreRefByReference(ctx context.Context, arg sqlc.StampStoreRefByReferenceParams) (int64, error)
 	ExtendByStoreRef(ctx context.Context, arg sqlc.ExtendByStoreRefParams) (int64, error)
 	CancelByStoreRef(ctx context.Context, arg sqlc.CancelByStoreRefParams) (int64, error)
@@ -56,12 +56,13 @@ func (w *WebhookWriter) Grant(ctx context.Context, userID, planID, storeType str
 	if expiresAt != nil {
 		exp = pgtype.Timestamp{Time: *expiresAt, Valid: true}
 	}
-	return w.q.InsertGrantedSubscription(ctx, sqlc.InsertGrantedSubscriptionParams{
+	_, err = w.q.InsertGrantedSubscription(ctx, sqlc.InsertGrantedSubscriptionParams{
 		UserID:    uid,
 		PlanID:    pid,
 		StoreType: sqlc.SubscriptionsStoreTypeEnum(storeType),
 		ExpiresAt: exp,
 	})
+	return err
 }
 
 // StampStoreRef writes (store_type, store_transaction_id) onto the most-recent

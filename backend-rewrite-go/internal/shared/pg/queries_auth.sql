@@ -207,9 +207,10 @@ RETURNING s.user_id, u.email, s.expires_at;
 UPDATE subscriptions SET status = 'cancelled'::subscriptions_status_enum, updated_at = now()
 WHERE user_id = $1 AND status = 'active'::subscriptions_status_enum;
 
--- name: InsertGrantedSubscription :exec
+-- name: InsertGrantedSubscription :one
 INSERT INTO subscriptions (user_id, plan_id, status, store_type, started_at, expires_at)
-VALUES ($1, $2, 'active'::subscriptions_status_enum, $3, now(), $4);
+VALUES ($1, $2, 'active'::subscriptions_status_enum, $3, now(), $4)
+RETURNING id, user_id, plan_id, status, store_type, store_transaction_id, started_at, expires_at, created_at, updated_at;
 
 -- name: StampStoreRefByReference :execrows
 UPDATE subscriptions SET store_type = $2, store_transaction_id = $3, updated_at = now()

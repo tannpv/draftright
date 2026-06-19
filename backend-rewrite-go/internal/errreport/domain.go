@@ -7,10 +7,63 @@ package errreport
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"regexp"
 	"strings"
 	"unicode/utf16"
 )
+
+// ErrNotFound is returned by the admin repo when an error_reports row is
+// absent. The HTTP edge translates it to 400 "not found" (errors do NOT
+// use 404 — see spec §4 / Node BadRequestException('not found')).
+var ErrNotFound = errors.New("error report not found")
+
+// ErrorReportEntity is the full error_reports row returned by the admin
+// read/list/patch/delete routes. JSON key order mirrors the Node entity
+// (src/errors/entities/error-report.entity.ts) exactly so the marshalled
+// bytes match. MarshalJSON pins the field order + renders the bigint and
+// timestamps the way TypeORM does over the `pg` driver:
+//
+//   - display_no is a TypeORM bigint → the `pg` driver returns it as a JS
+//     STRING (no setTypeParser override in the Node codebase), so JSON.stringify
+//     emits "display_no":"203" (quoted). Held as a Go string, never int64.
+//   - first_seen_at / last_seen_at / resolved_at are TypeORM Date columns →
+//     serialized via Date.toISOString() (always UTC, exactly 3 fractional
+//     digits, trailing Z). Held as ISOMillis-formatted strings.
+//
+// context is jsonb marshalled raw so null/{} round-trip byte-identically.
+type ErrorReportEntity struct {
+	ID            string          `json:"id"`
+	DisplayNo     string          `json:"display_no"`
+	Platform      string          `json:"platform"`
+	AppVersion    *string         `json:"app_version"`
+	Severity      string          `json:"severity"`
+	ErrorType     *string         `json:"error_type"`
+	Message       *string         `json:"message"`
+	StackTrace    *string         `json:"stack_trace"`
+	Context       json.RawMessage `json:"context"`
+	UserID        *string         `json:"user_id"`
+	DeviceID      *string         `json:"device_id"`
+	Fingerprint   string          `json:"fingerprint"`
+	Count         int             `json:"count"`
+	Status        int             `json:"status"`
+	AiFixProposal *string         `json:"ai_fix_proposal"`
+	ResolvedBy    *string         `json:"resolved_by"`
+	ResolvedAt    *string         `json:"resolved_at"`
+	FirstSeenAt   string          `json:"first_seen_at"`
+	LastSeenAt    string          `json:"last_seen_at"`
+}
+
+// AdminListFilter carries the optional filters + pagination for the admin
+// list route (Node ErrorsService.list opts). Nil pointers = no filter.
+type AdminListFilter struct {
+	Platform *string
+	Severity *string
+	Status   *int
+	Limit    int
+	Offset   int
+}
 
 // AllowedPlatforms / allowedSeverity mirror the Node service constants.
 var AllowedPlatforms = []string{"ios", "android", "macos", "windows", "linux", "web"}

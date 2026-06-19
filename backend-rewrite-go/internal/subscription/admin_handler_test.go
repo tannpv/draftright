@@ -214,3 +214,255 @@ func TestAdminListTransactions_ServiceError(t *testing.T) {
 		t.Fatalf("code = %v, want internal; body=%s", m["code"], rec.Body.String())
 	}
 }
+
+// ---------------------------------------------------------------------------
+// POST /admin/subscriptions/grant
+// ---------------------------------------------------------------------------
+
+// fakeGrantService satisfies the grant handler's consumer-side port. It
+// captures the args it received and returns a canned GrantedSub.
+type fakeGrantService struct {
+	row        GrantedSub
+	err        error
+	called     bool
+	gotUserID  string
+	gotPlanID  string
+	gotExpires *time.Time
+}
+
+func (f *fakeGrantService) Grant(ctx context.Context, userID, planID string, expiresAt *time.Time) (GrantedSub, error) {
+	f.called = true
+	f.gotUserID = userID
+	f.gotPlanID = planID
+	f.gotExpires = expiresAt
+	return f.row, f.err
+}
+
+func newGrantHandler(svc grantService) *GrantHandler { return &GrantHandler{svc: svc} }
+
+// TestGrant_Created: valid UUIDs, no expires_at → 201 GrantedSub, expires_at nil.
+func TestGrant_Created(t *testing.T) {
+	svc := &fakeGrantService{row: GrantedSub{
+		ID:        "33333333-3333-3333-8333-333333333333",
+		UserID:    "11111111-1111-1111-8111-111111111111",
+		PlanID:    "22222222-2222-2222-8222-222222222222",
+		Status:    "active",
+		StoreType: "admin_granted",
+	}}
+	h := newGrantHandler(svc)
+
+	body := `{"user_id":"11111111-1111-1111-8111-111111111111","plan_id":"22222222-2222-2222-8222-222222222222"}`
+	rec := httptest.NewRecorder()
+	h.Grant(rec, httptest.NewRequest(http.MethodPost, "/admin/subscriptions/grant", strings.NewReader(body)))
+
+	if rec.Code != 201 {
+		t.Fatalf("status = %d, want 201; body=%s", rec.Code, rec.Body.String())
+	}
+	if !svc.called {
+		t.Fatal("grant service not called")
+	}
+	if svc.gotUserID != "11111111-1111-1111-8111-111111111111" ||
+		svc.gotPlanID != "22222222-2222-2222-8222-222222222222" {
+		t.Fatalf("forwarded ids wrong: %q %q", svc.gotUserID, svc.gotPlanID)
+	}
+	if svc.gotExpires != nil {
+		t.Fatalf("expires_at = %v, want nil", svc.gotExpires)
+	}
+	raw := rec.Body.String()
+	// Node's subscriptionsService.grant() does create()+save() WITHOUT
+	// store_transaction_id, so the returned entity has it === undefined and
+	// JSON.stringify OMITS the key. expires_at IS explicitly set to null
+	// (expiresAt || null), so it is present as null. TypeORM appends the
+	// generated columns (id, created_at, updated_at) AFTER the create()-supplied
+	// columns, so id lands at position 7 — NOT first.
+	assertKeyOrder(t, raw,
+		"user_id", "plan_id", "status", "store_type",
+		"started_at", "expires_at", "id", "created_at", "updated_at")
+	if strings.Contains(raw, "store_transaction_id") {
+		t.Fatalf("store_transaction_id must be omitted (Node grant() never sets it): %s", raw)
+	}
+	if !strings.Contains(raw, `"expires_at":null`) {
+		t.Fatalf("expires_at must be present as null: %s", raw)
+	}
+}
+
+// TestGrant_ExpiresAtParsed: an ISO 8601 expires_at is parsed and forwarded.
+func TestGrant_ExpiresAtParsed(t *testing.T) {
+	svc := &fakeGrantService{}
+	h := newGrantHandler(svc)
+
+	body := `{"user_id":"11111111-1111-1111-8111-111111111111","plan_id":"22222222-2222-2222-8222-222222222222","expires_at":"2026-12-31T00:00:00.000Z"}`
+	rec := httptest.NewRecorder()
+	h.Grant(rec, httptest.NewRequest(http.MethodPost, "/admin/subscriptions/grant", strings.NewReader(body)))
+
+	if rec.Code != 201 {
+		t.Fatalf("status = %d, want 201; body=%s", rec.Code, rec.Body.String())
+	}
+	want := time.Date(2026, 12, 31, 0, 0, 0, 0, time.UTC)
+	if svc.gotExpires == nil || !svc.gotExpires.Equal(want) {
+		t.Fatalf("expires_at = %v, want %v", svc.gotExpires, want)
+	}
+}
+
+// TestGrant_BadUUID: invalid user_id → 400 invalid-input, verbatim message.
+func TestGrant_BadUUID(t *testing.T) {
+	svc := &fakeGrantService{}
+	h := newGrantHandler(svc)
+
+	body := `{"user_id":"not-a-uuid","plan_id":"22222222-2222-2222-8222-222222222222"}`
+	rec := httptest.NewRecorder()
+	h.Grant(rec, httptest.NewRequest(http.MethodPost, "/admin/subscriptions/grant", strings.NewReader(body)))
+
+	if rec.Code != 400 {
+		t.Fatalf("status = %d, want 400; body=%s", rec.Code, rec.Body.String())
+	}
+	var m map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &m); err != nil {
+		t.Fatalf("body not JSON: %v (%s)", err, rec.Body.String())
+	}
+	if m["code"] != "invalid-input" {
+		t.Fatalf("code = %v, want invalid-input; body=%s", m["code"], rec.Body.String())
+	}
+	if m["error"] != "user_id must be a UUID" {
+		t.Fatalf("error = %v, want %q", m["error"], "user_id must be a UUID")
+	}
+	if svc.called {
+		t.Fatal("grant service should not be called on validation failure")
+	}
+}
+
+// TestGrant_MissingPlanID: absent plan_id (required @IsUUID) → 400, UUID message.
+func TestGrant_MissingPlanID(t *testing.T) {
+	svc := &fakeGrantService{}
+	h := newGrantHandler(svc)
+
+	body := `{"user_id":"11111111-1111-1111-8111-111111111111"}`
+	rec := httptest.NewRecorder()
+	h.Grant(rec, httptest.NewRequest(http.MethodPost, "/admin/subscriptions/grant", strings.NewReader(body)))
+
+	if rec.Code != 400 {
+		t.Fatalf("status = %d, want 400; body=%s", rec.Code, rec.Body.String())
+	}
+	var m map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &m)
+	if m["error"] != "plan_id must be a UUID" {
+		t.Fatalf("error = %v, want %q", m["error"], "plan_id must be a UUID")
+	}
+}
+
+// TestGrant_BadDateString: present but non-ISO expires_at → 400, IsDateString msg.
+func TestGrant_BadDateString(t *testing.T) {
+	svc := &fakeGrantService{}
+	h := newGrantHandler(svc)
+
+	body := `{"user_id":"11111111-1111-1111-8111-111111111111","plan_id":"22222222-2222-2222-8222-222222222222","expires_at":"nope"}`
+	rec := httptest.NewRecorder()
+	h.Grant(rec, httptest.NewRequest(http.MethodPost, "/admin/subscriptions/grant", strings.NewReader(body)))
+
+	if rec.Code != 400 {
+		t.Fatalf("status = %d, want 400; body=%s", rec.Code, rec.Body.String())
+	}
+	var m map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &m)
+	if m["error"] != "expires_at must be a valid ISO 8601 date string" {
+		t.Fatalf("error = %v, want %q", m["error"], "expires_at must be a valid ISO 8601 date string")
+	}
+}
+
+// TestGrant_UnknownKey: forbidNonWhitelisted → 400, "property X should not exist".
+func TestGrant_UnknownKey(t *testing.T) {
+	svc := &fakeGrantService{}
+	h := newGrantHandler(svc)
+
+	body := `{"user_id":"11111111-1111-1111-8111-111111111111","plan_id":"22222222-2222-2222-8222-222222222222","bogus":1}`
+	rec := httptest.NewRecorder()
+	h.Grant(rec, httptest.NewRequest(http.MethodPost, "/admin/subscriptions/grant", strings.NewReader(body)))
+
+	if rec.Code != 400 {
+		t.Fatalf("status = %d, want 400; body=%s", rec.Code, rec.Body.String())
+	}
+	var m map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &m)
+	if m["error"] != "property bogus should not exist" {
+		t.Fatalf("error = %v, want %q", m["error"], "property bogus should not exist")
+	}
+}
+
+// TestGrant_UnknownKeyWithBadFields: forbidNonWhitelisted errors precede the
+// field-constraint errors. NestJS ValidationPipe (whitelist +
+// forbidNonWhitelisted) emits the "property X should not exist" errors FIRST,
+// then the field errors in declaration order (user_id, plan_id, expires_at).
+// Verified empirically against the real DTO + class-validator 0.14.4.
+func TestGrant_UnknownKeyWithBadFields(t *testing.T) {
+	svc := &fakeGrantService{}
+	h := newGrantHandler(svc)
+
+	body := `{"user_id":"x","plan_id":"y","expires_at":"nope","bogus":1}`
+	rec := httptest.NewRecorder()
+	h.Grant(rec, httptest.NewRequest(http.MethodPost, "/admin/subscriptions/grant", strings.NewReader(body)))
+
+	if rec.Code != 400 {
+		t.Fatalf("status = %d, want 400; body=%s", rec.Code, rec.Body.String())
+	}
+	var m map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &m)
+	want := "property bogus should not exist. user_id must be a UUID. plan_id must be a UUID. expires_at must be a valid ISO 8601 date string"
+	if m["error"] != want {
+		t.Fatalf("error = %v, want %q", m["error"], want)
+	}
+	if svc.called {
+		t.Fatal("grant service should not be called on validation failure")
+	}
+}
+
+// TestGrant_TwoUnknownKeys: multiple forbidNonWhitelisted errors preserve JSON
+// source order. NestJS reports unknown keys in body insertion order (zeta
+// before alpha here), not Go map-iteration order.
+func TestGrant_TwoUnknownKeys(t *testing.T) {
+	svc := &fakeGrantService{}
+	h := newGrantHandler(svc)
+
+	body := `{"user_id":"11111111-1111-1111-8111-111111111111","plan_id":"22222222-2222-2222-8222-222222222222","zeta":1,"alpha":2}`
+	rec := httptest.NewRecorder()
+	h.Grant(rec, httptest.NewRequest(http.MethodPost, "/admin/subscriptions/grant", strings.NewReader(body)))
+
+	if rec.Code != 400 {
+		t.Fatalf("status = %d, want 400; body=%s", rec.Code, rec.Body.String())
+	}
+	var m map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &m)
+	want := "property zeta should not exist. property alpha should not exist"
+	if m["error"] != want {
+		t.Fatalf("error = %v, want %q", m["error"], want)
+	}
+}
+
+// TestGrant_ServiceError: repo error → 500 internal.
+func TestGrant_ServiceError(t *testing.T) {
+	svc := &fakeGrantService{err: errors.New("db down")}
+	h := newGrantHandler(svc)
+
+	body := `{"user_id":"11111111-1111-1111-8111-111111111111","plan_id":"22222222-2222-2222-8222-222222222222"}`
+	rec := httptest.NewRecorder()
+	h.Grant(rec, httptest.NewRequest(http.MethodPost, "/admin/subscriptions/grant", strings.NewReader(body)))
+
+	if rec.Code != 500 {
+		t.Fatalf("status = %d, want 500; body=%s", rec.Code, rec.Body.String())
+	}
+	var m map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &m)
+	if m["code"] != "internal" {
+		t.Fatalf("code = %v, want internal; body=%s", m["code"], rec.Body.String())
+	}
+}
+
+// TestValidateGrant_UUIDVariants: @IsUUID() (no version) accepts v1-v8/nil/max.
+func TestValidateGrant_UUIDVariants(t *testing.T) {
+	// v1 UUID — rejected by @IsUUID('4') but accepted by the version-less
+	// @IsUUID() the grant DTO uses ('all' regex).
+	body := `{"user_id":"550e8400-e29b-11d4-a716-446655440000","plan_id":"22222222-2222-2222-8222-222222222222"}`
+	_, _, msg := validateGrant([]byte(body))
+	if msg != "" {
+		t.Fatalf("v1 UUID rejected: %q", msg)
+	}
+}

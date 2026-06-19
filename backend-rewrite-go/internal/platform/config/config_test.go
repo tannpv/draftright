@@ -77,3 +77,34 @@ func TestWebsiteURLDefault(t *testing.T) {
 		t.Fatalf("default WebsiteURL=%q want http://localhost:4000", got)
 	}
 }
+
+func TestLoad_DisableFixProposalCronToggle(t *testing.T) {
+	os.Setenv("JWT_SECRET", "s")
+	defer os.Unsetenv("JWT_SECRET")
+
+	cases := map[string]bool{
+		"1":     true,
+		"true":  true,
+		"0":     false,
+		"false": false,
+		"yes":   false, // laxer envBool truthy values do NOT count
+		"on":    false,
+		"TRUE":  false, // case-sensitive — Node compares ===
+		"":      false, // unset
+	}
+	for val, want := range cases {
+		if val == "" {
+			os.Unsetenv("DISABLE_FIX_PROPOSAL_CRON")
+		} else {
+			os.Setenv("DISABLE_FIX_PROPOSAL_CRON", val)
+		}
+		c, err := Load()
+		if err != nil {
+			t.Fatalf("Load(%q): %v", val, err)
+		}
+		if c.DisableFixProposalCron != want {
+			t.Fatalf("DISABLE_FIX_PROPOSAL_CRON=%q → %v, want %v", val, c.DisableFixProposalCron, want)
+		}
+	}
+	os.Unsetenv("DISABLE_FIX_PROPOSAL_CRON")
+}

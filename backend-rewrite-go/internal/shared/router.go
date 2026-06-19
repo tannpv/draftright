@@ -178,6 +178,27 @@ type Router struct {
 	AdminPaymentConfirm http.Handler // POST /admin/payments/{id}/confirm
 	AdminPaymentRefund  http.Handler // POST /admin/payments/{id}/refund
 
+	// ── Phase 4c-4 admin triage (19 routes) ──────────────────────────────
+	AdminErrorsList     http.Handler // GET    /admin/errors
+	AdminErrorGet       http.Handler // GET    /admin/errors/{id}
+	AdminErrorPatch     http.Handler // PATCH  /admin/errors/{id}
+	AdminErrorDelete    http.Handler // DELETE /admin/errors/{id}
+	AdminErrorSuggest   http.Handler // POST   /admin/errors/{id}/suggest-fix
+	AdminErrorsRunCron  http.Handler // POST   /admin/errors/run-ai-cron
+	AdminBugList        http.Handler // GET    /admin/bug-reports
+	AdminBugGet         http.Handler // GET    /admin/bug-reports/{id}
+	AdminBugScreenshot  http.Handler // GET    /admin/bug-reports/{id}/screenshot
+	AdminBugPatch       http.Handler // PATCH  /admin/bug-reports/{id}
+	AdminBugDelete      http.Handler // DELETE /admin/bug-reports/{id}
+	AdminBugFixProposal http.Handler // POST   /admin/bug-reports/{id}/fix-proposal
+	AdminInboxCounts    http.Handler // GET    /admin/inbox/counts
+	AdminInbox          http.Handler // GET    /admin/inbox
+	AdminReleasesList   http.Handler // GET    /admin/releases
+	AdminReleaseUpsert  http.Handler // POST   /admin/releases
+	AdminReleaseDelete  http.Handler // DELETE /admin/releases/{platform}/{channel}
+	AdminPolicyUpsert   http.Handler // POST   /admin/release-policies
+	AdminGrantSub       http.Handler // POST   /admin/subscriptions/grant
+
 	// EnableTracing wraps the whole mux with otelhttp middleware so
 	// every request becomes a span. No-op when the global tracer
 	// provider is the default noop (i.e. tracing.Setup returned
@@ -512,6 +533,73 @@ func (r *Router) Build() http.Handler {
 		}
 		if r.AdminPaymentRefund != nil {
 			admin.Method(http.MethodPost, "/admin/payments/{id}/refund", r.AdminPaymentRefund)
+		}
+
+		// Phase 4c-4 admin triage routes (Task H1). nil-guarded, same
+		// RequireAuth → RequireAdmin chain. Static segments registered
+		// before {id} wildcards (chi prioritizes static, but explicit):
+		// run-ai-cron before /errors/{id}; /inbox/counts before /inbox.
+		// errors — static run-ai-cron before {id} wildcards.
+		if r.AdminErrorsRunCron != nil {
+			admin.Method(http.MethodPost, "/admin/errors/run-ai-cron", r.AdminErrorsRunCron)
+		}
+		if r.AdminErrorsList != nil {
+			admin.Method(http.MethodGet, "/admin/errors", r.AdminErrorsList)
+		}
+		if r.AdminErrorGet != nil {
+			admin.Method(http.MethodGet, "/admin/errors/{id}", r.AdminErrorGet)
+		}
+		if r.AdminErrorPatch != nil {
+			admin.Method(http.MethodPatch, "/admin/errors/{id}", r.AdminErrorPatch)
+		}
+		if r.AdminErrorDelete != nil {
+			admin.Method(http.MethodDelete, "/admin/errors/{id}", r.AdminErrorDelete)
+		}
+		if r.AdminErrorSuggest != nil {
+			admin.Method(http.MethodPost, "/admin/errors/{id}/suggest-fix", r.AdminErrorSuggest)
+		}
+		// bug-reports
+		if r.AdminBugList != nil {
+			admin.Method(http.MethodGet, "/admin/bug-reports", r.AdminBugList)
+		}
+		if r.AdminBugGet != nil {
+			admin.Method(http.MethodGet, "/admin/bug-reports/{id}", r.AdminBugGet)
+		}
+		if r.AdminBugScreenshot != nil {
+			admin.Method(http.MethodGet, "/admin/bug-reports/{id}/screenshot", r.AdminBugScreenshot)
+		}
+		if r.AdminBugPatch != nil {
+			admin.Method(http.MethodPatch, "/admin/bug-reports/{id}", r.AdminBugPatch)
+		}
+		if r.AdminBugDelete != nil {
+			admin.Method(http.MethodDelete, "/admin/bug-reports/{id}", r.AdminBugDelete)
+		}
+		if r.AdminBugFixProposal != nil {
+			admin.Method(http.MethodPost, "/admin/bug-reports/{id}/fix-proposal", r.AdminBugFixProposal)
+		}
+		// inbox — static counts before /admin/inbox
+		if r.AdminInboxCounts != nil {
+			admin.Method(http.MethodGet, "/admin/inbox/counts", r.AdminInboxCounts)
+		}
+		if r.AdminInbox != nil {
+			admin.Method(http.MethodGet, "/admin/inbox", r.AdminInbox)
+		}
+		// releases
+		if r.AdminReleasesList != nil {
+			admin.Method(http.MethodGet, "/admin/releases", r.AdminReleasesList)
+		}
+		if r.AdminReleaseUpsert != nil {
+			admin.Method(http.MethodPost, "/admin/releases", r.AdminReleaseUpsert)
+		}
+		if r.AdminReleaseDelete != nil {
+			admin.Method(http.MethodDelete, "/admin/releases/{platform}/{channel}", r.AdminReleaseDelete)
+		}
+		if r.AdminPolicyUpsert != nil {
+			admin.Method(http.MethodPost, "/admin/release-policies", r.AdminPolicyUpsert)
+		}
+		// grant
+		if r.AdminGrantSub != nil {
+			admin.Method(http.MethodPost, "/admin/subscriptions/grant", r.AdminGrantSub)
 		}
 	})
 

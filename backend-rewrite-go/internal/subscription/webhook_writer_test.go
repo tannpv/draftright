@@ -22,9 +22,9 @@ func (f *fakeWebhookQ) CancelActiveSubsByUser(_ context.Context, id pgtype.UUID)
 	f.cancelledUser = uuidStr(id)
 	return nil
 }
-func (f *fakeWebhookQ) InsertGrantedSubscription(_ context.Context, a sqlc.InsertGrantedSubscriptionParams) error {
+func (f *fakeWebhookQ) InsertGrantedSubscription(_ context.Context, a sqlc.InsertGrantedSubscriptionParams) (sqlc.Subscription, error) {
 	f.inserted = a
-	return nil
+	return sqlc.Subscription{}, nil
 }
 func (f *fakeWebhookQ) StampStoreRefByReference(context.Context, sqlc.StampStoreRefByReferenceParams) (int64, error) {
 	return 1, nil
