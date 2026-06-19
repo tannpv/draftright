@@ -1,0 +1,6 @@
+{
+  "name": "payment_status_seeded",
+  "method": "GET",
+  "path": "/payment/status/SHADOW-PAY-001",
+  "headers": { "Content-Type": "application/json" }
+}

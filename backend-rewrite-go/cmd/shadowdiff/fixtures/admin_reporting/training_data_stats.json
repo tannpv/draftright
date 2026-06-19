@@ -1,0 +1,7 @@
+{
+  "name": "admin_reporting_training_data_stats",
+  "method": "GET",
+  "path": "/admin/training-data/stats",
+  "headers": { "Authorization": "Bearer {{admin_token}}" },
+  "ignore_value_of": ["request_id"]
+}

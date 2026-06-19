@@ -26,6 +26,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/tannpv/draftright-rewrite/internal/adapter/redislimit"
+	redistrial "github.com/tannpv/draftright-rewrite/internal/adapter/redistrial"
 	adminauth "github.com/tannpv/draftright-rewrite/internal/adminauth"
 	adminstatspkg "github.com/tannpv/draftright-rewrite/internal/adminstats"
 	"github.com/tannpv/draftright-rewrite/internal/aicall"
@@ -61,6 +62,7 @@ import (
 	"github.com/tannpv/draftright-rewrite/internal/rewrite/adapter/openai"
 	"github.com/tannpv/draftright-rewrite/internal/rewrite/adapter/pg"
 	"github.com/tannpv/draftright-rewrite/internal/rewrite/domain"
+	parity "github.com/tannpv/draftright-rewrite/internal/rewrite/parity"
 	"github.com/tannpv/draftright-rewrite/internal/rewrite/transport"
 	"github.com/tannpv/draftright-rewrite/internal/rewrite/usecase"
 	rewritelogpkg "github.com/tannpv/draftright-rewrite/internal/rewritelog"
@@ -179,6 +181,10 @@ func main() {
 		ImePacksManifest: core.imePacksManifest,
 		UpdatesLatest:    core.updatesLatest,
 		ErrorsIngest:     core.errorsIngest,
+
+		Tones:         core.tones,
+		RewriteParity: core.rewriteParity,
+		RewriteTrial:  core.rewriteTrial,
 
 		ExtractHandler:  core.extract,
 		EmailWebhook:    core.emailWebhook,
@@ -339,7 +345,11 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 	}
 
 	// --- RateLimiter -----------------------------------------------
+	// trialLimiter shares the SAME redis client as the streaming rate limiter
+	// (or the in-memory fallback). trialLimit mirrors Node's TRIAL_LIMIT
+	// (NODE_ENV==='production' ? 3 : 999).
 	var limiter domain.RateLimiter
+	var trialLimiter parity.TrialLimiter
 	if cfg.RedisURL != "" {
 		opts, err := redis.ParseURL(cfg.RedisURL)
 		if err != nil {
@@ -349,10 +359,16 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 		client := redis.NewClient(opts)
 		cleanups = append(cleanups, func() { _ = client.Close() })
 		limiter = redislimit.New(client)
+		trialLimiter = redistrial.New(client)
 		log.Info("adapter selected", "port", "rate_limiter", "impl", "redis")
 	} else {
 		limiter = memory.NewRateLimiter()
+		trialLimiter = memory.NewTrialLimiter()
 		log.Warn("adapter selected", "port", "rate_limiter", "impl", "memory (REDIS_URL unset — dev fallback)")
+	}
+	trialLimit := 999
+	if cfg.IsProduction() {
+		trialLimit = 3
 	}
 
 	// --- AiProvider ------------------------------------------------
@@ -387,6 +403,9 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 	// (it satisfies extraction.Completer via Complete+Name after Task 1), so
 	// it's wired unconditionally (available even without a pool).
 	core.extract = http.HandlerFunc(extractionpkg.NewHandler(extractionpkg.NewService(completer)).Extract)
+
+	// GET /rewrite/tones is a static catalog (no DB) — wire unconditionally.
+	core.tones = http.HandlerFunc(parity.WriteTones)
 
 	if pool != nil {
 		q := sqlc.New(pool)
@@ -428,9 +447,21 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 		core.changePassword = http.HandlerFunc(authHandler.ChangePassword)
 		core.account = http.HandlerFunc(authHandler.Account)
 		core.deleteAccount = http.HandlerFunc(authHandler.DeleteAccount)
-		subHandler := subpkg.NewHandler(subpkg.NewService(subReader, usageCounter, plansReader))
+		subSvc := subpkg.NewService(subReader, usageCounter, plansReader)
+		subHandler := subpkg.NewHandler(subSvc)
 		core.subscription = http.HandlerFunc(subHandler.Get)
 		core.verifyReceipt = http.HandlerFunc(subHandler.VerifyReceipt)
+
+		// Parity rewrite (Node /rewrite controller): authed POST /rewrite + public
+		// POST /rewrite/trial. subSvc supplies ResolveDailyLimit; usageCounter
+		// supplies CountToday; completer is the shared blocking provider head.
+		// Trial seam wired via WithTrial (limiter from Redis/memory, limit from the
+		// NODE_ENV-equivalent).
+		paritySvc := parity.NewService(completer, subSvc, usageCounter).
+			WithTrial(trialLimiter, trialLimit, time.Now)
+		parityHandler := parity.NewHandler(paritySvc)
+		core.rewriteParity = http.HandlerFunc(parityHandler.Rewrite)
+		core.rewriteTrial = http.HandlerFunc(parityHandler.Trial)
 
 		// Extension tokens (T15): mint/list/revoke, JWT-gated. extSvc is also
 		// stashed on coreHandlers so T16's dual-auth middleware on /v1/rewrite
@@ -829,6 +860,14 @@ type coreHandlers struct {
 	imePacksManifest http.Handler
 	updatesLatest    http.Handler
 	errorsIngest     http.Handler
+
+	// Parity /rewrite controller handlers.
+	//   tones         — GET  /rewrite/tones (static; always set).
+	//   rewriteParity — POST /rewrite       (dual-auth; set when pool != nil).
+	//   rewriteTrial  — POST /rewrite/trial (public; set when pool != nil).
+	tones         http.Handler
+	rewriteParity http.Handler
+	rewriteTrial  http.Handler
 
 	// Phase 4b handlers.
 	//   extract         — POST /extract (auth; no DB — always set).

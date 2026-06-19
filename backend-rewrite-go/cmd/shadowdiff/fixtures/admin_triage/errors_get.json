@@ -1,0 +1,7 @@
+{
+  "name": "admin_triage_errors_get",
+  "method": "GET",
+  "path": "/admin/errors/00000000-0000-4000-8000-000000000008",
+  "headers": { "Authorization": "Bearer {{admin_token}}" },
+  "ignore_value_of": []
+}

@@ -1,0 +1,7 @@
+{
+  "name": "admin_triage_bug_reports_delete",
+  "method": "DELETE",
+  "path": "/admin/bug-reports/00000000-0000-4000-8000-000000000007",
+  "headers": { "Authorization": "Bearer {{admin_token}}" },
+  "ignore_value_of": []
+}

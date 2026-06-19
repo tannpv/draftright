@@ -1,0 +1,11 @@
+{
+  "name": "account_extension_tokens_mint",
+  "method": "POST",
+  "path": "/auth/extension-tokens",
+  "headers": {
+    "Authorization": "Bearer {{user_token}}",
+    "Content-Type": "application/json"
+  },
+  "body": { "device_id": "b2c3d4e5-f6a7-4b8c-9d0e-f1a2b3c4d5e6", "device_name": "shadow-mint" },
+  "ignore_value_of": ["token", "id"]
+}

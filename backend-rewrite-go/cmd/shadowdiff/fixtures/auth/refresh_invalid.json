@@ -1,0 +1,8 @@
+{
+  "name": "auth_refresh_invalid",
+  "method": "POST",
+  "path": "/auth/refresh",
+  "headers": { "Content-Type": "application/json" },
+  "body": { "refresh_token": "not-a-valid-jwt" },
+  "ignore_value_of": ["request_id"]
+}

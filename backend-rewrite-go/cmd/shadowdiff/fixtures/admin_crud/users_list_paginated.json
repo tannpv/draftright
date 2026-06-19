@@ -1,0 +1,7 @@
+{
+  "name": "admin_crud_users_list_paginated",
+  "method": "GET",
+  "path": "/admin/users?page=1&limit=5&status=all&sort_by=created_at&sort_order=ASC",
+  "headers": { "Authorization": "Bearer {{admin_token}}" },
+  "ignore_value_of": ["request_id"]
+}

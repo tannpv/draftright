@@ -1,0 +1,7 @@
+{
+  "name": "admin_reporting_stats",
+  "method": "GET",
+  "path": "/admin/stats",
+  "headers": { "Authorization": "Bearer {{admin_token}}" },
+  "ignore_value_of": ["request_id"]
+}

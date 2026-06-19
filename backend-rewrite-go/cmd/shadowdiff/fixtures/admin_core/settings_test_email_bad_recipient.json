@@ -1,0 +1,8 @@
+{
+  "name": "admin_core_settings_test_email_bad_recipient",
+  "method": "POST",
+  "path": "/admin/settings/test-email",
+  "headers": { "Authorization": "Bearer {{admin_token}}", "Content-Type": "application/json" },
+  "body": { "to": "not-an-email" },
+  "ignore_value_of": ["request_id"]
+}

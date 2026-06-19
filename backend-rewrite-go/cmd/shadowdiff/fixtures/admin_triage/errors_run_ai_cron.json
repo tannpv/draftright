@@ -1,0 +1,7 @@
+{
+  "name": "admin_triage_errors_run_ai_cron",
+  "method": "POST",
+  "path": "/admin/errors/run-ai-cron",
+  "headers": { "Authorization": "Bearer {{admin_token}}" },
+  "ignore_value_of": []
+}

@@ -1,0 +1,8 @@
+{
+  "name": "admin_triage_bug_reports_patch",
+  "method": "PATCH",
+  "path": "/admin/bug-reports/00000000-0000-4000-8000-000000000007",
+  "headers": { "Authorization": "Bearer {{admin_token}}", "Content-Type": "application/json" },
+  "body": { "status": "reviewing", "admin_notes": "Shadow triage note" },
+  "ignore_value_of": ["updated_at"]
+}

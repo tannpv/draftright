@@ -1,0 +1,8 @@
+{
+  "name": "admin_core_settings_patch",
+  "method": "PATCH",
+  "path": "/admin/settings",
+  "headers": { "Authorization": "Bearer {{admin_token}}", "Content-Type": "application/json" },
+  "body": { "max_input_length": 4096, "client_log_level": "warnings" },
+  "ignore_value_of": ["request_id", "updated_at"]
+}

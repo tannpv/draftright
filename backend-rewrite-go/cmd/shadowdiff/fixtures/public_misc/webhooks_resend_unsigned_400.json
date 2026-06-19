@@ -1,0 +1,18 @@
+{
+  "name": "webhooks_resend_unsigned_400",
+  "method": "POST",
+  "path": "/webhooks/resend",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "type": "email.delivered",
+    "data": {
+      "email_id": "shadow-fixture-email-id",
+      "to": ["shadow-user@draftright.info"]
+    }
+  },
+  "ignore_value_of": [
+    "request_id"
+  ]
+}

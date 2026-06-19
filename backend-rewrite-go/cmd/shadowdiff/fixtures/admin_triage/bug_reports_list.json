@@ -1,0 +1,7 @@
+{
+  "name": "admin_triage_bug_reports_list",
+  "method": "GET",
+  "path": "/admin/bug-reports",
+  "headers": { "Authorization": "Bearer {{admin_token}}" },
+  "ignore_value_of": []
+}

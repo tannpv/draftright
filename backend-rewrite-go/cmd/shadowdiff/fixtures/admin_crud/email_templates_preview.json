@@ -1,0 +1,7 @@
+{
+  "name": "admin_crud_email_templates_preview",
+  "method": "GET",
+  "path": "/admin/email-templates/verification/preview",
+  "headers": { "Authorization": "Bearer {{admin_token}}" },
+  "ignore_value_of": ["request_id"]
+}

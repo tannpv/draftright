@@ -1,0 +1,8 @@
+{
+  "name": "auth_login_bad_creds",
+  "method": "POST",
+  "path": "/auth/login",
+  "headers": { "Content-Type": "application/json" },
+  "body": { "email": "shadow-user@draftright.info", "password": "wrongpassword" },
+  "ignore_value_of": ["request_id"]
+}

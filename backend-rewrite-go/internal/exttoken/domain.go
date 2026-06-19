@@ -7,8 +7,11 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"time"
+
+	"github.com/tannpv/draftright-rewrite/internal/shared"
 )
 
 // TokenPrefix is the opaque-token marker the dual-auth middleware keys on.
@@ -44,6 +47,39 @@ type TokenRow struct {
 	LastUsedAt *time.Time `json:"last_used_at"`
 	CreatedAt  time.Time  `json:"created_at"`
 	RevokedAt  *time.Time `json:"revoked_at"`
+}
+
+// MarshalJSON pins TokenRow's timestamps to Node's Date.toJSON() format
+// (ISOMillis — 3-digit millis with trailing "Z"). Go's default time.Time
+// marshaling emits microseconds and drops ".000" on whole seconds, which
+// breaks byte-parity with TypeORM's toISOString(). Key order matches the
+// entity field order after the controller strips token_hash + user_id.
+func (r TokenRow) MarshalJSON() ([]byte, error) {
+	type wire struct {
+		ID         string   `json:"id"`
+		Scopes     []string `json:"scopes"`
+		DeviceID   string   `json:"device_id"`
+		DeviceName string   `json:"device_name"`
+		LastUsedAt *string  `json:"last_used_at"`
+		CreatedAt  string   `json:"created_at"`
+		RevokedAt  *string  `json:"revoked_at"`
+	}
+	w := wire{
+		ID:         r.ID,
+		Scopes:     r.Scopes,
+		DeviceID:   r.DeviceID,
+		DeviceName: r.DeviceName,
+		CreatedAt:  shared.ISOMillis(r.CreatedAt),
+	}
+	if r.LastUsedAt != nil {
+		s := shared.ISOMillis(*r.LastUsedAt)
+		w.LastUsedAt = &s
+	}
+	if r.RevokedAt != nil {
+		s := shared.ISOMillis(*r.RevokedAt)
+		w.RevokedAt = &s
+	}
+	return json.Marshal(w)
 }
 
 // generateToken returns a fresh plaintext token (TokenPrefix + base64url-nopad

@@ -1,0 +1,17 @@
+{
+  "name": "rewrite_ext_ok",
+  "method": "POST",
+  "path": "/rewrite",
+  "headers": {
+    "Authorization": "Bearer {{ext_token}}",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "text": "hello world",
+    "tone": "simple"
+  },
+  "ignore_value_of": [
+    "rewritten_text",
+    "usage_today"
+  ]
+}

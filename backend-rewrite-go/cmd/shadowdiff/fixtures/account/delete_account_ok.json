@@ -1,0 +1,9 @@
+{
+  "name": "account_delete_account_ok",
+  "method": "DELETE",
+  "path": "/auth/account",
+  "headers": {
+    "Authorization": "Bearer {{user_token}}"
+  },
+  "ignore_value_of": []
+}

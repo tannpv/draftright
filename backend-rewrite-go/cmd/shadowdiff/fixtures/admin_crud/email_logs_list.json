@@ -1,0 +1,7 @@
+{
+  "name": "admin_crud_email_logs_list",
+  "method": "GET",
+  "path": "/admin/email-logs",
+  "headers": { "Authorization": "Bearer {{admin_token}}" },
+  "ignore_value_of": ["request_id"]
+}

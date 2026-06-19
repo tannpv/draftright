@@ -1,0 +1,7 @@
+{
+  "name": "admin_crud_plans_list",
+  "method": "GET",
+  "path": "/admin/plans",
+  "headers": { "Authorization": "Bearer {{admin_token}}" },
+  "ignore_value_of": ["request_id"]
+}

@@ -1,0 +1,6 @@
+{
+  "name": "plans_ok",
+  "method": "GET",
+  "path": "/plans",
+  "headers": { "Content-Type": "application/json" }
+}

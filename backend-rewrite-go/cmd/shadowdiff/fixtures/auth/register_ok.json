@@ -1,0 +1,8 @@
+{
+  "name": "auth_register_ok",
+  "method": "POST",
+  "path": "/auth/register",
+  "headers": { "Content-Type": "application/json" },
+  "body": { "email": "shadow-newreg@draftright.info", "password": "NewPass12345", "name": "New Reg" },
+  "ignore_value_of": ["request_id", "access_token", "refresh_token", "id"]
+}

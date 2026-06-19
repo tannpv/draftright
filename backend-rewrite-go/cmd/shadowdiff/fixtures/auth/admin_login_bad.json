@@ -1,0 +1,8 @@
+{
+  "name": "admin_auth_login_bad",
+  "method": "POST",
+  "path": "/admin/auth/login",
+  "headers": { "Content-Type": "application/json" },
+  "body": { "email": "shadow-admin@draftright.info", "password": "nope" },
+  "ignore_value_of": ["request_id"]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "errors_honeypot_drop",
+  "method": "POST",
+  "path": "/errors",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "platform": "ios",
+    "app_version": "2.4.1",
+    "message": "shadow fixture honeypot error",
+    "website": "spam-bot-filled-this"
+  }
+}

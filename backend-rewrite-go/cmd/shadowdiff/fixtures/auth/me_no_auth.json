@@ -1,0 +1,7 @@
+{
+  "name": "auth_me_no_auth",
+  "method": "GET",
+  "path": "/auth/me",
+  "headers": { "Content-Type": "application/json" },
+  "ignore_value_of": ["request_id"]
+}

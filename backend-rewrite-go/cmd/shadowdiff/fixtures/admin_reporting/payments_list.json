@@ -1,0 +1,7 @@
+{
+  "name": "admin_reporting_payments_list",
+  "method": "GET",
+  "path": "/admin/payments",
+  "headers": { "Authorization": "Bearer {{admin_token}}" },
+  "ignore_value_of": ["request_id"]
+}

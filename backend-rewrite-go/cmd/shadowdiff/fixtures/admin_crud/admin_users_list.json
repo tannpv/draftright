@@ -1,0 +1,7 @@
+{
+  "name": "admin_crud_admin_users_list",
+  "method": "GET",
+  "path": "/admin/admin-users",
+  "headers": { "Authorization": "Bearer {{admin_token}}" },
+  "ignore_value_of": ["request_id"]
+}
