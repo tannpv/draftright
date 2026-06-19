@@ -20,10 +20,19 @@ type stubRewriter struct {
 	got struct {
 		userID, text, tone, target, source string
 	}
+	trialOut struct {
+		text, tone, clientIp, target, source string
+	}
 }
 
 func (s *stubRewriter) Rewrite(_ context.Context, userID, text, tone, target, source string) (any, error) {
 	s.got.userID, s.got.text, s.got.tone, s.got.target, s.got.source = userID, text, tone, target, source
+	return s.out, s.err
+}
+
+// trialGot records what the Trial path passed (clientIp instead of userID).
+func (s *stubRewriter) TrialRewrite(_ context.Context, text, tone, clientIp, target, source string) (any, error) {
+	s.trialOut.text, s.trialOut.tone, s.trialOut.clientIp, s.trialOut.target, s.trialOut.source = text, tone, clientIp, target, source
 	return s.out, s.err
 }
 
@@ -173,5 +182,86 @@ func TestHandlerRewrite_DefaultErrorOpaque500(t *testing.T) {
 	json.Unmarshal(rec.Body.Bytes(), &body)
 	if strings.Contains(body["error"].(string), "boom") {
 		t.Fatalf("500 leaked underlying error: %v", body["error"])
+	}
+}
+
+// --- trial endpoint (public, unauthenticated) ---
+
+func newTrialReq(body string) *http.Request {
+	return httptest.NewRequest(http.MethodPost, "/rewrite/trial", strings.NewReader(body))
+}
+
+func TestHandlerTrial_Valid201(t *testing.T) {
+	st := &stubRewriter{out: trialRewriteEnvelope{RewrittenText: "Hello."}}
+	h := &Handler{svc: st}
+	rec := httptest.NewRecorder()
+	h.Trial(rec, newTrialReq(`{"text":"hi","tone":"polished"}`))
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201", rec.Code)
+	}
+	if st.trialOut.text != "hi" || st.trialOut.tone != "polished" {
+		t.Fatalf("service got %+v", st.trialOut)
+	}
+	want := `{"rewritten_text":"Hello."}`
+	if strings.TrimSpace(rec.Body.String()) != want {
+		t.Fatalf("body = %s, want %s", rec.Body.String(), want)
+	}
+}
+
+func TestHandlerTrial_Limit429(t *testing.T) {
+	st := &stubRewriter{err: ErrTrialLimit}
+	h := &Handler{svc: st}
+	rec := httptest.NewRecorder()
+	h.Trial(rec, newTrialReq(`{"text":"hi","tone":"polished"}`))
+
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("status = %d, want 429", rec.Code)
+	}
+	var body map[string]any
+	json.Unmarshal(rec.Body.Bytes(), &body)
+	if body["error"] != "Trial limit reached. Sign up for unlimited rewrites!" {
+		t.Fatalf("error = %q", body["error"])
+	}
+	if body["code"] != "rate-limited" {
+		t.Fatalf("code = %v, want rate-limited", body["code"])
+	}
+	if _, ok := body["request_id"]; !ok {
+		t.Error("request_id must be present in the envelope")
+	}
+}
+
+func TestHandlerTrial_BadTone400(t *testing.T) {
+	st := &stubRewriter{}
+	h := &Handler{svc: st}
+	rec := httptest.NewRecorder()
+	h.Trial(rec, newTrialReq(`{"text":"hi","tone":"bogus"}`))
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+	var body map[string]any
+	json.Unmarshal(rec.Body.Bytes(), &body)
+	if body["code"] != "invalid-input" {
+		t.Fatalf("code = %v, want invalid-input", body["code"])
+	}
+	if st.trialOut.text != "" {
+		t.Error("invalid input must not reach the service")
+	}
+}
+
+func TestClientIP_XForwardedFor(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/rewrite/trial", nil)
+	req.Header.Set("X-Forwarded-For", "1.2.3.4, 5.6.7.8")
+	if got := clientIP(req); got != "1.2.3.4" {
+		t.Fatalf("clientIP = %q, want 1.2.3.4", got)
+	}
+}
+
+func TestClientIP_RemoteAddrFallback(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/rewrite/trial", nil)
+	req.RemoteAddr = "9.9.9.9:5555"
+	if got := clientIP(req); got != "9.9.9.9:5555" {
+		t.Fatalf("clientIP = %q, want 9.9.9.9:5555", got)
 	}
 }

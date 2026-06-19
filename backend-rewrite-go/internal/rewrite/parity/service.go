@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"time"
 )
 
 // Service ports the NestJS RewriteService.rewrite() + callAI()
@@ -44,6 +45,11 @@ type Service struct {
 	c     completer
 	ents  entitlements
 	usage usageCounter
+
+	// Trial seam (set via WithTrial; nil for authed-only wiring).
+	trial      TrialLimiter
+	trialLimit int
+	now        func() time.Time
 }
 
 // NewService wires the rewrite dependencies.
@@ -51,10 +57,30 @@ func NewService(c completer, ents entitlements, usage usageCounter) *Service {
 	return &Service{c: c, ents: ents, usage: usage}
 }
 
+// WithTrial wires the public-trial seam without disturbing the NewService
+// signature (so authed-rewrite tests and existing wiring stay untouched).
+// limit mirrors Node's TRIAL_LIMIT (3 in production, 999 otherwise); now
+// defaults to time.Now when nil.
+func (s *Service) WithTrial(l TrialLimiter, limit int, now func() time.Time) *Service {
+	s.trial = l
+	s.trialLimit = limit
+	if now == nil {
+		now = time.Now
+	}
+	s.now = now
+	return s
+}
+
 // ErrQuotaExceeded is returned when the caller is at/over their daily limit.
 // Node throws HttpException({error:'Daily limit reached', …}, 429); the
 // AllExceptionsFilter drops the extra fields, leaving the bare message.
 var ErrQuotaExceeded = errors.New("Daily limit reached")
+
+// ErrTrialLimit is returned when the IP-keyed trial counter exceeds
+// TRIAL_LIMIT. Node throws HttpException({error:'Trial limit reached. Sign up
+// for unlimited rewrites!'}, 429); the AllExceptionsFilter drops the extra
+// fields and inferCode(429) supplies code: "rate-limited".
+var ErrTrialLimit = errors.New("Trial limit reached. Sign up for unlimited rewrites!")
 
 // ErrProviderFailed wraps any upstream provider error. Node maps every
 // provider failure to a generic 502 so sensitive internals never reach a
@@ -86,6 +112,19 @@ type grammarEnvelope struct {
 	Grammar    json.RawMessage `json:"grammar"`
 	UsageToday int             `json:"usage_today"`
 	DailyLimit int             `json:"daily_limit"`
+}
+
+// trialRewriteEnvelope is the public-trial rewrite/translate success body.
+// Unlike rewriteEnvelope it omits usage_today / daily_limit (Node's trial path
+// returns only the rewritten text).
+type trialRewriteEnvelope struct {
+	RewrittenText string `json:"rewritten_text"`
+}
+
+// trialGrammarEnvelope is the public-trial grammar_check success body. Omits
+// the usage fields, mirroring Node's trial path.
+type trialGrammarEnvelope struct {
+	Grammar json.RawMessage `json:"grammar"`
 }
 
 // failedGrammar mirrors Node's parseGrammarResult fallback object emitted when
@@ -129,6 +168,39 @@ func (s *Service) Rewrite(ctx context.Context, userID, text, tone, target, sourc
 		UsageToday:    usageToday + 1,
 		DailyLimit:    dailyLimit,
 	}, nil
+}
+
+// TrialRewrite ports RewriteService.trialRewrite(): IP-keyed daily gate →
+// callAI → usage-free envelope. The clientIp only forms the rate-limit key.
+func (s *Service) TrialRewrite(ctx context.Context, text, tone, clientIp, target, source string) (any, error) {
+	today := s.now().UTC().Format("2006-01-02")
+	key := "trial:" + clientIp + ":" + today
+
+	count, err := s.trial.Incr(ctx, key, 86400)
+	if err != nil {
+		// Fail-open: any redis error → count 0 → allow (mirrors Node's catch→0).
+		count = 0
+	}
+	if count > int64(s.trialLimit) {
+		return nil, ErrTrialLimit
+	}
+
+	// Truncate to 500 runes. This only bounds the prompt sent upstream; the
+	// rewrite output value is ignored by the shadow gate, so rune-vs-UTF16
+	// precision is value-invisible.
+	if r := []rune(text); len(r) > 500 {
+		text = string(r[:500])
+	}
+
+	out, err := s.callAI(ctx, text, tone, target, source)
+	if err != nil {
+		return nil, err
+	}
+
+	if tone == "grammar_check" {
+		return trialGrammarEnvelope{Grammar: parseGrammarResult(out)}, nil
+	}
+	return trialRewriteEnvelope{RewrittenText: out}, nil
 }
 
 // callAI ports RewriteService.callAI(): resolve the prompt, call the provider,

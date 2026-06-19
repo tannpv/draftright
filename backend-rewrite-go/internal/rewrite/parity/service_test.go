@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 )
 
 // --- fakes for the consumer-side ports ---
@@ -35,6 +36,101 @@ type fakeUsage struct {
 
 func (f *fakeUsage) CountToday(_ context.Context, _ string) (int, error) {
 	return f.count, f.err
+}
+
+// fakeTrialLimiter is an in-memory TrialLimiter. start seeds the count that
+// the next Incr returns; err forces the fail-open path. lastKey records the
+// key Incr was called with (for clientIP assertions).
+type fakeTrialLimiter struct {
+	count   int64
+	err     error
+	lastKey string
+	lastTTL int
+}
+
+func (f *fakeTrialLimiter) Incr(_ context.Context, key string, ttlSec int) (int64, error) {
+	f.lastKey, f.lastTTL = key, ttlSec
+	if f.err != nil {
+		return 0, f.err
+	}
+	f.count++
+	return f.count, nil
+}
+
+// fixedNow returns a now func pinned to a known UTC date for key assertions.
+func fixedNow() func() time.Time {
+	return func() time.Time { return time.Date(2026, 6, 19, 10, 30, 0, 0, time.UTC) }
+}
+
+func TestTrialRewrite_OverLimit(t *testing.T) {
+	lim := &fakeTrialLimiter{count: 3} // next Incr returns 4 > limit 3
+	svc := NewService(&fakeCompleter{text: "x"}, &fakeEnts{}, &fakeUsage{}).
+		WithTrial(lim, 3, fixedNow())
+	_, err := svc.TrialRewrite(context.Background(), "hi", "polished", "1.2.3.4", "", "")
+	if !errors.Is(err, ErrTrialLimit) {
+		t.Fatalf("err = %v, want ErrTrialLimit", err)
+	}
+}
+
+func TestTrialRewrite_NormalToneEnvelope(t *testing.T) {
+	lim := &fakeTrialLimiter{}
+	svc := NewService(&fakeCompleter{text: "Hello."}, &fakeEnts{}, &fakeUsage{}).
+		WithTrial(lim, 3, fixedNow())
+	out, err := svc.TrialRewrite(context.Background(), "hi", "polished", "1.2.3.4", "", "")
+	if err != nil {
+		t.Fatalf("TrialRewrite: %v", err)
+	}
+	got, _ := json.Marshal(out)
+	want := `{"rewritten_text":"Hello."}`
+	if string(got) != want {
+		t.Fatalf("body = %s, want %s", got, want)
+	}
+	if lim.lastKey != "trial:1.2.3.4:2026-06-19" {
+		t.Fatalf("key = %q", lim.lastKey)
+	}
+	if lim.lastTTL != 86400 {
+		t.Fatalf("ttl = %d, want 86400", lim.lastTTL)
+	}
+}
+
+func TestTrialRewrite_GrammarCheckEnvelope(t *testing.T) {
+	lim := &fakeTrialLimiter{}
+	svc := NewService(&fakeCompleter{text: `{"score":90,"issues":[]}`}, &fakeEnts{}, &fakeUsage{}).
+		WithTrial(lim, 3, fixedNow())
+	out, err := svc.TrialRewrite(context.Background(), "hi", "grammar_check", "1.2.3.4", "", "")
+	if err != nil {
+		t.Fatalf("TrialRewrite: %v", err)
+	}
+	got, _ := json.Marshal(out)
+	want := `{"grammar":{"score":90,"issues":[]}}`
+	if string(got) != want {
+		t.Fatalf("body = %s, want %s", got, want)
+	}
+}
+
+func TestTrialRewrite_FailOpen(t *testing.T) {
+	// Limiter error → treated as count 0 → proceeds (not limited).
+	lim := &fakeTrialLimiter{err: errors.New("redis down")}
+	svc := NewService(&fakeCompleter{text: "Hello."}, &fakeEnts{}, &fakeUsage{}).
+		WithTrial(lim, 3, fixedNow())
+	out, err := svc.TrialRewrite(context.Background(), "hi", "polished", "1.2.3.4", "", "")
+	if err != nil {
+		t.Fatalf("fail-open should proceed, got %v", err)
+	}
+	got, _ := json.Marshal(out)
+	if string(got) != `{"rewritten_text":"Hello."}` {
+		t.Fatalf("body = %s", got)
+	}
+}
+
+func TestTrialRewrite_ProviderFailed(t *testing.T) {
+	lim := &fakeTrialLimiter{}
+	svc := NewService(&fakeCompleter{err: errors.New("upstream 500")}, &fakeEnts{}, &fakeUsage{}).
+		WithTrial(lim, 3, fixedNow())
+	_, err := svc.TrialRewrite(context.Background(), "hi", "polished", "1.2.3.4", "", "")
+	if !errors.Is(err, ErrProviderFailed) {
+		t.Fatalf("err = %v, want ErrProviderFailed", err)
+	}
 }
 
 func TestRewrite_RewriteToneEnvelope(t *testing.T) {
