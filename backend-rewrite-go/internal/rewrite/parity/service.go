@@ -52,9 +52,10 @@ type Service struct {
 	now        func() time.Time
 }
 
-// NewService wires the rewrite dependencies.
+// NewService wires the rewrite dependencies. now defaults to time.Now so the
+// clock is never nil even on the authed-only path (WithTrial overrides it).
 func NewService(c completer, ents entitlements, usage usageCounter) *Service {
-	return &Service{c: c, ents: ents, usage: usage}
+	return &Service{c: c, ents: ents, usage: usage, now: time.Now}
 }
 
 // WithTrial wires the public-trial seam without disturbing the NewService
