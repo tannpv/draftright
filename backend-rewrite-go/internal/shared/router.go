@@ -232,6 +232,7 @@ func (r *Router) Build() http.Handler {
 	}
 	mux := chi.NewRouter()
 
+	mux.Use(CORS)
 	mux.Use(RequestID)
 	mux.Use(middleware.RealIP)
 	mux.Use(middleware.Recoverer)
