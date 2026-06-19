@@ -137,12 +137,16 @@ func TestUpsertChannel_ShaLowercasedAndDefaults(t *testing.T) {
 	require.Equal(t, "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789", repo.insertedRel.SHA256)
 }
 
-func TestUpsertChannel_DefaultChannelDirect(t *testing.T) {
+// An explicit empty channel must FAIL validation at the usecase layer. Node
+// defaults only on null/undefined (`?? 'direct'`, applied in the handler when
+// the request key is absent); an explicit "" is not one of {direct, store} so
+// the service rejects it with the verbatim message → 400. The legitimate
+// nil→"direct" default lives in the handler, not the usecase.
+func TestUpsertChannel_EmptyChannelRejected(t *testing.T) {
 	repo := &fakeRelRepo{}
 	svc := updates.NewAdminService(repo)
-	out, err := svc.UpsertChannel(context.Background(), updates.UpsertChannelInput{Platform: "mac", Version: "1", DownloadURL: "u"})
-	require.NoError(t, err)
-	require.Equal(t, "direct", out.Channel)
+	_, err := svc.UpsertChannel(context.Background(), updates.UpsertChannelInput{Platform: "mac", Version: "1", DownloadURL: "u"})
+	require.EqualError(t, err, "channel must be one of: direct, store")
 }
 
 func TestUpsertChannel_EmptyShaDefaultsEmpty(t *testing.T) {

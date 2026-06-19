@@ -165,10 +165,10 @@ func (s *AdminService) ListAll(ctx context.Context) (ReleasesView, error) {
 // messages), lowercase sha, then load-then-branch overwriting optional fields
 // only when provided (mirrors Node's per-field `if (x !== undefined)`).
 func (s *AdminService) UpsertChannel(ctx context.Context, in UpsertChannelInput) (AppRelease, error) {
+	// No empty→direct default here: Node defaults only on null/undefined (`?? 'direct'`,
+	// applied in the handler when the key is absent). An explicit "" must fail validation
+	// (channel must be one of: direct, store) → 400, matching Node.
 	channel := in.Channel
-	if channel == "" {
-		channel = "direct"
-	}
 	if !contains(platforms, in.Platform) {
 		return AppRelease{}, fmt.Errorf("platform must be one of: %s", strings.Join(platforms, ", "))
 	}
