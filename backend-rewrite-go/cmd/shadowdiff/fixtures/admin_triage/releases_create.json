@@ -13,5 +13,5 @@
     "required": false,
     "enabled": true
   },
-  "ignore_value_of": ["updated_at"]
+  "ignore_value_of": ["updated_at", "request_id"]
 }

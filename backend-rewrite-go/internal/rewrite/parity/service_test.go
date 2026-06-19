@@ -133,6 +133,24 @@ func TestTrialRewrite_ProviderFailed(t *testing.T) {
 	}
 }
 
+func TestRewrite_NoDefaultProvider(t *testing.T) {
+	// Node resolves the default provider OUTSIDE callProvider's try, so a
+	// missing default is a 400 (ErrNoDefaultProvider), NOT the 502
+	// ErrProviderFailed path. callAI must pass the sentinel through.
+	svc := NewService(
+		&fakeCompleter{err: ErrNoDefaultProvider},
+		&fakeEnts{limit: 500},
+		&fakeUsage{count: 0},
+	)
+	_, err := svc.Rewrite(context.Background(), "u1", "hi", "polished", "", "")
+	if !errors.Is(err, ErrNoDefaultProvider) {
+		t.Fatalf("err = %v, want ErrNoDefaultProvider", err)
+	}
+	if errors.Is(err, ErrProviderFailed) {
+		t.Fatal("no-default must not collapse to ErrProviderFailed")
+	}
+}
+
 func TestRewrite_RewriteToneEnvelope(t *testing.T) {
 	svc := NewService(
 		&fakeCompleter{text: "Hello.", ms: 12},

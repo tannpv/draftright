@@ -131,25 +131,38 @@ func (s *Service) Test(ctx context.Context, id string) TestResult {
 	return TestResult{Success: true, Response: text, ResponseTimeMs: ms}
 }
 
+// DefaultComplete resolves the active default provider and runs one blocking
+// completion, returning the rewritten text AND the provider's name (Node
+// provider.name) plus the elapsed ms. Mirrors Node: aiProviders.findDefault()
+// then callProvider(provider, system, user). Returns ErrNoDefaultProvider when
+// no default is configured. This is the single DB-resolved completion path —
+// Propose, plus the rewrite + extraction usecases (wired in main.go), all
+// route through it so every request reports the live DB default provider
+// rather than a process-static ENV provider.
+func (s *Service) DefaultComplete(ctx context.Context, system, user string) (text, name string, ms int64, err error) {
+	p, err := s.repo.GetDefault(ctx)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return "", "", 0, ErrNoDefaultProvider
+		}
+		return "", "", 0, err
+	}
+	c, err := s.factory.For(p)
+	if err != nil {
+		return "", "", 0, err
+	}
+	text, ms, err = c.Complete(ctx, system, user)
+	if err != nil {
+		return "", "", 0, err
+	}
+	return text, p.Name, ms, nil
+}
+
 // Propose resolves the active default provider and runs one blocking
 // completion. Mirrors Node: aiProviders.findDefault() then callProvider(
 // provider, system, user). Used by errreport/bugreports suggest-fix + both
 // hourly crons. Returns ErrNoDefaultProvider when no default is configured.
 func (s *Service) Propose(ctx context.Context, system, user string) (string, error) {
-	p, err := s.repo.GetDefault(ctx)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return "", ErrNoDefaultProvider
-		}
-		return "", err
-	}
-	c, err := s.factory.For(p)
-	if err != nil {
-		return "", err
-	}
-	text, _, err := c.Complete(ctx, system, user)
-	if err != nil {
-		return "", err
-	}
-	return text, nil
+	text, _, _, err := s.DefaultComplete(ctx, system, user)
+	return text, err
 }

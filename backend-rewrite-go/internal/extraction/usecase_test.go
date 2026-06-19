@@ -7,16 +7,15 @@ import (
 	"testing"
 )
 
-type fakeCompleter struct{ out string }
+type fakeProvider struct{ out string }
 
-func (f fakeCompleter) Complete(context.Context, string, string) (string, int64, error) {
-	return f.out, 1, nil
+func (f fakeProvider) DefaultComplete(context.Context, string, string) (string, string, error) {
+	return f.out, "openai", nil
 }
-func (f fakeCompleter) Name() string { return "openai" }
 
 func extract(t *testing.T, out, text string) Response {
 	t.Helper()
-	svc := NewService(fakeCompleter{out: out})
+	svc := NewService(fakeProvider{out: out})
 	resp, err := svc.Extract(context.Background(), text, nil)
 	if err != nil {
 		t.Fatalf("Extract returned error: %v", err)

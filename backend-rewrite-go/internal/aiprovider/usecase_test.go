@@ -117,6 +117,28 @@ func TestPropose_OK(t *testing.T) {
 	}
 }
 
+func TestDefaultComplete_ReportsNameAndMs(t *testing.T) {
+	// DefaultComplete must surface the DB provider's name (Node provider.name)
+	// and the completer's elapsed ms — the values rewrite/extraction report.
+	p := AiProvider{ID: "1", Name: "Ollama Llama 3.2", Type: "ollama"}
+	svc := NewService(&fakeRepo{provider: &p}, fakeFactory{c: fakeCompleter{text: "REWRITTEN"}})
+	text, name, ms, err := svc.DefaultComplete(context.Background(), "sys", "user")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if text != "REWRITTEN" || name != "Ollama Llama 3.2" || ms != 42 {
+		t.Fatalf("DefaultComplete mismatch: text=%q name=%q ms=%d", text, name, ms)
+	}
+}
+
+func TestDefaultComplete_NoDefault(t *testing.T) {
+	svc := NewService(&fakeRepo{provider: nil}, fakeFactory{})
+	_, _, _, err := svc.DefaultComplete(context.Background(), "sys", "user")
+	if !errors.Is(err, ErrNoDefaultProvider) {
+		t.Fatalf("expected ErrNoDefaultProvider, got %v", err)
+	}
+}
+
 func TestPropose_CompleterError(t *testing.T) {
 	p := AiProvider{ID: "1", Type: "openai"}
 	svc := NewService(&fakeRepo{provider: &p}, fakeFactory{c: fakeCompleter{err: errors.New("boom")}})

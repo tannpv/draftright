@@ -12,6 +12,7 @@
   },
   "ignore_value_of": [
     "rewritten_text",
-    "usage_today"
+    "usage_today",
+    "request_id"
   ]
 }

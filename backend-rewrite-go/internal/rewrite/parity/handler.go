@@ -74,6 +74,8 @@ func (h *Handler) Rewrite(w http.ResponseWriter, r *http.Request) {
 			// AllExceptionsFilter drops the extra usage_today/daily_limit fields;
 			// only the bare message survives. code rate-limited → 429.
 			shared.WriteError(w, r, "rate-limited", "Daily limit reached")
+		case errors.Is(err, ErrNoDefaultProvider):
+			shared.WriteError(w, r, "invalid-input", ErrNoDefaultProvider.Error())
 		case errors.Is(err, ErrProviderFailed):
 			shared.WriteError(w, r, "provider-failed", providerUnavailableMsg)
 		case errors.As(err, &ute):
@@ -124,6 +126,8 @@ func (h *Handler) Trial(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case errors.Is(err, ErrTrialLimit):
 			shared.WriteError(w, r, "rate-limited", ErrTrialLimit.Error())
+		case errors.Is(err, ErrNoDefaultProvider):
+			shared.WriteError(w, r, "invalid-input", ErrNoDefaultProvider.Error())
 		case errors.Is(err, ErrProviderFailed):
 			shared.WriteError(w, r, "provider-failed", providerUnavailableMsg)
 		case errors.As(err, &ute):

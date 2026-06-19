@@ -61,8 +61,10 @@ type paginatedResponse struct {
 // { name, type, endpoint_url, api_key?, model, temperature?, is_default?,
 // is_active? }. Pointers distinguish an absent key (nil) from an explicit
 // value — temperature absent defaults to "0.3" (the DB column default Node
-// relies on); is_default/is_active default to their zero values, which the
-// repo writes (Node's createProvider also accepts is_default/is_active).
+// relies on); is_default absent defaults to false (its column default), and
+// is_active absent defaults to TRUE — the ai_provider entity column default is
+// `true`, and Node's create() lets that default apply, so an omitted is_active
+// persists true (NOT the Go bool zero false). See aiprovider parity issue #42.
 //
 // Temperature arrives as a JSON number from the admin UI; json.Number keeps it
 // lossless so we format it back to the same textual decimal Node stores.
@@ -145,7 +147,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		Model:       derefStr(body.Model),
 		Temperature: temperature,
 		IsDefault:   derefBool(body.IsDefault),
-		IsActive:    derefBool(body.IsActive),
+		IsActive:    derefBoolOr(body.IsActive, true),
 	}
 
 	p, err := h.svc.Create(r.Context(), in)
@@ -202,13 +204,15 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	}{true})
 }
 
-// Test handles POST /admin/ai-providers/:id/test → always 200. Body shape is
+// Test handles POST /admin/ai-providers/:id/test → 201. Node's
+// @Post('ai-providers/:id/test') has no @HttpCode override, so the success
+// status is 201 (NOT 200). See aiprovider parity issue #43. Body shape is
 // { success, response, response_time_ms } on success; { success:false, error }
 // on failure / not-found.
 func (h *Handler) Test(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	res := h.svc.Test(r.Context(), id)
-	shared.WriteJSON(w, http.StatusOK, res)
+	shared.WriteJSON(w, http.StatusCreated, res)
 }
 
 func derefStr(p *string) string {
@@ -221,6 +225,15 @@ func derefStr(p *string) string {
 func derefBool(p *bool) bool {
 	if p == nil {
 		return false
+	}
+	return *p
+}
+
+// derefBoolOr returns *p, or def when p is nil — for fields whose absent-key
+// default is not the bool zero value (e.g. is_active defaults to true).
+func derefBoolOr(p *bool, def bool) bool {
+	if p == nil {
+		return def
 	}
 	return *p
 }
