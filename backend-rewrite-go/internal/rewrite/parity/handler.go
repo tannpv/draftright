@@ -31,6 +31,19 @@ type Handler struct {
 // NewHandler wires the rewrite service.
 func NewHandler(svc *Service) *Handler { return &Handler{svc: svc} }
 
+// tonesEnvelope pins the GET /rewrite/tones body: {"tones":[…]} — mirrors Node's
+// `return { tones: TONES }`.
+type tonesEnvelope struct {
+	Tones []ToneMeta `json:"tones"`
+}
+
+// WriteTones serves GET /rewrite/tones → 200 (NestJS @Get default status). It
+// has no Service dependency — it just marshals the static catalog — so main.go
+// wires it unconditionally (no DB).
+func WriteTones(w http.ResponseWriter, _ *http.Request) {
+	shared.WriteJSON(w, http.StatusOK, tonesEnvelope{Tones: Tones})
+}
+
 // Rewrite handles POST /rewrite → 201 (NestJS POST default, no @HttpCode).
 func (h *Handler) Rewrite(w http.ResponseWriter, r *http.Request) {
 	claims, ok := shared.ClaimsFromContext(r.Context())

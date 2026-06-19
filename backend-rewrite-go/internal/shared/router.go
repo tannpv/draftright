@@ -29,6 +29,13 @@ type Router struct {
 	// http.Handler stub.
 	Rewrite http.Handler
 
+	// Parity rewrite endpoints (Node /rewrite controller; SEPARATE from the
+	// Go-only streaming /v1/rewrite above). Tones + Trial are PUBLIC; RewriteParity
+	// uses the SAME dual-auth (ExtVerifier OR JWT) as /v1/rewrite. All nil-guarded.
+	Tones         http.Handler // GET  /rewrite/tones (public)
+	RewriteParity http.Handler // POST /rewrite       (dual-auth: ext token OR JWT)
+	RewriteTrial  http.Handler // POST /rewrite/trial (public)
+
 	// ExtVerifier, when non-nil, enables dual auth on /v1/rewrite: a
 	// bearer token prefixed dr_ext_ is verified as an extension token
 	// (mirroring Node's RewriteAuthGuard) instead of a JWT. nil-guarded:
@@ -272,6 +279,10 @@ func (r *Router) Build() http.Handler {
 	if r.Plans != nil {
 		mux.Method(http.MethodGet, "/plans", r.Plans)
 	}
+	// /rewrite/tones — PUBLIC static catalog (Node @Get('tones') has no guard).
+	if r.Tones != nil {
+		mux.Method(http.MethodGet, "/rewrite/tones", r.Tones)
+	}
 	if r.PaymentMethods != nil {
 		mux.Method(http.MethodGet, "/payment/methods", r.PaymentMethods)
 	}
@@ -305,6 +316,10 @@ func (r *Router) Build() http.Handler {
 	}
 	if r.ErrorsIngest != nil {
 		mux.Method(http.MethodPost, "/errors", r.ErrorsIngest)
+	}
+	// /rewrite/trial — PUBLIC (Node @Post('trial') has no guard).
+	if r.RewriteTrial != nil {
+		mux.Method(http.MethodPost, "/rewrite/trial", r.RewriteTrial)
 	}
 
 	// Phase 4b public endpoints — mounted BEFORE the auth group (no JWT).
@@ -348,6 +363,17 @@ func (r *Router) Build() http.Handler {
 			mux.Method(http.MethodPost, "/v1/rewrite", ExtOrJWT(r.ExtVerifier, jwtMW, r.Log)(r.Rewrite))
 		} else {
 			mux.Method(http.MethodPost, "/v1/rewrite", jwtMW(r.Rewrite))
+		}
+	}
+
+	// POST /rewrite — Node /rewrite controller's authed endpoint. SAME dual-auth
+	// as /v1/rewrite (dr_ext_ token OR JWT). chi treats /rewrite, /rewrite/trial,
+	// /rewrite/tones as distinct paths — no conflict.
+	if r.RewriteParity != nil {
+		if r.ExtVerifier != nil {
+			mux.Method(http.MethodPost, "/rewrite", ExtOrJWT(r.ExtVerifier, jwtMW, r.Log)(r.RewriteParity))
+		} else {
+			mux.Method(http.MethodPost, "/rewrite", jwtMW(r.RewriteParity))
 		}
 	}
 

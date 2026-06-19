@@ -49,6 +49,7 @@ GET /payment/methods
 GET /payment/portal
 GET /payment/status/{ref}
 GET /plans
+GET /rewrite/tones
 GET /subscription
 GET /updates/latest
 PATCH /admin/admin-users/{id}
@@ -96,6 +97,8 @@ POST /payment/webhook/lemonsqueezy
 POST /payment/webhook/sepay
 POST /payment/webhook/stripe
 POST /payment/webhook/vietqr
+POST /rewrite
+POST /rewrite/trial
 POST /subscription/verify-receipt
-POST /v1/rewrite
+# POST /v1/rewrite  — go-only streaming path (Node 404s here); excluded from parity gate
 POST /webhooks/resend
