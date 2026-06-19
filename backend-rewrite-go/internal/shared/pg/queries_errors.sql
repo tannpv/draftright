@@ -47,13 +47,14 @@ DELETE FROM error_reports WHERE id = $1;
 UPDATE error_reports
 SET status = $2,
     resolved_at = $3,
-    resolved_by = $4
+    resolved_by = $4,
+    last_seen_at = now()
 WHERE id = $1
 RETURNING *;
 
 -- name: AdminSetErrorFixProposal :one
 UPDATE error_reports
-SET ai_fix_proposal = $2, status = $3
+SET ai_fix_proposal = $2, status = $3, last_seen_at = now()
 WHERE id = $1
 RETURNING *;
 

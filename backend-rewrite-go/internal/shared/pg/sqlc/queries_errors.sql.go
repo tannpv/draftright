@@ -190,7 +190,7 @@ func (q *Queries) AdminListErrors(ctx context.Context, arg AdminListErrorsParams
 
 const adminSetErrorFixProposal = `-- name: AdminSetErrorFixProposal :one
 UPDATE error_reports
-SET ai_fix_proposal = $2, status = $3
+SET ai_fix_proposal = $2, status = $3, last_seen_at = now()
 WHERE id = $1
 RETURNING id, platform, app_version, severity, error_type, message, stack_trace, context, user_id, device_id, fingerprint, count, status, ai_fix_proposal, resolved_by, resolved_at, first_seen_at, last_seen_at, display_no
 `
@@ -232,7 +232,8 @@ const adminSetErrorStatus = `-- name: AdminSetErrorStatus :one
 UPDATE error_reports
 SET status = $2,
     resolved_at = $3,
-    resolved_by = $4
+    resolved_by = $4,
+    last_seen_at = now()
 WHERE id = $1
 RETURNING id, platform, app_version, severity, error_type, message, stack_trace, context, user_id, device_id, fingerprint, count, status, ai_fix_proposal, resolved_by, resolved_at, first_seen_at, last_seen_at, display_no
 `
