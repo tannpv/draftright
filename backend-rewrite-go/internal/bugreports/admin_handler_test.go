@@ -89,11 +89,14 @@ func TestList_OK(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("code=%d", rec.Code)
 	}
+	if !strings.Contains(rec.Body.String(), `"rows"`) {
+		t.Fatalf("list body must use key \"rows\" not \"items\": %s", rec.Body.String())
+	}
 	var got listResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
-	if got.Total != 1 || len(got.Items) != 1 {
+	if got.Total != 1 || len(got.Rows) != 1 {
 		t.Fatalf("body=%s", rec.Body.String())
 	}
 	if svc.lastFilter.Status != "new" || svc.lastFilter.Kind != "bug" || svc.lastFilter.TargetPlatform != "mobile" {

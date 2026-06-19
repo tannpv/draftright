@@ -80,10 +80,11 @@ func NewAdminHandler(svc *AdminService) *AdminHandler {
 	return &AdminHandler{svc: svc}
 }
 
-// listResponse is the { items, total } body — JSON key order matches Node's
-// applyListQuery return ({ items, total }).
+// listResponse is the { rows, total } body — JSON key order matches Node's
+// applyListQuery return ({ rows, total }). (Distinct from errors, which
+// hand-rolls { items, total }.)
 type listResponse struct {
-	Items []BugReportEntity `json:"items"`
+	Rows  []BugReportEntity `json:"rows"`
 	Total int               `json:"total"`
 }
 
@@ -130,7 +131,7 @@ func (h *AdminHandler) List(w http.ResponseWriter, r *http.Request) {
 	if items == nil {
 		items = []BugReportEntity{}
 	}
-	shared.WriteJSON(w, http.StatusOK, listResponse{Items: items, Total: total})
+	shared.WriteJSON(w, http.StatusOK, listResponse{Rows: items, Total: total})
 }
 
 // Get handles GET /admin/bug-reports/:id → 200 entity; absent → 404.
