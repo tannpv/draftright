@@ -272,10 +272,12 @@ func TestGrant_Created(t *testing.T) {
 	// Node's subscriptionsService.grant() does create()+save() WITHOUT
 	// store_transaction_id, so the returned entity has it === undefined and
 	// JSON.stringify OMITS the key. expires_at IS explicitly set to null
-	// (expiresAt || null), so it is present as null.
+	// (expiresAt || null), so it is present as null. TypeORM appends the
+	// generated columns (id, created_at, updated_at) AFTER the create()-supplied
+	// columns, so id lands at position 7 — NOT first.
 	assertKeyOrder(t, raw,
-		"id", "user_id", "plan_id", "status", "store_type",
-		"started_at", "expires_at", "created_at", "updated_at")
+		"user_id", "plan_id", "status", "store_type",
+		"started_at", "expires_at", "id", "created_at", "updated_at")
 	if strings.Contains(raw, "store_transaction_id") {
 		t.Fatalf("store_transaction_id must be omitted (Node grant() never sets it): %s", raw)
 	}

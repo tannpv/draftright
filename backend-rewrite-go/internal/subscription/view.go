@@ -38,14 +38,18 @@ type GrantedSub struct {
 // because the writer populates it from the RETURNING row, but it is not
 // serialized on this wire shape to match Node.
 func (g GrantedSub) MarshalJSON() ([]byte, error) {
+	// Key order mirrors TypeORM create()+save(): create() sets the supplied
+	// columns in entity-declaration order (user_id…expires_at), then save()'s
+	// RETURNING merge appends the generated id, created_at, updated_at — so id
+	// lands at position 7, NOT first. store_transaction_id is not returned.
 	type wire struct {
-		ID        string  `json:"id"`
 		UserID    string  `json:"user_id"`
 		PlanID    string  `json:"plan_id"`
 		Status    string  `json:"status"`
 		StoreType string  `json:"store_type"`
 		StartedAt string  `json:"started_at"`
 		ExpiresAt *string `json:"expires_at"`
+		ID        string  `json:"id"`
 		CreatedAt string  `json:"created_at"`
 		UpdatedAt string  `json:"updated_at"`
 	}

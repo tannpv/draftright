@@ -167,12 +167,14 @@ func TestGrantedSub_JSONMatchesNode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `{"id":"33333333-3333-3333-3333-333333333333",` +
-		`"user_id":"11111111-1111-1111-1111-111111111111",` +
+	// id at position 7 — TypeORM appends generated columns (id, created_at,
+	// updated_at) AFTER the create()-supplied columns; id is NOT first.
+	want := `{"user_id":"11111111-1111-1111-1111-111111111111",` +
 		`"plan_id":"22222222-2222-2222-2222-222222222222",` +
 		`"status":"active","store_type":"admin_granted",` +
 		`"started_at":"2026-06-19T12:00:00.000Z",` +
 		`"expires_at":null,` +
+		`"id":"33333333-3333-3333-3333-333333333333",` +
 		`"created_at":"2026-06-19T12:00:00.123Z",` +
 		`"updated_at":"2026-06-19T12:00:01.000Z"}`
 	if string(b) != want {
