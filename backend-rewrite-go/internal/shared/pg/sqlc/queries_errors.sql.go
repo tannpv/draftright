@@ -230,27 +230,29 @@ func (q *Queries) AdminSetErrorFixProposal(ctx context.Context, arg AdminSetErro
 
 const adminSetErrorStatus = `-- name: AdminSetErrorStatus :one
 UPDATE error_reports
-SET status = $2,
-    resolved_at = $3,
-    resolved_by = $4,
+SET status = $1,
+    resolved_at = CASE WHEN $2::boolean THEN $3 ELSE resolved_at END,
+    resolved_by = CASE WHEN $2::boolean THEN $4 ELSE resolved_by END,
     last_seen_at = now()
-WHERE id = $1
+WHERE id = $5
 RETURNING id, platform, app_version, severity, error_type, message, stack_trace, context, user_id, device_id, fingerprint, count, status, ai_fix_proposal, resolved_by, resolved_at, first_seen_at, last_seen_at, display_no
 `
 
 type AdminSetErrorStatusParams struct {
-	ID         pgtype.UUID        `db:"id" json:"id"`
-	Status     int32              `db:"status" json:"status"`
-	ResolvedAt pgtype.Timestamptz `db:"resolved_at" json:"resolved_at"`
-	ResolvedBy *string            `db:"resolved_by" json:"resolved_by"`
+	Status      int32              `db:"status" json:"status"`
+	SetResolved bool               `db:"set_resolved" json:"set_resolved"`
+	ResolvedAt  pgtype.Timestamptz `db:"resolved_at" json:"resolved_at"`
+	ResolvedBy  *string            `db:"resolved_by" json:"resolved_by"`
+	ID          pgtype.UUID        `db:"id" json:"id"`
 }
 
 func (q *Queries) AdminSetErrorStatus(ctx context.Context, arg AdminSetErrorStatusParams) (ErrorReport, error) {
 	row := q.db.QueryRow(ctx, adminSetErrorStatus,
-		arg.ID,
 		arg.Status,
+		arg.SetResolved,
 		arg.ResolvedAt,
 		arg.ResolvedBy,
+		arg.ID,
 	)
 	var i ErrorReport
 	err := row.Scan(

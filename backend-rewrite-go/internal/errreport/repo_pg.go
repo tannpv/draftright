@@ -212,19 +212,21 @@ func (r *PgRepo) AdminDelete(ctx context.Context, id string) (bool, error) {
 	return affected > 0, nil
 }
 
-// AdminSetStatus updates status (+ resolved_at/resolved_by when the use
-// case decides to resolve) and returns the saved row.
-func (r *PgRepo) AdminSetStatus(ctx context.Context, id string, status int, resolvedAt *time.Time, resolvedBy *string) (ErrorReportEntity, error) {
+// AdminSetStatus updates status; resolved_at/resolved_by are overwritten only
+// when setResolved is true (status 4/5), otherwise the stored values are
+// preserved — mirrors Node repo.save() re-persisting the loaded row's columns.
+func (r *PgRepo) AdminSetStatus(ctx context.Context, id string, status int, setResolved bool, resolvedAt *time.Time, resolvedBy *string) (ErrorReportEntity, error) {
 	var ra pgtype.Timestamptz
 	if resolvedAt != nil {
 		ra.Time = *resolvedAt
 		ra.Valid = true
 	}
 	row, err := r.q.AdminSetErrorStatus(ctx, sqlc.AdminSetErrorStatusParams{
-		ID:         toUUID(&id),
-		Status:     int32(status),
-		ResolvedAt: ra,
-		ResolvedBy: resolvedBy,
+		ID:          toUUID(&id),
+		Status:      int32(status),
+		SetResolved: setResolved,
+		ResolvedAt:  ra,
+		ResolvedBy:  resolvedBy,
 	})
 	if err != nil {
 		return ErrorReportEntity{}, err

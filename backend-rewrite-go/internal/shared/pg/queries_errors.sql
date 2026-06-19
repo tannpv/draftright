@@ -45,11 +45,11 @@ DELETE FROM error_reports WHERE id = $1;
 
 -- name: AdminSetErrorStatus :one
 UPDATE error_reports
-SET status = $2,
-    resolved_at = $3,
-    resolved_by = $4,
+SET status = sqlc.arg(status),
+    resolved_at = CASE WHEN sqlc.arg(set_resolved)::boolean THEN sqlc.narg(resolved_at) ELSE resolved_at END,
+    resolved_by = CASE WHEN sqlc.arg(set_resolved)::boolean THEN sqlc.narg(resolved_by) ELSE resolved_by END,
     last_seen_at = now()
-WHERE id = $1
+WHERE id = sqlc.arg(id)
 RETURNING *;
 
 -- name: AdminSetErrorFixProposal :one

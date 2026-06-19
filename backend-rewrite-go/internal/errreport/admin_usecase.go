@@ -14,7 +14,7 @@ type adminRepo interface {
 	AdminList(ctx context.Context, f AdminListFilter) ([]ErrorReportEntity, int, error)
 	AdminGet(ctx context.Context, id string) (ErrorReportEntity, error)
 	AdminDelete(ctx context.Context, id string) (bool, error)
-	AdminSetStatus(ctx context.Context, id string, status int, resolvedAt *time.Time, resolvedBy *string) (ErrorReportEntity, error)
+	AdminSetStatus(ctx context.Context, id string, status int, setResolved bool, resolvedAt *time.Time, resolvedBy *string) (ErrorReportEntity, error)
 	AdminSetFixProposal(ctx context.Context, id string, proposal string, status int) (ErrorReportEntity, error)
 	AdminFixCandidates(ctx context.Context, limit int32) ([]string, error)
 }
@@ -57,14 +57,16 @@ func (s *AdminService) Delete(ctx context.Context, id string) (bool, error) {
 
 // SetStatus loads the row (404 → ErrNotFound), then persists the new status.
 // When status is 4 (RESOLVED) or 5 (IGNORED) it stamps resolved_at = now and
-// resolved_by (defaulting to "admin"). Mirrors ErrorsService.setStatus.
+// resolved_by (defaulting to "admin"); other statuses preserve the stored
+// resolved_* values (Node repo.save() re-persists them). Mirrors ErrorsService.setStatus.
 func (s *AdminService) SetStatus(ctx context.Context, id string, status int, resolvedBy string) (ErrorReportEntity, error) {
 	if _, err := s.repo.AdminGet(ctx, id); err != nil {
 		return ErrorReportEntity{}, err
 	}
+	setResolved := status == 4 || status == 5
 	var resolvedAt *time.Time
 	var rb *string
-	if status == 4 || status == 5 {
+	if setResolved {
 		now := s.now()
 		resolvedAt = &now
 		v := resolvedBy
@@ -73,7 +75,10 @@ func (s *AdminService) SetStatus(ctx context.Context, id string, status int, res
 		}
 		rb = &v
 	}
-	return s.repo.AdminSetStatus(ctx, id, status, resolvedAt, rb)
+	// Non-resolving statuses preserve the stored resolved_at/resolved_by
+	// (Node's repo.save() re-persists the loaded row); the SQL CASE keys off
+	// setResolved, so the nil params are ignored unless resolving.
+	return s.repo.AdminSetStatus(ctx, id, status, setResolved, resolvedAt, rb)
 }
 
 // SuggestFix loads the row (404 → ErrNotFound), builds the §3.2 prompt, runs

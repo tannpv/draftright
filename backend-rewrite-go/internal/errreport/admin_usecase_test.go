@@ -17,9 +17,10 @@ type fakeAdminRepo struct {
 	getEntity errreport.ErrorReportEntity
 	getErr    error
 
-	gotStatus     int
-	gotResolvedAt *time.Time
-	gotResolvedBy *string
+	gotStatus      int
+	gotSetResolved bool
+	gotResolvedAt  *time.Time
+	gotResolvedBy  *string
 
 	gotProposal       string
 	gotProposalStatus int
@@ -40,8 +41,9 @@ func (f *fakeAdminRepo) AdminDelete(ctx context.Context, _ string) (bool, error)
 	return false, nil
 }
 
-func (f *fakeAdminRepo) AdminSetStatus(ctx context.Context, _ string, status int, resolvedAt *time.Time, resolvedBy *string) (errreport.ErrorReportEntity, error) {
+func (f *fakeAdminRepo) AdminSetStatus(ctx context.Context, _ string, status int, setResolved bool, resolvedAt *time.Time, resolvedBy *string) (errreport.ErrorReportEntity, error) {
 	f.gotStatus = status
+	f.gotSetResolved = setResolved
 	f.gotResolvedAt = resolvedAt
 	f.gotResolvedBy = resolvedBy
 	return f.getEntity, nil
@@ -87,10 +89,13 @@ func TestAdminSetStatus_ResolvedByPassthrough(t *testing.T) {
 	require.Equal(t, "mark", *repo.gotResolvedBy)
 }
 
-func TestAdminSetStatus_NonResolvedLeavesNil(t *testing.T) {
+func TestAdminSetStatus_NonResolvedPreserves(t *testing.T) {
 	repo := &fakeAdminRepo{}
 	svc := errreport.NewAdminService(repo, fakeProposer{}, time.Now)
 	_, _ = svc.SetStatus(context.Background(), "e1", 2, "")
+	// setResolved=false → the SQL CASE keeps the stored resolved_at/resolved_by;
+	// the use case passes nil params (ignored), so Node's preserve-on-reopen holds.
+	require.False(t, repo.gotSetResolved)
 	require.Nil(t, repo.gotResolvedAt)
 	require.Nil(t, repo.gotResolvedBy)
 }
