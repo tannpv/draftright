@@ -269,9 +269,19 @@ func TestGrant_Created(t *testing.T) {
 		t.Fatalf("expires_at = %v, want nil", svc.gotExpires)
 	}
 	raw := rec.Body.String()
+	// Node's subscriptionsService.grant() does create()+save() WITHOUT
+	// store_transaction_id, so the returned entity has it === undefined and
+	// JSON.stringify OMITS the key. expires_at IS explicitly set to null
+	// (expiresAt || null), so it is present as null.
 	assertKeyOrder(t, raw,
 		"id", "user_id", "plan_id", "status", "store_type",
-		"store_transaction_id", "started_at", "expires_at", "created_at", "updated_at")
+		"started_at", "expires_at", "created_at", "updated_at")
+	if strings.Contains(raw, "store_transaction_id") {
+		t.Fatalf("store_transaction_id must be omitted (Node grant() never sets it): %s", raw)
+	}
+	if !strings.Contains(raw, `"expires_at":null`) {
+		t.Fatalf("expires_at must be present as null: %s", raw)
+	}
 }
 
 // TestGrant_ExpiresAtParsed: an ISO 8601 expires_at is parsed and forwarded.
@@ -373,6 +383,55 @@ func TestGrant_UnknownKey(t *testing.T) {
 	_ = json.Unmarshal(rec.Body.Bytes(), &m)
 	if m["error"] != "property bogus should not exist" {
 		t.Fatalf("error = %v, want %q", m["error"], "property bogus should not exist")
+	}
+}
+
+// TestGrant_UnknownKeyWithBadFields: forbidNonWhitelisted errors precede the
+// field-constraint errors. NestJS ValidationPipe (whitelist +
+// forbidNonWhitelisted) emits the "property X should not exist" errors FIRST,
+// then the field errors in declaration order (user_id, plan_id, expires_at).
+// Verified empirically against the real DTO + class-validator 0.14.4.
+func TestGrant_UnknownKeyWithBadFields(t *testing.T) {
+	svc := &fakeGrantService{}
+	h := newGrantHandler(svc)
+
+	body := `{"user_id":"x","plan_id":"y","expires_at":"nope","bogus":1}`
+	rec := httptest.NewRecorder()
+	h.Grant(rec, httptest.NewRequest(http.MethodPost, "/admin/subscriptions/grant", strings.NewReader(body)))
+
+	if rec.Code != 400 {
+		t.Fatalf("status = %d, want 400; body=%s", rec.Code, rec.Body.String())
+	}
+	var m map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &m)
+	want := "property bogus should not exist. user_id must be a UUID. plan_id must be a UUID. expires_at must be a valid ISO 8601 date string"
+	if m["error"] != want {
+		t.Fatalf("error = %v, want %q", m["error"], want)
+	}
+	if svc.called {
+		t.Fatal("grant service should not be called on validation failure")
+	}
+}
+
+// TestGrant_TwoUnknownKeys: multiple forbidNonWhitelisted errors preserve JSON
+// source order. NestJS reports unknown keys in body insertion order (zeta
+// before alpha here), not Go map-iteration order.
+func TestGrant_TwoUnknownKeys(t *testing.T) {
+	svc := &fakeGrantService{}
+	h := newGrantHandler(svc)
+
+	body := `{"user_id":"11111111-1111-1111-8111-111111111111","plan_id":"22222222-2222-2222-8222-222222222222","zeta":1,"alpha":2}`
+	rec := httptest.NewRecorder()
+	h.Grant(rec, httptest.NewRequest(http.MethodPost, "/admin/subscriptions/grant", strings.NewReader(body)))
+
+	if rec.Code != 400 {
+		t.Fatalf("status = %d, want 400; body=%s", rec.Code, rec.Body.String())
+	}
+	var m map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &m)
+	want := "property zeta should not exist. property alpha should not exist"
+	if m["error"] != want {
+		t.Fatalf("error = %v, want %q", m["error"], want)
 	}
 }
 

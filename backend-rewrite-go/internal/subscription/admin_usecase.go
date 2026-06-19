@@ -10,10 +10,18 @@
 //	@IsUUID()              plan_id   // version-less → 'all'
 //	@IsOptional @IsDateString expires_at?  // ISO 8601 (alias of @IsISO8601)
 //
-// On any failure Node's exceptionFactory flatMaps every constraint string
-// (errors in property-declaration order, then whitelist errors), the
-// AllExceptionsFilter humanizes each (none of these messages hit a special
+// On any failure Node's exceptionFactory flatMaps every constraint string and
+// the AllExceptionsFilter humanizes each (none of these messages hit a special
 // case) and joins them with ". " → 400 / invalid-input.
+//
+// ORDER (verified empirically against class-validator 0.14.4 + the real DTO):
+// the ValidationPipe whitelist pass (forbidNonWhitelisted) runs first and
+// prepends its "property X should not exist" errors — one per unknown key, in
+// JSON source-insertion order — BEFORE the metadata-driven field errors
+// (user_id, plan_id, expires_at) in declaration order. e.g.
+// {user_id:'x',plan_id:'y',expires_at:'nope',bogus:1} →
+// "property bogus should not exist. user_id must be a UUID. plan_id must be a
+// UUID. expires_at must be a valid ISO 8601 date string".
 //
 // Raw class-validator default messages (verified against node_modules
 // class-validator 0.14.4):
@@ -24,6 +32,7 @@
 package subscription
 
 import (
+	"bytes"
 	"encoding/json"
 	"regexp"
 	"strings"
@@ -61,7 +70,18 @@ func validateGrant(raw []byte) (in grantInput, malformed bool, msg string) {
 
 	var raws []string
 
-	// Known properties first, in declaration order: user_id, plan_id, expires_at.
+	// forbidNonWhitelisted FIRST: the ValidationPipe whitelist pass prepends
+	// "property X should not exist" for every unknown key, in JSON
+	// source-insertion order, before the field-constraint errors. Go's map
+	// iteration is randomized and json.Unmarshal discards insertion order, so
+	// scan the raw body's top-level keys in literal source order instead.
+	for _, k := range topLevelKeysInOrder(raw) {
+		if _, ok := known[k]; !ok {
+			raws = append(raws, "property "+k+" should not exist")
+		}
+	}
+
+	// Known properties next, in declaration order: user_id, plan_id, expires_at.
 	in.UserID = uuidField(fields, "user_id", &raws)
 	in.PlanID = uuidField(fields, "plan_id", &raws)
 
@@ -81,13 +101,6 @@ func validateGrant(raw []byte) (in grantInput, malformed bool, msg string) {
 		}
 	}
 
-	// forbidNonWhitelisted: any key outside the whitelist, in JSON order.
-	for k := range fields {
-		if _, ok := known[k]; !ok {
-			raws = append(raws, "property "+k+" should not exist")
-		}
-	}
-
 	if len(raws) == 0 {
 		return in, false, ""
 	}
@@ -96,6 +109,61 @@ func validateGrant(raw []byte) (in grantInput, malformed bool, msg string) {
 		humanized[i] = humanizeValidation(r)
 	}
 	return grantInput{}, false, strings.Join(humanized, ". ")
+}
+
+// topLevelKeysInOrder returns the top-level object keys of raw in their literal
+// JSON source order (json.Unmarshal into a map discards this). raw is assumed to
+// be a well-formed JSON object — the caller already unmarshalled it. A decode
+// hiccup yields a nil slice (the field-error path still fires). Nested
+// objects/arrays are skipped so only depth-1 keys are captured.
+func topLevelKeysInOrder(raw []byte) []string {
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	// Opening '{'.
+	if _, err := dec.Token(); err != nil {
+		return nil
+	}
+	var keys []string
+	for dec.More() {
+		t, err := dec.Token()
+		if err != nil {
+			return keys
+		}
+		key, ok := t.(string)
+		if !ok {
+			return keys
+		}
+		keys = append(keys, key)
+		// Consume the value. Decoder.Token streams nested delimiters, so a
+		// composite value (object/array) advances the depth counter and we
+		// drain until it returns to the top level.
+		if err := skipValue(dec); err != nil {
+			return keys
+		}
+	}
+	return keys
+}
+
+// skipValue consumes exactly one JSON value from dec, descending through nested
+// objects/arrays via the delimiter depth counter.
+func skipValue(dec *json.Decoder) error {
+	depth := 0
+	for {
+		t, err := dec.Token()
+		if err != nil {
+			return err
+		}
+		if d, ok := t.(json.Delim); ok {
+			switch d {
+			case '{', '[':
+				depth++
+			case '}', ']':
+				depth--
+			}
+		}
+		if depth == 0 {
+			return nil
+		}
+	}
 }
 
 // uuidField validates one required @IsUUID() property, appending the

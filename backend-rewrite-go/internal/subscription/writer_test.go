@@ -136,12 +136,20 @@ func TestGrant_ExpiresAtStoredWhenProvided(t *testing.T) {
 // Date.toJSON() format: fixed 3-digit millis with trailing "Z" (NOT Go's
 // default microseconds), exact Node entity key order, and expires_at null
 // when absent. Sub-second / whole-second timestamps both render ".###Z".
+//
+// store_transaction_id is OMITTED even when the struct field is populated:
+// Node's subscriptionsService.grant() does create()+save() without assigning
+// store_transaction_id, so the returned entity has it === undefined and
+// JSON.stringify drops the key. expires_at, set to `expiresAt || null`, stays
+// present as null.
 func TestGrantedSub_JSONMatchesNode(t *testing.T) {
 	// started_at = whole second (must gain ".000"); created/updated carry
 	// sub-second precision (must truncate to 3 digits, NOT 6).
 	started := time.Date(2026, 6, 19, 12, 0, 0, 0, time.UTC)
 	created := time.Date(2026, 6, 19, 12, 0, 0, 123456000, time.UTC)
 	updated := time.Date(2026, 6, 19, 12, 0, 1, 0, time.UTC)
+	// Populated on the struct (the RETURNING row carries it), yet it must NOT
+	// appear in the grant wire bytes — Node omits it on this path.
 	txn := "txn-1"
 	g := subscription.GrantedSub{
 		ID:                 "33333333-3333-3333-3333-333333333333",
@@ -163,7 +171,6 @@ func TestGrantedSub_JSONMatchesNode(t *testing.T) {
 		`"user_id":"11111111-1111-1111-1111-111111111111",` +
 		`"plan_id":"22222222-2222-2222-2222-222222222222",` +
 		`"status":"active","store_type":"admin_granted",` +
-		`"store_transaction_id":"txn-1",` +
 		`"started_at":"2026-06-19T12:00:00.000Z",` +
 		`"expires_at":null,` +
 		`"created_at":"2026-06-19T12:00:00.123Z",` +
