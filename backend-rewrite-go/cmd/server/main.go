@@ -906,14 +906,14 @@ type coreHandlers struct {
 	adminErrorPatch    http.Handler // PATCH  /admin/errors/{id}
 	adminErrorDelete   http.Handler // DELETE /admin/errors/{id}
 	adminErrorSuggest  http.Handler // POST   /admin/errors/{id}/suggest-fix
-	adminErrorsRunCron http.Handler // POST   /admin/errors/run-fix-proposal-cron
+	adminErrorsRunCron http.Handler // POST   /admin/errors/run-ai-cron
 
 	adminBugList        http.Handler // GET    /admin/bug-reports
 	adminBugGet         http.Handler // GET    /admin/bug-reports/{id}
 	adminBugScreenshot  http.Handler // GET    /admin/bug-reports/{id}/screenshot
 	adminBugPatch       http.Handler // PATCH  /admin/bug-reports/{id}
 	adminBugDelete      http.Handler // DELETE /admin/bug-reports/{id}
-	adminBugFixProposal http.Handler // POST   /admin/bug-reports/{id}/suggest-fix
+	adminBugFixProposal http.Handler // POST   /admin/bug-reports/{id}/fix-proposal
 
 	adminInboxCounts http.Handler // GET /admin/inbox/counts
 	adminInbox       http.Handler // GET /admin/inbox
