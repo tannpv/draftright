@@ -1,0 +1,7 @@
+{
+  "name": "admin_triage_errors_suggest_fix",
+  "method": "POST",
+  "path": "/admin/errors/00000000-0000-4000-8000-000000000008/suggest-fix",
+  "headers": { "Authorization": "Bearer {{admin_token}}" },
+  "ignore_value_of": ["ai_fix_proposal", "last_seen_at"]
+}

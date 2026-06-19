@@ -1,0 +1,8 @@
+{
+  "name": "admin_triage_bug_reports_screenshot",
+  "method": "GET",
+  "path": "/admin/bug-reports/00000000-0000-4000-8000-000000000007/screenshot",
+  "headers": { "Authorization": "Bearer {{admin_token}}" },
+  "ignore_value_of": ["request_id"],
+  "_note": "Seeded bug_report ...007 has screenshot_path = NULL, so BOTH backends return 400 { error: 'no screenshot for this report', code: 'invalid-input', request_id }. The image/png streaming path is NOT exercised here on purpose: screenshots are served from the container filesystem (bug_reports.screenshot_path is a disk path, not a bytea column), and augment.sql (SQL only) cannot provision a file on both shadow containers' disks. Even if screenshot_path were set, both backends hit fs.access/os.Open failure and return 400 'screenshot file missing on disk'. The deterministic 400 (full body, request_id ignored) is the strongest parity assertion authorable in the SQL-only shadow harness."
+}

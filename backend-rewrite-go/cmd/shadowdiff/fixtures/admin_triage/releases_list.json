@@ -1,0 +1,7 @@
+{
+  "name": "admin_triage_releases_list",
+  "method": "GET",
+  "path": "/admin/releases",
+  "headers": { "Authorization": "Bearer {{admin_token}}" },
+  "ignore_value_of": []
+}
