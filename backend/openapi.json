@@ -1935,6 +1935,21 @@
         ]
       }
     },
+    "/ime-packs/manifest": {
+      "get": {
+        "operationId": "ImePacksController_manifest",
+        "summary": "List available keyboard languages + downloadable packs",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "ime-packs"
+        ]
+      }
+    },
     "/lemonsqueezy/checkout": {
       "post": {
         "operationId": "LemonsqueezyController_createCheckout",
@@ -2222,6 +2237,20 @@
           {
             "bearer": []
           }
+        ]
+      }
+    },
+    "/rewrite/tones": {
+      "get": {
+        "operationId": "RewriteController_getTones",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "rewrite"
         ]
       }
     },
