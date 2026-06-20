@@ -1,0 +1,8 @@
+{
+  "name": "cors_simple_get_origin",
+  "method": "GET",
+  "path": "/health",
+  "headers": {
+    "Origin": "https://draftright.info"
+  }
+}

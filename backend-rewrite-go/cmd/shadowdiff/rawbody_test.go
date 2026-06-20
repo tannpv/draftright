@@ -41,7 +41,7 @@ func TestSendRawBodyVerbatim(t *testing.T) {
 		Body:    []byte(`{"ignored":true}`),
 		RawBody: want,
 	}
-	status, _, err := send(srv.Client(), srv.URL, f)
+	status, _, _, err := send(srv.Client(), srv.URL, f)
 	if err != nil {
 		t.Fatal(err)
 	}
