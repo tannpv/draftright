@@ -9,8 +9,9 @@
 //
 // Node parity notes:
 //   - List defaults: page=1, limit=20 (parseInt || default in Node controller)
-//   - Export headers: Content-Type = "application/jsonl",
-//     Content-Disposition = "attachment; filename=draftright-training-data.jsonl"
+//   - Export headers: Content-Type = "application/jsonl; charset=utf-8"
+//     (Express res.send appends the charset), Content-Disposition =
+//     "attachment; filename=draftright-training-data.jsonl"
 //   - PATCH JSON decode error → 400 invalid-input "Invalid request body"
 //   - PATCH service error (e.g. bad UUID → Postgres throws) → 500 internal
 //     (Node: TypeORM update throws → AllExceptionsFilter 500)
@@ -150,7 +151,7 @@ func (h *Handler) Review(w http.ResponseWriter, r *http.Request) {
 //
 // Headers (byte-identical to Node's res.setHeader calls):
 //
-//	Content-Type: application/jsonl
+//	Content-Type: application/jsonl; charset=utf-8
 //	Content-Disposition: attachment; filename=draftright-training-data.jsonl
 //
 // Body is the raw JSONL string from ExportJSONL. Empty approved set → 200
@@ -168,7 +169,11 @@ func (h *Handler) Export(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/jsonl")
+	// Node: res.setHeader('Content-Type','application/jsonl') + res.send(str).
+	// Express's res.send appends the charset to a string body (setCharset), so
+	// the wire value is "application/jsonl; charset=utf-8" — match it exactly
+	// (caught by the shadow-gate header diff, #47).
+	w.Header().Set("Content-Type", "application/jsonl; charset=utf-8")
 	w.Header().Set("Content-Disposition", "attachment; filename=draftright-training-data.jsonl")
 	if jsonl == "" {
 		// Empty dataset → 200 empty body. WriteHeader locks the status to 200
