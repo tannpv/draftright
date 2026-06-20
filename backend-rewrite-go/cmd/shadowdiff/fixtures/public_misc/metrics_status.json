@@ -3,5 +3,6 @@
   "method": "GET",
   "path": "/metrics",
   "headers": { "Accept": "text/plain" },
-  "status_only": true
+  "status_only": true,
+  "ignore_headers": ["content-type"]
 }

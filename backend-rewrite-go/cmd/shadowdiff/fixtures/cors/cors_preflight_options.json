@@ -1,0 +1,10 @@
+{
+  "name": "cors_preflight_options",
+  "method": "OPTIONS",
+  "path": "/auth/login",
+  "headers": {
+    "Origin": "https://draftright.info",
+    "Access-Control-Request-Method": "POST",
+    "Access-Control-Request-Headers": "authorization,content-type"
+  }
+}
