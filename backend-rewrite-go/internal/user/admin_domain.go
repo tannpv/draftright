@@ -125,10 +125,9 @@ func (u UserDetail) MarshalJSON() ([]byte, error) {
 // StrippedUserDetail wraps a UserDetail to serialise it WITHOUT the six secret
 // columns (password_hash, email_verification_code/expires, password_reset_code/
 // expires/attempts). It is the #31 sanitised projection — the Go mirror of
-// Node's stripUserSecrets, applied ONLY at GET /admin/users/:id (the `user`
-// field) and PATCH /admin/users/:id. No client writes these columns back, so
-// they are dropped, not masked. The raw UserDetail (admin payment rows) still
-// emits them, matching Node's un-sanitised leftJoinAndSelect.
+// Node's stripUserSecrets, applied at GET /admin/users/:id (the `user` field),
+// PATCH /admin/users/:id, and the nested user of GET /admin/payments rows (#48).
+// No client writes these columns back, so they are dropped, not masked.
 type StrippedUserDetail struct{ UserDetail }
 
 // MarshalJSON emits the 16 non-secret columns in entity-declaration order. The

@@ -45,3 +45,62 @@ describe('deleteAdminUser guards (#32)', () => {
     expect(repo.update).toHaveBeenCalledWith('other', { is_active: false });
   });
 });
+
+// #48: GET /admin/payments leftJoinAndSelect's the raw user — listPayments must
+// drop the six secret columns from each nested user before responding.
+describe('listPayments strips nested user secrets (#48)', () => {
+  const SECRET_COLS = [
+    'password_hash',
+    'email_verification_code',
+    'email_verification_expires',
+    'password_reset_code',
+    'password_reset_expires',
+    'password_reset_attempts',
+  ];
+
+  function makeController(paymentService: any): AdminController {
+    const c: any = Object.create(AdminController.prototype);
+    c.paymentService = paymentService;
+    return c;
+  }
+
+  it('removes every secret column from the nested user, keeps non-secret fields', async () => {
+    const rawUser = {
+      id: 'u1',
+      email: 'a@b.com',
+      name: 'Alice',
+      password_hash: '$2b$10$hash',
+      email_verification_code: 'evc',
+      email_verification_expires: '2026-01-01',
+      password_reset_code: 'prc',
+      password_reset_expires: '2026-01-01',
+      password_reset_attempts: 2,
+    };
+    const paymentService = {
+      findAll: jest
+        .fn()
+        .mockResolvedValue({ payments: [{ id: 'pay1', user: rawUser }], total: 1 }),
+    };
+    const c = makeController(paymentService);
+
+    const res: any = await c.listPayments();
+
+    expect(res.total).toBe(1);
+    const u = res.payments[0].user;
+    for (const col of SECRET_COLS) expect(u).not.toHaveProperty(col);
+    expect(u).toMatchObject({ id: 'u1', email: 'a@b.com', name: 'Alice' });
+  });
+
+  it('passes a null nested user through unchanged', async () => {
+    const paymentService = {
+      findAll: jest
+        .fn()
+        .mockResolvedValue({ payments: [{ id: 'pay2', user: null }], total: 1 }),
+    };
+    const c = makeController(paymentService);
+
+    const res: any = await c.listPayments();
+
+    expect(res.payments[0].user).toBeNull();
+  });
+});
