@@ -7,6 +7,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { UsersService } from '../users/users.service';
+import { stripUserSecrets } from '../users/sanitize-user.util';
 import { PlansService } from '../plans/plans.service';
 import { AiProvidersService } from '../ai-providers/ai-providers.service';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
@@ -513,12 +514,12 @@ export class AdminController {
     const sub = await this.subscriptionsService.findActiveByUserId(id);
     const usageToday = await this.usageService.countTodayByUser(id);
     const recentUsage = await this.usageService.findRecentByUser(id);
-    return { user, subscription: sub, usage_today: usageToday, recent_usage: recentUsage };
+    return { user: stripUserSecrets(user), subscription: sub, usage_today: usageToday, recent_usage: recentUsage };
   }
 
   @Patch('users/:id')
   async updateUser(@Param('id') id: string, @Body() dto: UpdateUserDto) {
-    return this.usersService.update(id, dto as any);
+    return stripUserSecrets(await this.usersService.update(id, dto as any));
   }
 
   @Get('plans')
