@@ -122,7 +122,11 @@ func (s *Service) FeedFor(ctx context.Context, q FeedQuery) (Feed, error) {
 		return itemTime(merged[i]).After(itemTime(merged[j]))
 	})
 
-	if len(merged) > q.Limit {
+	// Truncate to limit. The q.Limit >= 0 guard prevents a `merged[:negative]`
+	// panic: a negative limit never reaches here in prod (the SQL LIMIT bind
+	// rejects it — Postgres "LIMIT must not be negative" → 500, matching Node),
+	// but the in-memory fakes in tests can. See issue #40.
+	if q.Limit >= 0 && len(merged) > q.Limit {
 		merged = merged[:q.Limit]
 	}
 
