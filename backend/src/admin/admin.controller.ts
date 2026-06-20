@@ -12,6 +12,7 @@ import { PlansService } from '../plans/plans.service';
 import { AiProvidersService } from '../ai-providers/ai-providers.service';
 import { maskProvider } from '../ai-providers/mask-provider.util';
 import { containsMaskMarker } from '../common/mask-secret.util';
+import { maskSettings, stripMaskedSecretsFromBody } from './mask-settings.util';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { UsageService } from '../usage/usage.service';
 import { RewriteLogService } from '../rewrite/rewrite-log.service';
@@ -439,11 +440,14 @@ export class AdminController {
       settings = this.settingsRepo.create();
       await this.settingsRepo.save(settings);
     }
-    return settings;
+    return maskSettings(settings);
   }
 
   @Patch('settings')
   async updateSettings(@Body() body: Partial<AppSettings>) {
+    // #30: drop masked secret echoes so a portal re-save can't overwrite a
+    // stored key with its mask.
+    stripMaskedSecretsFromBody(body);
     // Reject enabling a payment method that has no backend strategy (e.g.
     // paypal/momo) — otherwise the storefront advertises a tile that 400s
     // at checkout.
@@ -456,7 +460,7 @@ export class AdminController {
       await this.settingsRepo.save(settings);
     }
     await this.settingsRepo.update(settings.id, body);
-    return this.settingsRepo.findOne({ where: { id: settings.id } });
+    return maskSettings(await this.settingsRepo.findOne({ where: { id: settings.id } }));
   }
 
   @Post('settings/test-email')
