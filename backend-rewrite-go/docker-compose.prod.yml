@@ -1,0 +1,68 @@
+# Production compose — the Go drop-in port (Phase 5 cutover, 2026-06-19).
+#
+# Source of truth for what runs on the prod droplet at
+# /opt/draftright/docker-compose.prod.yml. The legacy NestJS `backend`
+# service (:3000) was DECOMMISSIONED at cutover and removed here; Node is
+# rollback-only and kept out of the canonical file. Secrets are NOT in this
+# file — they come from the untracked `.env` next to it (env_file) and the
+# ${POSTGRES_PASSWORD} interpolation.
+#
+# Redeploy: build draftright-backend-go:latest from the main checkout, then
+#   cd /opt/draftright && sudo docker compose -f docker-compose.prod.yml up -d backend-go
+
+services:
+  # Go drop-in port of the NestJS backend (Phase 5 prod cutover). Same .env +
+  # DATABASE_URL/REDIS_URL as the retired `backend`. Listens :3001
+  # (LISTEN_ADDR); host 127.0.0.1:3001 — also serves the streaming /v1/rewrite
+  # that Caddy already routes there. Image built from the monorepo main
+  # checkout (docker tag draftright-backend-go:latest).
+  backend-go:
+    image: draftright-backend-go:latest
+    ports:
+      - "127.0.0.1:3001:3001"
+    env_file:
+      - .env
+    environment:
+      - LISTEN_ADDR=:3001
+      - METRICS_ENABLED=true
+      - APP_ENV=production
+      # Streaming /v1/rewrite reads AI_PROVIDERS + pinned OPENAI_PROVIDER_ID
+      # (matches the retired /opt/draftright-rewrite-go microservice .env so
+      # usage_logs FK resolves to the same ai_providers row). OPENAI_API_KEY
+      # comes from .env.
+      - AI_PROVIDERS=openai
+      - OPENAI_PROVIDER_ID=db95825d-7209-4851-8a32-31a2955d0e51
+      - DATABASE_URL=postgresql://draftright:${POSTGRES_PASSWORD}@postgres:5432/draftright
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - /var/lib/draftright/bug-reports:/var/lib/draftright/bug-reports
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=draftright
+      - POSTGRES_DB=draftright
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "draftright"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - /data
+    restart: unless-stopped
+
+volumes:
+  pgdata:
