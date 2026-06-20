@@ -32,11 +32,11 @@ type fakeAdminSvc struct {
 	deleteErr    error
 	lastDeleteID string
 
-	// SetStatus
+	// SetStatusRaw
 	statusEntity   ErrorReportEntity
 	statusErr      error
 	lastStatusID   string
-	lastStatus     int
+	lastStatusRaw  json.RawMessage
 	lastResolvedBy string
 
 	// SuggestFix
@@ -60,9 +60,9 @@ func (f *fakeAdminSvc) Delete(ctx context.Context, id string) (bool, error) {
 	return f.deleteOK, f.deleteErr
 }
 
-func (f *fakeAdminSvc) SetStatus(ctx context.Context, id string, status int, resolvedBy string) (ErrorReportEntity, error) {
+func (f *fakeAdminSvc) SetStatusRaw(ctx context.Context, id string, statusRaw json.RawMessage, resolvedBy string) (ErrorReportEntity, error) {
 	f.lastStatusID = id
-	f.lastStatus = status
+	f.lastStatusRaw = statusRaw
 	f.lastResolvedBy = resolvedBy
 	return f.statusEntity, f.statusErr
 }
@@ -326,8 +326,8 @@ func TestAdminPatch_OK(t *testing.T) {
 	if rec.Code != 200 {
 		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
 	}
-	if svc.lastStatus != 4 || svc.lastResolvedBy != "bob" || svc.lastStatusID != "x" {
-		t.Fatalf("args wrong: id=%q status=%d rb=%q", svc.lastStatusID, svc.lastStatus, svc.lastResolvedBy)
+	if string(svc.lastStatusRaw) != "4" || svc.lastResolvedBy != "bob" || svc.lastStatusID != "x" {
+		t.Fatalf("args wrong: id=%q statusRaw=%q rb=%q", svc.lastStatusID, svc.lastStatusRaw, svc.lastResolvedBy)
 	}
 }
 
@@ -343,8 +343,28 @@ func TestAdminPatch_StatusZeroIsValid(t *testing.T) {
 	if rec.Code != 200 {
 		t.Fatalf("status:0 should be valid, got %d; body=%s", rec.Code, rec.Body.String())
 	}
-	if svc.lastStatus != 0 {
-		t.Fatalf("status forwarded = %d, want 0", svc.lastStatus)
+	if string(svc.lastStatusRaw) != "0" {
+		t.Fatalf("status forwarded = %q, want 0", svc.lastStatusRaw)
+	}
+}
+
+func TestAdminPatch_NullStatusPassesRequiredCheck(t *testing.T) {
+	// `{"status":null}` is PRESENT (not undefined) → must NOT trigger the
+	// "status required" 400. Node forwards null raw to Postgres (→ not-null
+	// violation 500); the handler must forward the raw "null" to the service,
+	// not short-circuit. Parity: only an ABSENT key is "status required".
+	svc := &fakeAdminSvc{statusEntity: ErrorReportEntity{ID: "x"}}
+	h := newAdminH(svc, &fakeCron{})
+
+	rec := httptest.NewRecorder()
+	req := routeWithID(httptest.NewRequest(http.MethodPatch, "/admin/errors/x", strings.NewReader(`{"status":null}`)), "x")
+	h.Patch(rec, req)
+
+	if strings.Contains(rec.Body.String(), `"error":"status required"`) {
+		t.Fatalf("null status wrongly rejected as required: %s", rec.Body.String())
+	}
+	if string(svc.lastStatusRaw) != "null" {
+		t.Fatalf("raw forwarded = %q, want null", svc.lastStatusRaw)
 	}
 }
 

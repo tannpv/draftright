@@ -1,0 +1,9 @@
+{
+  "name": "admin_triage_errors_patch_null_status",
+  "method": "PATCH",
+  "path": "/admin/errors/00000000-0000-4000-8000-000000000008",
+  "headers": { "Authorization": "Bearer {{admin_token}}", "Content-Type": "application/json" },
+  "body": { "status": null },
+  "ignore_value_of": ["request_id"],
+  "_note": "#37: explicit null is PRESENT (passes 'status required'), forwarded as SQL NULL -> not-null violation 500 'null value in column \"status\" of relation \"error_reports\" violates not-null constraint' on BOTH. Pre-fix Go collapsed present-null to absent and skipped the UPDATE. request_id volatile."
+}

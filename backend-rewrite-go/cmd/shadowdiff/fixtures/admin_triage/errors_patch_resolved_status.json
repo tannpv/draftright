@@ -1,0 +1,9 @@
+{
+  "name": "admin_triage_errors_patch_resolved_status",
+  "method": "PATCH",
+  "path": "/admin/errors/00000000-0000-4000-8000-000000000008",
+  "headers": { "Authorization": "Bearer {{admin_token}}", "Content-Type": "application/json" },
+  "body": { "status": 4 },
+  "ignore_value_of": ["last_seen_at", "resolved_at"],
+  "_note": "#37: JSON number 4 (RESOLVED) -> strict ===4 true -> stamps resolved_at=now() + resolved_by='admin'. 200 entity. last_seen_at + resolved_at = now() volatile."
+}

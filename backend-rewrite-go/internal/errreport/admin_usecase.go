@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -14,7 +15,7 @@ type adminRepo interface {
 	AdminList(ctx context.Context, f AdminListFilter) ([]ErrorReportEntity, int, error)
 	AdminGet(ctx context.Context, id string) (ErrorReportEntity, error)
 	AdminDelete(ctx context.Context, id string) (bool, error)
-	AdminSetStatus(ctx context.Context, id string, status int, setResolved bool, resolvedAt *time.Time, resolvedBy *string) (ErrorReportEntity, error)
+	AdminSetStatusRaw(ctx context.Context, id string, statusText *string, setResolved bool, resolvedAt *time.Time, resolvedBy *string) (ErrorReportEntity, error)
 	AdminSetFixProposal(ctx context.Context, id string, proposal string, status int) (ErrorReportEntity, error)
 	AdminFixCandidates(ctx context.Context, limit int32) ([]string, error)
 }
@@ -55,15 +56,22 @@ func (s *AdminService) Delete(ctx context.Context, id string) (bool, error) {
 	return s.repo.AdminDelete(ctx, id)
 }
 
-// SetStatus loads the row (404 → ErrNotFound), then persists the new status.
-// When status is 4 (RESOLVED) or 5 (IGNORED) it stamps resolved_at = now and
-// resolved_by (defaulting to "admin"); other statuses preserve the stored
-// resolved_* values (Node repo.save() re-persists them). Mirrors ErrorsService.setStatus.
-func (s *AdminService) SetStatus(ctx context.Context, id string, status int, resolvedBy string) (ErrorReportEntity, error) {
+// SetStatusRaw loads the row (404 → ErrNotFound), then persists the RAW status
+// value exactly as Node's ErrorsService.setStatus does: Node binds body.status
+// (any JSON type) straight to the int4 column and lets Postgres coerce — so a
+// non-numeric string or json null produces a Postgres 500, not a Go-side 400.
+//
+// resolved_at/resolved_by are stamped only when the raw value is the JSON
+// *number* 4 (RESOLVED) or 5 (IGNORED) — Node uses strict `=== 4/5`, so a JSON
+// string "4" does NOT resolve. Other values preserve the stored resolved_*
+// (the SQL CASE keys off setResolved). The AdminGet-first ordering matches
+// Node's findOne-before-save: an absent id with a bad status → 400 "not found",
+// never a 500. statusRaw==nil means the caller already rejected absent status.
+func (s *AdminService) SetStatusRaw(ctx context.Context, id string, statusRaw json.RawMessage, resolvedBy string) (ErrorReportEntity, error) {
 	if _, err := s.repo.AdminGet(ctx, id); err != nil {
 		return ErrorReportEntity{}, err
 	}
-	setResolved := status == 4 || status == 5
+	statusText, setResolved := renderStatus(statusRaw)
 	var resolvedAt *time.Time
 	var rb *string
 	if setResolved {
@@ -75,10 +83,45 @@ func (s *AdminService) SetStatus(ctx context.Context, id string, status int, res
 		}
 		rb = &v
 	}
-	// Non-resolving statuses preserve the stored resolved_at/resolved_by
-	// (Node's repo.save() re-persists the loaded row); the SQL CASE keys off
-	// setResolved, so the nil params are ignored unless resolving.
-	return s.repo.AdminSetStatus(ctx, id, status, setResolved, resolvedAt, rb)
+	return s.repo.AdminSetStatusRaw(ctx, id, statusText, setResolved, resolvedAt, rb)
+}
+
+// renderStatus converts the raw JSON status value into the TEXT node-pg would
+// bind to the int4 column, plus whether it is the resolving number 4/5.
+//   - JSON null → nil (→ SQL NULL → not-null violation, Node parity)
+//   - JSON number → JS String(n): integers without a decimal ("4"), others via
+//     shortest round-trip ("2.5"); resolves iff == 4 or == 5
+//   - JSON string → the unquoted value ("foo", "3") — never resolves
+//   - JSON bool → "true"/"false"; object/array → raw text — both hit a PG error
+func renderStatus(raw json.RawMessage) (text *string, resolveStatus bool) {
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+	var v any
+	if err := dec.Decode(&v); err != nil {
+		s := strings.TrimSpace(string(raw))
+		return &s, false
+	}
+	switch vv := v.(type) {
+	case nil:
+		return nil, false
+	case json.Number:
+		s := vv.String()
+		if f, ferr := vv.Float64(); ferr == nil {
+			if f == math.Trunc(f) && f >= math.MinInt32 && f <= math.MaxInt32 {
+				s = strconv.FormatInt(int64(f), 10)
+			}
+			return &s, f == 4 || f == 5
+		}
+		return &s, false
+	case string:
+		return &vv, false
+	case bool:
+		s := strconv.FormatBool(vv)
+		return &s, false
+	default:
+		s := strings.TrimSpace(string(raw))
+		return &s, false
+	}
 }
 
 // SuggestFix loads the row (404 → ErrNotFound), builds the §3.2 prompt, runs

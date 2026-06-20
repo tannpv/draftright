@@ -36,7 +36,19 @@ type Querier interface {
 	AdminListErrors(ctx context.Context, arg AdminListErrorsParams) ([]ErrorReport, error)
 	AdminSetBugFixProposal(ctx context.Context, arg AdminSetBugFixProposalParams) (BugReport, error)
 	AdminSetErrorFixProposal(ctx context.Context, arg AdminSetErrorFixProposalParams) (ErrorReport, error)
-	AdminSetErrorStatus(ctx context.Context, arg AdminSetErrorStatusParams) (ErrorReport, error)
+	// Byte-parity with Node ErrorsService.setStatus, which binds the RAW
+	// request body.status (any JSON type) straight to the int4 column and lets
+	// Postgres coerce. status_text is the value rendered as node-pg would send
+	// it (NULL for json null); `::integer` reproduces the exact PG errors —
+	// `invalid input syntax for type integer: "foo"` for non-numeric, and the
+	// not-null violation for json null (#37). A typed int param can't surface
+	// those, so Go was wrongly returning 400 instead of Node's 500.
+	// status_text is `::text::integer`, NOT `::integer`: the double cast keeps the
+	// bind param a TEXT so the raw value ("foo", "2.5", "3") reaches Postgres and
+	// int4-input runs at runtime — `'foo'::text::integer` throws the exact
+	// `invalid input syntax for type integer: "foo"` Node surfaces. A single
+	// `::integer` makes sqlc type the param int32, which can't carry those.
+	AdminSetErrorStatusRaw(ctx context.Context, arg AdminSetErrorStatusRawParams) (ErrorReport, error)
 	// The use case (admin_usecase.go) does the partial-merge in Go (load → apply
 	// only the provided DTO fields → write the merged values), mirroring Node's
 	// per-field `if (dto.x !== undefined)`. This writes the already-merged values.
