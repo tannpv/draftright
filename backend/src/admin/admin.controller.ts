@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Res, Header, BadRequestException, NotFoundException,
+  Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Res, Header, Request, BadRequestException, NotFoundException,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
@@ -783,7 +783,19 @@ export class AdminController {
   }
 
   @Delete('admin-users/:id')
-  async deleteAdminUser(@Param('id') id: string) {
+  async deleteAdminUser(@Param('id') id: string, @Request() req: any) {
+    // #32: an admin must not deactivate their own account or the last active
+    // admin (lockout / privilege-loss). Both → 400.
+    if (id === req.user.id) {
+      throw new BadRequestException('You cannot deactivate your own admin account');
+    }
+    const target = await this.adminUserRepo.findOne({ where: { id } });
+    if (target && target.is_active) {
+      const activeCount = await this.adminUserRepo.count({ where: { is_active: true } });
+      if (activeCount <= 1) {
+        throw new BadRequestException('Cannot deactivate the last active admin');
+      }
+    }
     await this.adminUserRepo.update(id, { is_active: false });
     return { success: true };
   }
