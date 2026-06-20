@@ -10,7 +10,7 @@
 # To regenerate after a schema change:
 #   1. scripts/dump-prod-schema.sh   # refresh schema.sql from prod
 #   2. sqlc generate                 # re-emit bindings
-#   3. git add internal/adapter/pg/sqlc/ internal/platform/db/schema.sql
+#   3. git add internal/shared/pg/sqlc/ internal/platform/db/schema.sql
 #   4. commit + push
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -19,7 +19,7 @@ if ! command -v sqlc >/dev/null 2>&1; then
     exit 2
 fi
 sqlc generate
-if ! git diff --exit-code -- internal/adapter/pg/sqlc/ internal/platform/db/schema.sql; then
+if ! git diff --exit-code -- internal/shared/pg/sqlc/ internal/platform/db/schema.sql; then
     echo
     echo "ERROR: sqlc-generated files are out of sync with queries.sql/schema.sql."
     echo "       Run \`sqlc generate\` locally + commit the diff."

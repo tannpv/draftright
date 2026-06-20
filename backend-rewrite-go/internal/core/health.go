@@ -46,12 +46,23 @@ func NewHealthHandler(reader LogLevelReader, version string) *HealthHandler {
 	return &HealthHandler{reader: reader, version: version, cached: defaultLogLevel}
 }
 
+// healthBody serializes in Node's exact key order: app, version, status,
+// client_log_level. A map[string]string marshals sorted (app,
+// client_log_level, status, version) — the master parity rule is "JSON keys
+// IN ORDER", so use an ordered struct, not a map. See parity issue #47.
+type healthBody struct {
+	App            string `json:"app"`
+	Version        string `json:"version"`
+	Status         string `json:"status"`
+	ClientLogLevel string `json:"client_log_level"`
+}
+
 func (h *HealthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	shared.WriteJSON(w, http.StatusOK, map[string]string{
-		"app":              healthApp,
-		"version":          h.version,
-		"status":           "ok",
-		"client_log_level": h.clientLogLevel(r.Context()),
+	shared.WriteJSON(w, http.StatusOK, healthBody{
+		App:            healthApp,
+		Version:        h.version,
+		Status:         "ok",
+		ClientLogLevel: h.clientLogLevel(r.Context()),
 	})
 }
 
