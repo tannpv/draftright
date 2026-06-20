@@ -276,6 +276,11 @@ type Querier interface {
 	InsertReleaseChannel(ctx context.Context, arg InsertReleaseChannelParams) (AppRelease, error)
 	// Node PoliciesService.upsert() create path. The use case supplies merged values.
 	InsertReleasePolicy(ctx context.Context, arg InsertReleasePolicyParams) (AppReleasePolicy, error)
+	// log(): fire-and-forget training-data capture after a successful rewrite.
+	// Node: rewriteLogRepo.save({ tone, input_text, output_text, model,
+	//        provider_type, response_time_ms }) — id/quality/created_at default.
+	// Mirrors RewriteService.callAI's this.rewriteLogService.log({...}).catch(()=>{}).
+	InsertRewriteLog(ctx context.Context, arg InsertRewriteLogParams) error
 	// Records one /rewrite call for daily quota tracking + analytics.
 	// Mirrors NestJS UsageService.log: same columns, same names, same
 	// precision so the two backends populate identical rows.

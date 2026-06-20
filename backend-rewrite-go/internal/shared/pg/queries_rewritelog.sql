@@ -32,6 +32,14 @@ SELECT COUNT(*) FROM rewrite_logs WHERE quality = 'pending';
 -- (0-row no-op is fine); invalid UUID → caller returns nil without touching DB.
 UPDATE rewrite_logs SET quality = $2 WHERE id = $1;
 
+-- name: InsertRewriteLog :exec
+-- log(): fire-and-forget training-data capture after a successful rewrite.
+-- Node: rewriteLogRepo.save({ tone, input_text, output_text, model,
+--        provider_type, response_time_ms }) — id/quality/created_at default.
+-- Mirrors RewriteService.callAI's this.rewriteLogService.log({...}).catch(()=>{}).
+INSERT INTO rewrite_logs (tone, input_text, output_text, model, provider_type, response_time_ms)
+VALUES ($1, $2, $3, $4, $5, $6);
+
 -- name: ListApprovedRewriteLogsAsc :many
 -- exportApproved / exportAll: quality='approved', oldest first.
 -- Node: find({ where: { quality: 'approved' }, order: { created_at: 'ASC' } })

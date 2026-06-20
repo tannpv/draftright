@@ -140,22 +140,33 @@ func (s *Service) Test(ctx context.Context, id string) TestResult {
 // route through it so every request reports the live DB default provider
 // rather than a process-static ENV provider.
 func (s *Service) DefaultComplete(ctx context.Context, system, user string) (text, name string, ms int64, err error) {
+	text, name, _, _, ms, err = s.DefaultCompleteFull(ctx, system, user)
+	return text, name, ms, err
+}
+
+// DefaultCompleteFull is DefaultComplete plus the resolved provider's model and
+// type — the two fields Node's RewriteService.callAI captures for the
+// rewrite_logs training-data row (provider.model, provider.type). Same DB
+// resolution and ErrNoDefaultProvider mapping; exposed separately so the
+// rewrite parity path can record provenance without widening the common
+// DefaultComplete signature used by Propose and extraction.
+func (s *Service) DefaultCompleteFull(ctx context.Context, system, user string) (text, name, model, providerType string, ms int64, err error) {
 	p, err := s.repo.GetDefault(ctx)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
-			return "", "", 0, ErrNoDefaultProvider
+			return "", "", "", "", 0, ErrNoDefaultProvider
 		}
-		return "", "", 0, err
+		return "", "", "", "", 0, err
 	}
 	c, err := s.factory.For(p)
 	if err != nil {
-		return "", "", 0, err
+		return "", "", "", "", 0, err
 	}
 	text, ms, err = c.Complete(ctx, system, user)
 	if err != nil {
-		return "", "", 0, err
+		return "", "", "", "", 0, err
 	}
-	return text, p.Name, ms, nil
+	return text, p.Name, p.Model, p.Type, ms, nil
 }
 
 // Propose resolves the active default provider and runs one blocking

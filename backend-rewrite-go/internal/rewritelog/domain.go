@@ -27,6 +27,20 @@ type RewriteLog struct {
 	CreatedAt      time.Time
 }
 
+// RewriteLogInput is the write side of rewrite_logs — the six fields the
+// rewrite flow captures after a successful provider call. id, quality, and
+// created_at are supplied by DB defaults (uuid, 'pending', now()), mirroring
+// Node's rewriteLogRepo.save({ tone, input_text, output_text, model,
+// provider_type, response_time_ms }).
+type RewriteLogInput struct {
+	Tone           string
+	InputText      string
+	OutputText     string
+	Model          string
+	ProviderType   string
+	ResponseTimeMs int64
+}
+
 func (l RewriteLog) MarshalJSON() ([]byte, error) {
 	type wire struct {
 		ID             string `json:"id"`

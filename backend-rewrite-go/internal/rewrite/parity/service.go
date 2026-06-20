@@ -22,10 +22,42 @@ import (
 // What remains is the externally-observable contract: quota gate → prompt
 // resolution → provider call → response envelope.
 
-// completer is the consumer-side port for a blocking AI completion. The real
-// aicall.Completer satisfies it; tests inject a fake.
+// Completion is the result of a blocking AI completion: the rewritten text
+// plus the resolved provider's provenance (model, type, elapsed ms). Node's
+// RewriteService.callAI captures the latter three for the rewrite_logs
+// training-data row (provider.model, provider.type, result.responseTimeMs).
+type Completion struct {
+	Text           string
+	Model          string
+	ProviderType   string
+	ResponseTimeMs int64
+}
+
+// completer is the consumer-side port for a blocking AI completion. The
+// DB-default completer in main.go satisfies it; tests inject a fake.
 type completer interface {
-	Complete(ctx context.Context, system, user string) (string, int64, error)
+	Complete(ctx context.Context, system, user string) (Completion, error)
+}
+
+// RewriteLogEntry is the training-data row captured after a successful rewrite.
+// Mirrors Node's this.rewriteLogService.log({ tone, input_text, output_text,
+// model, provider_type, response_time_ms }).
+type RewriteLogEntry struct {
+	Tone           string
+	InputText      string
+	OutputText     string
+	Model          string
+	ProviderType   string
+	ResponseTimeMs int64
+}
+
+// rewriteLogger is the consumer-side port for fire-and-forget training-data
+// capture. The contract: LogRewrite never blocks and never returns an error —
+// the sink in main.go detaches the write onto a goroutine and swallows
+// failures, mirroring Node's `.log({...}).catch(() => {})`. A nil logger
+// disables capture (authed-only / test wiring that doesn't assert logging).
+type rewriteLogger interface {
+	LogRewrite(ctx context.Context, e RewriteLogEntry)
 }
 
 // entitlements is the consumer-side port for the daily-quota lookup. The real
@@ -50,6 +82,9 @@ type Service struct {
 	trial      TrialLimiter
 	trialLimit int
 	now        func() time.Time
+
+	// Training-data seam (set via WithRewriteLog; nil disables capture).
+	logger rewriteLogger
 }
 
 // NewService wires the rewrite dependencies. now defaults to time.Now so the
@@ -69,6 +104,15 @@ func (s *Service) WithTrial(l TrialLimiter, limit int, now func() time.Time) *Se
 		now = time.Now
 	}
 	s.now = now
+	return s
+}
+
+// WithRewriteLog wires the fire-and-forget training-data sink. Kept off the
+// NewService signature so authed-only tests and existing wiring stay untouched
+// (a nil logger simply skips capture). Mirrors Node, where callAI logs every
+// successful rewrite — authenticated AND public-trial — for fine-tuning.
+func (s *Service) WithRewriteLog(l rewriteLogger) *Service {
+	s.logger = l
 	return s
 }
 
@@ -221,7 +265,7 @@ func (s *Service) callAI(ctx context.Context, text, tone, target, source string)
 	if prompt == "" {
 		return "", &UnknownToneError{Tone: tone}
 	}
-	out, _, err := s.c.Complete(ctx, prompt, text)
+	comp, err := s.c.Complete(ctx, prompt, text)
 	if err != nil {
 		// Node resolves the default provider OUTSIDE the callProvider try, so a
 		// missing default is a 400, not the generic 502. Pass it through;
@@ -231,7 +275,22 @@ func (s *Service) callAI(ctx context.Context, text, tone, target, source string)
 		}
 		return "", ErrProviderFailed
 	}
-	return out, nil
+
+	// Fire-and-forget training-data capture AFTER a successful provider call —
+	// Node logs here, between the call and the return, only on success (never on
+	// provider error or unknown tone). The sink is non-blocking and swallows
+	// errors; a nil logger skips capture.
+	if s.logger != nil {
+		s.logger.LogRewrite(ctx, RewriteLogEntry{
+			Tone:           tone,
+			InputText:      text,
+			OutputText:     comp.Text,
+			Model:          comp.Model,
+			ProviderType:   comp.ProviderType,
+			ResponseTimeMs: comp.ResponseTimeMs,
+		})
+	}
+	return comp.Text, nil
 }
 
 // parseGrammarResult mirrors Node's parseGrammarResult: parse the provider text
