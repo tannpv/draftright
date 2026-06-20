@@ -702,7 +702,7 @@ export class AdminController {
     @Query('sort_by') sort_by?: string,
     @Query('sort_order') sort_order?: string,
   ) {
-    return this.paymentService.findAll({
+    const { payments, total } = await this.paymentService.findAll({
       page: page ? parseInt(page) : 1,
       limit: limit ? parseInt(limit) : 20,
       status,
@@ -710,6 +710,14 @@ export class AdminController {
       sort_by,
       sort_order: sort_order?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC',
     });
+    // #48: the leftJoinAndSelect'd user is the raw entity (no
+    // ClassSerializerInterceptor), so drop the six secret columns from each
+    // nested user before it reaches an admin client. Mirrored byte-for-byte by
+    // the Go port (StrippedUserDetail on the payment row's nested user).
+    return {
+      payments: payments.map((p) => ({ ...p, user: stripUserSecrets(p.user) })),
+      total,
+    };
   }
 
   @Post('payments/:id/confirm')
