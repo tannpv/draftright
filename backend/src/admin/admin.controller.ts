@@ -10,6 +10,8 @@ import { UsersService } from '../users/users.service';
 import { stripUserSecrets } from '../users/sanitize-user.util';
 import { PlansService } from '../plans/plans.service';
 import { AiProvidersService } from '../ai-providers/ai-providers.service';
+import { maskProvider } from '../ai-providers/mask-provider.util';
+import { containsMaskMarker } from '../common/mask-secret.util';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { UsageService } from '../usage/usage.service';
 import { RewriteLogService } from '../rewrite/rewrite-log.service';
@@ -549,20 +551,23 @@ export class AdminController {
 
   @Get('ai-providers/paginated')
   async listProvidersPaginated(@Query() q: Record<string, unknown>) {
-    return this.aiProvidersService.findAllPaginated(parseListQuery(q));
+    const res = await this.aiProvidersService.findAllPaginated(parseListQuery(q));
+    return { ...res, rows: res.rows.map(maskProvider) };
   }
 
   @Get('ai-providers')
-  async listProviders() { return this.aiProvidersService.findAll(); }
+  async listProviders() { return (await this.aiProvidersService.findAll()).map(maskProvider); }
 
   @Post('ai-providers')
   async createProvider(@Body() body: { name: string; type: string; endpoint_url: string; api_key?: string; model: string; temperature?: number }) {
-    return this.aiProvidersService.create(body as any);
+    if (containsMaskMarker(body.api_key)) delete body.api_key;
+    return maskProvider(await this.aiProvidersService.create(body as any));
   }
 
   @Patch('ai-providers/:id')
   async updateProvider(@Param('id') id: string, @Body() body: Partial<{ name: string; type: string; endpoint_url: string; api_key: string; model: string; temperature: number; is_default: boolean; is_active: boolean }>) {
-    return this.aiProvidersService.update(id, body as any);
+    if (containsMaskMarker(body.api_key)) delete body.api_key;
+    return maskProvider(await this.aiProvidersService.update(id, body as any));
   }
 
   @Delete('ai-providers/:id')
