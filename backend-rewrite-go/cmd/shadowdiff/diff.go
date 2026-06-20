@@ -26,6 +26,7 @@ import (
 //   - JSON key ORDER (maps are unordered) — #47.
 //   - insignificant WHITESPACE — #38.
 //   - NUMBER formatting (1.0 vs 1, 1e2 vs 100 both decode to float64) — #38.
+//
 // These are why a stored jsonb `context` (error_reports/bug_reports) compares
 // equal even though Postgres canonicalizes it and Go round-trips raw bytes.
 // Do NOT "fix" #38 by re-marshalling Go's context through a map encoder — that

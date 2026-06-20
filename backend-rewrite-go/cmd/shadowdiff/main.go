@@ -50,6 +50,17 @@ type fixture struct {
 	// counter/gauge values change every scrape). NOT an escape hatch for a
 	// real body mismatch; reserve it for genuinely non-deterministic bodies.
 	StatusOnly bool `json:"status_only"`
+	// CompareRawBody compares the response bodies byte-for-byte (trailing
+	// newline normalized) instead of parsed — surfacing JSON key-order
+	// regressions the parsed differ ignores (issue #47). Opt-in; use ONLY for
+	// deterministic bodies (no per-request tokens/ids — there is no
+	// ignore_value_of equivalent for a raw compare). Supersedes the parsed
+	// diff for this fixture (equal bytes ⇒ equal parsed).
+	CompareRawBody bool `json:"compare_raw_body"`
+	// IgnoreHeaders lists parity-allowlist response headers to skip for this
+	// fixture (lower-cased). The escape hatch for an endpoint whose header
+	// legitimately differs Node-vs-Go (e.g. /metrics Content-Type).
+	IgnoreHeaders []string `json:"ignore_headers"`
 }
 
 func main() {
@@ -144,13 +155,13 @@ func main() {
 			}
 		}
 		ff := substitute(f, vars)
-		nStatus, nBody, err := send(client, *nodeBase, ff)
+		nStatus, nHeader, nBody, err := send(client, *nodeBase, ff)
 		if err != nil {
 			fmt.Printf("FAIL %s: node request error: %v\n", f.Name, err)
 			failed++
 			continue
 		}
-		gStatus, gBody, err := send(client, *goBase, ff)
+		gStatus, gHeader, gBody, err := send(client, *goBase, ff)
 		if err != nil {
 			fmt.Printf("FAIL %s: go request error: %v\n", f.Name, err)
 			failed++
@@ -160,7 +171,13 @@ func main() {
 		if nStatus != gStatus {
 			problems = append(problems, fmt.Sprintf("status: node=%d go=%d", nStatus, gStatus))
 		}
-		if !f.StatusOnly {
+		problems = append(problems, diffHeaders(nHeader, gHeader, lowerSet(f.IgnoreHeaders))...)
+		switch {
+		case f.StatusOnly:
+			// body non-deterministic — skip body diff entirely
+		case f.CompareRawBody:
+			problems = append(problems, diffRawBody(nBody, gBody)...)
+		default:
 			problems = append(problems, diffJSON(nBody, gBody, f.IgnoreValueOf)...)
 		}
 		if len(problems) > 0 {
@@ -214,7 +231,7 @@ func loadFixtures(dir string) ([]fixture, error) {
 	return out, nil
 }
 
-func send(c *http.Client, base string, f fixture) (int, []byte, error) {
+func send(c *http.Client, base string, f fixture) (int, http.Header, []byte, error) {
 	var body io.Reader
 	switch {
 	case f.RawBody != "":
@@ -224,16 +241,28 @@ func send(c *http.Client, base string, f fixture) (int, []byte, error) {
 	}
 	req, err := http.NewRequest(f.Method, base+f.Path, body)
 	if err != nil {
-		return 0, nil, err
+		return 0, nil, nil, err
 	}
 	for k, v := range f.Headers {
 		req.Header.Set(k, v)
 	}
 	resp, err := c.Do(req)
 	if err != nil {
-		return 0, nil, err
+		return 0, nil, nil, err
 	}
 	defer resp.Body.Close()
 	b, err := io.ReadAll(resp.Body)
-	return resp.StatusCode, b, err
+	return resp.StatusCode, resp.Header, b, err
+}
+
+// lowerSet builds a lower-cased lookup set from a slice (nil-safe).
+func lowerSet(ss []string) map[string]bool {
+	if len(ss) == 0 {
+		return nil
+	}
+	m := make(map[string]bool, len(ss))
+	for _, s := range ss {
+		m[strings.ToLower(s)] = true
+	}
+	return m
 }

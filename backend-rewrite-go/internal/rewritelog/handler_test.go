@@ -379,8 +379,8 @@ func TestExport_Headers(t *testing.T) {
 	if rec.Code != 200 {
 		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
 	}
-	if ct := rec.Header().Get("Content-Type"); ct != "application/jsonl" {
-		t.Fatalf("Content-Type = %q, want application/jsonl", ct)
+	if ct := rec.Header().Get("Content-Type"); ct != "application/jsonl; charset=utf-8" {
+		t.Fatalf("Content-Type = %q, want application/jsonl; charset=utf-8", ct)
 	}
 	wantCD := "attachment; filename=draftright-training-data.jsonl"
 	if cd := rec.Header().Get("Content-Disposition"); cd != wantCD {
@@ -435,7 +435,7 @@ func TestExport_ServiceError(t *testing.T) {
 	if cd := rec.Header().Get("Content-Disposition"); cd != "" {
 		t.Fatalf("error response leaked Content-Disposition = %q, want empty", cd)
 	}
-	if ct := rec.Header().Get("Content-Type"); ct == "application/jsonl" {
+	if ct := rec.Header().Get("Content-Type"); strings.HasPrefix(ct, "application/jsonl") {
 		t.Fatalf("error response leaked Content-Type = %q (jsonl), want JSON envelope", ct)
 	}
 }

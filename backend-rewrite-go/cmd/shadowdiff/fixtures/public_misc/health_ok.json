@@ -4,5 +4,6 @@
   "path": "/health",
   "headers": {
     "Content-Type": "application/json"
-  }
+  },
+  "compare_raw_body": true
 }
