@@ -1,0 +1,8 @@
+{
+  "name": "admin_core_admin_users_delete_self",
+  "method": "DELETE",
+  "path": "/admin/admin-users/{{admin_id}}",
+  "headers": { "Authorization": "Bearer {{admin_token}}" },
+  "ignore_value_of": ["request_id"],
+  "_note": "#32: an admin deactivating their own account → 400 invalid-input on BOTH backends ('You cannot deactivate your own admin account'). {{admin_id}} is the seeded admin's own JWT sub, so target == acting admin."
+}

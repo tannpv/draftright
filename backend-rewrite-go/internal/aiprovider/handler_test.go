@@ -142,3 +142,50 @@ func TestDelete_SuccessBody(t *testing.T) {
 		t.Fatalf("body = %q, want %q", got, `{"success":true}`)
 	}
 }
+
+// #29 write guard — PATCH with a masked api_key echo must NOT reach the repo
+// (nil = column untouched), so the real stored key survives. A genuine new key
+// still passes through.
+func TestUpdate_DropsMaskedAPIKeyEcho(t *testing.T) {
+	repo := &fakeRepo{}
+	h := NewHandler(NewService(repo, fakeFactory{}))
+	rec := httptest.NewRecorder()
+	req := routeWithID(httptest.NewRequest(http.MethodPatch, "/admin/ai-providers/x",
+		strings.NewReader(`{"api_key":"sk-…wxyz"}`)), "x")
+	h.Update(rec, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	if repo.updatedPath.APIKey != nil {
+		t.Fatalf("masked api_key echo reached repo: %q", *repo.updatedPath.APIKey)
+	}
+}
+
+func TestUpdate_KeepsRealAPIKey(t *testing.T) {
+	repo := &fakeRepo{}
+	h := NewHandler(NewService(repo, fakeFactory{}))
+	rec := httptest.NewRecorder()
+	req := routeWithID(httptest.NewRequest(http.MethodPatch, "/admin/ai-providers/x",
+		strings.NewReader(`{"api_key":"sk-proj-realnewkey1234"}`)), "x")
+	h.Update(rec, req)
+
+	if repo.updatedPath.APIKey == nil || *repo.updatedPath.APIKey != "sk-proj-realnewkey1234" {
+		t.Fatalf("real api_key must pass through, got %v", repo.updatedPath.APIKey)
+	}
+}
+
+// #29 write guard on Create — a masked api_key echo must be blanked before
+// insert (empty = unset), never persisted as a literal "sk-…wxyz".
+func TestCreate_DropsMaskedAPIKeyEcho(t *testing.T) {
+	repo := &fakeRepo{}
+	h := NewHandler(NewService(repo, fakeFactory{}))
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/admin/ai-providers",
+		strings.NewReader(`{"name":"GPT","type":"openai","api_key":"sk-…wxyz","model":"gpt-4"}`))
+	h.Create(rec, req)
+
+	if repo.inserted.APIKey != "" {
+		t.Fatalf("masked api_key echo reached repo on create: %q", repo.inserted.APIKey)
+	}
+}

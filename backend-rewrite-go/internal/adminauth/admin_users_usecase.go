@@ -25,6 +25,8 @@ type adminUsersRepo interface {
 	Insert(ctx context.Context, in NewAdminUser) (AdminUserOut, error)
 	Update(ctx context.Context, id string, p AdminUserPatch) (AdminUserOut, error)
 	SoftDelete(ctx context.Context, id string) error
+	IsActiveAdmin(ctx context.Context, id string) (bool, error)
+	CountActiveAdmins(ctx context.Context) (int, error)
 }
 
 // CreateAdminUserInput is the resolved create payload — Role is already
@@ -125,4 +127,14 @@ func (s *AdminUsersService) Update(ctx context.Context, id string, in UpdateAdmi
 // SoftDelete clears is_active (Node deleteAdminUser).
 func (s *AdminUsersService) SoftDelete(ctx context.Context, id string) error {
 	return s.repo.SoftDelete(ctx, id)
+}
+
+// IsActiveAdmin reports whether id is an existing, active admin (#32 guard).
+func (s *AdminUsersService) IsActiveAdmin(ctx context.Context, id string) (bool, error) {
+	return s.repo.IsActiveAdmin(ctx, id)
+}
+
+// CountActiveAdmins returns the active-admin count (#32 last-admin guard).
+func (s *AdminUsersService) CountActiveAdmins(ctx context.Context) (int, error) {
+	return s.repo.CountActiveAdmins(ctx)
 }

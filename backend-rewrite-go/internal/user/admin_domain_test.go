@@ -11,8 +11,12 @@ import (
 
 func sptr(s string) *string { return &s }
 
-// TestUserDetail_JSONKeyOrder pins the 22 JSON keys in entity-declaration
-// order and confirms an absent nullable string renders explicit null.
+// TestUserDetail_JSONKeyOrder pins the 22 RAW JSON keys in
+// entity-declaration order and confirms an absent nullable string renders
+// explicit null. UserDetail is the un-sanitised entity — it KEEPS the six
+// secrets because the admin payment rows nest it raw (leftJoinAndSelect,
+// no sanitiser), matching Node. The user detail/update endpoints serialise
+// via StrippedUserDetail instead — see TestStrippedUserDetail_OmitsSecretColumns (#31).
 func TestUserDetail_JSONKeyOrder(t *testing.T) {
 	created := time.Date(2026, 1, 2, 3, 4, 5, 678_000_000, time.UTC)
 	updated := time.Date(2026, 1, 2, 3, 4, 6, 0, time.UTC)
@@ -61,57 +65,82 @@ func TestUserDetail_JSONKeyOrder(t *testing.T) {
 	}
 }
 
-// TestUserDetail_NullPasswordHash — the OAuth-user parity case: a nil
-// PasswordHash renders explicit JSON null, not "".
-func TestUserDetail_NullPasswordHash(t *testing.T) {
+// TestUserDetail_KeepsSecretColumns — the raw entity MUST still expose the
+// six secrets. The admin payment rows nest *UserDetail directly (Node's
+// leftJoinAndSelect with no ClassSerializerInterceptor leaks them there), so
+// dropping them here would break byte parity at /admin/payments.
+func TestUserDetail_KeepsSecretColumns(t *testing.T) {
+	code := "123456"
+	hash := "$2b$10$abcdefghijklmnopqrstuv"
+	exp := time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
 	d := user.UserDetail{
-		ID:           "u2",
-		Email:        "oauth@b.com",
-		PasswordHash: nil,
-		Name:         "Bob",
-		Role:         "user",
-		AuthProvider: "google",
-		CreatedAt:    time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
-		UpdatedAt:    time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+		ID: "u1", Email: "a@b.com", PasswordHash: &hash, Name: "A",
+		Role: "user", AuthProvider: "local",
+		EmailVerificationCode: &code, EmailVerificationExpires: &exp,
+		PasswordResetCode: &code, PasswordResetExpires: &exp, PasswordResetAttempts: 3,
+		CreatedAt: exp, UpdatedAt: exp,
 	}
 	b, err := json.Marshal(d)
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
 	got := string(b)
-	if !strings.Contains(got, `"password_hash":null`) {
-		t.Errorf("nil password_hash must render null; got %s", got)
-	}
-	if strings.Contains(got, `"password_hash":""`) {
-		t.Errorf("nil password_hash must not render empty string; got %s", got)
+	for _, k := range []string{
+		"password_hash", "email_verification_code", "email_verification_expires",
+		"password_reset_code", "password_reset_expires", "password_reset_attempts",
+	} {
+		if !strings.Contains(got, k) {
+			t.Errorf("raw entity must keep %q (payment rows leak it): %s", k, got)
+		}
 	}
 }
 
-// TestUserDetail_NullableTimestamps — a non-nil email_verification_expires
-// renders as the quoted ISO-millis string; a nil one renders null.
-func TestUserDetail_NullableTimestamps(t *testing.T) {
-	exp := time.Date(2026, 3, 4, 5, 6, 7, 890_000_000, time.UTC)
-	d := user.UserDetail{
-		ID:                       "u3",
-		Email:                    "c@b.com",
-		Name:                     "Carol",
-		Role:                     "user",
-		AuthProvider:             "local",
-		EmailVerificationExpires: &exp,
-		// PasswordResetExpires left nil → expect null
-		CreatedAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
-		UpdatedAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
-	}
+// TestStrippedUserDetail_OmitsSecretColumns — #31: GET /admin/users/:id and
+// PATCH /admin/users/:id serialise via StrippedUserDetail, which must never
+// carry password_hash, the password-reset code/expiry/attempts, or the
+// email-verification code/expiry. Node's stripUserSecrets drops the same six
+// → byte parity.
+func TestStrippedUserDetail_OmitsSecretColumns(t *testing.T) {
+	code := "123456"
+	hash := "$2b$10$abcdefghijklmnopqrstuv"
+	exp := time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+	d := user.StrippedUserDetail{UserDetail: user.UserDetail{
+		ID: "u1", Email: "a@b.com", PasswordHash: &hash, Name: "A",
+		Role: "user", AuthProvider: "local",
+		EmailVerificationCode: &code, EmailVerificationExpires: &exp,
+		PasswordResetCode: &code, PasswordResetExpires: &exp, PasswordResetAttempts: 3,
+		CreatedAt: exp, UpdatedAt: exp,
+	}}
 	b, err := json.Marshal(d)
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
 	got := string(b)
-
-	if !strings.Contains(got, `"email_verification_expires":"2026-03-04T05:06:07.890Z"`) {
-		t.Errorf("non-nil timestamp must render ISO-millis string; got %s", got)
+	for _, k := range []string{
+		"password_hash", "email_verification_code", "email_verification_expires",
+		"password_reset_code", "password_reset_expires", "password_reset_attempts",
+	} {
+		if strings.Contains(got, k) {
+			t.Errorf("stripped response leaks %q: %s", k, got)
+		}
 	}
-	if !strings.Contains(got, `"password_reset_expires":null`) {
-		t.Errorf("nil timestamp must render null; got %s", got)
+	// Non-secret columns must remain, in order.
+	want := []string{
+		"id", "email", "name", "is_active", "role",
+		"auth_provider", "google_id", "facebook_id", "tiktok_id", "apple_id",
+		"avatar_url", "stripe_customer_id", "email_verified",
+		"lemonsqueezy_customer_id", "created_at", "updated_at",
+	}
+	prev := -1
+	for _, k := range want {
+		idx := strings.Index(got, `"`+k+`"`)
+		if idx < 0 {
+			t.Errorf("missing expected key %q", k)
+			continue
+		}
+		if idx <= prev {
+			t.Errorf("key %q out of order in %s", k, got)
+		}
+		prev = idx
 	}
 }

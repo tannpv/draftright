@@ -326,9 +326,10 @@ func TestUpdateUser_ReturnsFullEntity(t *testing.T) {
 	if repo.updated.Name == nil || *repo.updated.Name != "Al" {
 		t.Fatalf("name patch not passed: %+v", repo.updated)
 	}
-	// full entity → has password_hash key (UserDetail-only field).
+	// full entity → has email_verified key (UserDetail-only field; the slim
+	// list row lacks it). password_hash et al. are dropped by #31.
 	m := decodeBody(t, rec.Body.String())
-	if _, ok := m["password_hash"]; !ok {
+	if _, ok := m["email_verified"]; !ok {
 		t.Fatalf("response is not the full UserDetail: %s", rec.Body.String())
 	}
 }
@@ -436,7 +437,7 @@ func TestUpdateUser_MalformedBody(t *testing.T) {
 }
 
 // TestUpdateUser_FullEntityKeyOrder: a valid PATCH returns the re-read full
-// entity (verified richer than UserListRow via password_hash) — guards the
+// entity (verified richer than UserListRow via email_verified) — guards the
 // success path still proceeds after validation.
 func TestUpdateUser_FullEntityKeyOrder(t *testing.T) {
 	now := time.Now()
@@ -463,7 +464,7 @@ func TestUpdateUser_FullEntityKeyOrder(t *testing.T) {
 		t.Fatalf("is_active patch not passed: %+v", repo.updated)
 	}
 	m := decodeBody(t, rec.Body.String())
-	if _, ok := m["password_hash"]; !ok {
+	if _, ok := m["email_verified"]; !ok {
 		t.Fatalf("response is not the full UserDetail: %s", rec.Body.String())
 	}
 }

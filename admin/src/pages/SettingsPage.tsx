@@ -2,6 +2,16 @@ import { useState, useEffect } from 'react';
 import Toast from '../components/Toast';
 import { apiFetch } from '../api';
 
+// The 11 secret-bearing app_settings columns (mirror backend
+// SETTINGS_SECRET_COLUMNS). Sent only when edited so a masked read-value never
+// round-trips back to the server.
+const SECRET_KEYS = [
+  'stripe_secret_key', 'stripe_webhook_secret', 'paypal_client_secret',
+  'momo_access_key', 'momo_secret_key', 'casso_api_key', 'sepay_api_key',
+  'resend_api_key', 'google_client_secret', 'lemonsqueezy_api_key',
+  'lemonsqueezy_webhook_secret',
+];
+
 interface Settings {
   environment: string;
   trial_limit: number;
@@ -132,6 +142,10 @@ export default function SettingsPage() {
   };
 
   const [settings, setSettings] = useState<Settings>(defaults);
+  // #30: secrets arrive masked from GET; only send a secret column the admin
+  // actually edited, so a mask never round-trips. Mirrors backend
+  // SETTINGS_SECRET_COLUMNS.
+  const [dirtySecrets, setDirtySecrets] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<ToastState | null>(null);
@@ -139,11 +153,20 @@ export default function SettingsPage() {
   const [testEmailTo, setTestEmailTo] = useState('tannpv@gmail.com');
   const [sendingTest, setSendingTest] = useState(false);
 
+  // Settings PATCH body with untouched (masked) secrets stripped (#30).
+  function settingsPayload(): Record<string, unknown> {
+    const payload: Record<string, unknown> = { ...settings };
+    for (const k of SECRET_KEYS) {
+      if (!dirtySecrets.has(k)) delete payload[k];
+    }
+    return payload;
+  }
+
   async function sendTestEmail() {
     setSendingTest(true);
     try {
       // Save first so backend reads the latest key/from from the DB.
-      await apiFetch('/admin/settings', { method: 'PATCH', body: JSON.stringify(settings) });
+      await apiFetch('/admin/settings', { method: 'PATCH', body: JSON.stringify(settingsPayload()) });
       await apiFetch('/admin/settings/test-email', { method: 'POST', body: JSON.stringify({ to: testEmailTo }) });
       setToast({ message: `Test email sent to ${testEmailTo}.`, type: 'success' });
     } catch (err) {
@@ -160,6 +183,7 @@ export default function SettingsPage() {
     try {
       const data = await apiFetch('/admin/settings') as Settings;
       setSettings({ ...defaults, ...data });
+      setDirtySecrets(new Set());
     } catch { /* use defaults */ }
     finally { setLoading(false); }
   }
@@ -167,14 +191,20 @@ export default function SettingsPage() {
   async function saveSettings() {
     setSaving(true);
     try {
-      await apiFetch('/admin/settings', { method: 'PATCH', body: JSON.stringify(settings) });
+      await apiFetch('/admin/settings', { method: 'PATCH', body: JSON.stringify(settingsPayload()) });
+      setDirtySecrets(new Set());
       setToast({ message: 'Settings saved successfully.', type: 'success' });
     } catch (err) {
       setToast({ message: err instanceof Error ? err.message : 'Failed to save settings', type: 'error' });
     } finally { setSaving(false); }
   }
 
-  const set = (key: string) => (val: string | number | boolean) => setSettings({ ...settings, [key]: val });
+  const set = (key: string) => (val: string | number | boolean) => {
+    if (SECRET_KEYS.includes(key)) {
+      setDirtySecrets((prev) => new Set(prev).add(key));
+    }
+    setSettings({ ...settings, [key]: val });
+  };
 
   if (loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}><div style={{ color: 'var(--muted)' }}>Loading settings...</div></div>;
 

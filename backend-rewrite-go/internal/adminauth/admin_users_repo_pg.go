@@ -229,6 +229,35 @@ func (r *AdminUsersRepo) SoftDelete(ctx context.Context, id string) error {
 	return r.q.SoftDeleteAdminUser(ctx, uid)
 }
 
+// IsActiveAdmin reports whether the admin row with id exists AND is active
+// (#32 guard). A missing row yields (false, nil) — matching Node's
+// `target && target.is_active` short-circuit, where a not-found target simply
+// skips the last-admin check.
+func (r *AdminUsersRepo) IsActiveAdmin(ctx context.Context, id string) (bool, error) {
+	uid, err := parseUUID(id)
+	if err != nil {
+		return false, err
+	}
+	active, err := r.q.GetAdminUserIsActiveByID(ctx, uid)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return active, nil
+}
+
+// CountActiveAdmins returns the number of active admin rows (#32 last-admin
+// guard, Node `count({ where: { is_active: true } })`).
+func (r *AdminUsersRepo) CountActiveAdmins(ctx context.Context) (int, error) {
+	n, err := r.q.CountActiveAdminUsers(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return int(n), nil
+}
+
 // adminUsersPatchSQL builds the SET clause from the non-nil patch fields,
 // walking fields in domain order (deterministic — no map range), with hardcoded
 // column names (injection-safe) and $N value placeholders. `updated_at = now()`

@@ -50,6 +50,7 @@ type Querier interface {
 	// completed_at + notes are bound ($2,$3) — the use case computes them (now()
 	// injected for deterministic tests; notes already defaulted).
 	ConfirmPayment(ctx context.Context, arg ConfirmPaymentParams) error
+	CountActiveAdminUsers(ctx context.Context) (int64, error)
 	// Mirrors subscriptionsService.countActive(): COUNT where status=active.
 	CountActiveSubscriptions(ctx context.Context) (int64, error)
 	// Admin user CRUD (Phase 4c-2). GET /admin/users/:id returns the FULL
@@ -173,6 +174,7 @@ type Querier interface {
 	// subscription for the user, joined to its plan. ORDER BY created_at
 	// DESC + LIMIT 1 reproduces TypeORM order:{created_at:'DESC'} findOne.
 	GetActiveSubscriptionByUserID(ctx context.Context, userID pgtype.UUID) (GetActiveSubscriptionByUserIDRow, error)
+	GetAdminUserIsActiveByID(ctx context.Context, id pgtype.UUID) (bool, error)
 	GetAiProviderByID(ctx context.Context, id pgtype.UUID) (GetAiProviderByIDRow, error)
 	GetAppSettings(ctx context.Context) (AppSetting, error)
 	// The single app_settings row's token lifetimes. No row → caller uses

@@ -9,9 +9,11 @@ import (
 )
 
 type fakeRepo struct {
-	demoted  bool
-	inserted NewProvider
-	provider *AiProvider
+	demoted     bool
+	inserted    NewProvider
+	updatedID   string
+	updatedPath ProviderPatch
+	provider    *AiProvider
 }
 
 func (f *fakeRepo) List(context.Context) ([]AiProvider, error) { return nil, nil }
@@ -35,7 +37,9 @@ func (f *fakeRepo) Insert(_ context.Context, in NewProvider) (AiProvider, error)
 	f.inserted = in
 	return AiProvider{ID: "new", Name: in.Name, IsDefault: in.IsDefault}, nil
 }
-func (f *fakeRepo) Update(context.Context, string, ProviderPatch) (AiProvider, error) {
+func (f *fakeRepo) Update(_ context.Context, id string, p ProviderPatch) (AiProvider, error) {
+	f.updatedID = id
+	f.updatedPath = p
 	return AiProvider{ID: "u"}, nil
 }
 func (f *fakeRepo) SoftDelete(context.Context, string) error { return nil }

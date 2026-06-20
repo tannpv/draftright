@@ -12,8 +12,8 @@ import (
 var ErrNotFound = errors.New("app settings not found")
 
 // AppSettings mirrors the single-row app_settings admin settings table.
-// All secret fields are returned UNMASKED on every read (Node parity — the
-// NestJS AppSettings entity exposes raw values). Field/JSON order matches
+// The 11 payment/SMTP secret columns are MASKED on every read (#30) via
+// MarshalJSON; non-secret IDs and config stay raw. Field/JSON order matches
 // src/admin/entities/app-settings.entity.ts @Column declaration order exactly.
 //
 // All string columns are NOT NULL with DB defaults, so they are plain
@@ -144,40 +144,44 @@ func (s AppSettings) MarshalJSON() ([]byte, error) {
 		ClientLogLevel             string `json:"client_log_level"`
 		UpdatedAt                  string `json:"updated_at"`
 	}{
-		ID:                         s.ID,
-		Environment:                s.Environment,
-		TrialLimit:                 s.TrialLimit,
-		TokenExpiryMinutes:         s.TokenExpiryMinutes,
-		RefreshTokenExpiryDays:     s.RefreshTokenExpiryDays,
-		MaxInputLength:             s.MaxInputLength,
-		SupportedLanguages:         s.SupportedLanguages,
-		PaymentMethodsEnabled:      s.PaymentMethodsEnabled,
-		StripeSecretKey:            s.StripeSecretKey,
-		StripeWebhookSecret:        s.StripeWebhookSecret,
+		ID:                     s.ID,
+		Environment:            s.Environment,
+		TrialLimit:             s.TrialLimit,
+		TokenExpiryMinutes:     s.TokenExpiryMinutes,
+		RefreshTokenExpiryDays: s.RefreshTokenExpiryDays,
+		MaxInputLength:         s.MaxInputLength,
+		SupportedLanguages:     s.SupportedLanguages,
+		PaymentMethodsEnabled:  s.PaymentMethodsEnabled,
+		// #30: payment + SMTP secret columns masked (first3…last4). Public IDs
+		// (paypal_client_id, apple_team_id/key_id, google_client_id, store/variant
+		// IDs, *_mode, vietqr_*, email_from, *_partner_code) stay raw. Node mirror:
+		// src/admin maskSettings util.
+		StripeSecretKey:            shared.MaskSecret(s.StripeSecretKey),
+		StripeWebhookSecret:        shared.MaskSecret(s.StripeWebhookSecret),
 		StripeMode:                 s.StripeMode,
 		PaypalClientID:             s.PaypalClientID,
-		PaypalClientSecret:         s.PaypalClientSecret,
+		PaypalClientSecret:         shared.MaskSecret(s.PaypalClientSecret),
 		PaypalMode:                 s.PaypalMode,
 		MomoPartnerCode:            s.MomoPartnerCode,
-		MomoAccessKey:              s.MomoAccessKey,
-		MomoSecretKey:              s.MomoSecretKey,
+		MomoAccessKey:              shared.MaskSecret(s.MomoAccessKey),
+		MomoSecretKey:              shared.MaskSecret(s.MomoSecretKey),
 		MomoMode:                   s.MomoMode,
 		VietqrBankID:               s.VietqrBankID,
 		VietqrAccountNumber:        s.VietqrAccountNumber,
 		VietqrAccountName:          s.VietqrAccountName,
-		CassoAPIKey:                s.CassoAPIKey,
-		SepayAPIKey:                s.SepayAPIKey,
+		CassoAPIKey:                shared.MaskSecret(s.CassoAPIKey),
+		SepayAPIKey:                shared.MaskSecret(s.SepayAPIKey),
 		SepayMode:                  s.SepayMode,
-		ResendAPIKey:               s.ResendAPIKey,
+		ResendAPIKey:               shared.MaskSecret(s.ResendAPIKey),
 		EmailFrom:                  s.EmailFrom,
 		GoogleClientID:             s.GoogleClientID,
-		GoogleClientSecret:         s.GoogleClientSecret,
+		GoogleClientSecret:         shared.MaskSecret(s.GoogleClientSecret),
 		AppleClientID:              s.AppleClientID,
 		AppleTeamID:                s.AppleTeamID,
 		AppleKeyID:                 s.AppleKeyID,
-		LemonsqueezyAPIKey:         s.LemonsqueezyAPIKey,
+		LemonsqueezyAPIKey:         shared.MaskSecret(s.LemonsqueezyAPIKey),
 		LemonsqueezyStoreID:        s.LemonsqueezyStoreID,
-		LemonsqueezyWebhookSecret:  s.LemonsqueezyWebhookSecret,
+		LemonsqueezyWebhookSecret:  shared.MaskSecret(s.LemonsqueezyWebhookSecret),
 		LemonsqueezyVariantMonthly: s.LemonsqueezyVariantMonthly,
 		LemonsqueezyVariantYearly:  s.LemonsqueezyVariantYearly,
 		ClientLogLevel:             s.ClientLogLevel,
