@@ -63,52 +63,45 @@ func isoPtr(t *time.Time) *string {
 	return &s
 }
 
+// MarshalJSON pins field order + ms timestamps. The six secret columns
+// (password_hash, email-verification code/expiry, password-reset
+// code/expiry/attempts) are deliberately omitted from the wire form — no
+// client ever writes them back, so they are dropped, not masked (#31). The
+// Node backend strips the same six → byte-identical JSON.
 func (u UserDetail) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
-		ID                       string  `json:"id"`
-		Email                    string  `json:"email"`
-		PasswordHash             *string `json:"password_hash"`
-		Name                     string  `json:"name"`
-		IsActive                 bool    `json:"is_active"`
-		Role                     string  `json:"role"`
-		AuthProvider             string  `json:"auth_provider"`
-		GoogleID                 *string `json:"google_id"`
-		FacebookID               *string `json:"facebook_id"`
-		TiktokID                 *string `json:"tiktok_id"`
-		AppleID                  *string `json:"apple_id"`
-		AvatarURL                *string `json:"avatar_url"`
-		StripeCustomerID         *string `json:"stripe_customer_id"`
-		EmailVerified            bool    `json:"email_verified"`
-		EmailVerificationCode    *string `json:"email_verification_code"`
-		EmailVerificationExpires *string `json:"email_verification_expires"`
-		PasswordResetCode        *string `json:"password_reset_code"`
-		PasswordResetExpires     *string `json:"password_reset_expires"`
-		PasswordResetAttempts    int     `json:"password_reset_attempts"`
-		LemonsqueezyCustomerID   *string `json:"lemonsqueezy_customer_id"`
-		CreatedAt                string  `json:"created_at"`
-		UpdatedAt                string  `json:"updated_at"`
+		ID                     string  `json:"id"`
+		Email                  string  `json:"email"`
+		Name                   string  `json:"name"`
+		IsActive               bool    `json:"is_active"`
+		Role                   string  `json:"role"`
+		AuthProvider           string  `json:"auth_provider"`
+		GoogleID               *string `json:"google_id"`
+		FacebookID             *string `json:"facebook_id"`
+		TiktokID               *string `json:"tiktok_id"`
+		AppleID                *string `json:"apple_id"`
+		AvatarURL              *string `json:"avatar_url"`
+		StripeCustomerID       *string `json:"stripe_customer_id"`
+		EmailVerified          bool    `json:"email_verified"`
+		LemonsqueezyCustomerID *string `json:"lemonsqueezy_customer_id"`
+		CreatedAt              string  `json:"created_at"`
+		UpdatedAt              string  `json:"updated_at"`
 	}{
-		ID:                       u.ID,
-		Email:                    u.Email,
-		PasswordHash:             u.PasswordHash,
-		Name:                     u.Name,
-		IsActive:                 u.IsActive,
-		Role:                     u.Role,
-		AuthProvider:             u.AuthProvider,
-		GoogleID:                 u.GoogleID,
-		FacebookID:               u.FacebookID,
-		TiktokID:                 u.TiktokID,
-		AppleID:                  u.AppleID,
-		AvatarURL:                u.AvatarURL,
-		StripeCustomerID:         u.StripeCustomerID,
-		EmailVerified:            u.EmailVerified,
-		EmailVerificationCode:    u.EmailVerificationCode,
-		EmailVerificationExpires: isoPtr(u.EmailVerificationExpires),
-		PasswordResetCode:        u.PasswordResetCode,
-		PasswordResetExpires:     isoPtr(u.PasswordResetExpires),
-		PasswordResetAttempts:    u.PasswordResetAttempts,
-		LemonsqueezyCustomerID:   u.LemonsqueezyCustomerID,
-		CreatedAt:                shared.ISOMillis(u.CreatedAt),
-		UpdatedAt:                shared.ISOMillis(u.UpdatedAt),
+		ID:                     u.ID,
+		Email:                  u.Email,
+		Name:                   u.Name,
+		IsActive:               u.IsActive,
+		Role:                   u.Role,
+		AuthProvider:           u.AuthProvider,
+		GoogleID:               u.GoogleID,
+		FacebookID:             u.FacebookID,
+		TiktokID:               u.TiktokID,
+		AppleID:                u.AppleID,
+		AvatarURL:              u.AvatarURL,
+		StripeCustomerID:       u.StripeCustomerID,
+		EmailVerified:          u.EmailVerified,
+		LemonsqueezyCustomerID: u.LemonsqueezyCustomerID,
+		CreatedAt:              shared.ISOMillis(u.CreatedAt),
+		UpdatedAt:              shared.ISOMillis(u.UpdatedAt),
 	})
 }
