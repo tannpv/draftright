@@ -9,15 +9,20 @@ import (
 
 // resetStatements returns the ordered SQL that drops `target` and recreates it
 // from `template`. Statement order is load-bearing: terminate live sessions
-// FIRST (DROP DATABASE refuses to run while connections exist), then drop, then
-// clone. Identifiers are double-quoted; the datname literal in the terminate
-// filter is single-quoted (it is a string, not an identifier).
+// FIRST (cheap, kills most pool conns), then drop WITH (FORCE), then clone.
+// The plain terminate alone races a pgxpool that re-dials instantly — a new
+// connection can land between the terminate and the DROP, yielding
+// "database ... is being accessed by other users" (SQLSTATE 55006). DROP
+// DATABASE ... WITH (FORCE) (PG13+) terminates remaining sessions and drops in
+// one atomic statement, closing that window. Identifiers are double-quoted; the
+// datname literal in the terminate filter is single-quoted (it is a string, not
+// an identifier).
 func resetStatements(target, template string) []string {
 	return []string{
 		fmt.Sprintf(
 			"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '%s' AND pid <> pg_backend_pid()",
 			target),
-		fmt.Sprintf(`DROP DATABASE IF EXISTS %q`, target),
+		fmt.Sprintf(`DROP DATABASE IF EXISTS %q WITH (FORCE)`, target),
 		fmt.Sprintf(`CREATE DATABASE %q TEMPLATE %q`, target, template),
 	}
 }

@@ -89,6 +89,14 @@ const (
 )
 
 func main() {
+	// Distroless self-probe: `/server -healthcheck` GETs the local /health
+	// endpoint and exits 0/1, so the shell-less image can still report
+	// container health without wget. Must run before config.Load so a probe
+	// works even with a minimal env. See issue #28.
+	if len(os.Args) > 1 && os.Args[1] == healthCheckArg {
+		os.Exit(healthProbe(os.Getenv("LISTEN_ADDR")))
+	}
+
 	cfg, err := config.Load()
 	if err != nil {
 		_, _ = os.Stderr.WriteString("FATAL: " + err.Error() + "\n")

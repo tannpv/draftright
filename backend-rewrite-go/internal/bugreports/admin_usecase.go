@@ -38,12 +38,26 @@ type Screenshot struct {
 // nil when the JSON key was absent (Node `dto.x !== undefined`), so the merge
 // touches only the provided columns. Status/Title/TargetPlatform validation
 // runs in Update; the handler decodes the raw body into these optionals.
+// BugPatch is one PATCH /admin/bug-reports/:id body. Node's handler uses
+// `dto.x !== undefined` to decide whether to touch each field, so an explicit
+// JSON `null` (present) behaves DIFFERENTLY from an absent key — and a Go
+// `*T == nil` decode collapses the two. Each <Field>Set bool restores that
+// distinction: true ⇔ the key was present (even as null), mirroring `!==
+// undefined`. The value pointer is nil when the present value was null or a
+// non-string (Node then validates it → 400, or for admin_notes persists NULL).
+// See issue #39. is_public keeps plain pointer semantics (nil = absent): a
+// present-null/non-bool is_public is a leaky DB-coerced edge left documented,
+// not fabricated here.
 type BugPatch struct {
-	Status         *string
-	AdminNotes     *string
-	Title          *string
-	TargetPlatform *string
-	IsPublic       *bool
+	StatusSet         bool
+	Status            *string
+	AdminNotesSet     bool
+	AdminNotes        *string
+	TitleSet          bool
+	Title             *string
+	TargetPlatformSet bool
+	TargetPlatform    *string
+	IsPublic          *bool
 }
 
 // AdminService implements the bug-report admin-triage use cases (C-group).
@@ -123,24 +137,33 @@ func (s *AdminService) Update(ctx context.Context, id string, p BugPatch) (BugRe
 	targetPlatform := row.TargetPlatform
 	isPublic := row.IsPublic
 
-	if p.Status != nil {
-		if !bugStatusValid(*p.Status) {
+	// Each branch fires on PRESENCE (Node `!== undefined`), so an explicit null
+	// — which arrives as Set=true with a nil value pointer — is validated, not
+	// silently skipped. A present null/non-string status or target_platform is
+	// "not in the allow-list" → 400 (matching Node's `includes(null)` → false);
+	// a present null title trims to "" → 400; a present null admin_notes
+	// persists SQL NULL.
+	if p.StatusSet {
+		if p.Status == nil || !bugStatusValid(*p.Status) {
 			return BugReportEntity{}, &BugValidationError{Msg: "status must be one of: " + strings.Join(bugAllowedStatuses, ", ")}
 		}
 		status = *p.Status
 	}
-	if p.AdminNotes != nil {
+	if p.AdminNotesSet {
 		adminNotes = p.AdminNotes
 	}
-	if p.Title != nil {
-		t := strings.TrimSpace(*p.Title)
+	if p.TitleSet {
+		t := ""
+		if p.Title != nil {
+			t = strings.TrimSpace(*p.Title)
+		}
 		if lenUTF16Bug(t) < 1 || lenUTF16Bug(t) > 80 {
 			return BugReportEntity{}, &BugValidationError{Msg: "title is required (1-80 characters)"}
 		}
 		title = &t
 	}
-	if p.TargetPlatform != nil {
-		if !bugTargetPlatformValid(*p.TargetPlatform) {
+	if p.TargetPlatformSet {
+		if p.TargetPlatform == nil || !bugTargetPlatformValid(*p.TargetPlatform) {
 			return BugReportEntity{}, &BugValidationError{Msg: "target_platform must be one of: " + strings.Join(bugTargetPlatforms, ", ")}
 		}
 		tp := *p.TargetPlatform

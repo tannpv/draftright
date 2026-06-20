@@ -160,6 +160,30 @@ func TestFeed_LimitSlice(t *testing.T) {
 	}
 }
 
+// TestFeed_NegativeLimitNoPanic guards the slice against a negative limit.
+// In prod a negative limit never reaches the slice — Node and Go both pass it
+// straight to the SQL LIMIT bind and Postgres rejects `LIMIT -5`
+// ("LIMIT must not be negative") → both return 500. So negative limit is NOT a
+// byte-parity divergence; this test only protects against the latent
+// `merged[:negative]` panic that the in-memory fakes (no DB) would otherwise
+// hit. See issue #40.
+func TestFeed_NegativeLimitNoPanic(t *testing.T) {
+	errs := &fakeErrors{
+		rows:  []errreport.ErrorReportEntity{{ID: "e1", LastSeenAt: "2026-06-19T10:00:00.000Z"}},
+		total: 1,
+	}
+	bugs := &fakeBugs{rows: []bugreports.BugReportEntity{{ID: "b1", CreatedAt: "2026-06-19T09:00:00.000Z"}}, total: 1}
+	svc := NewService(errs, bugs)
+	feed, err := svc.FeedFor(context.Background(), FeedQuery{Limit: -5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// No panic; with a negative limit the truncation is skipped, all rows pass.
+	if len(feed.Items) != 2 {
+		t.Fatalf("want 2 items (no truncation on negative limit), got %d", len(feed.Items))
+	}
+}
+
 func TestErrorItem_JSONKeySet(t *testing.T) {
 	it := mapErrorItem(errreport.ErrorReportEntity{
 		ID: "e1", Platform: "ios", Severity: "error", LastSeenAt: "2026-06-19T10:00:00.000Z",
