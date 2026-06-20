@@ -31,12 +31,29 @@ func (h *MeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	shared.WriteJSON(w, http.StatusOK, map[string]any{
-		"id":    claims.Sub,
-		"email": claims.Email,
-		"role":  claims.Role,
-		"flags": map[string]any{
-			"use_go_backend": UseGoBackend(claims.Sub, h.rampPercent),
-		},
+	// Ordered struct, NOT map[string]any: a map marshals keys sorted
+	// (email,flags,id,role), diverging byte-for-byte from Node's
+	// declaration order id,email,role,flags. Field order here = wire
+	// order = Node order. Locked by the shadow-gate raw-body fixture
+	// (#56, divergence found by the #47 raw-body mode).
+	shared.WriteJSON(w, http.StatusOK, meResponse{
+		ID:    claims.Sub,
+		Email: claims.Email,
+		Role:  claims.Role,
+		Flags: meFlags{UseGoBackend: UseGoBackend(claims.Sub, h.rampPercent)},
 	})
+}
+
+// meResponse is the GET /auth/me body in Node declaration order:
+// { id, email, role, flags: { use_go_backend } }.
+type meResponse struct {
+	ID    string  `json:"id"`
+	Email string  `json:"email"`
+	Role  string  `json:"role"`
+	Flags meFlags `json:"flags"`
+}
+
+// meFlags is the server-controlled rollout state nested under `flags`.
+type meFlags struct {
+	UseGoBackend bool `json:"use_go_backend"`
 }
