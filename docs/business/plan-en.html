@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DraftRight — Company Plan (for Dad)</title>
+<style>
+  :root{
+    --brand:#5b3df6; --brand2:#8b6cff; --ink:#1c1530; --muted:#6b6580;
+    --bg:#f6f4fb; --card:#ffffff; --line:#e7e2f3;
+    --green:#1faa59; --red:#e0455e; --amber:#e6a700;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+       background:var(--bg);color:var(--ink);line-height:1.6;font-size:16px}
+  .wrap{max-width:980px;margin:0 auto;padding:24px}
+  header.hero{background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;border-radius:20px;
+       padding:34px 30px;box-shadow:0 12px 30px rgba(91,61,246,.25)}
+  header.hero h1{margin:0 0 6px;font-size:30px}
+  header.hero p{margin:2px 0;opacity:.95}
+  .pill{display:inline-block;background:rgba(255,255,255,.22);padding:4px 12px;border-radius:999px;font-size:13px;margin-top:10px}
+  section{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:24px;margin:20px 0;
+       box-shadow:0 4px 14px rgba(28,21,48,.04)}
+  h2{font-size:22px;margin:0 0 4px;display:flex;align-items:center;gap:10px}
+  h2 .n{background:var(--brand);color:#fff;width:30px;height:30px;border-radius:9px;display:inline-flex;
+       align-items:center;justify-content:center;font-size:15px;flex:0 0 auto}
+  .sub{color:var(--muted);margin:0 0 16px;font-size:14px}
+  table{width:100%;border-collapse:collapse;margin:10px 0;font-size:15px}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line)}
+  th{background:#faf8ff;font-weight:600}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+  tr.total td{font-weight:700;background:#f3effe;border-top:2px solid var(--brand)}
+  .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .card{border:1px solid var(--line);border-radius:14px;padding:16px;background:#fcfbff}
+  .card h3{margin:0 0 6px;font-size:15px}
+  .card .big{font-size:24px;font-weight:800;color:var(--brand)}
+  .card small{color:var(--muted)}
+  .pos{color:var(--green);font-weight:700}
+  .neg{color:var(--red);font-weight:700}
+  /* product demo */
+  .demo{display:grid;grid-template-columns:1fr auto 1fr;gap:14px;align-items:center;margin:14px 0}
+  .note{border:1px solid var(--line);border-radius:14px;padding:14px 16px;background:#fcfbff}
+  .note .tag{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px}
+  .note.before .tag{color:var(--muted)} .note.after{border-color:var(--brand);background:#faf8ff}
+  .note.after .tag{color:var(--brand)}
+  .note p{margin:0;font-size:15px}
+  .arrow{font-size:26px;color:var(--brand);text-align:center}
+  .tones{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+  .tone{font-size:13px;padding:5px 12px;border-radius:999px;border:1px solid var(--line);background:#fff}
+  .tone.on{background:var(--brand);color:#fff;border-color:var(--brand)}
+  .feat{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:10px}
+  .feat .f{display:flex;gap:10px;align-items:flex-start}
+  .feat .f .ic{font-size:18px}
+  .plat{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+  .plat span{font-size:13px;background:#f1edfd;color:var(--brand);padding:6px 12px;border-radius:10px;font-weight:600}
+  /* chart */
+  .legend{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:var(--muted);margin:6px 0 12px}
+  .legend span::before{content:"";display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+  .lg-r::before{background:var(--red)} .lg-a::before{background:var(--amber)} .lg-g::before{background:var(--green)}
+  .bar-row{display:grid;grid-template-columns:90px 1fr 150px;align-items:center;gap:10px;margin:8px 0}
+  .bar-row .lbl{font-size:13px;color:var(--muted)}
+  .bar-track{background:#efeafb;border-radius:8px;height:26px;overflow:hidden}
+  .bar{height:100%;border-radius:8px;display:flex;align-items:center;justify-content:flex-end;padding-right:8px;color:#fff;font-size:12px;font-weight:700;white-space:nowrap}
+  .bar.y1{background:var(--red)} .bar.y2{background:var(--amber)} .bar.y3{background:var(--green)}
+  .bar-val{text-align:right;font-weight:700;font-size:14px}
+  .timeline{list-style:none;padding:0;margin:0}
+  .timeline li{border-left:3px solid var(--brand);padding:4px 0 14px 16px;margin-left:8px;position:relative}
+  .timeline li::before{content:"";position:absolute;left:-8px;top:8px;width:13px;height:13px;border-radius:50%;background:#fff;border:3px solid var(--brand)}
+  .timeline b{color:var(--brand)}
+  .goal{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .goal .g{border:1px solid var(--line);border-radius:14px;padding:16px;text-align:center;background:#fcfbff}
+  .goal .yr{font-size:13px;color:var(--muted);font-weight:700}
+  .goal .big{font-size:20px;font-weight:800;color:var(--brand);margin:4px 0}
+  .risk{background:#fff6f7;border:1px solid #f6d6dc;border-radius:12px;padding:14px 16px;margin:8px 0}
+  .risk.warn{background:#fff9e9;border-color:#f1e0a8}
+  .quote{background:linear-gradient(135deg,#eef0ff,#f6f1ff);border:1px solid #ddd8f5;border-radius:16px;padding:22px;font-size:18px;line-height:1.7}
+  footer{color:var(--muted);font-size:13px;text-align:center;padding:14px}
+  @media(max-width:720px){.cards,.feat,.goal{grid-template-columns:1fr}.demo{grid-template-columns:1fr}.arrow{transform:rotate(90deg)}.bar-row{grid-template-columns:70px 1fr 110px}}
+  @media print{*{-webkit-print-color-adjust:exact;print-color-adjust:exact}section,header.hero{box-shadow:none;break-inside:avoid}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <h1>DraftRight — Company Plan</h1>
+    <p>A software company built around one finished product</p>
+    <p>Prepared for Dad · 24 May 2026 · FX rate 25,000 VND/USD</p>
+    <span class="pill">Year-1 capital ~$4,000 · then ~$1,600/yr · 1 person</span>
+  </header>
+
+  <!-- WHAT IS IT -->
+  <section>
+    <h2><span class="n">1</span> What is DraftRight?</h2>
+    <p class="sub">A writing assistant. You highlight any text, choose a tone, and DraftRight instantly rewrites it — clearer, more professional, or in whatever style you need. It works inside email, messaging, documents, social media — anywhere you type.</p>
+    <div class="demo">
+      <div class="note before">
+        <div class="tag">You wrote</div>
+        <p>"hey can u send me the report asap thx"</p>
+      </div>
+      <div class="arrow">→</div>
+      <div class="note after">
+        <div class="tag">DraftRight · Professional</div>
+        <p>"Hello, could you please send me the report at your earliest convenience? Thank you."</p>
+      </div>
+    </div>
+    <div class="tones">
+      <span class="tone on">Professional</span><span class="tone">Friendly</span><span class="tone">Concise</span>
+      <span class="tone">Persuasive</span><span class="tone">Polite</span><span class="tone">Fix grammar</span><span class="tone">Translate</span>
+    </div>
+    <p class="sub" style="margin-top:14px">It runs everywhere — and includes a custom keyboard, so it even works on phones inside other apps:</p>
+    <div class="plat">
+      <span>macOS</span><span>Windows</span><span>Linux</span><span>iPhone</span><span>Android</span><span>Web</span><span>Custom keyboard</span>
+    </div>
+  </section>
+
+  <!-- WHO + WHY -->
+  <section>
+    <h2><span class="n">2</span> Who uses it & why it's different</h2>
+    <div class="feat">
+      <div class="f"><span class="ic">💼</span><div><b>Professionals</b> writing emails, proposals, customer replies.</div></div>
+      <div class="f"><span class="ic">🎓</span><div><b>Students</b> polishing essays and applications.</div></div>
+      <div class="f"><span class="ic">🌏</span><div><b>Non-native English writers</b> who want to sound fluent and correct.</div></div>
+      <div class="f"><span class="ic">🇻🇳</span><div><b>Vietnamese users</b> — built-in Telex keyboard that types Vietnamese better than the defaults.</div></div>
+    </div>
+    <p class="sub" style="margin-top:14px"><b>Why people would choose us over free built-in AI (Apple / Google):</b></p>
+    <div class="feat">
+      <div class="f"><span class="ic">📱</span><div>Works on <b>every device</b>, not just the newest phones.</div></div>
+      <div class="f"><span class="ic">🎚️</span><div><b>More tones & control</b> than the built-in tools.</div></div>
+      <div class="f"><span class="ic">🔒</span><div><b>Privacy</b> — can run on our own private AI, data not sent to big tech.</div></div>
+      <div class="f"><span class="ic">⌨️</span><div>The <b>Asian-language keyboards</b> — a real advantage no big competitor offers.</div></div>
+    </div>
+    <p class="sub" style="margin-top:18px"><b>Language roadmap — our growing moat.</b> We start with Vietnamese, then add the major Asian languages. Each one opens millions of new users that Apple/Google serve poorly:</p>
+    <div class="plat">
+      <span style="background:#e4f7ec;color:#1faa59">🇻🇳 Vietnamese · Live</span>
+      <span style="background:#fff3d6;color:#b9860b">🇯🇵 Japanese · In progress</span>
+      <span style="background:#f1edfd;color:#5b3df6">🇰🇷 Korean · Planned</span>
+      <span style="background:#f1edfd;color:#5b3df6">🇨🇳 Chinese · Planned</span>
+      <span style="background:#f4f2f8;color:#6b6580">…more later</span>
+    </div>
+  </section>
+
+  <!-- BUSINESS MODEL -->
+  <section>
+    <h2><span class="n">3</span> How the company makes money</h2>
+    <p class="sub">Subscription software (SaaS). Free tier to attract users; paid plan unlocks everything. Customers pay <b>every month</b> — recurring revenue that stacks up over time.</p>
+    <table>
+      <thead><tr><th>Plan</th><th>Price</th><th>What you get</th></tr></thead>
+      <tbody>
+        <tr><td><b>Free</b></td><td>$0</td><td>A few rewrites per day — to get people hooked</td></tr>
+        <tr><td><b>Pro</b></td><td>~$5.99 / month</td><td>Unlimited rewrites, all tones, all devices</td></tr>
+      </tbody>
+    </table>
+    <div class="cards" style="margin-top:8px">
+      <div class="card"><h3>Cost to serve a customer</h3><div class="big">~$0</div><small>the AI runs on a free server — no per-use cost</small></div>
+      <div class="card"><h3>Gross margin</h3><div class="big">~90%</div><small>almost every payment is profit</small></div>
+      <div class="card"><h3>Break-even</h3><div class="big">~25 customers</div><small>covers all monthly running costs</small></div>
+    </div>
+    <p class="sub" style="margin-top:10px">Because the product is already built and costs almost nothing to run, <b>once we pass ~25 paying customers, nearly everything after that is profit.</b></p>
+  </section>
+
+  <!-- COMPANY & GOAL -->
+  <section>
+    <h2><span class="n">4</span> The company & the goal</h2>
+    <p class="sub"><b>The company:</b> a Vietnamese single-member LLC that owns and operates DraftRight. Run by me (1 person) for now.</p>
+    <p class="sub"><b>Mission:</b> help anyone write clearly and confidently — in any tone, in any language, on any device.</p>
+    <div class="goal">
+      <div class="g"><div class="yr">By end of Year 1</div><div class="big">125 paying<br>+ 2,500 free</div><small>prove people pay</small></div>
+      <div class="g"><div class="yr">By end of Year 2</div><div class="big">~300 paying</div><small>profitable, ~$11k/yr profit</small></div>
+      <div class="g"><div class="yr">By end of Year 3</div><div class="big">~600 paying</div><small>~$26k/yr profit, hire help</small></div>
+    </div>
+  </section>
+
+  <!-- INVESTMENT -->
+  <section>
+    <h2><span class="n">5</span> Investment</h2>
+    <div class="cards">
+      <div class="card"><h3>Year 1</h3><div class="big">~$4,000</div><small>100M ₫ · includes strong marketing</small></div>
+      <div class="card"><h3>Each year after</h3><div class="big">~$1,600</div><small>40M ₫ · running costs</small></div>
+      <div class="card"><h3>Headcount</h3><div class="big">1 person</div><small>me — build + operate + support</small></div>
+    </div>
+    <table>
+      <thead><tr><th>Item</th><th class="num">Year 1 (₫)</th><th class="num">Each year after (₫)</th></tr></thead>
+      <tbody>
+        <tr><td>Company registration + digital signature + e-invoice</td><td class="num">4,300,000</td><td class="num">2,300,000</td></tr>
+        <tr><td>Business licence tax</td><td class="num">0 (exempt)</td><td class="num">2,000,000</td></tr>
+        <tr><td>Accounting (12 months)</td><td class="num">7,200,000</td><td class="num">7,200,000</td></tr>
+        <tr><td>Domain + email</td><td class="num">1,000,000</td><td class="num">1,000,000</td></tr>
+        <tr><td>Apple Developer</td><td class="num">2,500,000</td><td class="num">2,500,000</td></tr>
+        <tr><td>Server (Oracle free tier)</td><td class="num">0</td><td class="num">0</td></tr>
+        <tr><td>Claude Max 20x (AI coding tool — faster build)</td><td class="num">60,000,000</td><td class="num">15,000,000</td></tr>
+        <tr><td>Marketing</td><td class="num">15,000,000</td><td class="num">8,000,000</td></tr>
+        <tr><td>Contingency buffer</td><td class="num">10,000,000</td><td class="num">2,000,000</td></tr>
+        <tr class="total"><td>TOTAL</td><td class="num">~100,000,000</td><td class="num">~40,000,000</td></tr>
+      </tbody>
+    </table>
+    <p class="sub"><b>Strategy:</b> invest more in development speed (Claude Max 20x) to ship Japanese/Korean sooner, and spend less on paid marketing — relying on the app stores, word of mouth, and the language features themselves to attract users. Trade-off: <b>slower user growth in Year 1</b>, but a stronger product with more languages.</p>
+  </section>
+
+  <!-- LAUNCH PLAN -->
+  <section>
+    <h2><span class="n">6</span> Launch plan: 6 free months first</h2>
+    <p class="sub">For the first 6 months the app is <b>free for everyone</b> — to attract users, gather reviews, and fix every bug. We start charging in Month 7, when there's already a base of users to convert.</p>
+    <table>
+      <thead><tr><th>Free users by end of Month 6</th><th class="num">Paying when we switch on (M7)</th><th class="num">End of Year 1</th></tr></thead>
+      <tbody>
+        <tr><td>1,000</td><td class="num">~20</td><td class="num">~50</td></tr>
+        <tr><td>2,500 (base case)</td><td class="num">~50</td><td class="num">~125</td></tr>
+        <tr><td>5,000 (target with strong marketing)</td><td class="num">~100</td><td class="num">~250</td></tr>
+      </tbody>
+    </table>
+    <p class="sub"><b>The number of free users at Month 6 decides all the revenue.</b> That is the entire focus of the first half-year.</p>
+    <div class="risk warn" style="margin-top:10px">📉 <b>Note on the lower marketing budget:</b> with ~15M ₫ marketing (instead of 45M), expect the <b>conservative-to-base range</b> (~1,000–2,000 free users) in Year 1 — slower growth. In return, the heavier coding budget ships <b>Japanese & Korean sooner</b>, which widens the market and lifts Year 2–3.</div>
+  </section>
+
+  <!-- REVENUE -->
+  <section>
+    <h2><span class="n">7</span> Revenue — charging from Month 7 (base case)</h2>
+    <table>
+      <thead><tr><th>Month</th><th>Status</th><th class="num">Paying users</th><th class="num">Revenue/month (₫)</th></tr></thead>
+      <tbody>
+        <tr><td>1–6</td><td>Free launch</td><td class="num">0</td><td class="num">0</td></tr>
+        <tr><td>7</td><td>Payment ON</td><td class="num">50</td><td class="num">6,250,000</td></tr>
+        <tr><td>8</td><td></td><td class="num">70</td><td class="num">8,750,000</td></tr>
+        <tr><td>9</td><td></td><td class="num">88</td><td class="num">11,000,000</td></tr>
+        <tr><td>10</td><td></td><td class="num">103</td><td class="num">12,875,000</td></tr>
+        <tr><td>11</td><td></td><td class="num">115</td><td class="num">14,375,000</td></tr>
+        <tr><td>12</td><td></td><td class="num">125</td><td class="num">15,625,000</td></tr>
+        <tr class="total"><td colspan="3">Total Year 1 revenue</td><td class="num">~69,000,000 (~$2,760)</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- PROFIT -->
+  <section>
+    <h2><span class="n">8</span> 3-year profit (Revenue − Costs)</h2>
+    <p class="sub">Base case. Year 1 is a planned loss — we front-load marketing and give 6 free months.</p>
+    <div class="legend"><span class="lg-r">Year 1</span><span class="lg-a">Year 2</span><span class="lg-g">Year 3</span></div>
+    <div class="bar-row"><div class="lbl">Year 1</div><div class="bar-track"><div class="bar y1" style="width:12%">−31M</div></div><div class="bar-val neg">−31M ₫ (~−$1,240)</div></div>
+    <div class="bar-row"><div class="lbl">Year 2</div><div class="bar-track"><div class="bar y2" style="width:43%">+280M</div></div><div class="bar-val pos">+280M ₫ (~$11,200)</div></div>
+    <div class="bar-row"><div class="lbl">Year 3</div><div class="bar-track"><div class="bar y3" style="width:100%">+650M</div></div><div class="bar-val pos">+650M ₫ (~$26,000)</div></div>
+    <table style="margin-top:16px">
+      <thead><tr><th>Scenario</th><th class="num">Year 1</th><th class="num">Year 2</th><th class="num">Year 3</th></tr></thead>
+      <tbody>
+        <tr><td>🔴 Conservative</td><td class="num neg">−72M</td><td class="num pos">+50M</td><td class="num pos">+150M</td></tr>
+        <tr><td><b>🟡 Base</b></td><td class="num neg">−31M</td><td class="num pos">+280M</td><td class="num pos">+650M</td></tr>
+        <tr><td>🟢 Optimistic</td><td class="num pos">+40M</td><td class="num pos">+940M</td><td class="num pos">+2.28B</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- CASHFLOW -->
+  <section>
+    <h2><span class="n">9</span> Cash flow & payback</h2>
+    <ul class="timeline">
+      <li><b>Year 1:</b> cash flow <span class="neg">negative</span> — $4,000 in, no revenue for 6 months. Normal for a software launch.</li>
+      <li><b>Month 9–10:</b> operating break-even (~25 customers cover monthly costs).</li>
+      <li><b>Month 16–18:</b> <b>the full $4,000 is paid back.</b></li>
+      <li><b>From Year 2:</b> steady, growing profit — customers keep paying monthly and new ones join.</li>
+    </ul>
+  </section>
+
+  <!-- RISK -->
+  <section>
+    <h2><span class="n">10</span> Risks (straight talk)</h2>
+    <div class="risk">🎯 <b>Getting users is the hardest part.</b> The product is finished; the challenge is marketing, not building.</div>
+    <div class="risk">🆓 <b>Free built-in AI exists</b> (Apple, Google). Our edge: every platform, more control, privacy, the Vietnamese keyboard.</div>
+    <div class="risk warn">⚖️ <b>Intellectual property:</b> I built this while employed and my employer doesn't know. <b>We must check with a lawyer (~$50–100) before transferring ownership into the company.</b></div>
+    <div class="risk">💪 <b>Solo founder</b> — one person doing everything; burnout risk.</div>
+    <p class="sub" style="margin-top:12px"><b>Maximum downside: lose the ~$4,000 capital. No loans, no debt.</b></p>
+  </section>
+
+  <!-- CLOSING -->
+  <section>
+    <div class="quote">
+      <b>In one paragraph:</b> DraftRight is a finished AI writing app that works on every device and earns money through a monthly subscription. The product costs almost nothing to run, so the profit margin is ~90%. We invest ~$4,000 to register the company, give the app away free for 6 months to build users, then start charging. Year 1 is a small loss; the capital comes back around mid-Year 2; from there it earns steadily and grows. The most we can lose is the $4,000 — with no debt.
+    </div>
+  </section>
+
+  <footer>DraftRight · Internal plan · All figures are projections that depend on how many users we attract.</footer>
+</div>
+</body>
+</html>
