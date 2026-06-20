@@ -276,8 +276,8 @@ func sp(s string) *string         { return &s }
 
 // TestAdminPaymentRow_MarshalJSON_KeyOrderAndNesting is the parity-critical
 // test: it pins the 17 top-level Payment-entity keys in declaration order, the
-// nested raw `user` (incl password_hash) + `plan` shapes, and the null cases
-// for a missing relation / a nil nullable timestamp.
+// nested `user` (stripped of the six secret columns, #48) + raw `plan` shapes,
+// and the null cases for a missing relation / a nil nullable timestamp.
 func TestAdminPaymentRow_MarshalJSON_KeyOrderAndNesting(t *testing.T) {
 	created := time.Date(2026, 1, 2, 3, 4, 5, 678_000_000, time.UTC)
 	updated := time.Date(2026, 1, 2, 3, 4, 6, 0, time.UTC)
@@ -337,7 +337,8 @@ func TestAdminPaymentRow_MarshalJSON_KeyOrderAndNesting(t *testing.T) {
 	}
 	assertOrder(t, redactNested(got), topKeys)
 
-	// Nested user opens with id ... and includes the raw password_hash.
+	// Nested user opens with id and is STRIPPED of the six secret columns (#48):
+	// password_hash + email/password reset/verification codes must be absent.
 	uStart := strings.Index(got, `"user":{`)
 	if uStart < 0 {
 		t.Fatalf(`missing "user":{ in %s`, got)
@@ -345,8 +346,13 @@ func TestAdminPaymentRow_MarshalJSON_KeyOrderAndNesting(t *testing.T) {
 	if !strings.HasPrefix(got[uStart:], `"user":{"id":`) {
 		t.Fatalf(`nested user must open with "id", got %s`, got[uStart:uStart+40])
 	}
-	if !strings.Contains(got, `"password_hash":"$2b$10$hash"`) {
-		t.Fatalf("nested user must expose raw password_hash, got %s", got)
+	for _, secret := range []string{
+		"password_hash", "email_verification_code", "email_verification_expires",
+		"password_reset_code", "password_reset_expires", "password_reset_attempts",
+	} {
+		if strings.Contains(got, `"`+secret+`"`) {
+			t.Fatalf("nested user must NOT expose %s (#48), got %s", secret, got)
+		}
 	}
 
 	// Nested plan opens with id.

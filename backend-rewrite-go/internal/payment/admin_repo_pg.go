@@ -19,13 +19,13 @@
 // a BOOLEAN status filter (wrong — payment.status is a string enum) and clamps
 // limit to [1,100] (wrong — Node take(limit) has no clamp).
 //
-//   - leftJoinAndSelect user + plan: Node has NO ClassSerializerInterceptor, so
-//     the nested `user` is the RAW user row (incl password_hash + reset fields)
-//     and `plan` is the raw plan row. We project every user column (UserDetail
-//     order) + every plan column (PlanEntity order) and assemble the nested
-//     *user.UserDetail / *plans.PlanEntity, which carry pinned MarshalJSON that
-//     reproduce Node's raw-entity key order. A LEFT-JOIN miss → the nested
-//     object is nil → JSON null.
+//   - leftJoinAndSelect user + plan: Node has NO ClassSerializerInterceptor.
+//     We project every user column (UserDetail order) + every plan column
+//     (PlanEntity order) into the nested *user.UserDetail / *plans.PlanEntity.
+//     The nested user is then serialised through StrippedUserDetail (#48), which
+//     drops the six secret columns (password_hash + reset/verification codes) —
+//     mirroring Node's stripUserSecrets over the leftJoinAndSelect'd user. The
+//     plan stays raw. A LEFT-JOIN miss → the nested object is nil → JSON null.
 //   - status (non-empty): payment.status = $N (STRING equality).
 //   - search (non-empty, trimmed): the 5-col ILIKE over reference_code, the
 //     joined user.email / user.name / plan.name, and payment.method, bound to
@@ -83,10 +83,11 @@ func (r *AdminRepo) Stats(ctx context.Context) (PaymentStats, error) {
 	}, nil
 }
 
-// AdminPaymentRow is one full Payment entity with its nested raw user + plan,
-// as Node's leftJoinAndSelect serialises it (no ClassSerializerInterceptor).
-// MarshalJSON pins the Payment-entity field order; the nested *user.UserDetail
-// and *plans.PlanEntity emit via their own pinned MarshalJSON (nil → null).
+// AdminPaymentRow is one full Payment entity with its nested user + plan, as
+// Node's leftJoinAndSelect serialises it (no ClassSerializerInterceptor).
+// MarshalJSON pins the Payment-entity field order; the nested user emits via
+// StrippedUserDetail (secrets dropped, #48) and *plans.PlanEntity via its own
+// pinned MarshalJSON (nil → null).
 type AdminPaymentRow struct {
 	ID            string
 	UserID        string
@@ -109,27 +110,27 @@ type AdminPaymentRow struct {
 
 func (p AdminPaymentRow) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
-		ID            string            `json:"id"`
-		UserID        string            `json:"user_id"`
-		User          *user.UserDetail  `json:"user"`
-		PlanID        string            `json:"plan_id"`
-		Plan          *plans.PlanEntity `json:"plan"`
-		Amount        int               `json:"amount"`
-		Currency      string            `json:"currency"`
-		Method        string            `json:"method"`
-		Status        string            `json:"status"`
-		ProviderRef   *string           `json:"provider_ref"`
-		ReferenceCode string            `json:"reference_code"`
-		QRData        *string           `json:"qr_data"`
-		Notes         *string           `json:"notes"`
-		ExpiresAt     *string           `json:"expires_at"`
-		CompletedAt   *string           `json:"completed_at"`
-		CreatedAt     string            `json:"created_at"`
-		UpdatedAt     string            `json:"updated_at"`
+		ID            string                   `json:"id"`
+		UserID        string                   `json:"user_id"`
+		User          *user.StrippedUserDetail `json:"user"`
+		PlanID        string                   `json:"plan_id"`
+		Plan          *plans.PlanEntity        `json:"plan"`
+		Amount        int                      `json:"amount"`
+		Currency      string                   `json:"currency"`
+		Method        string                   `json:"method"`
+		Status        string                   `json:"status"`
+		ProviderRef   *string                  `json:"provider_ref"`
+		ReferenceCode string                   `json:"reference_code"`
+		QRData        *string                  `json:"qr_data"`
+		Notes         *string                  `json:"notes"`
+		ExpiresAt     *string                  `json:"expires_at"`
+		CompletedAt   *string                  `json:"completed_at"`
+		CreatedAt     string                   `json:"created_at"`
+		UpdatedAt     string                   `json:"updated_at"`
 	}{
 		ID:            p.ID,
 		UserID:        p.UserID,
-		User:          p.User,
+		User:          stripPaymentUser(p.User),
 		PlanID:        p.PlanID,
 		Plan:          p.Plan,
 		Amount:        p.Amount,
@@ -145,6 +146,17 @@ func (p AdminPaymentRow) MarshalJSON() ([]byte, error) {
 		CreatedAt:     shared.ISOMillis(p.CreatedAt),
 		UpdatedAt:     shared.ISOMillis(p.UpdatedAt),
 	})
+}
+
+// stripPaymentUser wraps the nested user in StrippedUserDetail so the admin
+// payment row drops the six secret columns (password_hash + reset/verification
+// codes) — issue #48. Mirrors Node's stripUserSecrets applied to the
+// leftJoinAndSelect'd user. nil (LEFT-JOIN miss) stays nil → JSON null.
+func stripPaymentUser(u *user.UserDetail) *user.StrippedUserDetail {
+	if u == nil {
+		return nil
+	}
+	return &user.StrippedUserDetail{UserDetail: *u}
 }
 
 // paymentSortMap is the sort_by allow-list (mirrors Node sortMap). The joined
