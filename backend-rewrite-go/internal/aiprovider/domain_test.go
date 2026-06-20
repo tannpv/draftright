@@ -8,7 +8,7 @@ import (
 )
 
 func TestAiProvider_JSONKeyOrder(t *testing.T) {
-	key := "sk-test"
+	key := "sk-proj-abcd1234wxyz"
 	p := AiProvider{
 		ID: "11111111-1111-1111-1111-111111111111", Name: "OpenAI", Type: "openai",
 		EndpointURL: "https://api.openai.com/v1", APIKey: key, Model: "gpt-4o-mini",
@@ -29,8 +29,8 @@ func TestAiProvider_JSONKeyOrder(t *testing.T) {
 		}
 		prev = idx
 	}
-	if !strings.Contains(string(raw), `"api_key":"sk-test"`) {
-		t.Fatalf("api_key must be plaintext: %s", raw)
+	if !strings.Contains(string(raw), `"api_key":"sk-…wxyz"`) {
+		t.Fatalf("api_key must be masked (#29): %s", raw)
 	}
 	// decimal(3,2) has no TypeORM numeric transformer → Node serializes it as
 	// a JSON string like "0.30" (parity).
@@ -39,5 +39,19 @@ func TestAiProvider_JSONKeyOrder(t *testing.T) {
 	}
 	if !strings.Contains(string(raw), `"created_at":"1970-01-01T00:00:00.000Z"`) {
 		t.Fatalf("timestamp not ISO-millis: %s", raw)
+	}
+}
+
+// TestAiProvider_MasksAPIKey — #29: the raw api_key must never appear in the
+// serialized response; only the first3…last4 mask. Mirrors Node maskProvider.
+func TestAiProvider_MasksAPIKey(t *testing.T) {
+	p := AiProvider{ID: "p1", Name: "OpenAI", Type: "openai", APIKey: "sk-proj-abcd1234wxyz", Model: "gpt-4o"}
+	b, _ := json.Marshal(p)
+	s := string(b)
+	if strings.Contains(s, "sk-proj-abcd1234wxyz") {
+		t.Errorf("leaks raw api_key: %s", s)
+	}
+	if !strings.Contains(s, `"api_key":"sk-…wxyz"`) {
+		t.Errorf("expected masked api_key, got: %s", s)
 	}
 }
