@@ -36,6 +36,8 @@ type adminUsersService interface {
 	Create(ctx context.Context, in CreateAdminUserInput) (AdminUserOut, error)
 	Update(ctx context.Context, id string, in UpdateAdminUserInput) (AdminUserOut, error)
 	SoftDelete(ctx context.Context, id string) error
+	IsActiveAdmin(ctx context.Context, id string) (bool, error)
+	CountActiveAdmins(ctx context.Context) (int, error)
 }
 
 // AdminUsersHandler serves the admin admin-users routes. All routes mount inside
@@ -173,9 +175,39 @@ func (h *AdminUsersHandler) Update(w http.ResponseWriter, r *http.Request) {
 	shared.WriteJSON(w, http.StatusOK, out)
 }
 
-// Delete handles DELETE /admin/admin-users/:id → 200 { success:true }.
+// Delete handles DELETE /admin/admin-users/:id → 200 { success:true }. Two #32
+// guards (Node deleteAdminUser), both → 400 invalid-input: an admin must not
+// deactivate their own account, nor the last remaining active admin. The
+// self-check runs first (before any repo read), then — only when the target is
+// an active admin — the last-admin count guard, mirroring Node's
+// `target && target.is_active` short-circuit.
 func (h *AdminUsersHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+	claims, ok := shared.ClaimsFromContext(r.Context())
+	if !ok {
+		shared.WriteError(w, r, "internal", "admin-users failed")
+		return
+	}
+	if id == claims.Sub {
+		shared.WriteError(w, r, "invalid-input", "You cannot deactivate your own admin account")
+		return
+	}
+	active, err := h.svc.IsActiveAdmin(r.Context(), id)
+	if err != nil {
+		shared.WriteError(w, r, "internal", "admin-users failed")
+		return
+	}
+	if active {
+		count, err := h.svc.CountActiveAdmins(r.Context())
+		if err != nil {
+			shared.WriteError(w, r, "internal", "admin-users failed")
+			return
+		}
+		if count <= 1 {
+			shared.WriteError(w, r, "invalid-input", "Cannot deactivate the last active admin")
+			return
+		}
+	}
 	if err := h.svc.SoftDelete(r.Context(), id); err != nil {
 		shared.WriteError(w, r, "internal", "admin-users failed")
 		return

@@ -10,6 +10,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	platauth "github.com/tannpv/draftright-rewrite/internal/platform/auth"
+	"github.com/tannpv/draftright-rewrite/internal/shared"
 	"github.com/tannpv/draftright-rewrite/internal/shared/listquery"
 )
 
@@ -27,6 +29,13 @@ type fakeAdminUsersRepo struct {
 	builtSeen     listquery.Built
 	calledListAll bool
 	calledPaginat bool
+
+	// #32 delete-guard fakes: targetActive feeds IsActiveAdmin, activeCount
+	// feeds CountActiveAdmins, softDeleteCalled records whether the soft-delete
+	// actually ran (the guards must short-circuit before it on rejection).
+	targetActive     bool
+	activeCount      int
+	softDeleteCalled bool
 }
 
 func (f *fakeAdminUsersRepo) ListAll(ctx context.Context) ([]AdminUserOut, error) {
@@ -54,7 +63,24 @@ func (f *fakeAdminUsersRepo) Update(ctx context.Context, id string, p AdminUserP
 	return AdminUserOut{ID: id}, nil
 }
 
-func (f *fakeAdminUsersRepo) SoftDelete(ctx context.Context, id string) error { return nil }
+func (f *fakeAdminUsersRepo) SoftDelete(ctx context.Context, id string) error {
+	f.softDeleteCalled = true
+	return nil
+}
+
+func (f *fakeAdminUsersRepo) IsActiveAdmin(ctx context.Context, id string) (bool, error) {
+	return f.targetActive, nil
+}
+
+func (f *fakeAdminUsersRepo) CountActiveAdmins(ctx context.Context) (int, error) {
+	return f.activeCount, nil
+}
+
+// withAdminClaims stamps a verified-admin claim (Sub = acting admin id) onto the
+// request, the way RequireAuth would for a real DELETE /admin/admin-users/:id.
+func withAdminClaims(req *http.Request, actingID string) *http.Request {
+	return req.WithContext(shared.ContextWithClaims(req.Context(), &platauth.Claims{Sub: actingID}))
+}
 
 // assertAdminUserKeyOrder fails unless the JSON keys appear in raw in the given
 // order.
@@ -301,20 +327,96 @@ func (n *notFoundRepo) Update(ctx context.Context, id string, p AdminUserPatch) 
 	return AdminUserOut{}, ErrAdminNotFound
 }
 
-// TestDeleteAdminUser_SuccessBody: DELETE → 200 { "success": true }.
-func TestDeleteAdminUser_SuccessBody(t *testing.T) {
-	h := newAdminUsersHandler(&fakeAdminUsersRepo{})
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodDelete, "/admin/admin-users/x", nil)
+// deleteReq builds a DELETE /admin/admin-users/:id request carrying both the
+// chi URL param and an acting-admin claim (Sub = actingID).
+func deleteReq(target, actingID string) *http.Request {
+	req := httptest.NewRequest(http.MethodDelete, "/admin/admin-users/"+target, nil)
 	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("id", "x")
+	rctx.URLParams.Add("id", target)
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-	h.Delete(rec, req)
+	return withAdminClaims(req, actingID)
+}
+
+// TestDeleteAdminUser_SuccessBody: DELETE a different, inactive (or non-last)
+// admin → 200 { "success": true }.
+func TestDeleteAdminUser_SuccessBody(t *testing.T) {
+	repo := &fakeAdminUsersRepo{}
+	h := newAdminUsersHandler(repo)
+	rec := httptest.NewRecorder()
+	h.Delete(rec, deleteReq("x", "admin-self"))
 
 	if rec.Code != 200 {
 		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
 	}
 	if got := strings.TrimSpace(rec.Body.String()); got != `{"success":true}` {
 		t.Fatalf("body = %q, want %q", got, `{"success":true}`)
+	}
+	if !repo.softDeleteCalled {
+		t.Fatalf("expected SoftDelete to run on a normal delete")
+	}
+}
+
+// TestDelete_SelfAndLastAdminGuards (#32): self-deletion and last-active-admin
+// deletion both → 400 invalid-input with the Node messages, and NEITHER mutates
+// (SoftDelete must not run). A normal delete of an active admin with peers → 200.
+func TestDelete_SelfAndLastAdminGuards(t *testing.T) {
+	// Self-deletion: id == acting admin → 400, no SoftDelete, no repo reads.
+	selfRepo := &fakeAdminUsersRepo{targetActive: true, activeCount: 5}
+	sh := newAdminUsersHandler(selfRepo)
+	srec := httptest.NewRecorder()
+	sh.Delete(srec, deleteReq("admin-self", "admin-self"))
+
+	if srec.Code != 400 {
+		t.Fatalf("self status = %d, want 400; body=%s", srec.Code, srec.Body.String())
+	}
+	assertDeleteError(t, srec.Body.Bytes(), "You cannot deactivate your own admin account")
+	if selfRepo.softDeleteCalled {
+		t.Fatalf("self-delete must not run SoftDelete")
+	}
+
+	// Last active admin: target active + activeCount 1 → 400, no SoftDelete.
+	lastRepo := &fakeAdminUsersRepo{targetActive: true, activeCount: 1}
+	lh := newAdminUsersHandler(lastRepo)
+	lrec := httptest.NewRecorder()
+	lh.Delete(lrec, deleteReq("other", "admin-self"))
+
+	if lrec.Code != 400 {
+		t.Fatalf("last-admin status = %d, want 400; body=%s", lrec.Code, lrec.Body.String())
+	}
+	assertDeleteError(t, lrec.Body.Bytes(), "Cannot deactivate the last active admin")
+	if lastRepo.softDeleteCalled {
+		t.Fatalf("last-admin delete must not run SoftDelete")
+	}
+
+	// Active admin with peers (count 3) → 200, SoftDelete runs.
+	okRepo := &fakeAdminUsersRepo{targetActive: true, activeCount: 3}
+	oh := newAdminUsersHandler(okRepo)
+	orec := httptest.NewRecorder()
+	oh.Delete(orec, deleteReq("other", "admin-self"))
+
+	if orec.Code != 200 {
+		t.Fatalf("ok status = %d, want 200; body=%s", orec.Code, orec.Body.String())
+	}
+	if !okRepo.softDeleteCalled {
+		t.Fatalf("normal delete must run SoftDelete")
+	}
+}
+
+// assertDeleteError asserts a 400 envelope carries code invalid-input and the
+// exact Node BadRequestException message.
+func assertDeleteError(t *testing.T, body []byte, wantMsg string) {
+	t.Helper()
+	var env struct {
+		Error string `json:"error"`
+		Code  string `json:"code"`
+	}
+	if err := json.Unmarshal(body, &env); err != nil {
+		t.Fatalf("body not JSON: %v (%s)", err, body)
+	}
+	if env.Code != "invalid-input" {
+		t.Fatalf("code = %q, want invalid-input", env.Code)
+	}
+	if env.Error != wantMsg {
+		t.Fatalf("message = %q, want %q", env.Error, wantMsg)
 	}
 }
