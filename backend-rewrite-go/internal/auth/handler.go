@@ -16,6 +16,35 @@ type Handler struct{ svc *Service }
 // NewHandler wires the service.
 func NewHandler(svc *Service) *Handler { return &Handler{svc: svc} }
 
+// authResponse is the login/register/social envelope in Node declaration
+// order { access_token, refresh_token, user }. An ordered struct, NOT
+// map[string]any: maps marshal keys sorted, which would re-order the
+// nested `user` object (Node id,email,name → sorted email,id,name) and
+// break byte-parity (#56). User is `any` so it can carry either authUser
+// or authUserVerified.
+type authResponse struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	User         any    `json:"user"`
+}
+
+// authUser is the nested `user` object for login + social, in Node order
+// { id, email, name }.
+type authUser struct {
+	ID    string `json:"id"`
+	Email string `json:"email"`
+	Name  string `json:"name"`
+}
+
+// authUserVerified is register's `user` object, adding the literal
+// email_verified:false (Node: { id, email, name, email_verified }).
+type authUserVerified struct {
+	ID            string `json:"id"`
+	Email         string `json:"email"`
+	Name          string `json:"name"`
+	EmailVerified bool   `json:"email_verified"`
+}
+
 // writeDomainErr renders a known domain error as the canonical envelope:
 // *AuthError → invalid-token (bare message → "Unauthorized", matching
 // NestJS's default), *BadRequestError → invalid-input, *ConflictError →
@@ -69,12 +98,10 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		shared.WriteError(w, r, "internal", "login failed")
 		return
 	}
-	shared.WriteJSON(w, http.StatusCreated, map[string]any{
-		"access_token":  res.AccessToken,
-		"refresh_token": res.RefreshToken,
-		"user": map[string]any{
-			"id": res.User.ID, "email": res.User.Email, "name": res.User.Name,
-		},
+	shared.WriteJSON(w, http.StatusCreated, authResponse{
+		AccessToken:  res.AccessToken,
+		RefreshToken: res.RefreshToken,
+		User:         authUser{ID: res.User.ID, Email: res.User.Email, Name: res.User.Name},
 	})
 }
 
@@ -177,12 +204,12 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		shared.WriteError(w, r, "internal", "register failed")
 		return
 	}
-	shared.WriteJSON(w, http.StatusCreated, map[string]any{
-		"access_token":  res.AccessToken,
-		"refresh_token": res.RefreshToken,
-		"user": map[string]any{
-			"id": res.User.ID, "email": res.User.Email, "name": res.User.Name,
-			"email_verified": res.User.EmailVerified,
+	shared.WriteJSON(w, http.StatusCreated, authResponse{
+		AccessToken:  res.AccessToken,
+		RefreshToken: res.RefreshToken,
+		User: authUserVerified{
+			ID: res.User.ID, Email: res.User.Email, Name: res.User.Name,
+			EmailVerified: res.User.EmailVerified,
 		},
 	})
 }
@@ -211,12 +238,10 @@ func (h *Handler) Social(w http.ResponseWriter, r *http.Request) {
 		shared.WriteError(w, r, "internal", "social login failed")
 		return
 	}
-	shared.WriteJSON(w, http.StatusCreated, map[string]any{
-		"access_token":  res.AccessToken,
-		"refresh_token": res.RefreshToken,
-		"user": map[string]any{
-			"id": res.User.ID, "email": res.User.Email, "name": res.User.Name,
-		},
+	shared.WriteJSON(w, http.StatusCreated, authResponse{
+		AccessToken:  res.AccessToken,
+		RefreshToken: res.RefreshToken,
+		User:         authUser{ID: res.User.ID, Email: res.User.Email, Name: res.User.Name},
 	})
 }
 

@@ -5,5 +5,5 @@
   "headers": {
     "Authorization": "Bearer {{user_token}}"
   },
-  "ignore_value_of": []
+  "compare_raw_body": true
 }
