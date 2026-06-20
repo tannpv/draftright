@@ -470,8 +470,11 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 		// supplies CountToday; dbDefault resolves the DB default provider per
 		// request (Node RewriteService.callAI → findDefault). Trial seam wired via
 		// WithTrial (limiter from Redis/memory, limit from the NODE_ENV-equivalent).
+		// WithRewriteLog wires the fire-and-forget training-data capture Node runs
+		// on every successful rewrite (authed + trial) for fine-tuning.
 		paritySvc := parity.NewService(dbDefault, subSvc, usageCounter).
-			WithTrial(trialLimiter, trialLimit, time.Now)
+			WithTrial(trialLimiter, trialLimit, time.Now).
+			WithRewriteLog(rewriteLogSink{repo: rewritelogpkg.NewPgRepo(q), log: log})
 		parityHandler := parity.NewHandler(paritySvc)
 		core.rewriteParity = http.HandlerFunc(parityHandler.Rewrite)
 		core.rewriteTrial = http.HandlerFunc(parityHandler.Trial)
@@ -1005,12 +1008,47 @@ func (paymentMethodValidator) AssertMethodsRegisterable(csv string) error {
 // it to the right status (rewrite/extract → 400 invalid-input).
 type dbDefaultCompleter struct{ svc *aiproviderpkg.Service }
 
-func (d dbDefaultCompleter) Complete(ctx context.Context, system, user string) (string, int64, error) {
-	text, _, ms, err := d.svc.DefaultComplete(ctx, system, user)
+func (d dbDefaultCompleter) Complete(ctx context.Context, system, user string) (parity.Completion, error) {
+	text, _, model, ptype, ms, err := d.svc.DefaultCompleteFull(ctx, system, user)
 	if errors.Is(err, aiproviderpkg.ErrNoDefaultProvider) {
-		return "", 0, parity.ErrNoDefaultProvider
+		return parity.Completion{}, parity.ErrNoDefaultProvider
 	}
-	return text, ms, err
+	if err != nil {
+		return parity.Completion{}, err
+	}
+	return parity.Completion{
+		Text:           text,
+		Model:          model,
+		ProviderType:   ptype,
+		ResponseTimeMs: ms,
+	}, nil
+}
+
+// rewriteLogSink adapts the rewritelog repo to parity.rewriteLogger. It honors
+// the port's fire-and-forget contract: LogRewrite returns immediately, detaching
+// the INSERT onto a goroutine with a cancellation-detached context (the request
+// ctx is cancelled once the response is written) and swallowing failures with a
+// warn log — mirroring Node's `this.rewriteLogService.log({...}).catch(()=>{})`.
+type rewriteLogSink struct {
+	repo *rewritelogpkg.PgRepo
+	log  *slog.Logger
+}
+
+func (s rewriteLogSink) LogRewrite(ctx context.Context, e parity.RewriteLogEntry) {
+	ctx = context.WithoutCancel(ctx)
+	go func() {
+		err := s.repo.Insert(ctx, rewritelogpkg.RewriteLogInput{
+			Tone:           e.Tone,
+			InputText:      e.InputText,
+			OutputText:     e.OutputText,
+			Model:          e.Model,
+			ProviderType:   e.ProviderType,
+			ResponseTimeMs: e.ResponseTimeMs,
+		})
+		if err != nil {
+			s.log.Warn("rewrite_logs insert failed", "err", err)
+		}
+	}()
 }
 
 func (d dbDefaultCompleter) DefaultComplete(ctx context.Context, system, user string) (string, string, error) {

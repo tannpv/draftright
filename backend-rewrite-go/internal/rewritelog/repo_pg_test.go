@@ -25,8 +25,10 @@ type fakeQuerier struct {
 	countPendingFn       func(ctx context.Context) (int64, error)
 	updateQualityFn      func(ctx context.Context, arg sqlc.UpdateRewriteLogQualityParams) error
 	listApprovedAscFn    func(ctx context.Context) ([]sqlc.RewriteLog, error)
+	insertFn             func(ctx context.Context, arg sqlc.InsertRewriteLogParams) error
 	listPendingCallArgs  *sqlc.ListPendingRewriteLogsParams // capture last call
 	updateQualityCallArg *sqlc.UpdateRewriteLogQualityParams
+	insertCallArg        *sqlc.InsertRewriteLogParams
 }
 
 func (f *fakeQuerier) CountRewriteLogs(ctx context.Context) (int64, error) {
@@ -48,6 +50,10 @@ func (f *fakeQuerier) UpdateRewriteLogQuality(ctx context.Context, arg sqlc.Upda
 }
 func (f *fakeQuerier) ListApprovedRewriteLogsAsc(ctx context.Context) ([]sqlc.RewriteLog, error) {
 	return f.listApprovedAscFn(ctx)
+}
+func (f *fakeQuerier) InsertRewriteLog(ctx context.Context, arg sqlc.InsertRewriteLogParams) error {
+	f.insertCallArg = &arg
+	return f.insertFn(ctx, arg)
 }
 
 // makeUUID builds a pgtype.UUID from a canonical string (panic on parse error —
@@ -246,3 +252,55 @@ func TestFindApprovedAsc_MapsAllFields(t *testing.T) {
 		t.Errorf("CreatedAt = %v, want %v", got.CreatedAt, ts)
 	}
 }
+
+// ── Test: Insert ─────────────────────────────────────────────────────────────
+
+// Insert maps RewriteLogInput → InsertRewriteLogParams (response_time_ms int64
+// → int32) and forwards to the querier. id/quality/created_at are DB defaults.
+func TestInsert_MapsInputToParams(t *testing.T) {
+	q := &fakeQuerier{
+		insertFn: func(_ context.Context, _ sqlc.InsertRewriteLogParams) error { return nil },
+	}
+	repo := NewPgRepo(q)
+	err := repo.Insert(context.Background(), RewriteLogInput{
+		Tone:           "polished",
+		InputText:      "hi",
+		OutputText:     "Hello.",
+		Model:          "gpt-4o",
+		ProviderType:   "openai",
+		ResponseTimeMs: 123,
+	})
+	if err != nil {
+		t.Fatalf("Insert: %v", err)
+	}
+	if q.insertCallArg == nil {
+		t.Fatal("InsertRewriteLog not called")
+	}
+	got := *q.insertCallArg
+	want := sqlc.InsertRewriteLogParams{
+		Tone: "polished", InputText: "hi", OutputText: "Hello.",
+		Model: "gpt-4o", ProviderType: "openai", ResponseTimeMs: 123,
+	}
+	if got != want {
+		t.Fatalf("params = %+v, want %+v", got, want)
+	}
+}
+
+// Insert surfaces the querier error unchanged (caller decides fire-and-forget).
+func TestInsert_PropagatesError(t *testing.T) {
+	q := &fakeQuerier{
+		insertFn: func(_ context.Context, _ sqlc.InsertRewriteLogParams) error {
+			return errSentinel
+		},
+	}
+	repo := NewPgRepo(q)
+	if err := repo.Insert(context.Background(), RewriteLogInput{}); err != errSentinel {
+		t.Fatalf("err = %v, want errSentinel", err)
+	}
+}
+
+var errSentinel = errorString("boom")
+
+type errorString string
+
+func (e errorString) Error() string { return string(e) }

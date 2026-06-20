@@ -11,13 +11,34 @@ import (
 // --- fakes for the consumer-side ports ---
 
 type fakeCompleter struct {
-	text string
-	ms   int64
-	err  error
+	text  string
+	model string
+	ptype string
+	ms    int64
+	err   error
 }
 
-func (f *fakeCompleter) Complete(_ context.Context, _, _ string) (string, int64, error) {
-	return f.text, f.ms, f.err
+func (f *fakeCompleter) Complete(_ context.Context, _, _ string) (Completion, error) {
+	if f.err != nil {
+		return Completion{}, f.err
+	}
+	return Completion{
+		Text:           f.text,
+		Model:          f.model,
+		ProviderType:   f.ptype,
+		ResponseTimeMs: f.ms,
+	}, nil
+}
+
+// fakeLogger records LogRewrite calls synchronously for assertions. The real
+// sink detaches onto a goroutine; the fake stays synchronous so tests are
+// deterministic without sleeps.
+type fakeLogger struct {
+	entries []RewriteLogEntry
+}
+
+func (f *fakeLogger) LogRewrite(_ context.Context, e RewriteLogEntry) {
+	f.entries = append(f.entries, e)
 }
 
 type fakeEnts struct {
@@ -263,5 +284,129 @@ func TestRewrite_UnknownTone(t *testing.T) {
 	}
 	if ute.Error() != "Unknown tone: bogus" {
 		t.Fatalf("msg = %q", ute.Error())
+	}
+}
+
+// --- training-data logging (#36) ---
+
+// On a successful authenticated Rewrite, the logger receives exactly one entry
+// carrying tone + input + output + provider provenance (model/type/ms). Mirrors
+// Node's this.rewriteLogService.log({...}) after a good provider call.
+func TestRewrite_LogsOnSuccess(t *testing.T) {
+	lg := &fakeLogger{}
+	svc := NewService(
+		&fakeCompleter{text: "Hello.", model: "gpt-4o", ptype: "openai", ms: 12},
+		&fakeEnts{limit: 500},
+		&fakeUsage{count: 0},
+	).WithRewriteLog(lg)
+
+	if _, err := svc.Rewrite(context.Background(), "u1", "hi", "polished", "", ""); err != nil {
+		t.Fatalf("Rewrite: %v", err)
+	}
+	if len(lg.entries) != 1 {
+		t.Fatalf("entries = %d, want 1", len(lg.entries))
+	}
+	got := lg.entries[0]
+	want := RewriteLogEntry{
+		Tone: "polished", InputText: "hi", OutputText: "Hello.",
+		Model: "gpt-4o", ProviderType: "openai", ResponseTimeMs: 12,
+	}
+	if got != want {
+		t.Fatalf("entry = %+v, want %+v", got, want)
+	}
+}
+
+// grammar_check logs the RAW provider text as output_text (Node logs result.text
+// before parseGrammarResult), and the tone verbatim.
+func TestRewrite_LogsRawOutputForGrammar(t *testing.T) {
+	lg := &fakeLogger{}
+	svc := NewService(
+		&fakeCompleter{text: `{"score":90}`, model: "m", ptype: "ollama", ms: 5},
+		&fakeEnts{limit: 500},
+		&fakeUsage{count: 0},
+	).WithRewriteLog(lg)
+
+	if _, err := svc.Rewrite(context.Background(), "u1", "hi", "grammar_check", "", ""); err != nil {
+		t.Fatalf("Rewrite: %v", err)
+	}
+	if len(lg.entries) != 1 {
+		t.Fatalf("entries = %d, want 1", len(lg.entries))
+	}
+	if lg.entries[0].OutputText != `{"score":90}` {
+		t.Fatalf("output_text = %q, want raw provider text", lg.entries[0].OutputText)
+	}
+	if lg.entries[0].Tone != "grammar_check" {
+		t.Fatalf("tone = %q", lg.entries[0].Tone)
+	}
+}
+
+// A provider failure must NOT log — Node logs only after a successful call.
+func TestRewrite_NoLogOnProviderError(t *testing.T) {
+	lg := &fakeLogger{}
+	svc := NewService(
+		&fakeCompleter{err: errors.New("upstream 500")},
+		&fakeEnts{limit: 500},
+		&fakeUsage{count: 0},
+	).WithRewriteLog(lg)
+
+	if _, err := svc.Rewrite(context.Background(), "u1", "hi", "polished", "", ""); !errors.Is(err, ErrProviderFailed) {
+		t.Fatalf("err = %v, want ErrProviderFailed", err)
+	}
+	if len(lg.entries) != 0 {
+		t.Fatalf("entries = %d, want 0 (no log on provider error)", len(lg.entries))
+	}
+}
+
+// An unknown tone (resolvePrompt==nil) short-circuits before the provider call,
+// so nothing is logged.
+func TestRewrite_NoLogOnUnknownTone(t *testing.T) {
+	lg := &fakeLogger{}
+	svc := NewService(
+		&fakeCompleter{text: "x"},
+		&fakeEnts{limit: 500},
+		&fakeUsage{count: 0},
+	).WithRewriteLog(lg)
+
+	if _, err := svc.Rewrite(context.Background(), "u1", "hi", "bogus", "", ""); err == nil {
+		t.Fatal("expected UnknownToneError")
+	}
+	if len(lg.entries) != 0 {
+		t.Fatalf("entries = %d, want 0 (no log on unknown tone)", len(lg.entries))
+	}
+}
+
+// The public-trial path logs too (Node's trialRewrite shares callAI), and the
+// logged input_text is the 500-rune-TRUNCATED text actually sent upstream.
+func TestTrialRewrite_LogsTruncatedInput(t *testing.T) {
+	lg := &fakeLogger{}
+	svc := NewService(
+		&fakeCompleter{text: "ok", model: "m", ptype: "openai", ms: 3},
+		&fakeEnts{}, &fakeUsage{},
+	).WithTrial(&fakeTrialLimiter{}, 3, fixedNow()).WithRewriteLog(lg)
+
+	long := make([]rune, 600)
+	for i := range long {
+		long[i] = 'a'
+	}
+	if _, err := svc.TrialRewrite(context.Background(), string(long), "polished", "1.2.3.4", "", ""); err != nil {
+		t.Fatalf("TrialRewrite: %v", err)
+	}
+	if len(lg.entries) != 1 {
+		t.Fatalf("entries = %d, want 1", len(lg.entries))
+	}
+	if l := len([]rune(lg.entries[0].InputText)); l != 500 {
+		t.Fatalf("logged input rune len = %d, want 500 (truncated)", l)
+	}
+}
+
+// A nil logger (no WithRewriteLog) must not panic and simply skips capture.
+func TestRewrite_NilLoggerSkipsCapture(t *testing.T) {
+	svc := NewService(
+		&fakeCompleter{text: "Hello."},
+		&fakeEnts{limit: 500},
+		&fakeUsage{count: 0},
+	)
+	if _, err := svc.Rewrite(context.Background(), "u1", "hi", "polished", "", ""); err != nil {
+		t.Fatalf("Rewrite with nil logger: %v", err)
 	}
 }
