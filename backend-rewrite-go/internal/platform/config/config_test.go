@@ -20,6 +20,56 @@ func TestLoad_ReadsRefreshSecret(t *testing.T) {
 	}
 }
 
+// #46: prod-mode must resolve from NODE_ENV (the signal Node + every existing
+// deployment set), with APP_ENV as an optional Go-native override.
+func TestLoad_NodeEnvProductionEnablesProdMode(t *testing.T) {
+	os.Setenv("JWT_SECRET", "s")
+	os.Setenv("NODE_ENV", "production")
+	defer func() {
+		os.Unsetenv("JWT_SECRET")
+		os.Unsetenv("NODE_ENV")
+	}()
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.IsProduction() {
+		t.Fatalf("NODE_ENV=production should yield IsProduction()=true, got AppEnv=%q", c.AppEnv)
+	}
+}
+
+func TestLoad_AppEnvOverridesNodeEnv(t *testing.T) {
+	os.Setenv("JWT_SECRET", "s")
+	os.Setenv("APP_ENV", "development")
+	os.Setenv("NODE_ENV", "production")
+	defer func() {
+		os.Unsetenv("JWT_SECRET")
+		os.Unsetenv("APP_ENV")
+		os.Unsetenv("NODE_ENV")
+	}()
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.IsProduction() {
+		t.Fatalf("APP_ENV=development should win over NODE_ENV=production, got AppEnv=%q", c.AppEnv)
+	}
+}
+
+func TestLoad_DefaultsToDevelopment(t *testing.T) {
+	os.Setenv("JWT_SECRET", "s")
+	os.Unsetenv("APP_ENV")
+	os.Unsetenv("NODE_ENV")
+	defer os.Unsetenv("JWT_SECRET")
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.AppEnv != "development" {
+		t.Fatalf("no env set should default to development, got %q", c.AppEnv)
+	}
+}
+
 func TestLoad_ReadsEmailAndAppleEnv(t *testing.T) {
 	os.Setenv("JWT_SECRET", "s")
 	os.Setenv("RESEND_API_KEY", "re_123")

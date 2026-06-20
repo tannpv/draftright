@@ -5,6 +5,7 @@ package redistrial
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -36,7 +37,14 @@ func (l *Limiter) Incr(ctx context.Context, key string, ttlSec int) (int64, erro
 		return 0, err
 	}
 	if n == 1 {
-		l.rdb.Expire(callCtx, key, time.Duration(ttlSec)*time.Second)
+		// EXPIRE failure must not break the trial check (body stays
+		// identical → parity preserved), but a dropped error leaves the
+		// counter key with no TTL → it never expires and the IP's trial
+		// window sticks permanently. Log it so the leak is observable. See #41.
+		if err := l.rdb.Expire(callCtx, key, time.Duration(ttlSec)*time.Second).Err(); err != nil {
+			slog.Warn("redistrial: EXPIRE failed; trial key may leak without TTL",
+				"key", key, "ttl_sec", ttlSec, "error", err)
+		}
 	}
 	return n, nil
 }

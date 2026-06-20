@@ -187,7 +187,7 @@ func Load() (*Config, error) {
 		BugReportsDir:             envOr("BUG_REPORTS_DIR", "/var/lib/draftright/bug-reports"),
 		ResendWebhookSecret:       os.Getenv("RESEND_WEBHOOK_SECRET"),
 		DisableFixProposalCron:    cronToggleSet("DISABLE_FIX_PROPOSAL_CRON"),
-		AppEnv:                    envOr("APP_ENV", "development"),
+		AppEnv:                    resolveAppEnv(),
 
 		MetricsEnabled:  envBool("METRICS_ENABLED", false),
 		OtelEndpoint:    os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
@@ -220,6 +220,22 @@ func (c *Config) validate() error {
 // prod vs dev" — never literal `== "production"` scattered around.
 func (c *Config) IsProduction() bool {
 	return strings.EqualFold(c.AppEnv, "production")
+}
+
+// resolveAppEnv picks the runtime environment. The NestJS parity authority and
+// every existing deployment set NODE_ENV (not APP_ENV), so a true drop-in must
+// honor NODE_ENV. Precedence: APP_ENV if set (Go-native override), else
+// NODE_ENV (the platform's signal), else "development". Without this the Go
+// container ran in dev mode on prod (24h admin TTL, trialLimit 999) until
+// APP_ENV=production was added manually to compose. See parity issue #46.
+func resolveAppEnv() string {
+	if v := os.Getenv("APP_ENV"); v != "" {
+		return v
+	}
+	if v := os.Getenv("NODE_ENV"); v != "" {
+		return v
+	}
+	return "development"
 }
 
 // envOr returns the env var value or a fallback when unset/empty.
