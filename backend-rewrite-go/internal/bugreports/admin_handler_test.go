@@ -148,6 +148,30 @@ func TestPatch_OK(t *testing.T) {
 	}
 }
 
+// TestPatch_ExplicitNullSetsPresenceFlag pins issue #39 at the HTTP edge: an
+// explicit JSON null is PRESENT (Set flag true, value pointer nil), distinct
+// from an absent key. Node's `!== undefined` enters the branch for null.
+func TestPatch_ExplicitNullSetsPresenceFlag(t *testing.T) {
+	svc := &fakeHandlerSvc{updEntity: BugReportEntity{ID: "x"}}
+	do(t, newRouter(NewAdminHandler(nil).withSvc(svc)), "PATCH", "/admin/bug-reports/x", `{"admin_notes":null}`)
+	if !svc.lastPatch.AdminNotesSet {
+		t.Fatalf("explicit null admin_notes should set presence flag")
+	}
+	if svc.lastPatch.AdminNotes != nil {
+		t.Fatalf("explicit null admin_notes value should be nil pointer")
+	}
+}
+
+// TestPatch_AbsentKeyLeavesFlagUnset: an absent key must NOT set the presence
+// flag (the other half of the #39 distinction).
+func TestPatch_AbsentKeyLeavesFlagUnset(t *testing.T) {
+	svc := &fakeHandlerSvc{updEntity: BugReportEntity{ID: "x"}}
+	do(t, newRouter(NewAdminHandler(nil).withSvc(svc)), "PATCH", "/admin/bug-reports/x", `{"status":"reviewing"}`)
+	if svc.lastPatch.AdminNotesSet {
+		t.Fatalf("absent admin_notes must leave presence flag unset")
+	}
+}
+
 func TestDelete_OK(t *testing.T) {
 	svc := &fakeHandlerSvc{}
 	rec := do(t, newRouter(NewAdminHandler(nil).withSvc(svc)), "DELETE", "/admin/bug-reports/x", "")

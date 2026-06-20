@@ -14,7 +14,7 @@ func TestResetStatements_Order(t *testing.T) {
 		!strings.Contains(stmts[0], "'draftright_shadow_go'") {
 		t.Fatalf("stmt[0] must terminate conns to target db: %q", stmts[0])
 	}
-	if stmts[1] != `DROP DATABASE IF EXISTS "draftright_shadow_go"` {
+	if stmts[1] != `DROP DATABASE IF EXISTS "draftright_shadow_go" WITH (FORCE)` {
 		t.Fatalf("stmt[1] = %q", stmts[1])
 	}
 	if stmts[2] != `CREATE DATABASE "draftright_shadow_go" TEMPLATE "draftright_shadow_tmpl"` {

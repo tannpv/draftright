@@ -93,14 +93,36 @@ type successResponse struct {
 	Success bool `json:"success"`
 }
 
-// patchBody is the PATCH inline body. Each pointer is nil when the key is
-// absent (Node `dto.x !== undefined`).
-type patchBody struct {
-	Status         *string `json:"status"`
-	AdminNotes     *string `json:"admin_notes"`
-	Title          *string `json:"title"`
-	TargetPlatform *string `json:"target_platform"`
-	IsPublic       *bool   `json:"is_public"`
+// jsonStrPtr unmarshals a present field's raw JSON into a *string: a JSON
+// string yields &s; an explicit null or a non-string (number/bool/object)
+// yields nil. The caller already knows the key was PRESENT (it came from the
+// decoded map), so a nil here means "present but not a usable string" — which
+// the use case validates per Node's rules. Mirrors how `dto.x` reaches the Node
+// service as null / NaN / the raw value.
+func jsonStrPtr(rm json.RawMessage) *string {
+	// JSON null unmarshals into a string as a no-op (leaves ""), so guard it
+	// explicitly — a present-null must yield a nil pointer, not &"".
+	if string(rm) == "null" {
+		return nil
+	}
+	var s string
+	if err := json.Unmarshal(rm, &s); err != nil {
+		return nil
+	}
+	return &s
+}
+
+// jsonBoolPtr unmarshals a present field's raw JSON into a *bool: a JSON bool
+// yields &b; null or a non-bool yields nil.
+func jsonBoolPtr(rm json.RawMessage) *bool {
+	if string(rm) == "null" {
+		return nil
+	}
+	var b bool
+	if err := json.Unmarshal(rm, &b); err != nil {
+		return nil
+	}
+	return &b
 }
 
 // List handles GET /admin/bug-reports → 200 { items, total }. Builds the
@@ -179,18 +201,31 @@ func (h *AdminHandler) Screenshot(w http.ResponseWriter, r *http.Request) {
 // Patch handles PATCH /admin/bug-reports/:id → 200 entity. Per-field
 // validation errors → 400 invalid-input; absent row → 404.
 func (h *AdminHandler) Patch(w http.ResponseWriter, r *http.Request) {
-	var body patchBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil && err != io.EOF {
+	// Decode into a raw key map so the handler can tell an absent key from an
+	// explicit null (Node's `!== undefined`). A typed-struct decode collapses
+	// both to a nil pointer. See issue #39.
+	raw := map[string]json.RawMessage{}
+	if err := json.NewDecoder(r.Body).Decode(&raw); err != nil && err != io.EOF {
 		shared.WriteError(w, r, "invalid-input", "Invalid request body")
 		return
 	}
-	row, err := h.svc.Update(r.Context(), chi.URLParam(r, "id"), BugPatch{
-		Status:         body.Status,
-		AdminNotes:     body.AdminNotes,
-		Title:          body.Title,
-		TargetPlatform: body.TargetPlatform,
-		IsPublic:       body.IsPublic,
-	})
+	var p BugPatch
+	if rm, ok := raw["status"]; ok {
+		p.StatusSet, p.Status = true, jsonStrPtr(rm)
+	}
+	if rm, ok := raw["admin_notes"]; ok {
+		p.AdminNotesSet, p.AdminNotes = true, jsonStrPtr(rm)
+	}
+	if rm, ok := raw["title"]; ok {
+		p.TitleSet, p.Title = true, jsonStrPtr(rm)
+	}
+	if rm, ok := raw["target_platform"]; ok {
+		p.TargetPlatformSet, p.TargetPlatform = true, jsonStrPtr(rm)
+	}
+	if rm, ok := raw["is_public"]; ok {
+		p.IsPublic = jsonBoolPtr(rm)
+	}
+	row, err := h.svc.Update(r.Context(), chi.URLParam(r, "id"), p)
 	if err != nil {
 		h.writeServiceError(w, r, err)
 		return

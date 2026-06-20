@@ -73,7 +73,7 @@ func boolp(b bool) *bool    { return &b }
 func TestUpdate_RejectsBadStatus(t *testing.T) {
 	repo := &fakeAdminRepo{row: BugReportEntity{Status: "new"}}
 	svc := NewAdminService(repo, &fakeProposer{}, time.Now)
-	_, err := svc.Update(context.Background(), "id", BugPatch{Status: strp("nope")})
+	_, err := svc.Update(context.Background(), "id", BugPatch{StatusSet: true, Status: strp("nope")})
 	var ve *BugValidationError
 	if !errors.As(err, &ve) {
 		t.Fatalf("want BugValidationError, got %v", err)
@@ -83,10 +83,71 @@ func TestUpdate_RejectsBadStatus(t *testing.T) {
 	}
 }
 
+// TestUpdate_PresentNullRejectsStatus pins issue #39: an explicit-null status
+// (Set=true, value nil) is PRESENT, so Node enters the branch and
+// `includes(null)` → false → 400. Go must match, not silently skip.
+func TestUpdate_PresentNullRejectsStatus(t *testing.T) {
+	repo := &fakeAdminRepo{row: BugReportEntity{Status: "new"}}
+	svc := NewAdminService(repo, &fakeProposer{}, time.Now)
+	_, err := svc.Update(context.Background(), "id", BugPatch{StatusSet: true, Status: nil})
+	var ve *BugValidationError
+	if !errors.As(err, &ve) || ve.Msg != "status must be one of: new, reviewing, fix_proposed, resolved, wont_fix" {
+		t.Fatalf("present-null status should 400, got %v", err)
+	}
+}
+
+// TestUpdate_PresentNullRejectsTitle: explicit-null title trims to "" → 400.
+func TestUpdate_PresentNullRejectsTitle(t *testing.T) {
+	repo := &fakeAdminRepo{row: BugReportEntity{Status: "new"}}
+	svc := NewAdminService(repo, &fakeProposer{}, time.Now)
+	_, err := svc.Update(context.Background(), "id", BugPatch{TitleSet: true, Title: nil})
+	var ve *BugValidationError
+	if !errors.As(err, &ve) || ve.Msg != "title is required (1-80 characters)" {
+		t.Fatalf("present-null title should 400, got %v", err)
+	}
+}
+
+// TestUpdate_PresentNullRejectsTargetPlatform: explicit-null platform → 400.
+func TestUpdate_PresentNullRejectsTargetPlatform(t *testing.T) {
+	repo := &fakeAdminRepo{row: BugReportEntity{Status: "new"}}
+	svc := NewAdminService(repo, &fakeProposer{}, time.Now)
+	_, err := svc.Update(context.Background(), "id", BugPatch{TargetPlatformSet: true, TargetPlatform: nil})
+	var ve *BugValidationError
+	if !errors.As(err, &ve) || ve.Msg != "target_platform must be one of: playground, mobile, windows, mac, linux" {
+		t.Fatalf("present-null target_platform should 400, got %v", err)
+	}
+}
+
+// TestUpdate_PresentNullAdminNotesPersistsNull: explicit-null admin_notes is
+// present → Node assigns null → SQL NULL. Go passes a nil pointer to the repo.
+func TestUpdate_PresentNullAdminNotesPersistsNull(t *testing.T) {
+	repo := &fakeAdminRepo{row: BugReportEntity{Status: "new", AdminNotes: strp("old notes")}}
+	svc := NewAdminService(repo, &fakeProposer{}, time.Now)
+	if _, err := svc.Update(context.Background(), "id", BugPatch{AdminNotesSet: true, AdminNotes: nil}); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if repo.upNotes != nil {
+		t.Fatalf("present-null admin_notes should persist NULL, got %v", *repo.upNotes)
+	}
+}
+
+// TestUpdate_AbsentAdminNotesKeepsCurrent: an ABSENT admin_notes (Set=false)
+// must leave the current value untouched — the distinction issue #39 hinges on.
+func TestUpdate_AbsentAdminNotesKeepsCurrent(t *testing.T) {
+	repo := &fakeAdminRepo{row: BugReportEntity{Status: "new", AdminNotes: strp("keep me")}}
+	svc := NewAdminService(repo, &fakeProposer{}, time.Now)
+	if _, err := svc.Update(context.Background(), "id", BugPatch{StatusSet: true, Status: strp("reviewing")}); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if repo.upNotes == nil || *repo.upNotes != "keep me" {
+		t.Fatalf("absent admin_notes should keep current value, got %v", repo.upNotes)
+	}
+}
+
 func TestUpdate_RejectsBadTitle(t *testing.T) {
 	repo := &fakeAdminRepo{row: BugReportEntity{Status: "new"}}
 	svc := NewAdminService(repo, &fakeProposer{}, time.Now)
-	_, err := svc.Update(context.Background(), "id", BugPatch{Title: strp("   ")})
+	_, err := svc.Update(context.Background(), "id", BugPatch{TitleSet: true, Title: strp("   ")})
 	var ve *BugValidationError
 	if !errors.As(err, &ve) || ve.Msg != "title is required (1-80 characters)" {
 		t.Fatalf("want title validation error, got %v", err)
@@ -96,7 +157,7 @@ func TestUpdate_RejectsBadTitle(t *testing.T) {
 func TestUpdate_RejectsBadTargetPlatform(t *testing.T) {
 	repo := &fakeAdminRepo{row: BugReportEntity{Status: "new"}}
 	svc := NewAdminService(repo, &fakeProposer{}, time.Now)
-	_, err := svc.Update(context.Background(), "id", BugPatch{TargetPlatform: strp("toaster")})
+	_, err := svc.Update(context.Background(), "id", BugPatch{TargetPlatformSet: true, TargetPlatform: strp("toaster")})
 	var ve *BugValidationError
 	if !errors.As(err, &ve) || ve.Msg != "target_platform must be one of: playground, mobile, windows, mac, linux" {
 		t.Fatalf("want target_platform validation error, got %v", err)
@@ -113,7 +174,7 @@ func TestUpdate_MergesOnlyProvidedFields(t *testing.T) {
 	}}
 	svc := NewAdminService(repo, &fakeProposer{}, time.Now)
 	// Only is_public + status provided; notes/title/platform keep current row values.
-	_, err := svc.Update(context.Background(), "id", BugPatch{Status: strp("reviewing"), IsPublic: boolp(true)})
+	_, err := svc.Update(context.Background(), "id", BugPatch{StatusSet: true, Status: strp("reviewing"), IsPublic: boolp(true)})
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -134,7 +195,7 @@ func TestUpdate_MergesOnlyProvidedFields(t *testing.T) {
 func TestUpdate_TrimsTitle(t *testing.T) {
 	repo := &fakeAdminRepo{row: BugReportEntity{Status: "new"}}
 	svc := NewAdminService(repo, &fakeProposer{}, time.Now)
-	if _, err := svc.Update(context.Background(), "id", BugPatch{Title: strp("  Hello  ")}); err != nil {
+	if _, err := svc.Update(context.Background(), "id", BugPatch{TitleSet: true, Title: strp("  Hello  ")}); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	if repo.upTitle == nil || *repo.upTitle != "Hello" {

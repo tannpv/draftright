@@ -1,0 +1,9 @@
+{
+  "name": "admin_triage_bug_reports_patch_null_status",
+  "method": "PATCH",
+  "path": "/admin/bug-reports/00000000-0000-4000-8000-000000000007",
+  "headers": { "Authorization": "Bearer {{admin_token}}", "Content-Type": "application/json" },
+  "body": { "status": null },
+  "ignore_value_of": ["request_id"],
+  "_note": "Issue #39. Explicit-null status is PRESENT (Node `dto.status !== undefined` true) so the branch runs and `ALLOWED_STATUSES.includes(null)` -> false -> 400 { error:'status must be one of: new, reviewing, fix_proposed, resolved, wont_fix', code:'invalid-input', request_id:<uuid> }. Pre-fix Go collapsed present-null to absent (nil pointer) and returned 200 without mutating -> the divergence this pins. Validation 400 fires before AdminUpdate, so this mutates nothing and is order-independent vs the sibling success patch on the same row id ...007."
+}
