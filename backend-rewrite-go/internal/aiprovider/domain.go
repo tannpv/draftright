@@ -89,7 +89,11 @@ func (p AiProvider) MarshalJSON() ([]byte, error) {
 		UpdatedAt   string `json:"updated_at"`
 	}{
 		ID: p.ID, Name: p.Name, Type: p.Type, EndpointURL: p.EndpointURL,
-		APIKey: p.APIKey, Model: p.Model, Temperature: p.Temperature,
+		// #29: api_key masked in every admin response (first3…last4). The live
+		// provider-call factory reads the AiProvider.APIKey field directly, so
+		// masking the JSON projection never affects real calls. Node mirror:
+		// src/ai-providers/ maskProvider util.
+		APIKey: shared.MaskSecret(p.APIKey), Model: p.Model, Temperature: p.Temperature,
 		IsDefault: p.IsDefault, IsActive: p.IsActive,
 		CreatedAt: shared.ISOMillis(p.CreatedAt), UpdatedAt: shared.ISOMillis(p.UpdatedAt),
 	})

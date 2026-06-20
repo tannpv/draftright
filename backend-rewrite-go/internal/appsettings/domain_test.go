@@ -29,8 +29,34 @@ func TestAppSettings_JSONKeyOrder(t *testing.T) {
 		}
 		prev = idx
 	}
-	if !strings.Contains(string(raw), `"stripe_secret_key":"sk_secret"`) {
-		t.Fatalf("secrets must be unmasked: %s", raw)
+	// #30: secret columns masked in the response. "sk_secret" is <16 runes →
+	// bare marker.
+	if !strings.Contains(string(raw), `"stripe_secret_key":"…"`) {
+		t.Fatalf("stripe_secret_key must be masked: %s", raw)
+	}
+}
+
+// TestAppSettings_MasksSecrets — #30: payment + SMTP secret columns must never
+// serialize plaintext; public IDs (Apple team/key, paypal client id) stay raw.
+func TestAppSettings_MasksSecrets(t *testing.T) {
+	s := AppSettings{
+		StripeSecretKey: "sk_live_abcdefghijklmnop", ResendAPIKey: "re_abcdefghijklmnop",
+		GoogleClientSecret: "gocspx-abcdefghijklmnop", AppleTeamID: "ABCDE12345",
+		AppleKeyID: "KEY1234567", PaypalClientID: "paypal-public-id-value",
+	}
+	b, _ := json.Marshal(s)
+	body := string(b)
+	for _, raw := range []string{"sk_live_abcdefghijklmnop", "re_abcdefghijklmnop", "gocspx-abcdefghijklmnop"} {
+		if strings.Contains(body, raw) {
+			t.Errorf("leaks secret %q", raw)
+		}
+	}
+	// Apple IDs and public client IDs are NOT masked.
+	if !strings.Contains(body, "ABCDE12345") || !strings.Contains(body, "paypal-public-id-value") {
+		t.Errorf("non-secret identifier wrongly masked: %s", body)
+	}
+	if !strings.Contains(body, `"stripe_secret_key":"sk_…mnop"`) {
+		t.Errorf("expected masked stripe key: %s", body)
 	}
 }
 

@@ -70,6 +70,38 @@ func (q *Queries) CountRewriteLogsByQuality(ctx context.Context) ([]CountRewrite
 	return items, nil
 }
 
+const insertRewriteLog = `-- name: InsertRewriteLog :exec
+INSERT INTO rewrite_logs (tone, input_text, output_text, model, provider_type, response_time_ms)
+VALUES ($1, $2, $3, $4, $5, $6)
+`
+
+type InsertRewriteLogParams struct {
+	Tone           string `db:"tone" json:"tone"`
+	InputText      string `db:"input_text" json:"input_text"`
+	OutputText     string `db:"output_text" json:"output_text"`
+	Model          string `db:"model" json:"model"`
+	ProviderType   string `db:"provider_type" json:"provider_type"`
+	ResponseTimeMs int32  `db:"response_time_ms" json:"response_time_ms"`
+}
+
+// log(): fire-and-forget training-data capture after a successful rewrite.
+// Node: rewriteLogRepo.save({ tone, input_text, output_text, model,
+//
+//	provider_type, response_time_ms }) — id/quality/created_at default.
+//
+// Mirrors RewriteService.callAI's this.rewriteLogService.log({...}).catch(()=>{}).
+func (q *Queries) InsertRewriteLog(ctx context.Context, arg InsertRewriteLogParams) error {
+	_, err := q.db.Exec(ctx, insertRewriteLog,
+		arg.Tone,
+		arg.InputText,
+		arg.OutputText,
+		arg.Model,
+		arg.ProviderType,
+		arg.ResponseTimeMs,
+	)
+	return err
+}
+
 const listApprovedRewriteLogsAsc = `-- name: ListApprovedRewriteLogsAsc :many
 SELECT id, tone, input_text, output_text, model, provider_type, response_time_ms, quality, created_at
 FROM rewrite_logs

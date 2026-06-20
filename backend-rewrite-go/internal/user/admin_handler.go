@@ -133,10 +133,12 @@ func (h *AdminHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		shared.WriteError(w, r, "invalid-input", msg)
 		return
 	}
-	user, err := h.svc.Update(r.Context(), id, patch)
+	updated, err := h.svc.Update(r.Context(), id, patch)
 	if err != nil {
 		shared.WriteError(w, r, "internal", "users failed")
 		return
 	}
-	shared.WriteJSON(w, http.StatusOK, user)
+	// #31: strip the six secret columns from the PATCH response, mirroring Node
+	// `return stripUserSecrets(await usersService.update(...))`.
+	shared.WriteJSON(w, http.StatusOK, StrippedUserDetail{updated})
 }

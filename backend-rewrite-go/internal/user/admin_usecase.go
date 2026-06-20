@@ -112,10 +112,10 @@ func (s *AdminService) List(ctx context.Context, p ListUsersParams) ([]AdminUser
 // surfaced as a 404 — matching Node byte-for-byte. The sub/usage/recent reads
 // all tolerate a non-existent user_id (null / 0 / []).
 func (s *AdminService) Get(ctx context.Context, id string) (GetUserResponse, error) {
-	var userPtr *UserDetail
+	var userPtr *StrippedUserDetail
 	u, err := s.repo.GetFull(ctx, id)
 	if err == nil {
-		userPtr = &u
+		userPtr = &StrippedUserDetail{u}
 	} else if !errors.Is(err, ErrNotFound) {
 		return GetUserResponse{}, err
 	}
@@ -160,10 +160,10 @@ func (s *AdminService) Update(ctx context.Context, id string, p UserPatchAdmin) 
 // serialises null when absent (Node findById → null). RecentUsage must be
 // non-nil (the usecase guarantees it) to emit [] not null.
 type GetUserResponse struct {
-	User         *UserDetail      `json:"user"`
-	Subscription *AdminSubView    `json:"subscription"`
-	UsageToday   int              `json:"usage_today"`
-	RecentUsage  []RecentUsageRow `json:"recent_usage"`
+	User         *StrippedUserDetail `json:"user"`
+	Subscription *AdminSubView       `json:"subscription"`
+	UsageToday   int                 `json:"usage_today"`
+	RecentUsage  []RecentUsageRow    `json:"recent_usage"`
 }
 
 // AdminUserRow is one row of GET /admin/users. Key order id, email, name, role,

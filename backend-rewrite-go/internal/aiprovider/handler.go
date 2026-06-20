@@ -150,6 +150,12 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		IsActive:    derefBoolOr(body.IsActive, true),
 	}
 
+	// #29 write guard: a masked api_key echoed back from the admin UI must not
+	// overwrite the real stored key. Empty = explicit unset; masked = ignore.
+	if shared.ContainsMaskMarker(in.APIKey) {
+		in.APIKey = ""
+	}
+
 	p, err := h.svc.Create(r.Context(), in)
 	if err != nil {
 		shared.WriteError(w, r, "internal", "ai providers failed")
@@ -182,6 +188,12 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	if body.Temperature != nil {
 		t := body.Temperature.String()
 		patch.Temperature = &t
+	}
+
+	// #29 write guard: drop a masked api_key echo so PATCH keeps the stored key
+	// (nil = column untouched). Empty string still clears it (explicit).
+	if patch.APIKey != nil && shared.ContainsMaskMarker(*patch.APIKey) {
+		patch.APIKey = nil
 	}
 
 	p, err := h.svc.Update(r.Context(), id, patch)

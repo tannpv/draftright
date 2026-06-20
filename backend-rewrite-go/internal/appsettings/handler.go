@@ -110,6 +110,20 @@ func (h *Handler) Patch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// #30 write guard: drop masked echoes so a portal re-save can't overwrite the
+	// stored secret with its mask. Applies to the 11 secret-bearing columns only;
+	// an empty string still clears (explicit), nil leaves the column untouched.
+	for _, f := range []**string{
+		&body.StripeSecretKey, &body.StripeWebhookSecret, &body.PaypalClientSecret,
+		&body.MomoAccessKey, &body.MomoSecretKey, &body.CassoAPIKey, &body.SepayAPIKey,
+		&body.ResendAPIKey, &body.GoogleClientSecret, &body.LemonsqueezyAPIKey,
+		&body.LemonsqueezyWebhookSecret,
+	} {
+		if *f != nil && shared.ContainsMaskMarker(**f) {
+			*f = nil
+		}
+	}
+
 	p := Patch{
 		Environment:                body.Environment,
 		TrialLimit:                 body.TrialLimit,

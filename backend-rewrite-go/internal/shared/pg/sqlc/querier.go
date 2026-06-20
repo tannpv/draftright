@@ -50,6 +50,7 @@ type Querier interface {
 	// completed_at + notes are bound ($2,$3) — the use case computes them (now()
 	// injected for deterministic tests; notes already defaulted).
 	ConfirmPayment(ctx context.Context, arg ConfirmPaymentParams) error
+	CountActiveAdminUsers(ctx context.Context) (int64, error)
 	// Mirrors subscriptionsService.countActive(): COUNT where status=active.
 	CountActiveSubscriptions(ctx context.Context) (int64, error)
 	// Admin user CRUD (Phase 4c-2). GET /admin/users/:id returns the FULL
@@ -173,6 +174,7 @@ type Querier interface {
 	// subscription for the user, joined to its plan. ORDER BY created_at
 	// DESC + LIMIT 1 reproduces TypeORM order:{created_at:'DESC'} findOne.
 	GetActiveSubscriptionByUserID(ctx context.Context, userID pgtype.UUID) (GetActiveSubscriptionByUserIDRow, error)
+	GetAdminUserIsActiveByID(ctx context.Context, id pgtype.UUID) (bool, error)
 	GetAiProviderByID(ctx context.Context, id pgtype.UUID) (GetAiProviderByIDRow, error)
 	GetAppSettings(ctx context.Context) (AppSetting, error)
 	// The single app_settings row's token lifetimes. No row → caller uses
@@ -276,6 +278,11 @@ type Querier interface {
 	InsertReleaseChannel(ctx context.Context, arg InsertReleaseChannelParams) (AppRelease, error)
 	// Node PoliciesService.upsert() create path. The use case supplies merged values.
 	InsertReleasePolicy(ctx context.Context, arg InsertReleasePolicyParams) (AppReleasePolicy, error)
+	// log(): fire-and-forget training-data capture after a successful rewrite.
+	// Node: rewriteLogRepo.save({ tone, input_text, output_text, model,
+	//        provider_type, response_time_ms }) — id/quality/created_at default.
+	// Mirrors RewriteService.callAI's this.rewriteLogService.log({...}).catch(()=>{}).
+	InsertRewriteLog(ctx context.Context, arg InsertRewriteLogParams) error
 	// Records one /rewrite call for daily quota tracking + analytics.
 	// Mirrors NestJS UsageService.log: same columns, same names, same
 	// precision so the two backends populate identical rows.

@@ -36,6 +36,7 @@ type rewriteQuerier interface {
 	CountPendingRewriteLogs(ctx context.Context) (int64, error)
 	UpdateRewriteLogQuality(ctx context.Context, arg sqlc.UpdateRewriteLogQualityParams) error
 	ListApprovedRewriteLogsAsc(ctx context.Context) ([]sqlc.RewriteLog, error)
+	InsertRewriteLog(ctx context.Context, arg sqlc.InsertRewriteLogParams) error
 }
 
 // PgRepo is the Postgres adapter for rewrite_logs.
@@ -115,6 +116,21 @@ func (r *PgRepo) UpdateQuality(ctx context.Context, id, quality string) error {
 	return r.q.UpdateRewriteLogQuality(ctx, sqlc.UpdateRewriteLogQualityParams{
 		ID:      uid,
 		Quality: quality,
+	})
+}
+
+// Insert writes one training-data row after a successful rewrite.
+// id, quality, created_at come from DB defaults (uuid, 'pending', now()).
+// Mirrors Node: rewriteLogRepo.save({ tone, input_text, output_text, model,
+// provider_type, response_time_ms }).
+func (r *PgRepo) Insert(ctx context.Context, in RewriteLogInput) error {
+	return r.q.InsertRewriteLog(ctx, sqlc.InsertRewriteLogParams{
+		Tone:           in.Tone,
+		InputText:      in.InputText,
+		OutputText:     in.OutputText,
+		Model:          in.Model,
+		ProviderType:   in.ProviderType,
+		ResponseTimeMs: int32(in.ResponseTimeMs),
 	})
 }
 

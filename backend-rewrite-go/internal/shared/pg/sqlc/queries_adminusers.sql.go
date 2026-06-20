@@ -22,6 +22,28 @@ func (q *Queries) AdminEmailExists(ctx context.Context, email string) (bool, err
 	return exists, err
 }
 
+const countActiveAdminUsers = `-- name: CountActiveAdminUsers :one
+SELECT COUNT(*) FROM admin_users WHERE is_active = true
+`
+
+func (q *Queries) CountActiveAdminUsers(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countActiveAdminUsers)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const getAdminUserIsActiveByID = `-- name: GetAdminUserIsActiveByID :one
+SELECT is_active FROM admin_users WHERE id = $1
+`
+
+func (q *Queries) GetAdminUserIsActiveByID(ctx context.Context, id pgtype.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, getAdminUserIsActiveByID, id)
+	var is_active bool
+	err := row.Scan(&is_active)
+	return is_active, err
+}
+
 const insertAdminUser = `-- name: InsertAdminUser :one
 INSERT INTO admin_users (email, password_hash, name, role)
 VALUES ($1, $2, $3, $4)

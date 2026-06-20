@@ -2,11 +2,39 @@ package main
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 )
+
+// parseSubject decodes the `sub` claim from a JWT WITHOUT verifying its
+// signature. Used at bootstrap to learn the seeded admin's own id so the #32
+// self-delete fixture can target /admin/admin-users/{{admin_id}} — the same id
+// the admin token carries — and trigger the self-deactivation guard on both
+// backends.
+func parseSubject(token string) (string, error) {
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return "", fmt.Errorf("malformed jwt: %d segments", len(parts))
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return "", fmt.Errorf("decode jwt payload: %w", err)
+	}
+	var c struct {
+		Sub string `json:"sub"`
+	}
+	if err := json.Unmarshal(payload, &c); err != nil {
+		return "", err
+	}
+	if c.Sub == "" {
+		return "", fmt.Errorf("no sub claim in token")
+	}
+	return c.Sub, nil
+}
 
 func parseAccessToken(body []byte) (string, error) {
 	var r struct {
@@ -97,6 +125,9 @@ func bootstrapTokens(c *http.Client, base, userEmail, userPass, adminEmail, admi
 		return nil, err
 	}
 	if vars["admin_token"], err = parseAccessToken(ab); err != nil {
+		return nil, err
+	}
+	if vars["admin_id"], err = parseSubject(vars["admin_token"]); err != nil {
 		return nil, err
 	}
 	eb, err := post("/auth/extension-tokens",

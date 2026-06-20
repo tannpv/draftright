@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Res, Header, BadRequestException, NotFoundException,
+  Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Res, Header, Request, BadRequestException, NotFoundException,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
@@ -7,8 +7,12 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { UsersService } from '../users/users.service';
+import { stripUserSecrets } from '../users/sanitize-user.util';
 import { PlansService } from '../plans/plans.service';
 import { AiProvidersService } from '../ai-providers/ai-providers.service';
+import { maskProvider } from '../ai-providers/mask-provider.util';
+import { containsMaskMarker } from '../common/mask-secret.util';
+import { maskSettings, stripMaskedSecretsFromBody } from './mask-settings.util';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { UsageService } from '../usage/usage.service';
 import { RewriteLogService } from '../rewrite/rewrite-log.service';
@@ -436,11 +440,14 @@ export class AdminController {
       settings = this.settingsRepo.create();
       await this.settingsRepo.save(settings);
     }
-    return settings;
+    return maskSettings(settings);
   }
 
   @Patch('settings')
   async updateSettings(@Body() body: Partial<AppSettings>) {
+    // #30: drop masked secret echoes so a portal re-save can't overwrite a
+    // stored key with its mask.
+    stripMaskedSecretsFromBody(body);
     // Reject enabling a payment method that has no backend strategy (e.g.
     // paypal/momo) — otherwise the storefront advertises a tile that 400s
     // at checkout.
@@ -453,7 +460,7 @@ export class AdminController {
       await this.settingsRepo.save(settings);
     }
     await this.settingsRepo.update(settings.id, body);
-    return this.settingsRepo.findOne({ where: { id: settings.id } });
+    return maskSettings(await this.settingsRepo.findOne({ where: { id: settings.id } }));
   }
 
   @Post('settings/test-email')
@@ -513,12 +520,12 @@ export class AdminController {
     const sub = await this.subscriptionsService.findActiveByUserId(id);
     const usageToday = await this.usageService.countTodayByUser(id);
     const recentUsage = await this.usageService.findRecentByUser(id);
-    return { user, subscription: sub, usage_today: usageToday, recent_usage: recentUsage };
+    return { user: stripUserSecrets(user), subscription: sub, usage_today: usageToday, recent_usage: recentUsage };
   }
 
   @Patch('users/:id')
   async updateUser(@Param('id') id: string, @Body() dto: UpdateUserDto) {
-    return this.usersService.update(id, dto as any);
+    return stripUserSecrets(await this.usersService.update(id, dto as any));
   }
 
   @Get('plans')
@@ -548,20 +555,23 @@ export class AdminController {
 
   @Get('ai-providers/paginated')
   async listProvidersPaginated(@Query() q: Record<string, unknown>) {
-    return this.aiProvidersService.findAllPaginated(parseListQuery(q));
+    const res = await this.aiProvidersService.findAllPaginated(parseListQuery(q));
+    return { ...res, rows: res.rows.map(maskProvider) };
   }
 
   @Get('ai-providers')
-  async listProviders() { return this.aiProvidersService.findAll(); }
+  async listProviders() { return (await this.aiProvidersService.findAll()).map(maskProvider); }
 
   @Post('ai-providers')
   async createProvider(@Body() body: { name: string; type: string; endpoint_url: string; api_key?: string; model: string; temperature?: number }) {
-    return this.aiProvidersService.create(body as any);
+    if (containsMaskMarker(body.api_key)) delete body.api_key;
+    return maskProvider(await this.aiProvidersService.create(body as any));
   }
 
   @Patch('ai-providers/:id')
   async updateProvider(@Param('id') id: string, @Body() body: Partial<{ name: string; type: string; endpoint_url: string; api_key: string; model: string; temperature: number; is_default: boolean; is_active: boolean }>) {
-    return this.aiProvidersService.update(id, body as any);
+    if (containsMaskMarker(body.api_key)) delete body.api_key;
+    return maskProvider(await this.aiProvidersService.update(id, body as any));
   }
 
   @Delete('ai-providers/:id')
@@ -773,7 +783,19 @@ export class AdminController {
   }
 
   @Delete('admin-users/:id')
-  async deleteAdminUser(@Param('id') id: string) {
+  async deleteAdminUser(@Param('id') id: string, @Request() req: any) {
+    // #32: an admin must not deactivate their own account or the last active
+    // admin (lockout / privilege-loss). Both → 400.
+    if (id === req.user.id) {
+      throw new BadRequestException('You cannot deactivate your own admin account');
+    }
+    const target = await this.adminUserRepo.findOne({ where: { id } });
+    if (target && target.is_active) {
+      const activeCount = await this.adminUserRepo.count({ where: { is_active: true } });
+      if (activeCount <= 1) {
+        throw new BadRequestException('Cannot deactivate the last active admin');
+      }
+    }
     await this.adminUserRepo.update(id, { is_active: false });
     return { success: true };
   }

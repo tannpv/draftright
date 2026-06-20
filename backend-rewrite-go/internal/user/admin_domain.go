@@ -63,6 +63,15 @@ func isoPtr(t *time.Time) *string {
 	return &s
 }
 
+// MarshalJSON pins field order + ms timestamps and emits EVERY column,
+// including the six secrets (password_hash, email-verification code/expiry,
+// password-reset code/expiry/attempts). This is the RAW entity exactly as
+// Node's un-sanitised TypeORM serialisation produces it — used where Node
+// also leaks the secrets: the admin payment rows' nested `user`
+// (leftJoinAndSelect, no ClassSerializerInterceptor). The admin user detail +
+// update endpoints DON'T use this directly; they serialise via
+// StrippedUserDetail to drop the six (#31), mirroring Node stripUserSecrets
+// applied only at those two controller handlers.
 func (u UserDetail) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
 		ID                       string  `json:"id"`
@@ -110,5 +119,56 @@ func (u UserDetail) MarshalJSON() ([]byte, error) {
 		LemonsqueezyCustomerID:   u.LemonsqueezyCustomerID,
 		CreatedAt:                shared.ISOMillis(u.CreatedAt),
 		UpdatedAt:                shared.ISOMillis(u.UpdatedAt),
+	})
+}
+
+// StrippedUserDetail wraps a UserDetail to serialise it WITHOUT the six secret
+// columns (password_hash, email_verification_code/expires, password_reset_code/
+// expires/attempts). It is the #31 sanitised projection — the Go mirror of
+// Node's stripUserSecrets, applied ONLY at GET /admin/users/:id (the `user`
+// field) and PATCH /admin/users/:id. No client writes these columns back, so
+// they are dropped, not masked. The raw UserDetail (admin payment rows) still
+// emits them, matching Node's un-sanitised leftJoinAndSelect.
+type StrippedUserDetail struct{ UserDetail }
+
+// MarshalJSON emits the 16 non-secret columns in entity-declaration order. The
+// six secrets are absent (dropped, not nulled) — byte-identical to Node's
+// stripUserSecrets output, which `delete`s the keys entirely.
+func (s StrippedUserDetail) MarshalJSON() ([]byte, error) {
+	u := s.UserDetail
+	return json.Marshal(struct {
+		ID                     string  `json:"id"`
+		Email                  string  `json:"email"`
+		Name                   string  `json:"name"`
+		IsActive               bool    `json:"is_active"`
+		Role                   string  `json:"role"`
+		AuthProvider           string  `json:"auth_provider"`
+		GoogleID               *string `json:"google_id"`
+		FacebookID             *string `json:"facebook_id"`
+		TiktokID               *string `json:"tiktok_id"`
+		AppleID                *string `json:"apple_id"`
+		AvatarURL              *string `json:"avatar_url"`
+		StripeCustomerID       *string `json:"stripe_customer_id"`
+		EmailVerified          bool    `json:"email_verified"`
+		LemonsqueezyCustomerID *string `json:"lemonsqueezy_customer_id"`
+		CreatedAt              string  `json:"created_at"`
+		UpdatedAt              string  `json:"updated_at"`
+	}{
+		ID:                     u.ID,
+		Email:                  u.Email,
+		Name:                   u.Name,
+		IsActive:               u.IsActive,
+		Role:                   u.Role,
+		AuthProvider:           u.AuthProvider,
+		GoogleID:               u.GoogleID,
+		FacebookID:             u.FacebookID,
+		TiktokID:               u.TiktokID,
+		AppleID:                u.AppleID,
+		AvatarURL:              u.AvatarURL,
+		StripeCustomerID:       u.StripeCustomerID,
+		EmailVerified:          u.EmailVerified,
+		LemonsqueezyCustomerID: u.LemonsqueezyCustomerID,
+		CreatedAt:              shared.ISOMillis(u.CreatedAt),
+		UpdatedAt:              shared.ISOMillis(u.UpdatedAt),
 	})
 }

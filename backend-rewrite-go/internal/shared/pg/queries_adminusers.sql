@@ -18,3 +18,9 @@ RETURNING id, email, name, is_active, role, created_at, updated_at;
 
 -- name: SoftDeleteAdminUser :exec
 UPDATE admin_users SET is_active = false WHERE id = $1;
+
+-- name: CountActiveAdminUsers :one
+SELECT COUNT(*) FROM admin_users WHERE is_active = true;
+
+-- name: GetAdminUserIsActiveByID :one
+SELECT is_active FROM admin_users WHERE id = $1;

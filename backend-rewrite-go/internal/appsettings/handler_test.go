@@ -49,6 +49,27 @@ func assertKeyOrder(t *testing.T, raw string, keys ...string) {
 	}
 }
 
+// #30 write guard — a masked secret echo must not reach the repo (stored value
+// kept); a real new secret and a non-secret field still persist.
+func TestPatch_DropsMaskedSecretEchoes(t *testing.T) {
+	repo := &fakeRepo{}
+	h := NewHandler(NewService(repo, fakeValidator{}, &fakeSender{}))
+	body := `{"stripe_secret_key":"sk_…mnop","resend_api_key":"re_brandnewkey12345","email_from":"x@y.com"}`
+	req := httptest.NewRequest("PATCH", "/admin/settings", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	h.Patch(rec, req)
+
+	if repo.patched.StripeSecretKey != nil {
+		t.Errorf("masked stripe echo must be dropped, got %q", *repo.patched.StripeSecretKey)
+	}
+	if repo.patched.ResendAPIKey == nil || *repo.patched.ResendAPIKey != "re_brandnewkey12345" {
+		t.Errorf("real new secret must persist")
+	}
+	if repo.patched.EmailFrom == nil || *repo.patched.EmailFrom != "x@y.com" {
+		t.Errorf("non-secret field must persist")
+	}
+}
+
 // GET /admin/settings → 200, body is the full settings row.
 func TestGet_Returns200(t *testing.T) {
 	h := NewHandler(NewService(&fakeRepo{}, fakeValidator{}, &fakeSender{}))
