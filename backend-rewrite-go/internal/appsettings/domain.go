@@ -12,8 +12,8 @@ import (
 var ErrNotFound = errors.New("app settings not found")
 
 // AppSettings mirrors the single-row app_settings admin settings table.
-// All secret fields are returned UNMASKED on every read (Node parity — the
-// NestJS AppSettings entity exposes raw values). Field/JSON order matches
+// The 11 payment/SMTP secret columns are MASKED on every read (#30) via
+// MarshalJSON; non-secret IDs and config stay raw. Field/JSON order matches
 // src/admin/entities/app-settings.entity.ts @Column declaration order exactly.
 //
 // All string columns are NOT NULL with DB defaults, so they are plain
@@ -144,14 +144,14 @@ func (s AppSettings) MarshalJSON() ([]byte, error) {
 		ClientLogLevel             string `json:"client_log_level"`
 		UpdatedAt                  string `json:"updated_at"`
 	}{
-		ID:                         s.ID,
-		Environment:                s.Environment,
-		TrialLimit:                 s.TrialLimit,
-		TokenExpiryMinutes:         s.TokenExpiryMinutes,
-		RefreshTokenExpiryDays:     s.RefreshTokenExpiryDays,
-		MaxInputLength:             s.MaxInputLength,
-		SupportedLanguages:         s.SupportedLanguages,
-		PaymentMethodsEnabled:      s.PaymentMethodsEnabled,
+		ID:                     s.ID,
+		Environment:            s.Environment,
+		TrialLimit:             s.TrialLimit,
+		TokenExpiryMinutes:     s.TokenExpiryMinutes,
+		RefreshTokenExpiryDays: s.RefreshTokenExpiryDays,
+		MaxInputLength:         s.MaxInputLength,
+		SupportedLanguages:     s.SupportedLanguages,
+		PaymentMethodsEnabled:  s.PaymentMethodsEnabled,
 		// #30: payment + SMTP secret columns masked (first3…last4). Public IDs
 		// (paypal_client_id, apple_team_id/key_id, google_client_id, store/variant
 		// IDs, *_mode, vietqr_*, email_from, *_partner_code) stay raw. Node mirror:
