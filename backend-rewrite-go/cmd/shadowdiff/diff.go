@@ -18,6 +18,22 @@ import (
 // Keys named in ignoreValueOf are compared for presence + non-emptiness only,
 // wherever they appear in the tree (their values legitimately differ per
 // request — request_id, a freshly-minted token, a row id, last_used_at, …).
+//
+// PARSED-COMPARE ALLOWANCES (load-bearing — see issues #38 and #47): both
+// bodies are json.Unmarshal'd into `any` before comparing, so this differ is
+// deliberately blind to three byte-level formatting differences that are NOT
+// behavior changes:
+//   - JSON key ORDER (maps are unordered) — #47.
+//   - insignificant WHITESPACE — #38.
+//   - NUMBER formatting (1.0 vs 1, 1e2 vs 100 both decode to float64) — #38.
+// These are why a stored jsonb `context` (error_reports/bug_reports) compares
+// equal even though Postgres canonicalizes it and Go round-trips raw bytes.
+// Do NOT "fix" #38 by re-marshalling Go's context through a map encoder — that
+// would SORT keys and break Postgres insertion-order. If a raw-bytes/string
+// body-compare mode is ever added (the #47 harness ask, to catch key-order
+// regressions), it MUST first canonicalize jsonb context fields with an
+// ORDER-PRESERVING encoder (or allowlist them), or #38 resurfaces as a false
+// positive.
 func diffJSON(a, b []byte, ignoreValueOf []string) []string {
 	ignore := map[string]bool{}
 	for _, k := range ignoreValueOf {
