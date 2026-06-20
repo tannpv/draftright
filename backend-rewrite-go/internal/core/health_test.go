@@ -32,6 +32,13 @@ func TestHealth_ShapeMatchesNode(t *testing.T) {
 			t.Errorf("body[%q] = %v, want %v", k, body[k], v)
 		}
 	}
+
+	// #47: raw key ORDER must match Node exactly (app, version, status,
+	// client_log_level). A map[string]string marshals sorted and regresses
+	// this silently — the shadow gate parses to a map so it would not catch it.
+	if got := rec.Body.String(); got != `{"app":"draftright","version":"2.0.0","status":"ok","client_log_level":"warnings"}`+"\n" {
+		t.Errorf("health key order mismatch:\n got: %s", got)
+	}
 }
 
 func TestHealth_DBErrorFallsBackToInfo(t *testing.T) {
