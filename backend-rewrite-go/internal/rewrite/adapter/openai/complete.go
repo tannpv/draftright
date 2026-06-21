@@ -36,7 +36,9 @@ func (c *Client) Complete(ctx context.Context, system, user string) (string, int
 	if err != nil {
 		return "", time.Since(start).Milliseconds(), fmt.Errorf("provider %s: build request", c.Name())
 	}
-	httpReq.Header.Set("Authorization", "Bearer "+c.apiKey)
+	if c.apiKey != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+c.apiKey)
+	}
 	httpReq.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.http.Do(httpReq)
