@@ -1,0 +1,9 @@
+{
+  "name": "admin_triage_errors_patch_string_status",
+  "method": "PATCH",
+  "path": "/admin/errors/00000000-0000-4000-8000-000000000008",
+  "headers": { "Authorization": "Bearer {{admin_token}}", "Content-Type": "application/json" },
+  "body": { "status": "3" },
+  "ignore_value_of": ["last_seen_at", "status"],
+  "_note": "#37: Node binds raw body.status ('3' string) to the int4 column; Postgres coerces '3'->3 -> 200. Go forwards the raw text (::text::integer) not 400, and does NOT resolve (strict !== 4/5). status VALUE is a documented shadow-gate allowance: Node's TypeORM save() echoes the in-memory assigned value WITHOUT reloading, so a STRING input ('3') returns as JSON string \"3\"; Go reads the coerced int4 back from the DB -> number 3. Replicating Node's echo would need a struct-wide custom MarshalJSON (byte-parity risk on every other errreport route) to mirror a TypeORM artifact for an input the admin portal never sends (portal posts a typed number). Status code (200), resolution behavior, and all other fields still verified. last_seen_at=now() volatile."
+}

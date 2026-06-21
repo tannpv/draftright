@@ -1,0 +1,9 @@
+{
+  "name": "admin_triage_errors_patch_missing_status",
+  "method": "PATCH",
+  "path": "/admin/errors/00000000-0000-4000-8000-000000000008",
+  "headers": { "Authorization": "Bearer {{admin_token}}", "Content-Type": "application/json" },
+  "body": { "resolved_by": "admin" },
+  "ignore_value_of": ["request_id"],
+  "_note": "#37: status key ABSENT -> Node 'body.status === undefined' -> 400 { error:'status required', code:'invalid-input' }. Only an absent key is 'required'; present null/foo are forwarded. request_id volatile."
+}

@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	sqlc "github.com/tannpv/draftright-rewrite/internal/shared/pg/sqlc"
 )
@@ -26,6 +27,8 @@ type fakeQuerier struct {
 	getRow      sqlc.ErrorReport
 	getErr      error
 	deleted     int64
+	statusParam sqlc.AdminSetErrorStatusRawParams
+	statusErr   error
 }
 
 func (f *fakeQuerier) FindErrorByFingerprint(ctx context.Context, fp string) (sqlc.ErrorReport, error) {
@@ -51,8 +54,9 @@ func (f *fakeQuerier) AdminGetError(ctx context.Context, id pgtype.UUID) (sqlc.E
 func (f *fakeQuerier) AdminDeleteError(ctx context.Context, id pgtype.UUID) (int64, error) {
 	return f.deleted, nil
 }
-func (f *fakeQuerier) AdminSetErrorStatus(ctx context.Context, arg sqlc.AdminSetErrorStatusParams) (sqlc.ErrorReport, error) {
-	return f.getRow, nil
+func (f *fakeQuerier) AdminSetErrorStatusRaw(ctx context.Context, arg sqlc.AdminSetErrorStatusRawParams) (sqlc.ErrorReport, error) {
+	f.statusParam = arg
+	return f.getRow, f.statusErr
 }
 func (f *fakeQuerier) AdminSetErrorFixProposal(ctx context.Context, arg sqlc.AdminSetErrorFixProposalParams) (sqlc.ErrorReport, error) {
 	return f.getRow, nil
@@ -236,6 +240,43 @@ func TestAdminDelete_Affected(t *testing.T) {
 	ok, _ = repo.AdminDelete(context.Background(), "11111111-1111-1111-1111-111111111111")
 	if ok {
 		t.Fatal("expected deleted=false when absent")
+	}
+}
+
+// AdminSetStatusRaw must unwrap a pgconn.PgError to its BARE .Message: pgx's
+// err.Error() is "ERROR: <msg> (SQLSTATE <code>)", but Node/TypeORM surfaces
+// only the message in its 500 body. The 500 envelope is byte-compared, so the
+// SQLSTATE suffix would break parity (#37).
+func TestAdminSetStatusRaw_UnwrapsPgError(t *testing.T) {
+	f := &fakeQuerier{statusErr: &pgconn.PgError{
+		Severity: "ERROR",
+		Code:     "22P02",
+		Message:  `invalid input syntax for type integer: "foo"`,
+	}}
+	repo := NewPgRepo(f)
+	foo := "foo"
+	_, err := repo.AdminSetStatusRaw(context.Background(), "11111111-1111-1111-1111-111111111111", &foo, false, nil, nil)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if err.Error() != `invalid input syntax for type integer: "foo"` {
+		t.Fatalf("err = %q, want bare PG message (no SQLSTATE)", err.Error())
+	}
+}
+
+func TestAdminSetStatusRaw_ForwardsParams(t *testing.T) {
+	f := &fakeQuerier{}
+	repo := NewPgRepo(f)
+	three := "3"
+	_, err := repo.AdminSetStatusRaw(context.Background(), "11111111-1111-1111-1111-111111111111", &three, false, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.statusParam.StatusText == nil || *f.statusParam.StatusText != "3" {
+		t.Fatalf("StatusText = %v, want \"3\"", f.statusParam.StatusText)
+	}
+	if f.statusParam.SetResolved {
+		t.Fatal("SetResolved should be false")
 	}
 }
 

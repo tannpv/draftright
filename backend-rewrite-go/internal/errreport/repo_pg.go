@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/tannpv/draftright-rewrite/internal/shared"
 	sqlc "github.com/tannpv/draftright-rewrite/internal/shared/pg/sqlc"
@@ -46,7 +47,7 @@ type Querier interface {
 	AdminCountErrors(ctx context.Context, arg sqlc.AdminCountErrorsParams) (int64, error)
 	AdminGetError(ctx context.Context, id pgtype.UUID) (sqlc.ErrorReport, error)
 	AdminDeleteError(ctx context.Context, id pgtype.UUID) (int64, error)
-	AdminSetErrorStatus(ctx context.Context, arg sqlc.AdminSetErrorStatusParams) (sqlc.ErrorReport, error)
+	AdminSetErrorStatusRaw(ctx context.Context, arg sqlc.AdminSetErrorStatusRawParams) (sqlc.ErrorReport, error)
 	AdminSetErrorFixProposal(ctx context.Context, arg sqlc.AdminSetErrorFixProposalParams) (sqlc.ErrorReport, error)
 	AdminErrorFixCandidates(ctx context.Context, limit int32) ([]sqlc.ErrorReport, error)
 }
@@ -212,23 +213,33 @@ func (r *PgRepo) AdminDelete(ctx context.Context, id string) (bool, error) {
 	return affected > 0, nil
 }
 
-// AdminSetStatus updates status; resolved_at/resolved_by are overwritten only
-// when setResolved is true (status 4/5), otherwise the stored values are
-// preserved — mirrors Node repo.save() re-persisting the loaded row's columns.
-func (r *PgRepo) AdminSetStatus(ctx context.Context, id string, status int, setResolved bool, resolvedAt *time.Time, resolvedBy *string) (ErrorReportEntity, error) {
+// AdminSetStatusRaw binds the raw status TEXT (statusText) to a
+// `::text::integer` UPDATE so Postgres coerces it exactly as node-pg does —
+// reproducing the int4-input 500 for non-numeric values and the not-null
+// violation for a nil (json null) value (#37). resolved_at/resolved_by are
+// overwritten only when setResolved is true (status 4/5); otherwise the stored
+// values are preserved (Node repo.save() re-persists the loaded row's columns).
+func (r *PgRepo) AdminSetStatusRaw(ctx context.Context, id string, statusText *string, setResolved bool, resolvedAt *time.Time, resolvedBy *string) (ErrorReportEntity, error) {
 	var ra pgtype.Timestamptz
 	if resolvedAt != nil {
 		ra.Time = *resolvedAt
 		ra.Valid = true
 	}
-	row, err := r.q.AdminSetErrorStatus(ctx, sqlc.AdminSetErrorStatusParams{
+	row, err := r.q.AdminSetErrorStatusRaw(ctx, sqlc.AdminSetErrorStatusRawParams{
 		ID:          toUUID(&id),
-		Status:      int32(status),
+		StatusText:  statusText,
 		SetResolved: setResolved,
 		ResolvedAt:  ra,
 		ResolvedBy:  resolvedBy,
 	})
 	if err != nil {
+		// pgx's PgError.Error() is "ERROR: <msg> (SQLSTATE <code>)", but
+		// Node/TypeORM surfaces the BARE PG message in its 500 envelope.
+		// Unwrap to .Message so the byte-for-byte error body matches.
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) {
+			return ErrorReportEntity{}, errors.New(pgErr.Message)
+		}
 		return ErrorReportEntity{}, err
 	}
 	return mapEntity(row), nil
