@@ -1,0 +1,11 @@
+{
+  "name": "auth_login_malformed_array_body",
+  "method": "POST",
+  "path": "/auth/login",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "raw_body": "[1,2,3]",
+  "ignore_value_of": ["request_id", "error"],
+  "_note": "Top-level JSON array. Node's strict body-parser ACCEPTS objects/arrays, so this passes the parser and fails later validation -> 400 invalid-input WITH a real request_id, matching Go. Full-body fixture asserts status + code=invalid-input; request_id present+non-empty on both; error message ignored (Node leaks a volatile validator string). The one malformed-shape body whose envelope is byte-comparable. See #33."
+}
