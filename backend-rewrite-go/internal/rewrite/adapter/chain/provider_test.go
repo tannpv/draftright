@@ -12,6 +12,7 @@ import (
 	"github.com/tannpv/draftright-rewrite/internal/rewrite/adapter/chain"
 	"github.com/tannpv/draftright-rewrite/internal/rewrite/adapter/memory"
 	"github.com/tannpv/draftright-rewrite/internal/rewrite/domain"
+	"github.com/tannpv/draftright-rewrite/internal/rewrite/provenance"
 )
 
 func mustReq(t *testing.T) domain.RewriteRequest {
@@ -125,6 +126,25 @@ func TestChain_ContextCancelDuringPrimary(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("errs did not close after cancel")
 	}
+}
+
+func TestChain_StampsWinningProviderProvenance(t *testing.T) {
+	t.Parallel()
+	primary := memory.NewProvider("openai", nil).
+		WithModel("gpt-4o-mini").
+		WithFinalError(errors.New("primary down"))
+	fallback := memory.NewProvider("anthropic", []string{"rescue"}).
+		WithModel("claude-3-5-sonnet-20241022")
+	c := chain.New("test", []domain.AiProvider{primary, fallback})
+
+	ctx, p := provenance.NewContext(context.Background())
+	tokens, errs := c.Stream(ctx, mustReq(t))
+	got, err := drain(t, tokens, errs)
+	require.NoError(t, err)
+	require.Equal(t, []string{"rescue"}, got)
+	m, ty := p.Read()
+	require.Equal(t, "claude-3-5-sonnet-20241022", m)
+	require.Equal(t, "anthropic", ty)
 }
 
 func TestChain_IDAndName(t *testing.T) {

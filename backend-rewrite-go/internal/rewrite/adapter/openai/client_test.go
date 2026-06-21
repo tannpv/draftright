@@ -15,6 +15,7 @@ import (
 
 	"github.com/tannpv/draftright-rewrite/internal/rewrite/adapter/openai"
 	"github.com/tannpv/draftright-rewrite/internal/rewrite/domain"
+	"github.com/tannpv/draftright-rewrite/internal/rewrite/provenance"
 )
 
 // streamChunks formats the given content tokens as the SSE chunks the
@@ -85,6 +86,25 @@ func TestClient_StreamsTokensFromHttptest(t *testing.T) {
 	got, finalErr := drainTokens(t, tokens, errs)
 	require.NoError(t, finalErr)
 	require.Equal(t, []string{"Hello", " ", "world"}, got)
+}
+
+func TestClient_StampsProvenance(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		streamChunks(w, []string{"Hello", " ", "world"}, true)
+	}))
+	defer srv.Close()
+
+	c := openai.New(uuid.New(), "test-key",
+		openai.WithEndpoint(srv.URL),
+		openai.WithModel("gpt-4o-mini"))
+	ctx, p := provenance.NewContext(context.Background())
+	tokens, errs := c.Stream(ctx, mustReq(t))
+	_, finalErr := drainTokens(t, tokens, errs)
+	require.NoError(t, finalErr)
+	model, ptype := p.Read()
+	require.Equal(t, "gpt-4o-mini", model)
+	require.Equal(t, "openai", ptype)
 }
 
 func TestClient_PropagatesNon2xx(t *testing.T) {

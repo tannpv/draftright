@@ -15,6 +15,7 @@ import (
 
 	"github.com/tannpv/draftright-rewrite/internal/rewrite/adapter/ollama"
 	"github.com/tannpv/draftright-rewrite/internal/rewrite/domain"
+	"github.com/tannpv/draftright-rewrite/internal/rewrite/provenance"
 )
 
 // streamNDJSON writes one NDJSON line per token then a final done:true line.
@@ -76,6 +77,23 @@ func TestClient_StreamsContentTokens(t *testing.T) {
 	got, finalErr := drainTokens(t, tokens, errs)
 	require.NoError(t, finalErr)
 	require.Equal(t, []string{"Hello", " ", "world"}, got)
+}
+
+func TestClient_StampsProvenance(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		streamNDJSON(w, []string{"Hello", " ", "world"})
+	}))
+	defer srv.Close()
+
+	c := ollama.New(uuid.New(), ollama.WithEndpoint(srv.URL))
+	ctx, p := provenance.NewContext(context.Background())
+	tokens, errs := c.Stream(ctx, mustReq(t))
+	_, finalErr := drainTokens(t, tokens, errs)
+	require.NoError(t, finalErr)
+	model, ptype := p.Read()
+	require.Equal(t, "llama3.2", model)
+	require.Equal(t, "ollama", ptype)
 }
 
 func TestClient_PropagatesNon2xx(t *testing.T) {
