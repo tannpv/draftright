@@ -33,6 +33,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/tannpv/draftright-rewrite/internal/rewrite/domain"
+	"github.com/tannpv/draftright-rewrite/internal/rewrite/provenance"
 )
 
 const (
@@ -105,6 +106,8 @@ func (c *Client) Name() string { return "openai" }
 // two channels — tokens + a terminal error — and a goroutine that
 // closes both when the stream ends, errors, or is canceled.
 func (c *Client) Stream(ctx context.Context, req domain.RewriteRequest) (<-chan string, <-chan error) {
+	provenance.Stamp(ctx, c.model, c.Name())
+
 	tokens := make(chan string)
 	errs := make(chan error, 1)
 
