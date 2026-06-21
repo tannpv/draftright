@@ -97,7 +97,7 @@ export default function AdminAuditLogPage() {
         rows={rows}
         loading={loading}
         page={page}
-        totalPages={Math.max(1, Math.ceil(total / pageSize))}
+        totalPages={total === 0 ? 0 : Math.max(1, Math.ceil(total / pageSize))}
         onPageChange={setPage}
         total={total}
         pageSize={pageSize}
