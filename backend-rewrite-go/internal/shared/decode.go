@@ -30,6 +30,45 @@ const (
 // the gate reports a mismatch, replace this with Node's actual bytes.
 const nullBodyMessage = `Unexpected token 'n', "null" is not valid JSON`
 
+// isNullBody reports whether buf is a top-level literal `null` (whitespace
+// trimmed) — the one body Go's encoding/json no-ops into a struct pointer
+// without error, but Node's strict Express body-parser rejects with 400.
+func isNullBody(buf []byte) bool { return string(bytes.TrimSpace(buf)) == "null" }
+
+// WriteNullBodyError writes the exact Node 400 for a top-level `null` body.
+// Node's Express body-parser throws the SyntaxError BEFORE its request-id
+// middleware runs, so AllExceptionsFilter emits request_id:"" (empty) —
+// WriteBodyParseError mirrors that byte-for-byte. Single owner of the null
+// message + its empty request_id so DecodeJSON and the bespoke-decoder sites
+// (RejectNullBody callers) never drift (Rule #1).
+func WriteNullBodyError(w http.ResponseWriter) {
+	WriteBodyParseError(w, "invalid-input", nullBodyMessage)
+}
+
+// RejectNullBody buffers r.Body so a caller with a BESPOKE json.Decoder
+// (UseNumber / DisallowUnknownFields / a domain-error return) can gain the
+// top-level-`null` guard #57 centralized for the uniform sites WITHOUT giving
+// up its decoder config. Unlike DecodeJSON it does NOT decode and does NOT
+// write on null — the caller owns both, so each site keeps its exact parity.
+//
+// Returns:
+//   - buf:     the fully buffered body; feed it to your own decoder via
+//     json.NewDecoder(bytes.NewReader(buf)).
+//   - isNull:  true iff the trimmed body is exactly `null`. The caller emits
+//     the 400 via WriteNullBodyError (or maps it into its own error channel).
+//   - readErr: any error reading r.Body. When r.Body is a http.MaxBytesReader
+//     this surfaces *http.MaxBytesError so oversize-handling parity is
+//     preserved (e.g. errreport → 500 "request entity too large"). On
+//     readErr != nil, isNull is false and buf may be partial — the caller
+//     maps readErr exactly as it did when it owned the io.ReadAll.
+func RejectNullBody(r *http.Request) (buf []byte, isNull bool, readErr error) {
+	buf, readErr = io.ReadAll(r.Body)
+	if readErr != nil {
+		return buf, false, readErr
+	}
+	return buf, isNullBody(buf), nil
+}
+
 // DecodeJSON reads the request body and unmarshals JSON into dst. It
 // intercepts a top-level literal `null` body — which Go's encoding/json
 // silently no-ops into a struct pointer (no error), but Node rejects —
@@ -50,11 +89,8 @@ func DecodeJSON(w http.ResponseWriter, r *http.Request, dst any, mode DecodeMode
 
 	// Top-level literal null: the one case Go's decoder accepts but Node
 	// rejects. Whitespace-tolerant (Node trims), matches Node's strict mode.
-	// This is a body-parser-level rejection — Node throws here BEFORE its
-	// request-id middleware runs, so the envelope carries request_id:"".
-	// WriteBodyParseError mirrors that empty request_id byte-for-byte.
-	if string(bytes.TrimSpace(buf)) == "null" {
-		WriteBodyParseError(w, "invalid-input", nullBodyMessage)
+	if isNullBody(buf) {
+		WriteNullBodyError(w)
 		return false
 	}
 

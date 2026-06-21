@@ -1,6 +1,7 @@
 package extraction
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -27,7 +28,19 @@ func NewHandler(svc *Service) *Handler { return &Handler{svc: svc} }
 // Extract handles POST /extract → 200 (NestJS @HttpCode(200), NOT 201).
 func (h *Handler) Extract(w http.ResponseWriter, r *http.Request) {
 	var body requestBody
-	dec := json.NewDecoder(r.Body)
+	// #59: reject a top-level `null` body (Node's strict body-parser 400s it
+	// before the DTO pipe) while preserving this site's DisallowUnknownFields
+	// decoder. RejectNullBody buffers; we feed our own decoder from the buffer.
+	buf, isNull, err := shared.RejectNullBody(r)
+	if err != nil {
+		shared.WriteError(w, r, "invalid-input", "Invalid request body")
+		return
+	}
+	if isNull {
+		shared.WriteNullBodyError(w)
+		return
+	}
+	dec := json.NewDecoder(bytes.NewReader(buf))
 	// Node global pipe uses whitelist + forbidNonWhitelisted → an unknown body
 	// property is a 400. Mirror the rewrite module's idiom (handler_rewrite.go):
 	// DisallowUnknownFields, then collapse any decode failure to the generic

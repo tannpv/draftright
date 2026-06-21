@@ -287,3 +287,26 @@ func assertKeyOrder(t *testing.T, raw string, keys ...string) {
 		prev = idx
 	}
 }
+
+// #59 — top-level `null` body: Node's strict body-parser 400s before the DTO
+// pipe; the DisallowUnknownFields decoder no-ops it, so the null guard must.
+func TestFeedback_NullBody400(t *testing.T) {
+	repo := newFakeRepo()
+	h := newHandlerT(repo, nil)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/feedback", strings.NewReader("null"))
+	h.Create(rec, req)
+	if rec.Code != 400 {
+		t.Fatalf("status = %d, want 400; body=%s", rec.Code, rec.Body.String())
+	}
+	body := decodeBody(t, rec.Body.String())
+	if body["error"] != `Unexpected token 'n', "null" is not valid JSON` {
+		t.Fatalf("error = %v, want null body message", body["error"])
+	}
+	if body["code"] != "invalid-input" {
+		t.Fatalf("code = %v, want invalid-input", body["code"])
+	}
+	if repo.inserted != nil {
+		t.Error("null body must not reach the service")
+	}
+}

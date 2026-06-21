@@ -3,6 +3,7 @@ package shared
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -130,5 +131,81 @@ func TestDecodeJSON_RequestIDParity(t *testing.T) {
 	// malformed (handler-level) → populated request_id from context.
 	if status, id := decodeID("{"); status != 400 || id == "" {
 		t.Fatalf("malformed body: got status=%d request_id=%q, want status=400 non-empty request_id", status, id)
+	}
+}
+
+func TestRejectNullBody(t *testing.T) {
+	cases := []struct {
+		name     string
+		in       string
+		wantNull bool
+		wantBuf  string
+	}{
+		{name: "null", in: "null", wantNull: true, wantBuf: "null"},
+		{name: "ws-null", in: "  null\n", wantNull: true, wantBuf: "  null\n"},
+		{name: "object", in: `{"a":1}`, wantNull: false, wantBuf: `{"a":1}`},
+		{name: "empty", in: "", wantNull: false, wantBuf: ""},
+		{name: "null-substring", in: `{"x":null}`, wantNull: false, wantBuf: `{"x":null}`},
+		{name: "bare-string", in: `"null"`, wantNull: false, wantBuf: `"null"`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader([]byte(tc.in)))
+			buf, isNull, err := RejectNullBody(req)
+			if err != nil {
+				t.Fatalf("unexpected readErr: %v", err)
+			}
+			if isNull != tc.wantNull {
+				t.Fatalf("isNull = %v, want %v", isNull, tc.wantNull)
+			}
+			if string(buf) != tc.wantBuf {
+				t.Fatalf("buf = %q, want %q", string(buf), tc.wantBuf)
+			}
+		})
+	}
+}
+
+// TestRejectNullBody_MaxBytesError proves a MaxBytesReader-wrapped body
+// surfaces *http.MaxBytesError through readErr (isNull false), so callers
+// like errreport keep their oversize→500 parity instead of mis-reading an
+// oversize body as null/invalid.
+func TestRejectNullBody_MaxBytesError(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader([]byte("aaaaaaaaaa")))
+	req.Body = http.MaxBytesReader(httptest.NewRecorder(), req.Body, 4)
+	_, isNull, err := RejectNullBody(req)
+	if isNull {
+		t.Fatalf("isNull = true, want false on oversize body")
+	}
+	var maxErr *http.MaxBytesError
+	if !errors.As(err, &maxErr) {
+		t.Fatalf("readErr = %v, want *http.MaxBytesError", err)
+	}
+}
+
+// TestWriteNullBodyError_Envelope locks the exact Node 400 bytes: the null
+// message, invalid-input code, and the empty request_id (body-parser-stage
+// rejection — request-id middleware hasn't run).
+func TestWriteNullBodyError_Envelope(t *testing.T) {
+	rec := httptest.NewRecorder()
+	WriteNullBodyError(rec)
+	if rec.Code != 400 {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+	var env struct {
+		Error     string `json:"error"`
+		Code      string `json:"code"`
+		RequestID string `json:"request_id"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &env); err != nil {
+		t.Fatalf("body not JSON: %v", err)
+	}
+	if env.Error != `Unexpected token 'n', "null" is not valid JSON` {
+		t.Fatalf("error = %q", env.Error)
+	}
+	if env.Code != "invalid-input" {
+		t.Fatalf("code = %q, want invalid-input", env.Code)
+	}
+	if env.RequestID != "" {
+		t.Fatalf("request_id = %q, want empty", env.RequestID)
 	}
 }
