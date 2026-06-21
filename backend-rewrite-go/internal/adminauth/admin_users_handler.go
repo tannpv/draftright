@@ -35,7 +35,7 @@ type adminUsersService interface {
 	ListPaginated(ctx context.Context, b listquery.Built) ([]AdminUserOut, int, error)
 	Create(ctx context.Context, in CreateAdminUserInput) (AdminUserOut, error)
 	Update(ctx context.Context, id string, in UpdateAdminUserInput) (AdminUserOut, error)
-	SoftDelete(ctx context.Context, id string) error
+	SoftDeleteWithAudit(ctx context.Context, actorID, targetID string) error
 	IsActiveAdmin(ctx context.Context, id string) (bool, error)
 	CountActiveAdmins(ctx context.Context) (int, error)
 }
@@ -208,7 +208,7 @@ func (h *AdminUsersHandler) Delete(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if err := h.svc.SoftDelete(r.Context(), id); err != nil {
+	if err := h.svc.SoftDeleteWithAudit(r.Context(), claims.Sub, id); err != nil {
 		shared.WriteError(w, r, "internal", "admin-users failed")
 		return
 	}

@@ -102,3 +102,7 @@ POST /rewrite/trial
 POST /subscription/verify-receipt
 # POST /v1/rewrite  — go-only streaming path (Node 404s here); excluded from parity gate
 POST /webhooks/resend
+# ── Go-only routes (NO Node parity) — intentionally NOT probed ───────────────
+# GET /admin/admin-user-audit  — #51 audit log. Node returns 404 (route never
+#   existed); listing it here would make the shadow gate diff 200 vs 404 and
+#   fail. Net-new post-cutover Go-only feature; keep it out of the inventory.

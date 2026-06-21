@@ -120,6 +120,19 @@ CREATE TABLE public.admin_users (
     updated_at timestamp without time zone DEFAULT now() NOT NULL
 );
 
+--
+-- Name: admin_user_audit_log; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.admin_user_audit_log (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    actor_admin_id uuid NOT NULL,
+    actor_email text NOT NULL,
+    target_admin_id uuid NOT NULL,
+    target_email text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
 
 --
 -- Name: ai_providers; Type: TABLE; Schema: public; Owner: -

@@ -161,6 +161,7 @@ type Router struct {
 	AdminAccountCreate http.Handler // POST   /admin/admin-users      (admin)
 	AdminAccountUpdate http.Handler // PATCH  /admin/admin-users/{id} (admin)
 	AdminAccountDelete http.Handler // DELETE /admin/admin-users/{id} (admin)
+	AdminAuditList     http.Handler // GET    /admin/admin-user-audit (admin, Go-only)
 
 	AdminEmailLogs http.Handler // GET /admin/email-logs (admin)
 
@@ -502,6 +503,9 @@ func (r *Router) Build() http.Handler {
 		}
 		if r.AdminAccountDelete != nil {
 			admin.Method(http.MethodDelete, "/admin/admin-users/{id}", r.AdminAccountDelete)
+		}
+		if r.AdminAuditList != nil {
+			admin.Method(http.MethodGet, "/admin/admin-user-audit", r.AdminAuditList)
 		}
 
 		if r.AdminEmailLogs != nil {
