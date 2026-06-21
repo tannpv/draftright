@@ -153,6 +153,7 @@ const navItems = [
   { path: '/email-logs',    label: 'Email Logs',    icon: <IconSettings />,      exact: false },
   { path: '/email-templates', label: 'Email Templates', icon: <IconSettings />,  exact: false },
   { path: '/admin-users',   label: 'Admin Users',   icon: <IconAdminUsers />,    exact: false },
+  { path: '/admin-audit',   label: 'Admin Audit Log', icon: <IconAdminUsers />,  exact: false },
   // Inbox moved to the top-right header (with unread badge) so admins always
   // see the count without scanning the sidebar. The /inbox route still works.
   { path: '/errors',        label: 'Error Reports', icon: <IconErrors />,        exact: false },

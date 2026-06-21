@@ -15,6 +15,7 @@ import SettingsPage from './pages/SettingsPage';
 import EmailLogsPage from './pages/EmailLogsPage';
 import EmailTemplatesPage from './pages/EmailTemplatesPage';
 import AdminUsersPage from './pages/AdminUsersPage';
+import AdminAuditLogPage from './pages/AdminAuditLogPage';
 import ErrorsPage from './pages/ErrorsPage';
 import BugReportsPage from './pages/BugReportsPage';
 import VersionsPage from './pages/VersionsPage';
@@ -47,6 +48,7 @@ export default function App() {
             <Route path="/email-logs" element={<EmailLogsPage />} />
             <Route path="/email-templates" element={<EmailTemplatesPage />} />
             <Route path="/admin-users" element={<AdminUsersPage />} />
+            <Route path="/admin-audit" element={<AdminAuditLogPage />} />
             <Route path="/errors" element={<ErrorsPage />} />
             <Route path="/bug-reports" element={<BugReportsPage />} />
             <Route path="/versions" element={<VersionsPage />} />
