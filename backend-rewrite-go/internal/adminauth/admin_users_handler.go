@@ -2,7 +2,6 @@ package adminauth
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -122,8 +121,7 @@ func (h *AdminUsersHandler) List(w http.ResponseWriter, r *http.Request) {
 // never appears in the response (AdminUserOut omits it).
 func (h *AdminUsersHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var body createAdminUserBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		shared.WriteError(w, r, "invalid-input", "Invalid request body")
+	if !shared.DecodeJSON(w, r, &body, shared.DecodeStrict) {
 		return
 	}
 
@@ -156,8 +154,7 @@ func (h *AdminUsersHandler) Create(w http.ResponseWriter, r *http.Request) {
 func (h *AdminUsersHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	var body patchAdminUserBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		shared.WriteError(w, r, "invalid-input", "Invalid request body")
+	if !shared.DecodeJSON(w, r, &body, shared.DecodeStrict) {
 		return
 	}
 

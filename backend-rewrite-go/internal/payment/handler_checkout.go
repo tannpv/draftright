@@ -1,7 +1,6 @@
 package payment
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -73,8 +72,7 @@ func (h *Handler) Checkout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body checkoutBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		shared.WriteError(w, r, "invalid-input", "Invalid request body")
+	if !shared.DecodeJSON(w, r, &body, shared.DecodeStrict) {
 		return
 	}
 	if msg := validateCheckout(body); msg != "" {
