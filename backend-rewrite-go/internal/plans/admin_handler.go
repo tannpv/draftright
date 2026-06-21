@@ -2,7 +2,6 @@ package plans
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -124,8 +123,7 @@ func (h *AdminHandler) List(w http.ResponseWriter, r *http.Request) {
 // ignored; only a malformed body 400s.
 func (h *AdminHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var body createPlanBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		shared.WriteError(w, r, "invalid-input", "Invalid request body")
+	if !shared.DecodeJSON(w, r, &body, shared.DecodeStrict) {
 		return
 	}
 
@@ -171,8 +169,7 @@ func (h *AdminHandler) Create(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	var body patchPlanBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		shared.WriteError(w, r, "invalid-input", "Invalid request body")
+	if !shared.DecodeJSON(w, r, &body, shared.DecodeStrict) {
 		return
 	}
 

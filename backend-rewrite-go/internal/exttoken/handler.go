@@ -1,7 +1,6 @@
 package exttoken
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -53,8 +52,11 @@ func (h *Handler) Mint(w http.ResponseWriter, r *http.Request) {
 	// A decode error (malformed/empty body) leaves req zero-valued; the empty
 	// fields then fail ValidateMint, which is exactly what Node emits when the
 	// body is absent (ValidationPipe runs against undefined fields). So we do
-	// not short-circuit on decode error — we fall through to validation.
-	_ = json.NewDecoder(r.Body).Decode(&req)
+	// not short-circuit on decode error — we fall through to validation. A
+	// literal-null body still short-circuits with a 400 (Node parity).
+	if !shared.DecodeJSON(w, r, &req, shared.DecodeLenient) {
+		return
+	}
 
 	if msg := ValidateMint(req.DeviceID, req.DeviceName); msg != "" {
 		shared.WriteError(w, r, "invalid-input", msg)

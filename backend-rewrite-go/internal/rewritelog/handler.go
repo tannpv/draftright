@@ -21,7 +21,6 @@ package rewritelog
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"strconv"
 
@@ -135,8 +134,7 @@ func (h *Handler) Review(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
 	var body reviewBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		shared.WriteError(w, r, "invalid-input", "Invalid request body")
+	if !shared.DecodeJSON(w, r, &body, shared.DecodeStrict) {
 		return
 	}
 
