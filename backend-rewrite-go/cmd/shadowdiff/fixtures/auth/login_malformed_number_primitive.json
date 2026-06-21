@@ -1,0 +1,11 @@
+{
+  "name": "auth_login_malformed_number_primitive",
+  "method": "POST",
+  "path": "/auth/login",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "raw_body": "12345",
+  "status_only": true,
+  "_note": "Top-level JSON primitive. Node's Express strict body-parser accepts only objects/arrays, so it rejects this BEFORE the request-id middleware -> 400 with request_id:'' (empty); Go decodes 12345 into the login struct -> json type error -> 400 with a real request_id. status_only pins the agreed 400 without asserting the request_id-presence divergence (same root as #57). See #33."
+}
