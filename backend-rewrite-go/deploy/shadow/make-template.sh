@@ -36,8 +36,28 @@ echo "  Template DB: ${TEMPLATE_DB}"
 echo "  Container  : ${POSTGRES_CONTAINER}"
 echo ""
 
+# ─── Step 0: Lock the source DB against new connections ──────────────────────
+# CREATE DATABASE … TEMPLATE requires ZERO active connections to the source.
+# Just terminating is racy: a live app pool (e.g. the dev backend) reconnects in
+# the gap before CREATE runs → "source database is being accessed by other
+# users". Flip ALLOW_CONNECTIONS off so terminated clients can't re-attach during
+# the clone; a trap restores it on ANY exit so the source never stays locked.
+restore_source_connections() {
+    docker exec "${POSTGRES_CONTAINER}" psql \
+        -U "${POSTGRES_USER}" -d postgres \
+        -c "ALTER DATABASE ${SOURCE_DB} WITH ALLOW_CONNECTIONS true;" --quiet || true
+}
+trap restore_source_connections EXIT
+
+echo "[0/5] Locking '${SOURCE_DB}' against new connections (clone window)..."
+docker exec "${POSTGRES_CONTAINER}" psql \
+    -U "${POSTGRES_USER}" \
+    -d postgres \
+    -v ON_ERROR_STOP=1 \
+    -c "ALTER DATABASE ${SOURCE_DB} WITH ALLOW_CONNECTIONS false;" \
+    --quiet
+
 # ─── Step 1: Terminate connections to source DB ───────────────────────────────
-# CREATE DATABASE … TEMPLATE requires zero active connections to the source.
 echo "[1/5] Terminating active connections to '${SOURCE_DB}'..."
 docker exec "${POSTGRES_CONTAINER}" psql \
     -U "${POSTGRES_USER}" \
@@ -66,6 +86,11 @@ docker exec "${POSTGRES_CONTAINER}" psql \
     -d postgres \
     -v ON_ERROR_STOP=1 \
     -c "CREATE DATABASE ${TEMPLATE_DB} TEMPLATE ${SOURCE_DB};"
+
+# Clone done — unlock the source NOW (augment touches only the template below),
+# so the dev backend can reconnect. The EXIT trap also covers failure paths.
+restore_source_connections
+trap - EXIT
 
 echo "    Clone complete."
 

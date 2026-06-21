@@ -1,0 +1,7 @@
+{
+  "name": "admin_core_ai_providers_create_null_body",
+  "method": "POST",
+  "path": "/admin/ai-providers",
+  "headers": { "Authorization": "Bearer {{admin_token}}", "Content-Type": "application/json" },
+  "raw_body": "null"
+}

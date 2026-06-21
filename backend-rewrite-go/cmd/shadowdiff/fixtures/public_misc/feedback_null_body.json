@@ -1,0 +1,7 @@
+{
+  "name": "feedback_null_body",
+  "method": "POST",
+  "path": "/feedback",
+  "headers": { "Content-Type": "application/json" },
+  "raw_body": "null"
+}

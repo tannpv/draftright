@@ -189,3 +189,43 @@ func TestCreate_DropsMaskedAPIKeyEcho(t *testing.T) {
 		t.Fatalf("masked api_key echo reached repo on create: %q", repo.inserted.APIKey)
 	}
 }
+
+// #59 — top-level `null` body: Node's strict body-parser 400s before any DTO
+// handling; the bespoke UseNumber decoder no-ops it, so the null guard must.
+func TestCreate_NullBody400(t *testing.T) {
+	repo := &fakeRepo{}
+	h := NewHandler(NewService(repo, fakeFactory{}))
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/admin/ai-providers", strings.NewReader("null"))
+	h.Create(rec, req)
+	assertNullBody400(t, rec)
+	if repo.inserted.Name != "" {
+		t.Error("null body must not reach the repo")
+	}
+}
+
+func TestUpdate_NullBody400(t *testing.T) {
+	repo := &fakeRepo{}
+	h := NewHandler(NewService(repo, fakeFactory{}))
+	rec := httptest.NewRecorder()
+	req := routeWithID(httptest.NewRequest(http.MethodPatch, "/admin/ai-providers/x", strings.NewReader("null")), "x")
+	h.Update(rec, req)
+	assertNullBody400(t, rec)
+}
+
+func assertNullBody400(t *testing.T, rec *httptest.ResponseRecorder) {
+	t.Helper()
+	if rec.Code != 400 {
+		t.Fatalf("status = %d, want 400; body=%s", rec.Code, rec.Body.String())
+	}
+	var env struct{ Error, Code string }
+	if err := json.Unmarshal(rec.Body.Bytes(), &env); err != nil {
+		t.Fatalf("body not JSON: %v", err)
+	}
+	if env.Error != `Unexpected token 'n', "null" is not valid JSON` {
+		t.Fatalf("error = %q, want null body message", env.Error)
+	}
+	if env.Code != "invalid-input" {
+		t.Fatalf("code = %q, want invalid-input", env.Code)
+	}
+}

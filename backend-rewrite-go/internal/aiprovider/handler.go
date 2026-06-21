@@ -1,6 +1,7 @@
 package aiprovider
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -123,7 +124,19 @@ func (h *Handler) Paginated(w http.ResponseWriter, r *http.Request) {
 // @HttpCode override, so the success status is 201.
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	var body createBody
-	dec := json.NewDecoder(r.Body)
+	// #59: reject a top-level `null` body (Node's strict body-parser 400s it
+	// before any DTO handling) while preserving this site's bespoke UseNumber
+	// decoder. RejectNullBody buffers; we feed our own decoder from the buffer.
+	buf, isNull, err := shared.RejectNullBody(r)
+	if err != nil {
+		shared.WriteError(w, r, "invalid-input", "Invalid request body")
+		return
+	}
+	if isNull {
+		shared.WriteNullBodyError(w)
+		return
+	}
+	dec := json.NewDecoder(bytes.NewReader(buf))
 	// Node's create body is NOT a class-validator DTO (it's an inline
 	// `@Body() body: {...}` typed param — no ValidationPipe whitelist), so
 	// unknown fields are silently ignored. Keep the decode lenient (no
@@ -169,7 +182,17 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	var body patchBody
-	dec := json.NewDecoder(r.Body)
+	// #59: null-body guard preserving the bespoke UseNumber decoder (see Create).
+	buf, isNull, err := shared.RejectNullBody(r)
+	if err != nil {
+		shared.WriteError(w, r, "invalid-input", "Invalid request body")
+		return
+	}
+	if isNull {
+		shared.WriteNullBodyError(w)
+		return
+	}
+	dec := json.NewDecoder(bytes.NewReader(buf))
 	dec.UseNumber()
 	if err := dec.Decode(&body); err != nil {
 		shared.WriteError(w, r, "invalid-input", "Invalid request body")

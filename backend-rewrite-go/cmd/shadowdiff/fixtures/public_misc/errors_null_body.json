@@ -1,0 +1,7 @@
+{
+  "name": "errors_null_body",
+  "method": "POST",
+  "path": "/errors",
+  "headers": { "Content-Type": "application/json" },
+  "raw_body": "null"
+}
