@@ -130,7 +130,9 @@ func (c *Client) Stream(ctx context.Context, req domain.RewriteRequest) (<-chan 
 			errs <- fmt.Errorf("openai: build request: %w", err)
 			return
 		}
-		httpReq.Header.Set("Authorization", "Bearer "+c.apiKey)
+		if c.apiKey != "" {
+			httpReq.Header.Set("Authorization", "Bearer "+c.apiKey)
+		}
 		httpReq.Header.Set("Content-Type", "application/json")
 		httpReq.Header.Set("Accept", "text/event-stream")
 

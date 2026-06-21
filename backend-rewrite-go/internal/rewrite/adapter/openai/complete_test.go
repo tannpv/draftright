@@ -39,6 +39,21 @@ func TestClient_Complete_NonStreaming(t *testing.T) {
 	require.Equal(t, false, gotBody["stream"])
 }
 
+func TestClient_Complete_OmitsAuthWhenNoKey(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, hasAuth := r.Header["Authorization"]
+		require.False(t, hasAuth, "no Authorization header when api key is empty")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"x"}}]}`))
+	}))
+	defer srv.Close()
+
+	c := openai.New(uuid.New(), "", openai.WithEndpoint(srv.URL))
+	_, _, err := c.Complete(context.Background(), "sys", "user")
+	require.NoError(t, err)
+}
+
 func TestClient_Complete_PropagatesNon2xx(t *testing.T) {
 	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
