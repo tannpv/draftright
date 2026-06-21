@@ -1,7 +1,6 @@
 package auth
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -74,11 +73,7 @@ func writeDomainErr(w http.ResponseWriter, r *http.Request, err error) bool {
 }
 
 func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
-	if err := json.NewDecoder(r.Body).Decode(dst); err != nil {
-		shared.WriteError(w, r, "invalid-input", "Invalid request body")
-		return false
-	}
-	return true
+	return shared.DecodeJSON(w, r, dst, shared.DecodeStrict)
 }
 
 // Login: POST /auth/login → 201.

@@ -8,7 +8,6 @@ package email
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -72,10 +71,11 @@ func (h *AdminTemplatesHandler) List(w http.ResponseWriter, r *http.Request) {
 func (h *AdminTemplatesHandler) Update(w http.ResponseWriter, r *http.Request) {
 	key := chi.URLParam(r, "key")
 	var body updateTemplateBody
-	if r.Body != nil {
-		// Ignore decode errors: missing/invalid body → zero-value fields, matching
-		// Nest's lenient body binding (empty subject/html allowed).
-		_ = json.NewDecoder(r.Body).Decode(&body)
+	// Ignore decode errors: missing/invalid body → zero-value fields, matching
+	// Nest's lenient body binding (empty subject/html allowed). A literal-null
+	// body still short-circuits with a 400 (Node parity).
+	if !shared.DecodeJSON(w, r, &body, shared.DecodeLenient) {
+		return
 	}
 	if err := h.svc.Update(r.Context(), key, body.Subject, body.HTML); err != nil {
 		if errors.Is(err, ErrUnknownTemplate) {

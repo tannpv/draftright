@@ -2,7 +2,6 @@ package adminauth
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -64,8 +63,7 @@ type meResp struct {
 // Login → POST /admin/auth/login (public). 201 on success.
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	var body loginBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		shared.WriteError(w, r, "invalid-input", "Invalid request body")
+	if !shared.DecodeJSON(w, r, &body, shared.DecodeStrict) {
 		return
 	}
 	res, err := h.svc.Login(r.Context(), body.Email, body.Password)
@@ -88,8 +86,7 @@ func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body changePwBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		shared.WriteError(w, r, "invalid-input", "Invalid request body")
+	if !shared.DecodeJSON(w, r, &body, shared.DecodeStrict) {
 		return
 	}
 	if err := h.svc.ChangePassword(r.Context(), adminID, body.CurrentPassword, body.NewPassword); err != nil {

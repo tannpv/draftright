@@ -1,0 +1,12 @@
+{
+  "name": "auth_login_null_body",
+  "method": "POST",
+  "path": "/auth/login",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "raw_body": "null",
+  "ignore_value_of": [
+    "request_id"
+  ]
+}

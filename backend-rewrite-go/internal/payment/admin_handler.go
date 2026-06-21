@@ -2,8 +2,6 @@ package payment
 
 import (
 	"context"
-	"encoding/json"
-	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -104,8 +102,7 @@ func (h *AdminHandler) ListPayments(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) Confirm(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	var body confirmBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil && err != io.EOF {
-		shared.WriteError(w, r, "invalid-input", "Invalid request body")
+	if !shared.DecodeJSON(w, r, &body, shared.DecodeOptional) {
 		return
 	}
 	row, err := h.svc.AdminConfirm(r.Context(), id, body.Notes)
@@ -124,8 +121,7 @@ func (h *AdminHandler) Confirm(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) Refund(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	var body refundBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil && err != io.EOF {
-		shared.WriteError(w, r, "invalid-input", "Invalid request body")
+	if !shared.DecodeJSON(w, r, &body, shared.DecodeOptional) {
 		return
 	}
 	row, err := h.svc.Refund(r.Context(), id, body.Reason)

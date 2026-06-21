@@ -25,7 +25,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"strconv"
 
@@ -144,8 +143,7 @@ func (h *AdminHandler) Get(w http.ResponseWriter, r *http.Request) {
 // 400 "status required". Absent row → 400 "not found".
 func (h *AdminHandler) Patch(w http.ResponseWriter, r *http.Request) {
 	var body patchBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil && err != io.EOF {
-		shared.WriteError(w, r, "invalid-input", "Invalid request body")
+	if !shared.DecodeJSON(w, r, &body, shared.DecodeOptional) {
 		return
 	}
 	if body.Status == nil {

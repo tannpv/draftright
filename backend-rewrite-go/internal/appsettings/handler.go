@@ -2,9 +2,7 @@ package appsettings
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 
 	"github.com/tannpv/draftright-rewrite/internal/shared"
@@ -105,8 +103,7 @@ func (h *Handler) Patch(w http.ResponseWriter, r *http.Request) {
 	var body patchBody
 	// Empty body (io.EOF) = no fields supplied = all columns untouched, which
 	// Node's `Partial<AppSettings>` also accepts. Only malformed JSON is 400.
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil && err != io.EOF {
-		shared.WriteError(w, r, "invalid-input", "Invalid request body")
+	if !shared.DecodeJSON(w, r, &body, shared.DecodeOptional) {
 		return
 	}
 
@@ -192,8 +189,7 @@ func (h *Handler) TestEmail(w http.ResponseWriter, r *http.Request) {
 	// yields {}), then the `!body?.to` guard throws → 500. Mirror that: an
 	// empty body (io.EOF) is NOT a decode error here — it leaves To="" so the
 	// service's '@' guard fires. Only malformed JSON is a 400.
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil && err != io.EOF {
-		shared.WriteError(w, r, "invalid-input", "Invalid request body")
+	if !shared.DecodeJSON(w, r, &body, shared.DecodeOptional) {
 		return
 	}
 	if err := h.svc.SendTestEmail(r.Context(), body.To); err != nil {

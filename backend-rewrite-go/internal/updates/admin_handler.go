@@ -20,9 +20,7 @@ package updates
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -95,8 +93,7 @@ func (h *AdminHandler) ListReleases(w http.ResponseWriter, r *http.Request) {
 // validation failure → 400 invalid-input with the verbatim message.
 func (h *AdminHandler) UpsertRelease(w http.ResponseWriter, r *http.Request) {
 	var body upsertReleaseBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil && err != io.EOF {
-		shared.WriteError(w, r, "invalid-input", "Invalid request body")
+	if !shared.DecodeJSON(w, r, &body, shared.DecodeOptional) {
 		return
 	}
 	// Node: `channel: body.channel ?? 'direct'`.
@@ -137,8 +134,7 @@ func (h *AdminHandler) DeleteRelease(w http.ResponseWriter, r *http.Request) {
 // A validation failure → 400 invalid-input with the verbatim message.
 func (h *AdminHandler) UpsertPolicy(w http.ResponseWriter, r *http.Request) {
 	var body upsertPolicyBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil && err != io.EOF {
-		shared.WriteError(w, r, "invalid-input", "Invalid request body")
+	if !shared.DecodeJSON(w, r, &body, shared.DecodeOptional) {
 		return
 	}
 	row, err := h.svc.UpsertPolicy(r.Context(), UpsertPolicyInput{

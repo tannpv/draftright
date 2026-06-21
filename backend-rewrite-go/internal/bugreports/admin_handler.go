@@ -205,8 +205,7 @@ func (h *AdminHandler) Patch(w http.ResponseWriter, r *http.Request) {
 	// explicit null (Node's `!== undefined`). A typed-struct decode collapses
 	// both to a nil pointer. See issue #39.
 	raw := map[string]json.RawMessage{}
-	if err := json.NewDecoder(r.Body).Decode(&raw); err != nil && err != io.EOF {
-		shared.WriteError(w, r, "invalid-input", "Invalid request body")
+	if !shared.DecodeJSON(w, r, &raw, shared.DecodeOptional) {
 		return
 	}
 	var p BugPatch
