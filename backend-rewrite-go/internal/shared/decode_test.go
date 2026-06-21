@@ -97,3 +97,38 @@ func TestDecodeJSON(t *testing.T) {
 		})
 	}
 }
+
+// TestDecodeJSON_RequestIDParity proves the body-parser-level parity rule:
+// a literal-null rejection mirrors Node's empty request_id (Node's
+// body-parser throws before the request-id middleware), while a malformed
+// rejection inside the handler still carries the populated context id.
+// Both requests run through the real RequestID middleware so the context
+// id is non-empty — the difference is which envelope writer DecodeJSON uses.
+func TestDecodeJSON_RequestIDParity(t *testing.T) {
+	type body struct {
+		Email string `json:"email"`
+	}
+	decodeID := func(reqBody string) (status int, requestID string) {
+		var dst body
+		h := RequestID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			DecodeJSON(w, r, &dst, DecodeStrict)
+		}))
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader([]byte(reqBody)))
+		h.ServeHTTP(rec, req)
+		var env struct {
+			RequestID string `json:"request_id"`
+		}
+		_ = json.Unmarshal(rec.Body.Bytes(), &env)
+		return rec.Code, env.RequestID
+	}
+
+	// null → body-parse rejection → empty request_id (Node parity).
+	if status, id := decodeID("null"); status != 400 || id != "" {
+		t.Fatalf("null body: got status=%d request_id=%q, want status=400 request_id=\"\"", status, id)
+	}
+	// malformed (handler-level) → populated request_id from context.
+	if status, id := decodeID("{"); status != 400 || id == "" {
+		t.Fatalf("malformed body: got status=%d request_id=%q, want status=400 non-empty request_id", status, id)
+	}
+}

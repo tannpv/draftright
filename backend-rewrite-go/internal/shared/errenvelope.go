@@ -52,3 +52,18 @@ func WriteError(w http.ResponseWriter, r *http.Request, code, message string) {
 		RequestID: RequestIDFromContext(r.Context()),
 	})
 }
+
+// WriteBodyParseError writes the error envelope for a request rejected at
+// the JSON body-parsing stage — the Go analogue of an Express body-parser
+// SyntaxError. In Node the body-parser throws BEFORE the request-id
+// middleware runs, so AllExceptionsFilter emits request_id:"" (empty). We
+// mirror that empty request_id byte-for-byte; the populated context
+// request-id is deliberately NOT used here. Status still derives from the
+// code via StatusForCode.
+func WriteBodyParseError(w http.ResponseWriter, code, message string) {
+	WriteJSON(w, StatusForCode(code), httpError{
+		Error:     message,
+		Code:      code,
+		RequestID: "",
+	})
+}

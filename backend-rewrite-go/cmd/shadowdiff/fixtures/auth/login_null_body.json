@@ -5,8 +5,5 @@
   "headers": {
     "Content-Type": "application/json"
   },
-  "raw_body": "null",
-  "ignore_value_of": [
-    "request_id"
-  ]
+  "raw_body": "null"
 }

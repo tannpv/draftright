@@ -50,8 +50,11 @@ func DecodeJSON(w http.ResponseWriter, r *http.Request, dst any, mode DecodeMode
 
 	// Top-level literal null: the one case Go's decoder accepts but Node
 	// rejects. Whitespace-tolerant (Node trims), matches Node's strict mode.
+	// This is a body-parser-level rejection — Node throws here BEFORE its
+	// request-id middleware runs, so the envelope carries request_id:"".
+	// WriteBodyParseError mirrors that empty request_id byte-for-byte.
 	if string(bytes.TrimSpace(buf)) == "null" {
-		WriteError(w, r, "invalid-input", nullBodyMessage)
+		WriteBodyParseError(w, "invalid-input", nullBodyMessage)
 		return false
 	}
 
