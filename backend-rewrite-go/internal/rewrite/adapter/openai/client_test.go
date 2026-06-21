@@ -88,6 +88,21 @@ func TestClient_StreamsTokensFromHttptest(t *testing.T) {
 	require.Equal(t, []string{"Hello", " ", "world"}, got)
 }
 
+func TestClient_Stream_OmitsAuthWhenNoKey(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, hasAuth := r.Header["Authorization"]
+		require.False(t, hasAuth, "no Authorization header when api key is empty")
+		streamChunks(w, nil, true /* withDone */)
+	}))
+	defer srv.Close()
+
+	c := openai.New(uuid.New(), "", openai.WithEndpoint(srv.URL))
+	tokens, errs := c.Stream(context.Background(), mustReq(t))
+	_, finalErr := drainTokens(t, tokens, errs)
+	require.NoError(t, finalErr)
+}
+
 func TestClient_StampsProvenance(t *testing.T) {
 	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -184,6 +199,15 @@ func TestClient_ContextCancellation(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("errs did not close after cancel")
 	}
+}
+
+func TestNew_TemperatureAndLocalLayoutOptions(t *testing.T) {
+	t.Parallel()
+	c := openai.New(uuid.New(), "k",
+		openai.WithTemperature("0.30"),
+		openai.WithLocalLayout(true),
+	)
+	require.NotNil(t, c)
 }
 
 func TestClient_IDAndName(t *testing.T) {
