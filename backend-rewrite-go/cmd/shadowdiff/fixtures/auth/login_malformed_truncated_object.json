@@ -1,0 +1,11 @@
+{
+  "name": "auth_login_malformed_truncated_object",
+  "method": "POST",
+  "path": "/auth/login",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "raw_body": "{bad json",
+  "status_only": true,
+  "_note": "Malformed JSON (syntax error). Node's Express strict body-parser rejects it BEFORE the request-id middleware -> 400 with request_id:'' (empty); Go's chi request-id middleware always runs first -> 400 with a real request_id. status_only pins the agreed 400 (refuting #33's 'Go 400 vs Node 500' premise) without asserting the request_id-presence divergence (Node body-parser ordering accident, same root as #57). See #33."
+}
