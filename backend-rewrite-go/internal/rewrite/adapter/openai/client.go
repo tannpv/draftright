@@ -51,12 +51,14 @@ const (
 // Client is the OpenAI provider. Construct once at startup; safe for
 // concurrent use (it owns no per-request state).
 type Client struct {
-	id        uuid.UUID
-	apiKey    string
-	endpoint  string
-	model     string
-	http      *http.Client
-	systemFmt func(domain.Tone) string
+	id          uuid.UUID
+	apiKey      string
+	endpoint    string
+	model       string
+	temperature string // raw decimal(3,2) string, parsed at body-build (Node Number())
+	isLocal     bool   // ollama type → isLocal message layout
+	http        *http.Client
+	systemFmt   func(domain.Tone) string
 }
 
 // Option configures the Client; canonical functional-options pattern
@@ -69,6 +71,15 @@ func WithEndpoint(url string) Option { return func(c *Client) { c.endpoint = url
 
 // WithModel pins a specific model (default gpt-4o-mini).
 func WithModel(m string) Option { return func(c *Client) { c.model = m } }
+
+// WithTemperature stores the raw decimal(3,2) string (e.g. "0.30"), parsed at
+// body-build time to mirror Node's Number(provider.temperature).
+func WithTemperature(t string) Option { return func(c *Client) { c.temperature = t } }
+
+// WithLocalLayout selects the ollama isLocal message layout (Node
+// type===OLLAMA): a fixed assistant system message + the system prompt folded
+// into the user message.
+func WithLocalLayout(local bool) Option { return func(c *Client) { c.isLocal = local } }
 
 // WithHTTPClient injects a custom *http.Client (tests use httptest).
 func WithHTTPClient(h *http.Client) Option { return func(c *Client) { c.http = h } }

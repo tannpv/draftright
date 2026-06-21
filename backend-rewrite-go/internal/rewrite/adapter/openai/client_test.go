@@ -201,6 +201,15 @@ func TestClient_ContextCancellation(t *testing.T) {
 	}
 }
 
+func TestNew_TemperatureAndLocalLayoutOptions(t *testing.T) {
+	t.Parallel()
+	c := openai.New(uuid.New(), "k",
+		openai.WithTemperature("0.30"),
+		openai.WithLocalLayout(true),
+	)
+	require.NotNil(t, c)
+}
+
 func TestClient_IDAndName(t *testing.T) {
 	id := uuid.New()
 	c := openai.New(id, "k")
