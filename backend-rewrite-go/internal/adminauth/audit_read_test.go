@@ -67,4 +67,20 @@ func TestAdminAuditHandler_List_DefaultsAndCap(t *testing.T) {
 	if repo.gotLimit != 100 {
 		t.Errorf("cap: got %d want 100", repo.gotLimit)
 	}
+
+	// explicit limit=100 (exact max) must pass through unchanged (catches > vs >= clamp typo)
+	repoBoundary := &fakeAuditRepo{}
+	hB := NewAdminAuditHandler(NewAdminAuditService(repoBoundary))
+	hB.List(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/admin/admin-user-audit?limit=100", nil))
+	if repoBoundary.gotLimit != 100 {
+		t.Errorf("limit=100 boundary: got %d want 100", repoBoundary.gotLimit)
+	}
+
+	// explicit offset=0 must stay 0 (catches n > 0 vs n >= 0 guard regression)
+	repoZero := &fakeAuditRepo{}
+	hZ := NewAdminAuditHandler(NewAdminAuditService(repoZero))
+	hZ.List(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/admin/admin-user-audit?offset=0", nil))
+	if repoZero.gotOffset != 0 {
+		t.Errorf("offset=0 explicit: got %d want 0", repoZero.gotOffset)
+	}
 }

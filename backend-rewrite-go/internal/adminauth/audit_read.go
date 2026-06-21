@@ -102,7 +102,7 @@ type AdminAuditHandler struct {
 }
 
 // NewAdminAuditHandler wires the service.
-func NewAdminAuditHandler(svc *AdminAuditService) *AdminAuditHandler {
+func NewAdminAuditHandler(svc adminAuditLister) *AdminAuditHandler {
 	return &AdminAuditHandler{svc: svc}
 }
 
