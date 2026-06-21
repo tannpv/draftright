@@ -31,11 +31,15 @@ type fakeAdminUsersRepo struct {
 	calledPaginat bool
 
 	// #32 delete-guard fakes: targetActive feeds IsActiveAdmin, activeCount
-	// feeds CountActiveAdmins, softDeleteCalled records whether the soft-delete
-	// actually ran (the guards must short-circuit before it on rejection).
+	// feeds CountActiveAdmins. #51: softDeleteCount records how many times the
+	// audited soft-delete ran (the guards must short-circuit before it on
+	// rejection); softDeleteActor / softDeleteTarget capture the last call's
+	// actor (JWT sub) and target (URL id) so the success test can assert them.
 	targetActive     bool
 	activeCount      int
-	softDeleteCalled bool
+	softDeleteCount  int
+	softDeleteActor  string
+	softDeleteTarget string
 }
 
 func (f *fakeAdminUsersRepo) ListAll(ctx context.Context) ([]AdminUserOut, error) {
@@ -63,8 +67,10 @@ func (f *fakeAdminUsersRepo) Update(ctx context.Context, id string, p AdminUserP
 	return AdminUserOut{ID: id}, nil
 }
 
-func (f *fakeAdminUsersRepo) SoftDelete(ctx context.Context, id string) error {
-	f.softDeleteCalled = true
+func (f *fakeAdminUsersRepo) SoftDeleteWithAudit(ctx context.Context, actorID, targetID string) error {
+	f.softDeleteCount++
+	f.softDeleteActor = actorID
+	f.softDeleteTarget = targetID
 	return nil
 }
 
@@ -351,8 +357,14 @@ func TestDeleteAdminUser_SuccessBody(t *testing.T) {
 	if got := strings.TrimSpace(rec.Body.String()); got != `{"success":true}` {
 		t.Fatalf("body = %q, want %q", got, `{"success":true}`)
 	}
-	if !repo.softDeleteCalled {
-		t.Fatalf("expected SoftDelete to run on a normal delete")
+	if repo.softDeleteCount != 1 {
+		t.Fatalf("SoftDeleteWithAudit ran %d times, want 1", repo.softDeleteCount)
+	}
+	if repo.softDeleteActor != "admin-self" {
+		t.Fatalf("actorID = %q, want claims.Sub %q", repo.softDeleteActor, "admin-self")
+	}
+	if repo.softDeleteTarget != "x" {
+		t.Fatalf("targetID = %q, want URL id %q", repo.softDeleteTarget, "x")
 	}
 }
 
@@ -370,8 +382,8 @@ func TestDelete_SelfAndLastAdminGuards(t *testing.T) {
 		t.Fatalf("self status = %d, want 400; body=%s", srec.Code, srec.Body.String())
 	}
 	assertDeleteError(t, srec.Body.Bytes(), "You cannot deactivate your own admin account")
-	if selfRepo.softDeleteCalled {
-		t.Fatalf("self-delete must not run SoftDelete")
+	if selfRepo.softDeleteCount != 0 {
+		t.Fatalf("self-delete must not run SoftDeleteWithAudit (ran %d)", selfRepo.softDeleteCount)
 	}
 
 	// Last active admin: target active + activeCount 1 → 400, no SoftDelete.
@@ -384,8 +396,8 @@ func TestDelete_SelfAndLastAdminGuards(t *testing.T) {
 		t.Fatalf("last-admin status = %d, want 400; body=%s", lrec.Code, lrec.Body.String())
 	}
 	assertDeleteError(t, lrec.Body.Bytes(), "Cannot deactivate the last active admin")
-	if lastRepo.softDeleteCalled {
-		t.Fatalf("last-admin delete must not run SoftDelete")
+	if lastRepo.softDeleteCount != 0 {
+		t.Fatalf("last-admin delete must not run SoftDeleteWithAudit (ran %d)", lastRepo.softDeleteCount)
 	}
 
 	// Active admin with peers (count 3) → 200, SoftDelete runs.
@@ -397,8 +409,8 @@ func TestDelete_SelfAndLastAdminGuards(t *testing.T) {
 	if orec.Code != 200 {
 		t.Fatalf("ok status = %d, want 200; body=%s", orec.Code, orec.Body.String())
 	}
-	if !okRepo.softDeleteCalled {
-		t.Fatalf("normal delete must run SoftDelete")
+	if okRepo.softDeleteCount != 1 {
+		t.Fatalf("normal delete must run SoftDeleteWithAudit once (ran %d)", okRepo.softDeleteCount)
 	}
 }
 
