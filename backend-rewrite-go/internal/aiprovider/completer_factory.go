@@ -47,6 +47,8 @@ func (Factory) For(p AiProvider) (Completer, error) {
 		if p.EndpointURL != "" {
 			opts = append(opts, openai.WithEndpoint(p.EndpointURL))
 		}
+		opts = append(opts, openai.WithTemperature(p.Temperature))
+		opts = append(opts, openai.WithLocalLayout(p.Type == "ollama"))
 		return openai.New(id, p.APIKey, opts...), nil
 	case "anthropic":
 		opts := []anthropic.Option{anthropic.WithModel(p.Model)}

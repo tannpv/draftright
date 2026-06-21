@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -90,6 +91,34 @@ func TestFactory_OllamaUsesOpenAIWire(t *testing.T) {
 	require.Equal(t, "system", msgs[0].(map[string]any)["role"])
 	require.Equal(t, "user", msgs[1].(map[string]any)["role"])
 	require.Equal(t, "llama3.2", gotBody["model"])
+}
+
+func TestFactory_PassesTemperatureAndLocalLayout(t *testing.T) {
+	t.Parallel()
+	var got map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(b, &got)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"ok"}}]}`))
+	}))
+	defer srv.Close()
+
+	comp, err := Factory{}.For(AiProvider{
+		ID:          uuid.New().String(),
+		Type:        "ollama",
+		Model:       "llama3.2",
+		EndpointURL: srv.URL,
+		Temperature: "0.30",
+	})
+	require.NoError(t, err)
+
+	_, _, err = comp.Complete(context.Background(), "SYS", "USER")
+	require.NoError(t, err)
+
+	require.InDelta(t, 0.3, got["temperature"], 1e-9)
+	msgs := got["messages"].([]any)
+	require.Contains(t, msgs[0].(map[string]any)["content"], "You are a writing assistant.")
 }
 
 // TestFactory_BuildsWhenEndpointEmpty: openai/anthropic must still build when
