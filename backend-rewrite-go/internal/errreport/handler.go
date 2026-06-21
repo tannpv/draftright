@@ -1,6 +1,7 @@
 package errreport
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -67,8 +68,13 @@ type successResp struct {
 func (h *Handler) Ingest(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
 	var body requestBody
-	dec := json.NewDecoder(r.Body)
-	if err := dec.Decode(&body); err != nil {
+	// #59: reject a top-level `null` body (Node's strict body-parser 400s it
+	// before any handling). RejectNullBody buffers through the MaxBytesReader,
+	// so an oversize body still surfaces *http.MaxBytesError via readErr and
+	// keeps the 500 "request entity too large" parity below (oversize is
+	// checked BEFORE null, exactly as Node's body-parser rejects size first).
+	buf, isNull, err := shared.RejectNullBody(r)
+	if err != nil {
 		// MaxBytesReader trips a *http.MaxBytesError once the limit is
 		// exceeded. In Node there's no body-limit override and no custom
 		// oversize error class: Express's raw-body-parser throws a plain
@@ -81,6 +87,15 @@ func (h *Handler) Ingest(w http.ResponseWriter, r *http.Request) {
 			shared.WriteError(w, r, "internal", "request entity too large")
 			return
 		}
+		shared.WriteError(w, r, "invalid-input", "Invalid request body")
+		return
+	}
+	if isNull {
+		shared.WriteNullBodyError(w)
+		return
+	}
+	dec := json.NewDecoder(bytes.NewReader(buf))
+	if err := dec.Decode(&body); err != nil {
 		shared.WriteError(w, r, "invalid-input", "Invalid request body")
 		return
 	}

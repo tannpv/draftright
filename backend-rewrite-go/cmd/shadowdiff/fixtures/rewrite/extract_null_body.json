@@ -1,0 +1,7 @@
+{
+  "name": "extract_null_body",
+  "method": "POST",
+  "path": "/extract",
+  "headers": { "Authorization": "Bearer {{user_token}}", "Content-Type": "application/json" },
+  "raw_body": "null"
+}
