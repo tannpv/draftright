@@ -1,0 +1,9 @@
+{
+  "name": "admin_triage_errors_patch_non_numeric_status",
+  "method": "PATCH",
+  "path": "/admin/errors/00000000-0000-4000-8000-000000000008",
+  "headers": { "Authorization": "Bearer {{admin_token}}", "Content-Type": "application/json" },
+  "body": { "status": "foo" },
+  "ignore_value_of": ["request_id"],
+  "_note": "#37: raw 'foo' reaches Postgres int4-input -> 500 'invalid input syntax for type integer: \"foo\"' on BOTH. pgconn.PgError unwrapped to bare .Message (no SQLSTATE suffix). AdminGet-first means a valid id reaches the UPDATE. request_id volatile."
+}

@@ -228,9 +228,9 @@ func (q *Queries) AdminSetErrorFixProposal(ctx context.Context, arg AdminSetErro
 	return i, err
 }
 
-const adminSetErrorStatus = `-- name: AdminSetErrorStatus :one
+const adminSetErrorStatusRaw = `-- name: AdminSetErrorStatusRaw :one
 UPDATE error_reports
-SET status = $1,
+SET status = $1::text::integer,
     resolved_at = CASE WHEN $2::boolean THEN $3 ELSE resolved_at END,
     resolved_by = CASE WHEN $2::boolean THEN $4 ELSE resolved_by END,
     last_seen_at = now()
@@ -238,17 +238,29 @@ WHERE id = $5
 RETURNING id, platform, app_version, severity, error_type, message, stack_trace, context, user_id, device_id, fingerprint, count, status, ai_fix_proposal, resolved_by, resolved_at, first_seen_at, last_seen_at, display_no
 `
 
-type AdminSetErrorStatusParams struct {
-	Status      int32              `db:"status" json:"status"`
+type AdminSetErrorStatusRawParams struct {
+	StatusText  *string            `db:"status_text" json:"status_text"`
 	SetResolved bool               `db:"set_resolved" json:"set_resolved"`
 	ResolvedAt  pgtype.Timestamptz `db:"resolved_at" json:"resolved_at"`
 	ResolvedBy  *string            `db:"resolved_by" json:"resolved_by"`
 	ID          pgtype.UUID        `db:"id" json:"id"`
 }
 
-func (q *Queries) AdminSetErrorStatus(ctx context.Context, arg AdminSetErrorStatusParams) (ErrorReport, error) {
-	row := q.db.QueryRow(ctx, adminSetErrorStatus,
-		arg.Status,
+// Byte-parity with Node ErrorsService.setStatus, which binds the RAW
+// request body.status (any JSON type) straight to the int4 column and lets
+// Postgres coerce. status_text is the value rendered as node-pg would send
+// it (NULL for json null); `::integer` reproduces the exact PG errors —
+// `invalid input syntax for type integer: "foo"` for non-numeric, and the
+// not-null violation for json null (#37). A typed int param can't surface
+// those, so Go was wrongly returning 400 instead of Node's 500.
+// status_text is `::text::integer`, NOT `::integer`: the double cast keeps the
+// bind param a TEXT so the raw value ("foo", "2.5", "3") reaches Postgres and
+// int4-input runs at runtime — `'foo'::text::integer` throws the exact
+// `invalid input syntax for type integer: "foo"` Node surfaces. A single
+// `::integer` makes sqlc type the param int32, which can't carry those.
+func (q *Queries) AdminSetErrorStatusRaw(ctx context.Context, arg AdminSetErrorStatusRawParams) (ErrorReport, error) {
+	row := q.db.QueryRow(ctx, adminSetErrorStatusRaw,
+		arg.StatusText,
 		arg.SetResolved,
 		arg.ResolvedAt,
 		arg.ResolvedBy,

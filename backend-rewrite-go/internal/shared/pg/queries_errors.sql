@@ -43,9 +43,21 @@ SELECT * FROM error_reports WHERE id = $1;
 -- name: AdminDeleteError :execrows
 DELETE FROM error_reports WHERE id = $1;
 
--- name: AdminSetErrorStatus :one
+-- name: AdminSetErrorStatusRaw :one
+-- Byte-parity with Node ErrorsService.setStatus, which binds the RAW
+-- request body.status (any JSON type) straight to the int4 column and lets
+-- Postgres coerce. status_text is the value rendered as node-pg would send
+-- it (NULL for json null); `::integer` reproduces the exact PG errors —
+-- `invalid input syntax for type integer: "foo"` for non-numeric, and the
+-- not-null violation for json null (#37). A typed int param can't surface
+-- those, so Go was wrongly returning 400 instead of Node's 500.
+-- status_text is `::text::integer`, NOT `::integer`: the double cast keeps the
+-- bind param a TEXT so the raw value ("foo", "2.5", "3") reaches Postgres and
+-- int4-input runs at runtime — `'foo'::text::integer` throws the exact
+-- `invalid input syntax for type integer: "foo"` Node surfaces. A single
+-- `::integer` makes sqlc type the param int32, which can't carry those.
 UPDATE error_reports
-SET status = sqlc.arg(status),
+SET status = sqlc.narg(status_text)::text::integer,
     resolved_at = CASE WHEN sqlc.arg(set_resolved)::boolean THEN sqlc.narg(resolved_at) ELSE resolved_at END,
     resolved_by = CASE WHEN sqlc.arg(set_resolved)::boolean THEN sqlc.narg(resolved_by) ELSE resolved_by END,
     last_seen_at = now()

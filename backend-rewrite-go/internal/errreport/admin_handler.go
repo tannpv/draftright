@@ -42,7 +42,7 @@ type adminHandlerService interface {
 	List(ctx context.Context, f AdminListFilter) ([]ErrorReportEntity, int, error)
 	Get(ctx context.Context, id string) (ErrorReportEntity, error)
 	Delete(ctx context.Context, id string) (bool, error)
-	SetStatus(ctx context.Context, id string, status int, resolvedBy string) (ErrorReportEntity, error)
+	SetStatusRaw(ctx context.Context, id string, statusRaw json.RawMessage, resolvedBy string) (ErrorReportEntity, error)
 	SuggestFix(ctx context.Context, id string) (ErrorReportEntity, error)
 }
 
@@ -77,11 +77,14 @@ type deleteResponse struct {
 }
 
 // patchBody is the PATCH inline body: { status, resolved_by }. status is a
-// pointer so the handler can distinguish "absent" (nil → 400 "status required")
-// from an explicit 0.
+// json.RawMessage (not a typed int) so the handler can distinguish "absent"
+// (nil → 400 "status required") from any present JSON value — including a
+// non-numeric string or null, which Node forwards raw to Postgres for coercion
+// (→ 500), not a Go-side 400. An explicit `null` arrives as []byte("null")
+// (non-nil), so it passes the required check, exactly like Node.
 type patchBody struct {
-	Status     *int   `json:"status"`
-	ResolvedBy string `json:"resolved_by"`
+	Status     json.RawMessage `json:"status"`
+	ResolvedBy string          `json:"resolved_by"`
 }
 
 // okResponse is the { ok: true } run-ai-cron body.
@@ -149,7 +152,7 @@ func (h *AdminHandler) Patch(w http.ResponseWriter, r *http.Request) {
 		shared.WriteError(w, r, "invalid-input", "status required")
 		return
 	}
-	row, err := h.svc.SetStatus(r.Context(), chi.URLParam(r, "id"), *body.Status, body.ResolvedBy)
+	row, err := h.svc.SetStatusRaw(r.Context(), chi.URLParam(r, "id"), body.Status, body.ResolvedBy)
 	if err != nil {
 		h.writeServiceError(w, r, err)
 		return
