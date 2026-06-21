@@ -3,7 +3,7 @@
 -- (scope = deactivation only). Run BEFORE deploying the Go image that queries
 -- it. Idempotent: safe to re-run.
 CREATE TABLE IF NOT EXISTS public.admin_user_audit_log (
-    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
     actor_admin_id uuid NOT NULL,
     actor_email text NOT NULL,
     target_admin_id uuid NOT NULL,
