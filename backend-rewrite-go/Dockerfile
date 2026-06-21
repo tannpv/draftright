@@ -42,6 +42,14 @@ COPY --from=builder /out/server /server
 USER nonroot:nonroot
 EXPOSE 3001
 
+# Distroless has no /bin/sh or wget, so a shell-form probe always fails
+# (issue #28). The binary self-probes instead: `/server -healthcheck` GETs
+# loopback /health and exits 0 (200) / 1 (anything else). Baked here so the
+# image carries its own healthcheck wherever it runs — including the ops-only
+# prod compose, which inherits this without a per-deploy edit.
+HEALTHCHECK --interval=10s --timeout=3s --retries=3 --start-period=5s \
+    CMD ["/server", "-healthcheck"]
+
 # Listening on 0.0.0.0:3001 inside the container; Docker compose maps
 # this to the host port (configurable via override).
 ENTRYPOINT ["/server"]
