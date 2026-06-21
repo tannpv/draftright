@@ -3,6 +3,7 @@ package usecase_test
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -13,6 +14,26 @@ import (
 	"github.com/tannpv/draftright-rewrite/internal/rewrite/domain"
 	"github.com/tannpv/draftright-rewrite/internal/rewrite/usecase"
 )
+
+// captureLogger is a synchronous RewriteLogger double: it records every
+// entry the use case fires so a test can assert on it immediately after
+// draining (the use case calls LogRewrite directly — no goroutine).
+type captureLogger struct {
+	mu      sync.Mutex
+	entries []usecase.RewriteLogEntry
+}
+
+func (c *captureLogger) LogRewrite(_ context.Context, e usecase.RewriteLogEntry) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.entries = append(c.entries, e)
+}
+
+func (c *captureLogger) all() []usecase.RewriteLogEntry {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]usecase.RewriteLogEntry(nil), c.entries...)
+}
 
 // Fakes live in internal/rewrite/adapter/memory so this file + future HTTP
 // handler tests share one set of doubles (Rule #1 — reusable).
@@ -196,4 +217,106 @@ func TestRewrite_InjectedClock_RecordsResponseTime(t *testing.T) {
 	require.NoError(t, finalErr)
 	require.Equal(t, 1, users.LogsLen())
 	require.Equal(t, int32(250), users.Logs()[0].ResponseTimeMs)
+}
+
+func TestRewriteLog_CleanFinish_LogsExactlyOneEntry(t *testing.T) {
+	t.Parallel()
+	u := userWithQuota(0, 100)
+	users := memory.NewUserRepo(u)
+	// Provider name == provider_type ("t"); WithModel sets model ("m").
+	// The fake stamps provenance at the top of Stream onto the
+	// carrier-bearing ctx the use case derives.
+	prov := memory.NewProvider("t", []string{"Hello", " ", "world!"}).WithModel("m")
+	rl := &captureLogger{}
+	deps := usecase.RewriteDeps{
+		Users: users, Provider: prov, RateLimit: memory.NewRateLimiter(),
+		RewriteLog: rl,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	tokens, errs, err := usecase.Rewrite(ctx, deps, u.ID, reqOK(t))
+	require.NoError(t, err)
+
+	collected, finalErr := drain(ctx, t, tokens, errs)
+	require.NoError(t, finalErr)
+	require.Equal(t, []string{"Hello", " ", "world!"}, collected)
+
+	entries := rl.all()
+	require.Len(t, entries, 1)
+	got := entries[0]
+	require.Equal(t, "polished", got.Tone)
+	require.Equal(t, "hello world", got.InputText)
+	require.Equal(t, "Hello world!", got.OutputText)
+	require.Equal(t, "m", got.Model)
+	require.Equal(t, "t", got.ProviderType)
+	require.GreaterOrEqual(t, got.ResponseTimeMs, int64(0))
+}
+
+func TestRewriteLog_ProviderError_NoLog(t *testing.T) {
+	t.Parallel()
+	u := userWithQuota(0, 100)
+	users := memory.NewUserRepo(u)
+	prov := memory.NewProvider("t", []string{"partial"}).
+		WithModel("m").
+		WithFinalError(errors.New("openai 429"))
+	rl := &captureLogger{}
+	deps := usecase.RewriteDeps{
+		Users: users, Provider: prov, RateLimit: memory.NewRateLimiter(),
+		RewriteLog: rl,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	tokens, errs, err := usecase.Rewrite(ctx, deps, u.ID, reqOK(t))
+	require.NoError(t, err)
+
+	_, finalErr := drain(ctx, t, tokens, errs)
+	require.Error(t, finalErr)
+	require.Len(t, rl.all(), 0, "failed stream must not capture training data")
+}
+
+func TestRewriteLog_ContextCancel_NoLog(t *testing.T) {
+	t.Parallel()
+	u := userWithQuota(0, 100)
+	users := memory.NewUserRepo(u)
+	prov := memory.NewProvider("t", []string{"would-stream-forever"}).WithModel("m")
+	rl := &captureLogger{}
+	deps := usecase.RewriteDeps{
+		Users: users, Provider: prov, RateLimit: memory.NewRateLimiter(),
+		RewriteLog: rl,
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	tokens, errs, err := usecase.Rewrite(ctx, deps, u.ID, reqOK(t))
+	require.NoError(t, err)
+
+	for range tokens {
+	}
+	select {
+	case <-errs:
+	case <-time.After(2 * time.Second):
+		t.Fatal("errs channel did not close after cancel")
+	}
+	require.Len(t, rl.all(), 0, "cancelled stream must not capture training data")
+}
+
+func TestRewriteLog_NilSink_NoPanic(t *testing.T) {
+	t.Parallel()
+	u := userWithQuota(0, 100)
+	users := memory.NewUserRepo(u)
+	prov := memory.NewProvider("t", []string{"Hello", " ", "world!"}).WithModel("m")
+	// RewriteLog deliberately left nil — clean finish must still
+	// stream to completion without panicking.
+	deps := usecase.RewriteDeps{Users: users, Provider: prov, RateLimit: memory.NewRateLimiter()}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	tokens, errs, err := usecase.Rewrite(ctx, deps, u.ID, reqOK(t))
+	require.NoError(t, err)
+
+	collected, finalErr := drain(ctx, t, tokens, errs)
+	require.NoError(t, finalErr)
+	require.Equal(t, []string{"Hello", " ", "world!"}, collected)
 }

@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/tannpv/draftright-rewrite/internal/rewrite/domain"
+	"github.com/tannpv/draftright-rewrite/internal/rewrite/provenance"
 )
 
 // Provider is an in-memory domain.AiProvider that emits a scripted
@@ -17,6 +18,7 @@ import (
 type Provider struct {
 	id         uuid.UUID
 	name       string
+	model      string
 	tokens     []string
 	final      error
 	completion string // scripted blocking-Complete result; see complete.go
@@ -42,6 +44,13 @@ func (p *Provider) WithFinalError(err error) *Provider {
 	return p
 }
 
+// WithModel sets the model the provider reports as served — used to
+// exercise provenance stamping (the winning leaf's model surfaces).
+func (p *Provider) WithModel(m string) *Provider {
+	p.model = m
+	return p
+}
+
 // WithID overrides the auto-generated UUID — useful when a test needs
 // to assert the recorded ai_provider_id on a usage log.
 func (p *Provider) WithID(id uuid.UUID) *Provider {
@@ -59,6 +68,8 @@ func (p *Provider) Name() string { return p.name }
 // error. Both close when the producer goroutine returns. Producer
 // respects ctx so cancellation never leaks the goroutine.
 func (p *Provider) Stream(ctx context.Context, _ domain.RewriteRequest) (<-chan string, <-chan error) {
+	provenance.Stamp(ctx, p.model, p.Name())
+
 	tokens := make(chan string)
 	errs := make(chan error, 1)
 	go func() {

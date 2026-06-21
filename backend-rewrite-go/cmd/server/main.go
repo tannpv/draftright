@@ -388,6 +388,13 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 	// findDefault() call timing. The chain's blocking head is discarded here.
 	provider, _ := buildProviderChain(cfg, log)
 
+	// --- RewriteLog ------------------------------------------------
+	// rewriteLog is the streaming /v1/rewrite training-data sink (Go-only
+	// path). It stays nil unless the pool block below wires the DB-backed
+	// sink — a no-DB dev run leaves RewriteDeps.RewriteLog nil (capture
+	// disabled), mirroring the parity WithRewriteLog guard.
+	var rewriteLog usecase.RewriteLogger
+
 	// --- Core Phase 0 handlers (/health, /auth/me) -----------------
 	// /auth/me reads only verified JWT claims, so it needs no DB and is
 	// always available. /health falls back to a static info reader
@@ -481,9 +488,14 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 		// WithTrial (limiter from Redis/memory, limit from the NODE_ENV-equivalent).
 		// WithRewriteLog wires the fire-and-forget training-data capture Node runs
 		// on every successful rewrite (authed + trial) for fine-tuning.
+		rewriteLogRepo := rewritelogpkg.NewPgRepo(q)
 		paritySvc := parity.NewService(dbDefault, subSvc, usageCounter).
 			WithTrial(trialLimiter, trialLimit, time.Now).
-			WithRewriteLog(rewriteLogSink{repo: rewritelogpkg.NewPgRepo(q), log: log})
+			WithRewriteLog(rewriteLogSink{repo: rewriteLogRepo, log: log})
+		// Same DB-backed repo feeds the Go-only streaming /v1/rewrite sink, so a
+		// successful streamed finish captures a training-data row just like the
+		// parity path. Reuses rewriteLogRepo (a thin stateless wrapper).
+		rewriteLog = usecaseRewriteLogSink{repo: rewriteLogRepo, log: log}
 		parityHandler := parity.NewHandler(paritySvc)
 		core.rewriteParity = http.HandlerFunc(parityHandler.Rewrite)
 		core.rewriteTrial = http.HandlerFunc(parityHandler.Trial)
@@ -822,12 +834,13 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 	}
 
 	return usecase.RewriteDeps{
-		Users:     users,
-		Provider:  provider,
-		RateLimit: limiter,
-		Metrics:   m,
-		Now:       time.Now,
-		Log:       log,
+		Users:      users,
+		Provider:   provider,
+		RateLimit:  limiter,
+		Metrics:    m,
+		Now:        time.Now,
+		Log:        log,
+		RewriteLog: rewriteLog,
 	}, core, cleanup, nil
 }
 
@@ -1061,6 +1074,31 @@ func (s rewriteLogSink) LogRewrite(ctx context.Context, e parity.RewriteLogEntry
 		})
 		if err != nil {
 			s.log.Warn("rewrite_logs insert failed", "err", err)
+		}
+	}()
+}
+
+// usecaseRewriteLogSink adapts the rewritelog repo to usecase.RewriteLogger for
+// the Go-only streaming /v1/rewrite path. Same fire-and-forget contract as
+// rewriteLogSink: detach onto a cancellation-free ctx, swallow + warn on error.
+type usecaseRewriteLogSink struct {
+	repo *rewritelogpkg.PgRepo
+	log  *slog.Logger
+}
+
+func (s usecaseRewriteLogSink) LogRewrite(ctx context.Context, e usecase.RewriteLogEntry) {
+	ctx = context.WithoutCancel(ctx)
+	go func() {
+		err := s.repo.Insert(ctx, rewritelogpkg.RewriteLogInput{
+			Tone:           e.Tone,
+			InputText:      e.InputText,
+			OutputText:     e.OutputText,
+			Model:          e.Model,
+			ProviderType:   e.ProviderType,
+			ResponseTimeMs: e.ResponseTimeMs,
+		})
+		if err != nil {
+			s.log.Warn("rewrite_logs insert failed (streaming)", "err", err)
 		}
 	}()
 }

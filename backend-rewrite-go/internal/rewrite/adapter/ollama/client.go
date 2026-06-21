@@ -26,6 +26,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/tannpv/draftright-rewrite/internal/rewrite/domain"
+	"github.com/tannpv/draftright-rewrite/internal/rewrite/provenance"
 )
 
 const (
@@ -84,6 +85,8 @@ func (c *Client) Name() string { return "ollama" }
 // Stream POSTs to /api/chat with stream=true, parses NDJSON, forwards
 // message.content tokens.
 func (c *Client) Stream(ctx context.Context, req domain.RewriteRequest) (<-chan string, <-chan error) {
+	provenance.Stamp(ctx, c.model, c.Name())
+
 	tokens := make(chan string)
 	errs := make(chan error, 1)
 

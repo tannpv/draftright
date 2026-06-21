@@ -15,7 +15,20 @@ import (
 	"time"
 
 	"github.com/tannpv/draftright-rewrite/internal/rewrite/domain"
+	"github.com/tannpv/draftright-rewrite/internal/rewrite/provenance"
 )
+
+// RewriteLogEntry is the training-data row captured on a clean streamed finish.
+type RewriteLogEntry struct {
+	Tone, InputText, OutputText, Model, ProviderType string
+	ResponseTimeMs                                   int64
+}
+
+// RewriteLogger is the consumer-side fire-and-forget training-data sink. A nil
+// sink disables capture; the use case must never panic on a nil RewriteLog.
+type RewriteLogger interface {
+	LogRewrite(ctx context.Context, e RewriteLogEntry)
+}
 
 // RewriteDeps groups every port the use case needs. Built once in
 // main.go (the composition root), passed to every call. The struct is
@@ -35,6 +48,10 @@ type RewriteDeps struct {
 	// Log is non-fatal: telemetry only. The use case must never panic
 	// because Log is nil — guard via nopLogger() below.
 	Log *slog.Logger
+	// RewriteLog is the fire-and-forget training-data sink. Captured on a
+	// CLEAN streamed finish only (never on error/cancel). Nil-safe: a nil
+	// RewriteLog disables capture and the use case must never panic on it.
+	RewriteLog RewriteLogger
 }
 
 // Rewrite is the orchestrator. Synchronous pre-flight (rate-limit,
@@ -98,6 +115,7 @@ func Rewrite(
 	//        length for the usage log,
 	//      - write the usage log when the provider stream closes
 	//        cleanly (not on error, not on cancel).
+	ctx, prov := provenance.NewContext(ctx)
 	provTokens, provErrs := deps.Provider.Stream(ctx, req)
 	outTokens := make(chan string)
 	outErrs := make(chan error, 1)
@@ -177,6 +195,17 @@ func Rewrite(
 								"user_id", userID.String(),
 								"provider", providerName,
 								"err", err.Error())
+						}
+						if deps.RewriteLog != nil {
+							model, ptype := prov.Read()
+							deps.RewriteLog.LogRewrite(ctx, RewriteLogEntry{
+								Tone:           req.Tone().String(),
+								InputText:      req.Text(),
+								OutputText:     output.String(),
+								Model:          model,
+								ProviderType:   ptype,
+								ResponseTimeMs: elapsedMs,
+							})
 						}
 						recordOutcome(domain.OutcomeOK)
 					}

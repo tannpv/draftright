@@ -15,6 +15,7 @@ import (
 
 	"github.com/tannpv/draftright-rewrite/internal/rewrite/adapter/anthropic"
 	"github.com/tannpv/draftright-rewrite/internal/rewrite/domain"
+	"github.com/tannpv/draftright-rewrite/internal/rewrite/provenance"
 )
 
 // streamDeltas writes one content_block_delta SSE frame per token —
@@ -81,6 +82,24 @@ func TestClient_StreamsTextDeltas(t *testing.T) {
 	got, finalErr := drainTokens(t, tokens, errs)
 	require.NoError(t, finalErr)
 	require.Equal(t, []string{"Hello", " ", "world"}, got)
+}
+
+func TestClient_StampsProvenance(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		streamDeltas(w, []string{"Hello", " ", "world"})
+	}))
+	defer srv.Close()
+
+	c := anthropic.New(uuid.New(), "test-key",
+		anthropic.WithEndpoint(srv.URL))
+	ctx, p := provenance.NewContext(context.Background())
+	tokens, errs := c.Stream(ctx, mustReq(t))
+	_, finalErr := drainTokens(t, tokens, errs)
+	require.NoError(t, finalErr)
+	model, ptype := p.Read()
+	require.Equal(t, "claude-3-5-sonnet-20241022", model)
+	require.Equal(t, "anthropic", ptype)
 }
 
 func TestClient_PropagatesNon2xx(t *testing.T) {
