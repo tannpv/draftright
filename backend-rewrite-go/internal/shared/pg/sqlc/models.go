@@ -283,6 +283,15 @@ type AdminUser struct {
 	UpdatedAt    pgtype.Timestamp `db:"updated_at" json:"updated_at"`
 }
 
+type AdminUserAuditLog struct {
+	ID            pgtype.UUID        `db:"id" json:"id"`
+	ActorAdminID  pgtype.UUID        `db:"actor_admin_id" json:"actor_admin_id"`
+	ActorEmail    string             `db:"actor_email" json:"actor_email"`
+	TargetAdminID pgtype.UUID        `db:"target_admin_id" json:"target_admin_id"`
+	TargetEmail   string             `db:"target_email" json:"target_email"`
+	CreatedAt     pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
 type AiProvider struct {
 	ID          pgtype.UUID         `db:"id" json:"id"`
 	Name        string              `db:"name" json:"name"`

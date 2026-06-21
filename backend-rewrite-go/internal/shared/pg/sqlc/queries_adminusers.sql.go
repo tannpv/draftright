@@ -33,6 +33,32 @@ func (q *Queries) CountActiveAdminUsers(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const countAdminUserAudit = `-- name: CountAdminUserAudit :one
+SELECT COUNT(*) FROM admin_user_audit_log
+`
+
+func (q *Queries) CountAdminUserAudit(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countAdminUserAudit)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const getAdminUserEmailByID = `-- name: GetAdminUserEmailByID :one
+
+SELECT email FROM admin_users WHERE id = $1
+`
+
+// #51 audit log. GetAdminUserEmailByID snapshots actor/target email inside the
+// soft-delete tx. InsertAdminUserAudit writes the append-only row in that same
+// tx. List/Count back GET /admin/admin-user-audit (Go-only, newest-first).
+func (q *Queries) GetAdminUserEmailByID(ctx context.Context, id pgtype.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getAdminUserEmailByID, id)
+	var email string
+	err := row.Scan(&email)
+	return email, err
+}
+
 const getAdminUserIsActiveByID = `-- name: GetAdminUserIsActiveByID :one
 SELECT is_active FROM admin_users WHERE id = $1
 `
@@ -85,6 +111,67 @@ func (q *Queries) InsertAdminUser(ctx context.Context, arg InsertAdminUserParams
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const insertAdminUserAudit = `-- name: InsertAdminUserAudit :exec
+INSERT INTO admin_user_audit_log (actor_admin_id, actor_email, target_admin_id, target_email)
+VALUES ($1, $2, $3, $4)
+`
+
+type InsertAdminUserAuditParams struct {
+	ActorAdminID  pgtype.UUID `db:"actor_admin_id" json:"actor_admin_id"`
+	ActorEmail    string      `db:"actor_email" json:"actor_email"`
+	TargetAdminID pgtype.UUID `db:"target_admin_id" json:"target_admin_id"`
+	TargetEmail   string      `db:"target_email" json:"target_email"`
+}
+
+func (q *Queries) InsertAdminUserAudit(ctx context.Context, arg InsertAdminUserAuditParams) error {
+	_, err := q.db.Exec(ctx, insertAdminUserAudit,
+		arg.ActorAdminID,
+		arg.ActorEmail,
+		arg.TargetAdminID,
+		arg.TargetEmail,
+	)
+	return err
+}
+
+const listAdminUserAudit = `-- name: ListAdminUserAudit :many
+SELECT id, actor_admin_id, actor_email, target_admin_id, target_email, created_at
+FROM admin_user_audit_log
+ORDER BY created_at DESC
+LIMIT $1 OFFSET $2
+`
+
+type ListAdminUserAuditParams struct {
+	Limit  int32 `db:"limit" json:"limit"`
+	Offset int32 `db:"offset" json:"offset"`
+}
+
+func (q *Queries) ListAdminUserAudit(ctx context.Context, arg ListAdminUserAuditParams) ([]AdminUserAuditLog, error) {
+	rows, err := q.db.Query(ctx, listAdminUserAudit, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AdminUserAuditLog{}
+	for rows.Next() {
+		var i AdminUserAuditLog
+		if err := rows.Scan(
+			&i.ID,
+			&i.ActorAdminID,
+			&i.ActorEmail,
+			&i.TargetAdminID,
+			&i.TargetEmail,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listAdminUsers = `-- name: ListAdminUsers :many
