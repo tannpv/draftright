@@ -229,6 +229,7 @@ func main() {
 		AdminAccountCreate: core.adminAccountCreate,
 		AdminAccountUpdate: core.adminAccountUpdate,
 		AdminAccountDelete: core.adminAccountDelete,
+		AdminAuditList:     core.adminAuditList,
 
 		AdminEmailLogs: core.adminEmailLogs,
 
@@ -598,6 +599,10 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 		core.adminAccountUpdate = http.HandlerFunc(adminAccountsHandler.Update)
 		core.adminAccountDelete = http.HandlerFunc(adminAccountsHandler.Delete)
 
+		// Admin-user audit log (#51, Go-only read endpoint).
+		adminAuditSvc := adminauth.NewAdminAuditService(adminauth.NewAdminAuditRepo(q, pool))
+		core.adminAuditList = http.HandlerFunc(adminauth.NewAdminAuditHandler(adminAuditSvc).List)
+
 		// Email logs (1 route).
 		emailLogsHandler := emailpkg.NewAdminLogsHandler(emailpkg.NewAdminLogsService(emailpkg.NewAdminLogsRepo(pool)))
 		core.adminEmailLogs = http.HandlerFunc(emailLogsHandler.List)
@@ -938,6 +943,7 @@ type coreHandlers struct {
 	adminAccountCreate http.Handler // POST   /admin/admin-users      (admin)
 	adminAccountUpdate http.Handler // PATCH  /admin/admin-users/{id} (admin)
 	adminAccountDelete http.Handler // DELETE /admin/admin-users/{id} (admin)
+	adminAuditList     http.Handler // GET    /admin/admin-user-audit (admin, Go-only)
 
 	adminEmailLogs http.Handler // GET /admin/email-logs (admin)
 
