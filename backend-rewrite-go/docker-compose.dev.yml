@@ -20,7 +20,8 @@ services:
       # Task 3 adds DATABASE_URL.
       # Task 7+ adds OPENAI_API_KEY etc.
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O - http://localhost:3001/health || exit 1"]
+      # Distroless image has no shell/wget — the binary self-probes (issue #28).
+      test: ["CMD", "/server", "-healthcheck"]
       interval: 10s
       timeout: 3s
       retries: 3
