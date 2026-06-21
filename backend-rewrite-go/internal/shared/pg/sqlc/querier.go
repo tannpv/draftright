@@ -65,6 +65,7 @@ type Querier interface {
 	CountActiveAdminUsers(ctx context.Context) (int64, error)
 	// Mirrors subscriptionsService.countActive(): COUNT where status=active.
 	CountActiveSubscriptions(ctx context.Context) (int64, error)
+	CountAdminUserAudit(ctx context.Context) (int64, error)
 	// Admin user CRUD (Phase 4c-2). GET /admin/users/:id returns the FULL
 	// TypeORM User entity (the `user` field); PATCH /admin/users/:id re-reads
 	// it. Only the full-row GET is static — the bespoke paginated list, its
@@ -186,6 +187,10 @@ type Querier interface {
 	// subscription for the user, joined to its plan. ORDER BY created_at
 	// DESC + LIMIT 1 reproduces TypeORM order:{created_at:'DESC'} findOne.
 	GetActiveSubscriptionByUserID(ctx context.Context, userID pgtype.UUID) (GetActiveSubscriptionByUserIDRow, error)
+	// #51 audit log. GetAdminUserEmailByID snapshots actor/target email inside the
+	// soft-delete tx. InsertAdminUserAudit writes the append-only row in that same
+	// tx. List/Count back GET /admin/admin-user-audit (Go-only, newest-first).
+	GetAdminUserEmailByID(ctx context.Context, id pgtype.UUID) (string, error)
 	GetAdminUserIsActiveByID(ctx context.Context, id pgtype.UUID) (bool, error)
 	GetAiProviderByID(ctx context.Context, id pgtype.UUID) (GetAiProviderByIDRow, error)
 	GetAppSettings(ctx context.Context) (AppSetting, error)
@@ -263,6 +268,7 @@ type Querier interface {
 	GetUserForCheckout(ctx context.Context, id pgtype.UUID) (GetUserForCheckoutRow, error)
 	GetUserFull(ctx context.Context, id pgtype.UUID) (GetUserFullRow, error)
 	InsertAdminUser(ctx context.Context, arg InsertAdminUserParams) (InsertAdminUserRow, error)
+	InsertAdminUserAudit(ctx context.Context, arg InsertAdminUserAuditParams) error
 	InsertAiProvider(ctx context.Context, arg InsertAiProviderParams) (InsertAiProviderRow, error)
 	InsertBugReport(ctx context.Context, arg InsertBugReportParams) (InsertBugReportRow, error)
 	InsertDefaultAppSettings(ctx context.Context) (AppSetting, error)
@@ -312,6 +318,7 @@ type Querier interface {
 	// list(): active tokens for the user, newest first
 	// (TypeORM where:{user_id, revoked_at:IsNull()} order:{created_at:'DESC'}).
 	ListActiveTokens(ctx context.Context, userID pgtype.UUID) ([]ListActiveTokensRow, error)
+	ListAdminUserAudit(ctx context.Context, arg ListAdminUserAuditParams) ([]AdminUserAuditLog, error)
 	// Admin-users CRUD (Phase 4c-2). The bare full-list, INSERT, soft-delete,
 	// and exact-email dup-check are static; the paginated branch + partial
 	// UPDATE have runtime WHERE/ORDER/SET assembled in Go on the pool.

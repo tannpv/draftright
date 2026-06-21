@@ -24,7 +24,7 @@ type adminUsersRepo interface {
 	EmailExists(ctx context.Context, email string) (bool, error)
 	Insert(ctx context.Context, in NewAdminUser) (AdminUserOut, error)
 	Update(ctx context.Context, id string, p AdminUserPatch) (AdminUserOut, error)
-	SoftDelete(ctx context.Context, id string) error
+	SoftDeleteWithAudit(ctx context.Context, actorID, targetID string) error
 	IsActiveAdmin(ctx context.Context, id string) (bool, error)
 	CountActiveAdmins(ctx context.Context) (int, error)
 }
@@ -124,9 +124,12 @@ func (s *AdminUsersService) Update(ctx context.Context, id string, in UpdateAdmi
 	return s.repo.Update(ctx, id, patch)
 }
 
-// SoftDelete clears is_active (Node deleteAdminUser).
-func (s *AdminUsersService) SoftDelete(ctx context.Context, id string) error {
-	return s.repo.SoftDelete(ctx, id)
+// SoftDeleteWithAudit clears is_active AND records an append-only audit row in
+// the same transaction (#51). actorID is the deactivating admin (JWT sub);
+// targetID is the deactivated admin. The #32 guards run upstream in the handler,
+// so a rejected deactivation never reaches here and never writes a row.
+func (s *AdminUsersService) SoftDeleteWithAudit(ctx context.Context, actorID, targetID string) error {
+	return s.repo.SoftDeleteWithAudit(ctx, actorID, targetID)
 }
 
 // IsActiveAdmin reports whether id is an existing, active admin (#32 guard).

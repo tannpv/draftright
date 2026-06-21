@@ -1,7 +1,7 @@
 // Admin-users CRUD Postgres adapter (Phase 4c-2). Mirrors plans/admin_repo_pg.go:
 //
-//   - STATIC queries (ListAll, EmailExists, Insert, SoftDelete) go through the
-//     sqlc-generated *sqlc.Queries — compile-time checked.
+//   - STATIC queries (ListAll, EmailExists, Insert, SoftDeleteWithAudit) go
+//     through the sqlc-generated *sqlc.Queries — compile-time checked.
 //   - DYNAMIC queries (ListPaginated's SELECT/COUNT, Update's partial SET) are
 //     assembled from listquery.Built / a non-nil patch field set and run on the
 //     pgxpool directly, because their WHERE/ORDER/columns aren't known until
@@ -219,14 +219,55 @@ func (r *AdminUsersRepo) Update(ctx context.Context, id string, p AdminUserPatch
 	return a, err
 }
 
-// SoftDelete clears is_active. ALWAYS returns nil on success even if 0 rows
-// matched (Node returns { success: true } unconditionally, no existence check).
-func (r *AdminUsersRepo) SoftDelete(ctx context.Context, id string) error {
-	uid, err := parseUUID(id)
+// SoftDeleteWithAudit clears is_active on the target AND appends an audit row in
+// ONE transaction (#51) — a deactivation and its trail are all-or-nothing. Both
+// emails are snapshotted by id inside the tx (no dependency on JWT claim shape).
+//
+// A missing target is a no-op success with NO audit row: Node's deleteAdminUser
+// returns { success: true } unconditionally even when the row is absent, so the
+// DELETE response stays byte-identical and we don't fabricate a trail for a
+// deactivation that didn't happen.
+func (r *AdminUsersRepo) SoftDeleteWithAudit(ctx context.Context, actorID, targetID string) error {
+	actorUUID, err := parseUUID(actorID)
 	if err != nil {
 		return err
 	}
-	return r.q.SoftDeleteAdminUser(ctx, uid)
+	targetUUID, err := parseUUID(targetID)
+	if err != nil {
+		return err
+	}
+
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	qtx := r.q.WithTx(tx)
+
+	targetEmail, err := qtx.GetAdminUserEmailByID(ctx, targetUUID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil // missing target → Node success, no audit row
+	}
+	if err != nil {
+		return err
+	}
+	actorEmail, err := qtx.GetAdminUserEmailByID(ctx, actorUUID)
+	if err != nil {
+		return err // actor is the authenticated caller; row must exist
+	}
+
+	if err := qtx.SoftDeleteAdminUser(ctx, targetUUID); err != nil {
+		return err
+	}
+	if err := qtx.InsertAdminUserAudit(ctx, sqlc.InsertAdminUserAuditParams{
+		ActorAdminID:  actorUUID,
+		ActorEmail:    actorEmail,
+		TargetAdminID: targetUUID,
+		TargetEmail:   targetEmail,
+	}); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // IsActiveAdmin reports whether the admin row with id exists AND is active
