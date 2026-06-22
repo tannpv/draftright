@@ -414,7 +414,7 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 
 	// Phase 4a: the IME-pack manifest is a pure in-memory static catalog —
 	// no DB, so it's wired unconditionally (available even without a pool).
-	core.imePacksManifest = http.HandlerFunc(imepackspkg.NewHandler().Manifest)
+	core.imePacksManifest = http.HandlerFunc(imepackspkg.NewHandler(cfg.IMEPackBase).Manifest)
 
 	// Phase 4b: /extract resolves the DB default provider per request, so it
 	// needs the pool — wired inside the pool block below (was unconditional

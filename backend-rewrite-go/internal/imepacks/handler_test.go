@@ -9,7 +9,7 @@ import (
 )
 
 func TestManifest_200AndShape(t *testing.T) {
-	h := NewHandler()
+	h := NewHandler(testBase)
 	rec := httptest.NewRecorder()
 	h.Manifest(rec, httptest.NewRequest(http.MethodGet, "/ime-packs/manifest", nil))
 	if rec.Code != http.StatusOK {

@@ -66,12 +66,10 @@ type Strategy struct {
 
 var _ strategy.Strategy = (*Strategy)(nil)
 
-// New builds a LemonSqueezy strategy. websiteURL falls back to the dev default
-// when empty (mirrors websiteUrl() in Node).
+// New builds a LemonSqueezy strategy. websiteURL is injected by the caller;
+// config guarantees a non-empty value (config.DefaultWebsiteURL or the
+// WEBSITE_URL override), so the adapter does not re-default it here.
 func New(c Creds, websiteURL string) *Strategy {
-	if websiteURL == "" {
-		websiteURL = "http://localhost:4000"
-	}
 	return &Strategy{creds: c, websiteURL: websiteURL, apiBase: defaultAPIBase, http: http.DefaultClient}
 }
 
