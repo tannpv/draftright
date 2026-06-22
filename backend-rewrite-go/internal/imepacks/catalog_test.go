@@ -2,8 +2,12 @@ package imepacks
 
 import "testing"
 
+// testBase mirrors the production CDN origin so URL assertions below stay
+// byte-identical to the shipped manifest.
+const testBase = "https://draftright.info/ime-packs"
+
 func TestCatalog_OrderAndCount(t *testing.T) {
-	c := Catalog()
+	c := Catalog(testBase)
 	if len(c) != 10 {
 		t.Fatalf("len = %d, want 10", len(c))
 	}
@@ -16,7 +20,7 @@ func TestCatalog_OrderAndCount(t *testing.T) {
 }
 
 func TestCatalog_JaPack(t *testing.T) {
-	ja := Catalog()[8]
+	ja := Catalog(testBase)[8]
 	if ja.ID != "ja" || ja.Bundled || ja.Layout != "romaji" || ja.Engine != "dictionary" || ja.InputMethod != "candidate" {
 		t.Fatalf("ja header wrong: %+v", ja)
 	}
@@ -39,7 +43,7 @@ func TestCatalog_JaPack(t *testing.T) {
 }
 
 func TestCatalog_ZhPack(t *testing.T) {
-	zh := Catalog()[9]
+	zh := Catalog(testBase)[9]
 	if zh.Pack == nil || zh.Layout != "pinyin" {
 		t.Fatalf("zh wrong: %+v", zh)
 	}
@@ -56,7 +60,7 @@ func TestCatalog_ZhPack(t *testing.T) {
 }
 
 func TestCatalog_WordlistPacksOnlyEnViFr(t *testing.T) {
-	c := Catalog()
+	c := Catalog(testBase)
 	withWordlist := map[string]bool{"en": true, "vi": true, "fr": true}
 	for _, m := range c {
 		if withWordlist[m.ID] && m.WordlistPack == nil {

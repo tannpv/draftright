@@ -51,12 +51,10 @@ func New(c Creds, e Env) *Strategy {
 	}}
 }
 
-func (s *Strategy) websiteURL() string {
-	if s.env.WebsiteURL != "" {
-		return s.env.WebsiteURL
-	}
-	return "http://localhost:4000"
-}
+// websiteURL is the payment return origin. config guarantees a non-empty
+// value (config.DefaultWebsiteURL or the WEBSITE_URL override), so the
+// adapter trusts the injected value rather than re-defaulting it here.
+func (s *Strategy) websiteURL() string { return s.env.WebsiteURL }
 
 // CreateCheckout ports createCheckout. Wallet methods (apple_pay/google_pay)
 // branch to a PaymentIntent before the price check (wallets bill an amount, not
