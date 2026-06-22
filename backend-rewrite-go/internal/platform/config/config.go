@@ -16,6 +16,19 @@ import (
 	"strings"
 )
 
+// Per-env default endpoints. Named (not inlined) so the literal lives in
+// exactly one place and the override env var sits beside it (Rule #1:
+// no hardcoding, one source of truth). Override via the paired env var.
+const (
+	// DefaultWebsiteURL is the marketing/site origin used to build payment
+	// return URLs. Override via WEBSITE_URL.
+	DefaultWebsiteURL = "http://localhost:4000"
+
+	// DefaultIMEPackBase is the CDN origin for downloadable language packs.
+	// Override via IME_PACK_BASE.
+	DefaultIMEPackBase = "https://draftright.info/ime-packs"
+)
+
 // Config is the immutable runtime configuration. Built once in main()
 // then passed (or its fields passed) into every adapter that needs it.
 // Never mutate after construction.
@@ -87,6 +100,11 @@ type Config struct {
 	// PaymentEnabledMethods is the PAYMENT_ENABLED_METHODS env fallback
 	// (comma-separated). Used only when app_settings has no override.
 	PaymentEnabledMethods string
+
+	// IMEPackBase is the CDN origin the ime-packs manifest builds pack
+	// URLs from. Defaults to DefaultIMEPackBase; override via IME_PACK_BASE
+	// (lets dev/test point at a local mirror).
+	IMEPackBase string
 
 	// Payment (Phase 3b). Credentials prefer the app_settings DB row at
 	// runtime; these env values are the resolveCredential() fallback
@@ -170,7 +188,8 @@ func Load() (*Config, error) {
 		AppleAudiences:            os.Getenv("APPLE_AUDIENCES"),
 		AIProviders:               os.Getenv("AI_PROVIDERS"),
 		PaymentEnabledMethods:     os.Getenv("PAYMENT_ENABLED_METHODS"),
-		WebsiteURL:                envOr("WEBSITE_URL", "http://localhost:4000"),
+		IMEPackBase:               envOr("IME_PACK_BASE", DefaultIMEPackBase),
+		WebsiteURL:                envOr("WEBSITE_URL", DefaultWebsiteURL),
 		StripeSecretKey:           os.Getenv("STRIPE_SECRET_KEY"),
 		StripePublishableKey:      os.Getenv("STRIPE_PUBLISHABLE_KEY"),
 		StripeWebhookSecret:       os.Getenv("STRIPE_WEBHOOK_SECRET"),
