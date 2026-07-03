@@ -1,5 +1,11 @@
 import { HttpException, Logger } from '@nestjs/common';
-import { RewriteService, PROVIDER_UNAVAILABLE_MESSAGE } from './rewrite.service';
+import {
+  RewriteService,
+  PROVIDER_UNAVAILABLE_MESSAGE,
+  resolvePrompt,
+  TONE_PROMPTS,
+} from './rewrite.service';
+import { SPEECH_PREAMBLE } from './tones';
 import { EntitlementTier } from '../subscriptions/entitlement';
 
 /**
@@ -99,5 +105,20 @@ describe('RewriteService — entitlement gating', () => {
   it('free user at cap is rejected with 429', async () => {
     const svc = build(FREE, 10, async () => ({ text: 'ok', responseTimeMs: 1 }));
     await expect(svc.rewrite('u', 'hi', 'polished')).rejects.toMatchObject({ status: 429 });
+  });
+});
+
+describe('input_kind', () => {
+  it('speech input_kind prepends preamble', () => {
+    expect(resolvePrompt('polished', undefined, undefined, 'speech'))
+      .toBe(SPEECH_PREAMBLE + TONE_PROMPTS['polished']);
+  });
+  it('typed/absent leaves prompt unchanged', () => {
+    expect(resolvePrompt('polished', undefined, undefined, 'typed')).toBe(TONE_PROMPTS['polished']);
+    expect(resolvePrompt('polished')).toBe(TONE_PROMPTS['polished']);
+  });
+  it('speech preamble also applies to translate', () => {
+    const base = resolvePrompt('translate', 'Vietnamese');
+    expect(resolvePrompt('translate', 'Vietnamese', undefined, 'speech')).toBe(SPEECH_PREAMBLE + base);
   });
 });

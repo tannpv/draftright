@@ -32,3 +32,11 @@ export const TONES: ToneMeta[] = [
 
 /** All valid tone ids, derived from the catalog (used for DTO validation). */
 export const TONE_IDS: string[] = TONES.map((t) => t.id);
+
+/** Valid input_kind values for POST /rewrite (used for DTO validation). */
+export const INPUT_KIND_IDS = ['typed', 'speech'] as const;
+export type InputKind = (typeof INPUT_KIND_IDS)[number];
+
+/** Prepended to the tone prompt when the client marks input as dictated speech. */
+export const SPEECH_PREAMBLE =
+  'The input is dictated speech: remove filler words and false starts, restore punctuation and casing, keep the meaning and language. ';
