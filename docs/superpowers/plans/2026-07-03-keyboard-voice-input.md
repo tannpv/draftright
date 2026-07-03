@@ -312,14 +312,16 @@ In `BackendClient.rewrite` body construction, after the `target_language` line:
 - [ ] **Step 1: Failing test** (TC: VOICE-010)
 ```kotlin
 class LanguagePackSttLocaleTest {
-    @Test fun localesPerPack() {
-        assertEquals("en-US", EnglishPack.sttLocale)
-        assertEquals("vi-VN", VietnamesePack.sttLocale)
-        assertNull(JapanesePack.sttLocale)
+    @Test fun `english and vietnamese expose stt locales`() {
+        assertEquals("en-US", EnglishLanguagePack.sttLocale)
+        assertEquals("vi-VN", VietnameseLanguagePack.sttLocale)
+    }
+    @Test fun `packs without voice support return null`() {
+        assertNull(JapaneseLanguagePack.sttLocale)
     }
 }
 ```
-(use the actual pack object names found in `.../keyboard/lang/` — adjust imports to match `LanguageRegistryTest.kt`.)
+(pack objects live in `.../keyboard/lang/` — `EnglishLanguagePack` confirmed; verify Vietnamese/Japanese object names against `LanguageRegistry.kt` before writing, same naming convention.)
 - [ ] **Step 2: Run** — FAIL.
 - [ ] **Step 3: Implement** — in the interface, below `longPressAccents`:
 ```kotlin
