@@ -25,7 +25,7 @@ experience first; iOS gets a main-app round-trip flow in v2.
 | Core behavior | Dictate → AI-polish through selected tone (not raw dictation, not voice commands) |
 | Platforms | Android v1; iOS v2 (designed below) |
 | Languages | EN (`en-US`) + VI (`vi-VN`) at launch; locale map extendable per language pack |
-| STT | On-device (`SpeechRecognizer` / `SFSpeechRecognizer`) — free, private. No cloud STT |
+| STT | Device speech service (`SpeechRecognizer` / `SFSpeechRecognizer`) — free; may use the platform provider's network path. No third-party cloud STT |
 | Polish | Existing `POST /rewrite` + new optional `input_kind` field |
 | Golden rule | **Never lose the user's words** — any polish failure commits the raw transcript |
 
@@ -135,6 +135,13 @@ intention:
 8. **Permission trampoline is generic.** `RequestPermissionActivity` takes the
    permission name as an extra — reusable for any future IME-side permission,
    not a RECORD_AUDIO one-off.
+
+Note (resolves a self-contradiction with item 6 above): the mic key actually
+lives in the tone strip (`ToolbarView`), per §1 Android UX — `QwertyLayout`'s
+key-def system covers the letter/functional keyboard rows only and doesn't
+apply to the toolbar row, so item 6's "registered through the existing shared
+functional-key system" refers to ToolbarView's own button mechanism (same
+pattern as the tone buttons), not QwertyLayout.
 
 ## Out of scope (v1)
 

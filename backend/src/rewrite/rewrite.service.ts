@@ -9,7 +9,7 @@ import {
   RewriteMetricsService,
   REWRITE_OUTCOMES,
 } from '../common/metrics/rewrite-metrics.service';
-import { SPEECH_PREAMBLE } from './tones';
+import { SPEECH_PREAMBLE, INPUT_KIND_SPEECH } from './tones';
 
 // --- Prompt Registry ---
 
@@ -40,7 +40,7 @@ export function resolvePrompt(tone: string, targetLanguage?: string, sourceLangu
     }
     return TONE_PROMPTS[tone] || null;
   })();
-  if (base && inputKind === 'speech') return SPEECH_PREAMBLE + base;
+  if (base && inputKind === INPUT_KIND_SPEECH) return SPEECH_PREAMBLE + base;
   return base;
 }
 
