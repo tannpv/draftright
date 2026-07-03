@@ -5,23 +5,37 @@ import android.content.res.ColorStateList
 import android.graphics.Color
 import android.util.TypedValue
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
+import android.view.animation.AlphaAnimation
+import android.view.animation.Animation
 import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
+import com.draftright.keyboard.voice.VoiceSessionController
 
 class ToolbarView(
     context: Context,
     private val onToneSelected: (Tone) -> Unit,
-    private val onUndo: () -> Unit
+    private val onUndo: () -> Unit,
+    /**
+     * Null hides the mic button entirely. IME passes null when the active
+     * pack has no [LanguagePack.sttLocale] or the device has no speech
+     * recognizer (see DraftRightIME.onCreateInputView) — Rule #1: the
+     * capability check lives once, at the call site, not duplicated here.
+     * `true` argument = raw mode (long-press), `false` = polished (tap).
+     */
+    private val onMicTapped: ((Boolean) -> Unit)? = null
 ) : LinearLayout(context) {
 
     private val toneButtons = mutableMapOf<Tone, View>()
     private var undoButton: TextView? = null
     private var loadingTone: Tone? = null
     private var spinnerView: ProgressBar? = null
+    private var micButton: View? = null
+    private var micSpinner: ProgressBar? = null
 
     init {
         orientation = HORIZONTAL
@@ -68,6 +82,56 @@ class ToolbarView(
             row.addView(btn)
         }
 
+        // Mic button — only built when the IME actually offers voice input
+        // for the active language on this device (see class doc above).
+        onMicTapped?.let { tapped ->
+            val mic = ImageView(context).apply {
+                setImageResource(KeyIcons.resolve("mic"))
+                imageTintList = iconTint
+                scaleType = ImageView.ScaleType.CENTER_INSIDE
+                setBackgroundResource(android.R.drawable.btn_default)
+                val pad = dpToPx(9)
+                setPadding(pad, pad, pad, pad)
+                layoutParams = LayoutParams(dpToPx(44), dpToPx(40)).apply {
+                    marginEnd = dpToPx(2)
+                }
+                contentDescription = "Voice input"
+            }
+
+            // Same tap-vs-long-press mechanism as QwertyKeyboardView's key
+            // touch handler (reused, not reinvented): a postDelayed runnable
+            // armed on ACTION_DOWN and cancelled on ACTION_UP/CANCEL. Firing
+            // the runnable flags longPressFired so ACTION_UP doesn't also
+            // fire the tap action.
+            var longPressFired = false
+            val longPressRunnable = Runnable {
+                longPressFired = true
+                tapped(true) // raw mode
+            }
+            mic.setOnTouchListener { v, event ->
+                when (event.action) {
+                    MotionEvent.ACTION_DOWN -> {
+                        longPressFired = false
+                        v.postDelayed(longPressRunnable, SpecialKeys.LONG_PRESS_MS)
+                        true
+                    }
+                    MotionEvent.ACTION_UP -> {
+                        v.removeCallbacks(longPressRunnable)
+                        if (!longPressFired) tapped(false) // polished mode
+                        true
+                    }
+                    MotionEvent.ACTION_CANCEL -> {
+                        v.removeCallbacks(longPressRunnable)
+                        true
+                    }
+                    else -> false
+                }
+            }
+
+            micButton = mic
+            row.addView(mic)
+        }
+
         scrollView.addView(row)
         addView(scrollView)
 
@@ -107,6 +171,47 @@ class ToolbarView(
             toneButtons[tone]?.visibility = View.VISIBLE
         }
         loadingTone = null
+    }
+
+    /**
+     * Drives the mic button's visual state (mirrors [setLoading]/[clearLoading]
+     * for the spinner half). LISTENING pulses the mic icon so it's obvious a
+     * recording is live; PROCESSING swaps it for a spinner (AI-polish call in
+     * flight); IDLE restores the plain icon.
+     */
+    fun setVoiceState(state: VoiceSessionController.State) {
+        val mic = micButton ?: return
+        when (state) {
+            VoiceSessionController.State.IDLE -> {
+                mic.clearAnimation()
+                micSpinner?.let { (it.parent as? LinearLayout)?.removeView(it) }
+                micSpinner = null
+                mic.visibility = View.VISIBLE
+            }
+            VoiceSessionController.State.LISTENING -> {
+                micSpinner?.let { (it.parent as? LinearLayout)?.removeView(it) }
+                micSpinner = null
+                mic.visibility = View.VISIBLE
+                mic.startAnimation(
+                    AlphaAnimation(1f, 0.3f).apply {
+                        duration = 500
+                        repeatMode = Animation.REVERSE
+                        repeatCount = Animation.INFINITE
+                    }
+                )
+            }
+            VoiceSessionController.State.PROCESSING -> {
+                mic.clearAnimation()
+                mic.visibility = View.INVISIBLE
+                val spinner = ProgressBar(context).apply {
+                    layoutParams = LayoutParams(dpToPx(24), dpToPx(24))
+                }
+                micSpinner = spinner
+                val parent = mic.parent as? LinearLayout
+                val index = parent?.indexOfChild(mic) ?: -1
+                if (index >= 0) parent?.addView(spinner, index)
+            }
+        }
     }
 
     fun showUndo() {

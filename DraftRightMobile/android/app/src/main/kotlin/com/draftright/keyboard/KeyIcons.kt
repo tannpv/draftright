@@ -32,6 +32,8 @@ object KeyIcons {
         "build" -> R.drawable.ic_tone_build
         "smart_toy" -> R.drawable.ic_tone_smart_toy
         "spellcheck" -> R.drawable.ic_tone_spellcheck
+        // Voice toolbar
+        "mic" -> R.drawable.ic_tone_mic
         else -> 0
     }
 }

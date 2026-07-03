@@ -1,12 +1,16 @@
 package com.draftright.keyboard
 
+import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.pm.PackageManager
 import android.inputmethodservice.InputMethodService
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.speech.SpeechRecognizer
+import android.view.KeyEvent
 import android.view.View
 import android.view.WindowInsets
 import android.view.inputmethod.EditorInfo
@@ -17,6 +21,9 @@ import android.widget.Toast
 import com.draftright.keyboard.ime.CandidateBarView
 import com.draftright.keyboard.ime.ImeContext
 import com.draftright.keyboard.lang.EnglishLanguagePack
+import com.draftright.keyboard.voice.SpeechRecognizerVoiceInput
+import com.draftright.keyboard.voice.VoiceOutcome
+import com.draftright.keyboard.voice.VoiceSessionController
 
 class DraftRightIME : InputMethodService(), KeyboardActionListener {
 
@@ -38,12 +45,44 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
      */
     private val candidateLimit: Int = 7
 
+    /**
+     * The tone a voice dictation gets AI-polished into. Tracks whichever
+     * tone button the user last tapped (see [handleToneSelected]) so voice
+     * output matches the same "selected tone" the toolbar already implies —
+     * there's no separate tone picker for dictation. Defaults to NATURAL
+     * (closest match to spoken language) before the user has picked one.
+     */
+    private var currentTone: Tone = Tone.NATURAL
+
+    private lateinit var voiceSession: VoiceSessionController
+    private var voiceState: VoiceSessionController.State = VoiceSessionController.State.IDLE
+
     override fun onCreate() {
         super.onCreate()
         // Lets LanguagePack implementations reach Android resources lazily
         // without polluting their interface with a Context parameter. The
         // application context outlives the IME service so it's safe to cache.
         ImeContext.attach(applicationContext)
+
+        voiceSession = VoiceSessionController(
+            voice = SpeechRecognizerVoiceInput(this),
+            polish = { text, cb -> aiClient.rewrite(text, currentTone, settings, InputKind.SPEECH, cb) },
+            onState = { state ->
+                mainHandler.post {
+                    voiceState = state
+                    toolbar?.setVoiceState(state)
+                }
+            },
+            onOutcome = { outcome -> commitVoiceResult(outcome) },
+        )
+        // Partial (live) transcripts are intentionally NOT surfaced visually.
+        // CandidateBarView.setCandidates takes tappable Candidate(text, display)
+        // chips that commit-on-tap (handleCandidatePicked) — stuffing a live,
+        // still-changing transcript into that list would let the user tap it
+        // mid-dictation and commit early while the recognizer keeps running,
+        // producing a duplicate commit when the final result / commitVoiceResult
+        // lands afterward. Not wiring onPartialText is safe: the controller
+        // no-ops when no callback is registered.
     }
 
     // Step B: construct LanguageRegistry + KeyboardController but do NOT wire
@@ -82,9 +121,19 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
         candidateBar = cb
         root.addView(cb)
 
+        // Voice input is only offered when the active pack ships an STT
+        // locale AND the device actually has a speech recognizer (some
+        // OEM builds / emulators ship none). Checked once here at pack
+        // resolution time, not duplicated inside ToolbarView.
+        val micHandler: ((Boolean) -> Unit)? =
+            if (controller!!.current.sttLocale != null && SpeechRecognizer.isRecognitionAvailable(this)) {
+                { rawMode -> handleMicTapped(rawMode) }
+            } else null
+
         val tb = ToolbarView(this,
             onToneSelected = { tone -> handleToneSelected(tone) },
-            onUndo = { handleUndo() }
+            onUndo = { handleUndo() },
+            onMicTapped = micHandler
         )
         toolbar = tb
         root.addView(tb)
@@ -297,6 +346,9 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
     }
 
     private fun handleToneSelected(tone: Tone) {
+        // Remembered as the tone voice dictation polishes into — see
+        // currentTone's doc comment.
+        currentTone = tone
         val text = readFullText().trim()
         if (text.isEmpty()) return
 
@@ -360,6 +412,40 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
             toolbar?.hideUndo()
             originalText = null
         }
+    }
+
+    // --- Voice input -----------------------------------------------------
+
+    private fun handleMicTapped(rawMode: Boolean) {
+        val locale = controller?.current?.sttLocale ?: return
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            RequestPermissionActivity.launch(this, Manifest.permission.RECORD_AUDIO)
+            return
+        }
+        voiceSession.startSession(locale, rawMode)
+    }
+
+    /** Single commit path for every [VoiceOutcome] — see class doc on VoiceSessionController. */
+    private fun commitVoiceResult(outcome: VoiceOutcome) = mainHandler.post {
+        toolbar?.setVoiceState(VoiceSessionController.State.IDLE)
+        when (outcome) {
+            is VoiceOutcome.Polished -> currentInputConnection?.commitText(outcome.text, 1)
+            is VoiceOutcome.Raw -> {
+                currentInputConnection?.commitText(outcome.text, 1)
+                outcome.hint?.let { showBanner(it) }
+            }
+            VoiceOutcome.Nothing_ -> Unit
+        }
+    }
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        // Back while actively listening cancels the voice session instead of
+        // dismissing the keyboard out from under an in-progress recording.
+        if (keyCode == KeyEvent.KEYCODE_BACK && voiceState == VoiceSessionController.State.LISTENING) {
+            voiceSession.cancelSession()
+            return true
+        }
+        return super.onKeyDown(keyCode, event)
     }
 
     private fun showBanner(message: String) {
