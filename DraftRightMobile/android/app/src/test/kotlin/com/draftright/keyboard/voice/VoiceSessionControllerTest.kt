@@ -184,6 +184,36 @@ class VoiceSessionControllerTest {
         assertEquals(0, fake.cancelCalls)
     }
 
+    @Test fun `cancelSession called reentrantly from inside a polish-success outcome does not deadlock or double-emit`() {
+        // Regression test for the cancelSession()/polish-completion TOCTOU fix:
+        // both paths now share a `synchronized(this)` block. Kotlin/JVM
+        // monitors are reentrant, so calling cancelSession() from *inside*
+        // onOutcome — which itself runs inside the completion's synchronized
+        // block, on the same thread — must succeed without blocking. State is
+        // already IDLE by the time onOutcome fires, so cancelSession()'s own
+        // `state == State.IDLE` guard makes it a no-op: exactly one outcome,
+        // not two.
+        val fake = FakeVoiceInput()
+        val outcomes = mutableListOf<VoiceOutcome>()
+        lateinit var controllerRef: VoiceSessionController
+        val c = VoiceSessionController(fake,
+            polish = { text, cb -> cb(Result.success("Polished: $text")) },
+            onState = {},
+            onOutcome = { outcome ->
+                outcomes.add(outcome)
+                if (outcome is VoiceOutcome.Polished) {
+                    controllerRef.cancelSession()
+                }
+            })
+        controllerRef = c
+
+        c.startSession("en-US", rawMode = false)
+        fake.listener!!.onFinal("hello")
+
+        assertEquals(listOf<VoiceOutcome>(VoiceOutcome.Polished("Polished: hello")), outcomes)
+        assertEquals(0, fake.cancelCalls) // already IDLE — cancelSession's guard short-circuits before voice.cancel()
+    }
+
     @Test fun `rapid partials within the debounce window are throttled after the first`() {  // TC: VOICE-010
         val fake = FakeVoiceInput()
         var time = 0L

@@ -107,28 +107,49 @@ class VoiceSessionController(
     }
 
     fun cancelSession() {
-        if (state == State.IDLE) return
-        generation.incrementAndGet() // invalidate any in-flight listener/polish callbacks
-        voice.cancel()
-        setState(State.IDLE)
-        onOutcome(VoiceOutcome.Nothing_)
+        // Serialized against the polish-completion handling below: without
+        // this, a cancel racing a polish result landing on a worker thread is
+        // a check-then-act TOCTOU — both sides can observe "I'm still current"
+        // and both emit an outcome. synchronized(this) makes the
+        // generation-bump + state mutation + outcome emission one atomic
+        // unit. Reentrant on the JVM, so it's safe for this to be called from
+        // inside onOutcome's completion handler (same thread) without
+        // deadlocking.
+        synchronized(this) {
+            if (state == State.IDLE) return
+            generation.incrementAndGet() // invalidate any in-flight listener/polish callbacks
+            voice.cancel()
+            setState(State.IDLE)
+            onOutcome(VoiceOutcome.Nothing_)
+        }
     }
 
     private fun handleFinal(text: String, rawMode: Boolean, sessionGeneration: Int) {
         if (rawMode) {
-            setState(State.IDLE)
-            onOutcome(VoiceOutcome.Raw(text, hint = null))
+            // Same TOCTOU concern as cancelSession(): the isCurrent check and
+            // the resulting state mutation + emit must be one atomic block.
+            synchronized(this) {
+                if (!isCurrent(sessionGeneration)) return
+                setState(State.IDLE)
+                onOutcome(VoiceOutcome.Raw(text, hint = null))
+            }
             return
         }
 
         setState(State.PROCESSING)
         polish(text) { result ->
-            if (!isCurrent(sessionGeneration)) return@polish // cancelled — drop the late result
-            setState(State.IDLE)
-            result.fold(
-                onSuccess = { polished -> onOutcome(VoiceOutcome.Polished(polished)) },
-                onFailure = { onOutcome(VoiceOutcome.Raw(text, hint = RAW_FALLBACK_HINT)) }
-            )
+            // `polish`'s completion can run on any worker thread and race a
+            // main-thread cancelSession() between the isCurrent check and the
+            // outcome emission — synchronize on the same lock cancelSession()
+            // uses so the two calls interleave atomically instead of racing.
+            synchronized(this) {
+                if (!isCurrent(sessionGeneration)) return@synchronized // cancelled — drop the late result
+                setState(State.IDLE)
+                result.fold(
+                    onSuccess = { polished -> onOutcome(VoiceOutcome.Polished(polished)) },
+                    onFailure = { onOutcome(VoiceOutcome.Raw(text, hint = RAW_FALLBACK_HINT)) }
+                )
+            }
         }
     }
 

@@ -221,7 +221,33 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
         // chat box when it opens.
         currentInputConnection?.finishComposingText()
         controller?.composer?.reset()
+        // A live voice session must die with the input session it started in —
+        // otherwise the mic keeps listening after the field/app switch (hot
+        // mic) and its eventual transcript would commit into whatever field
+        // now has focus, which may not even be a DraftRight-aware one.
+        // Null-safe: onFinishInput can theoretically fire before onCreate has
+        // finished wiring voiceSession (lateinit).
+        if (::voiceSession.isInitialized) voiceSession.cancelSession()
         super.onFinishInput()
+    }
+
+    override fun onWindowHidden() {
+        // Belt-and-suspenders alongside onFinishInput: the IME window can hide
+        // (user left the app / dismissed the keyboard) in cases that don't
+        // always route through onFinishInput first. Same hot-mic risk either
+        // way, so the same cancel applies.
+        if (::voiceSession.isInitialized) voiceSession.cancelSession()
+        super.onWindowHidden()
+    }
+
+    override fun onWindowShown() {
+        super.onWindowShown()
+        // VOICE-011 resume-on-grant: the permission trampoline
+        // (RequestPermissionActivity) runs in a separate Activity, which hides
+        // this IME window and shows it again once the system dialog resolves.
+        // Pick up whatever it recorded in SharedSettings and finish the
+        // gesture the user originally started.
+        resumePendingVoicePermission()
     }
 
     // --- KeyboardActionListener ---
@@ -437,10 +463,38 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
         }
         val locale = controller?.current?.sttLocale ?: return
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            // VOICE-011: persist what we were about to do so the trampoline's
+            // result can resume it in onWindowShown, even if the process was
+            // recreated while the system permission dialog was up front.
+            settings.pendingVoiceRawMode = rawMode
+            settings.voicePermissionRequested = true
             RequestPermissionActivity.launch(this, Manifest.permission.RECORD_AUDIO)
             return
         }
         voiceSession.startSession(locale, rawMode)
+    }
+
+    /**
+     * Consumes a pending mic-permission request recorded by [handleMicTapped]
+     * once [RequestPermissionActivity] reports a result via [SharedSettings]
+     * (VOICE-011). No-ops when there is nothing pending, or the trampoline
+     * hasn't resolved yet (result still null while its dialog is up).
+     */
+    private fun resumePendingVoicePermission() {
+        if (!::settings.isInitialized) return
+        if (!settings.voicePermissionRequested) return
+        val result = settings.voicePermissionResult ?: return
+        settings.voicePermissionRequested = false
+        settings.voicePermissionResult = null
+        val rawMode = settings.pendingVoiceRawMode
+        when (result) {
+            SharedSettings.VOICE_PERMISSION_GRANTED -> {
+                val locale = controller?.current?.sttLocale ?: return
+                voiceSession.startSession(locale, rawMode)
+            }
+            SharedSettings.VOICE_PERMISSION_DENIED ->
+                showBanner("Microphone permission needed — enable it in Settings > Apps > DraftRight")
+        }
     }
 
     /** Single commit path for every [VoiceOutcome] — see class doc on VoiceSessionController. */
@@ -458,9 +512,11 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        // Back while actively listening cancels the voice session instead of
-        // dismissing the keyboard out from under an in-progress recording.
-        if (keyCode == KeyEvent.KEYCODE_BACK && voiceState == VoiceSessionController.State.LISTENING) {
+        // Back while a voice session is active (LISTENING or PROCESSING)
+        // cancels it instead of dismissing the keyboard out from under an
+        // in-progress recording/polish — matches the mic-tap cancel gesture
+        // in handleMicTapped, which cancels for either state too.
+        if (keyCode == KeyEvent.KEYCODE_BACK && voiceState != VoiceSessionController.State.IDLE) {
             voiceSession.cancelSession()
             return true
         }
