@@ -101,6 +101,41 @@ experience first; iOS gets a main-app round-trip flow in v2.
   green before deploy.
 - Manual E2E on Samsung A52 (VI + EN) before merge to develop.
 
+## Rule #1 compliance (clean / extendable / reusable / no hardcoding)
+
+Binding on the implementation plan — each item names the mechanism, not an
+intention:
+
+1. **STT locale = language-pack property, not a switch.** `LanguagePack`
+   gains `sttLocale` (nullable: null = voice unsupported for that pack).
+   Enabling FR later = set one field on the FR pack. No `if (lang == "vi")`
+   anywhere. Same property lands on the iOS `LanguagePack` in v2 (platform
+   parity, mirrors the existing composer() pattern).
+2. **`input_kind` is an enum at every layer.** Kotlin `InputKind` enum with
+   `apiValue` (mirrors `Tone.kt`); NestJS DTO validated with `@IsEnum`; Go
+   `domain.InputKind` type + `ParseInputKind` returning the domain sentinel
+   (mirrors `tone.go`). No `"speech"` string literals at call sites.
+3. **Speech-cleanup instruction lives server-side with the tone prompts** —
+   single source, one place per backend, byte-identical Node/Go. Clients never
+   embed prompt text (same principle as open issue #24 tone-list SSOT).
+4. **Voice capture behind a consumer-owned interface.** Kotlin `VoiceInput`
+   interface (start/stop/cancel + listener) with `SpeechRecognizerVoiceInput`
+   impl; recognizer injected via factory (fake in tests). iOS v2 implements
+   the same shape as a Swift protocol — the IME/state-machine code is written
+   against the interface once per platform, swappable engine.
+5. **One commit path.** All outcomes (polished, raw fallback, long-press raw)
+   funnel through a single `commitResult()`; failure taxonomy is a sealed
+   class mapped to fallback behavior — no per-error duplicated insert logic.
+6. **Mic key registered through the existing shared functional-key system**
+   (QwertyLayout key definitions, same mechanism as the other brand-blue
+   functional keys) — not a bolted-on view.
+7. **No magic numbers.** Listening timeout, partial-result debounce, App Group
+   staging TTL (v2) are named constants in one config object per platform;
+   rewrite timeout reuses the existing shared 15s constant.
+8. **Permission trampoline is generic.** `RequestPermissionActivity` takes the
+   permission name as an extra — reusable for any future IME-side permission,
+   not a RECORD_AUDIO one-off.
+
 ## Out of scope (v1)
 
 iOS build, FR/JA/KO/ZH locales, TTS voice prompts, voice commands/intent
