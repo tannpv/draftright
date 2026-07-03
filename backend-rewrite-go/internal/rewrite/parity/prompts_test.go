@@ -1,6 +1,10 @@
 package parity
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/tannpv/draftright-rewrite/internal/rewrite/domain"
+)
 
 // Expected literals are copied byte-for-byte from the NestJS parity authority
 // (backend/src/rewrite/rewrite.service.ts).
@@ -75,5 +79,14 @@ func TestTonePromptsKeys(t *testing.T) {
 		if _, ok := TonePrompts[k]; !ok {
 			t.Fatalf("TonePrompts missing key %q", k)
 		}
+	}
+}
+
+// The streaming path (domain) and parity path each carry the preamble as an
+// independent constant — domain cannot import parity (zero-dep rule). This
+// test is the only thing keeping them byte-identical.
+func TestSpeechPreambleMatchesDomain(t *testing.T) {
+	if SpeechPreamble != domain.SpeechPreamble {
+		t.Fatalf("parity.SpeechPreamble != domain.SpeechPreamble:\nparity=%q\ndomain=%q", SpeechPreamble, domain.SpeechPreamble)
 	}
 }
