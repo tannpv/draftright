@@ -102,6 +102,11 @@ class SpeechRecognizerVoiceInput(private val context: Context) : VoiceInput {
     }
 
     override fun stop() {
+        // Destroys the recognizer immediately, so the async final onResults
+        // that stopListening() would normally deliver is dropped. No caller
+        // today ("stop and keep what you heard" isn't in the UX); a future
+        // caller wanting that behavior must defer terminalCleanup() until
+        // onResults/onError fires.
         recognizer?.stopListening()
         terminalCleanup()
     }
