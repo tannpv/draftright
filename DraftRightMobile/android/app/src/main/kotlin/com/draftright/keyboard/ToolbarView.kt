@@ -178,17 +178,25 @@ class ToolbarView(
      * for the spinner half). LISTENING pulses the mic icon so it's obvious a
      * recording is live; PROCESSING swaps it for a spinner (AI-polish call in
      * flight); IDLE restores the plain icon.
+     *
+     * Also locks the toolbar's buttons the same way [setLoading] does
+     * (`isEnabled = false` on `this`, the ViewGroup) for LISTENING/PROCESSING,
+     * and restores it for IDLE. Without this, a tap on a tone button during
+     * an active voice session fires a rewrite call that races the voice
+     * commit for the same InputConnection.
      */
     fun setVoiceState(state: VoiceSessionController.State) {
         val mic = micButton ?: return
         when (state) {
             VoiceSessionController.State.IDLE -> {
+                isEnabled = true
                 mic.clearAnimation()
                 micSpinner?.let { (it.parent as? LinearLayout)?.removeView(it) }
                 micSpinner = null
                 mic.visibility = View.VISIBLE
             }
             VoiceSessionController.State.LISTENING -> {
+                isEnabled = false
                 micSpinner?.let { (it.parent as? LinearLayout)?.removeView(it) }
                 micSpinner = null
                 mic.visibility = View.VISIBLE
@@ -201,6 +209,7 @@ class ToolbarView(
                 )
             }
             VoiceSessionController.State.PROCESSING -> {
+                isEnabled = false
                 mic.clearAnimation()
                 mic.visibility = View.INVISIBLE
                 val spinner = ProgressBar(context).apply {

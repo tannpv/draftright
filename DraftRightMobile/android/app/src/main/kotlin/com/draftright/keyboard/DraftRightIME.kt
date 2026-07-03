@@ -71,18 +71,27 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
                 mainHandler.post {
                     voiceState = state
                     toolbar?.setVoiceState(state)
+                    // Voice session ended (finished or cancelled) — drop any
+                    // live preview left in the candidate bar. The success/
+                    // failure paths also clear it in commitVoiceResult, but
+                    // cancelSession goes straight to IDLE without an outcome
+                    // commit, so it needs its own clear here.
+                    if (state == VoiceSessionController.State.IDLE) {
+                        candidateBar?.setPartialTranscript(null)
+                    }
                 }
             },
             onOutcome = { outcome -> commitVoiceResult(outcome) },
         )
-        // Partial (live) transcripts are intentionally NOT surfaced visually.
-        // CandidateBarView.setCandidates takes tappable Candidate(text, display)
-        // chips that commit-on-tap (handleCandidatePicked) — stuffing a live,
-        // still-changing transcript into that list would let the user tap it
-        // mid-dictation and commit early while the recognizer keeps running,
-        // producing a duplicate commit when the final result / commitVoiceResult
-        // lands afterward. Not wiring onPartialText is safe: the controller
-        // no-ops when no callback is registered.
+        // Live (partial) transcripts render as a non-interactive preview in
+        // the candidate bar via CandidateBarView.setPartialTranscript — a
+        // plain, unclickable TextView, NOT a tappable Candidate chip. Chips
+        // commit-on-tap (handleCandidatePicked), and tapping a still-changing
+        // transcript mid-dictation would race the final commit that lands
+        // when the recognizer finishes, producing a duplicate commit.
+        voiceSession.onPartialText { partial ->
+            mainHandler.post { candidateBar?.setPartialTranscript(partial) }
+        }
     }
 
     // Step B: construct LanguageRegistry + KeyboardController but do NOT wire
@@ -428,6 +437,7 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
     /** Single commit path for every [VoiceOutcome] — see class doc on VoiceSessionController. */
     private fun commitVoiceResult(outcome: VoiceOutcome) = mainHandler.post {
         toolbar?.setVoiceState(VoiceSessionController.State.IDLE)
+        candidateBar?.setPartialTranscript(null)
         when (outcome) {
             is VoiceOutcome.Polished -> currentInputConnection?.commitText(outcome.text, 1)
             is VoiceOutcome.Raw -> {
