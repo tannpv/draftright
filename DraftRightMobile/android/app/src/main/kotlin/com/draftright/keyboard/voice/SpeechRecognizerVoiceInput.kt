@@ -19,22 +19,28 @@ import android.speech.SpeechRecognizer
  * [VoiceConfig.LISTEN_TIMEOUT_MS] is a hard stop for the whole session — it
  * is NOT the platform's silence-detection extra (that is a different concept
  * with a different, much shorter, default). It is enforced here with a
- * postDelayed callback on the main looper, guarded by [finished] so it can
- * only ever fire once and is always cancelled on any terminal outcome.
+ * postDelayed callback on the main looper.
+ *
+ * Lifecycle guard: each [start] mints a fresh [SpeechRecognizer] and a fresh
+ * [sessionId]. Every callback/timeout runnable captures that id and only acts
+ * if it still equals [sessionId] at the time it fires — i.e. no newer session
+ * has started since. This is stronger than the single shared boolean flag it
+ * replaces: a boolean only stops a session's own callbacks from firing twice,
+ * it can't distinguish "stale event from session N-1" from "event for the
+ * current session N" once a new session has started in between (e.g. a
+ * cancelled recognizer delivering a late onResults just as the user re-taps
+ * the mic). All of start()/RecognitionListener callbacks/the timeout runnable
+ * execute on the main looper (platform contract for SpeechRecognizer + our
+ * Handler(mainLooper)), so [sessionId] requires no synchronization.
  */
 class SpeechRecognizerVoiceInput(private val context: Context) : VoiceInput {
 
     private var recognizer: SpeechRecognizer? = null
     private val timeoutHandler = Handler(Looper.getMainLooper())
     private var timeoutRunnable: Runnable? = null
-    /**
-     * Session-complete flag guarding terminal callbacks and timeout runnable.
-     * All of start()/RecognitionListener callbacks/the timeout runnable execute on the main
-     * looper (platform contract for SpeechRecognizer + our Handler(mainLooper)), so [finished]
-     * requires no synchronization; the guard exists for message-queue ordering (once set true,
-     * no more callbacks fire for this session).
-     */
-    private var finished = false
+
+    /** Monotonically increasing per-session token — see class doc. */
+    private var sessionId = 0
 
     override fun start(localeTag: String, listener: VoiceInput.Listener) {
         if (!SpeechRecognizer.isRecognitionAvailable(context)) {
@@ -42,7 +48,12 @@ class SpeechRecognizerVoiceInput(private val context: Context) : VoiceInput {
             return
         }
 
-        finished = false
+        val id = ++sessionId
+        // Safety net: drop any leftover recognizer/timeout a caller may have
+        // left behind by starting a new session without cancelling the old
+        // one first (VoiceSessionController always cancels first, but this
+        // keeps the adapter correct on its own).
+        terminalCleanup()
 
         val recognizer = SpeechRecognizer.createSpeechRecognizer(context)
         this.recognizer = recognizer
@@ -55,19 +66,19 @@ class SpeechRecognizerVoiceInput(private val context: Context) : VoiceInput {
             override fun onEvent(eventType: Int, params: Bundle?) = Unit
 
             override fun onError(error: Int) {
-                if (!markFinished()) return
-                cancelTimeout()
+                if (id != sessionId) return
+                terminalCleanup()
                 listener.onError(mapError(error))
             }
 
             override fun onPartialResults(partialResults: Bundle?) {
-                if (finished) return
+                if (id != sessionId) return
                 firstResult(partialResults)?.let { listener.onPartial(it) }
             }
 
             override fun onResults(results: Bundle?) {
-                if (!markFinished()) return
-                cancelTimeout()
+                if (id != sessionId) return
+                terminalCleanup()
                 val text = firstResult(results)
                 if (text != null) listener.onFinal(text) else listener.onError(VoiceError.NO_SPEECH)
             }
@@ -81,8 +92,9 @@ class SpeechRecognizerVoiceInput(private val context: Context) : VoiceInput {
         recognizer.startListening(intent)
 
         val runnable = Runnable {
-            if (!markFinished()) return@Runnable
+            if (id != sessionId) return@Runnable
             recognizer.cancel()
+            terminalCleanup()
             listener.onError(VoiceError.NO_SPEECH)
         }
         timeoutRunnable = runnable
@@ -90,23 +102,27 @@ class SpeechRecognizerVoiceInput(private val context: Context) : VoiceInput {
     }
 
     override fun stop() {
-        cancelTimeout()
         recognizer?.stopListening()
+        terminalCleanup()
     }
 
     override fun cancel() {
-        finished = true
-        cancelTimeout()
+        sessionId++ // invalidate any in-flight callback/timeout for this session
         recognizer?.cancel()
-        recognizer?.destroy()
-        recognizer = null
+        terminalCleanup()
     }
 
-    /** Returns true (and flips [finished]) only the first time it's called for this session. */
-    private fun markFinished(): Boolean {
-        if (finished) return false
-        finished = true
-        return true
+    /**
+     * Cancels the pending timeout and destroys+drops the recognizer. Shared
+     * terminal path for every way a session can end (result, error, timeout,
+     * cancel, stop) so a finished session never leaks a live
+     * [SpeechRecognizer] — [start] always mints a new one for the next
+     * session rather than reusing this one.
+     */
+    private fun terminalCleanup() {
+        cancelTimeout()
+        recognizer?.destroy()
+        recognizer = null
     }
 
     private fun cancelTimeout() {
