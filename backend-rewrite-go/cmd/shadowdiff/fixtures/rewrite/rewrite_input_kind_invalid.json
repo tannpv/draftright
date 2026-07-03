@@ -11,5 +11,7 @@
     "tone": "simple",
     "input_kind": "banana"
   },
-  "ignore_value_of": []
+  "ignore_value_of": [
+    "request_id"
+  ]
 }
