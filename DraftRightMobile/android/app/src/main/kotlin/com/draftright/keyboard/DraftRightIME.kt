@@ -426,6 +426,15 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
     // --- Voice input -----------------------------------------------------
 
     private fun handleMicTapped(rawMode: Boolean) {
+        // Spec: "Tap mic again or Back = cancel." The mic stays tappable for
+        // the whole session (see ToolbarView.setVoiceState doc) instead of
+        // being disabled, so a tap while LISTENING/PROCESSING is a deliberate
+        // cancel gesture, not a re-entrant start — rawMode is ignored here
+        // since there's no new session to start.
+        if (voiceState != VoiceSessionController.State.IDLE) {
+            voiceSession.cancelSession()
+            return
+        }
         val locale = controller?.current?.sttLocale ?: return
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             RequestPermissionActivity.launch(this, Manifest.permission.RECORD_AUDIO)
@@ -484,6 +493,9 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
      */
     private fun refreshCandidates() {
         val bar = candidateBar ?: return
+        // A live voice session owns the candidate bar (partial transcript
+        // preview) — don't let a concurrent typing refresh clobber it.
+        if (voiceState != VoiceSessionController.State.IDLE) return
         val pack = controller?.current
         val engine = pack?.candidateEngine()
         if (engine == null) {

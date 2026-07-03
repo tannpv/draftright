@@ -179,24 +179,25 @@ class ToolbarView(
      * recording is live; PROCESSING swaps it for a spinner (AI-polish call in
      * flight); IDLE restores the plain icon.
      *
-     * Also locks the toolbar's buttons the same way [setLoading] does
-     * (`isEnabled = false` on `this`, the ViewGroup) for LISTENING/PROCESSING,
-     * and restores it for IDLE. Without this, a tap on a tone button during
-     * an active voice session fires a rewrite call that races the voice
-     * commit for the same InputConnection.
+     * Also locks the tone buttons individually via [setToneButtonsEnabled] for
+     * LISTENING/PROCESSING, and restores them for IDLE. Without this, a tap on
+     * a tone button during an active voice session fires a rewrite call that
+     * races the voice commit for the same InputConnection. Note: the mic
+     * button itself is intentionally left enabled in every state — tapping it
+     * mid-session is the spec's cancel gesture (see DraftRightIME.handleMicTapped).
      */
     fun setVoiceState(state: VoiceSessionController.State) {
         val mic = micButton ?: return
         when (state) {
             VoiceSessionController.State.IDLE -> {
-                isEnabled = true
+                setToneButtonsEnabled(true)
                 mic.clearAnimation()
                 micSpinner?.let { (it.parent as? LinearLayout)?.removeView(it) }
                 micSpinner = null
                 mic.visibility = View.VISIBLE
             }
             VoiceSessionController.State.LISTENING -> {
-                isEnabled = false
+                setToneButtonsEnabled(false)
                 micSpinner?.let { (it.parent as? LinearLayout)?.removeView(it) }
                 micSpinner = null
                 mic.visibility = View.VISIBLE
@@ -209,7 +210,7 @@ class ToolbarView(
                 )
             }
             VoiceSessionController.State.PROCESSING -> {
-                isEnabled = false
+                setToneButtonsEnabled(false)
                 mic.clearAnimation()
                 mic.visibility = View.INVISIBLE
                 val spinner = ProgressBar(context).apply {
@@ -220,6 +221,20 @@ class ToolbarView(
                 val index = parent?.indexOfChild(mic) ?: -1
                 if (index >= 0) parent?.addView(spinner, index)
             }
+        }
+    }
+
+    /**
+     * Toggles each tone button's own [View.isEnabled] rather than the
+     * container's — a disabled ViewGroup does NOT stop child views from
+     * receiving touches/click callbacks on Android, so setting `isEnabled`
+     * on `this` (as the previous fix attempted) never actually blocked tone
+     * taps during a voice session. A disabled child View, by contrast, does
+     * suppress its own `setOnClickListener`.
+     */
+    private fun setToneButtonsEnabled(enabled: Boolean) {
+        for (btn in toneButtons.values) {
+            btn.isEnabled = enabled
         }
     }
 
