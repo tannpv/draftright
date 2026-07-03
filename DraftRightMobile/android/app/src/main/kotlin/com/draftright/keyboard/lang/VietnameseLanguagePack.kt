@@ -21,6 +21,8 @@ object VietnameseLanguagePack : LanguagePack {
     override val symbols2Rows: List<List<KeyDef>> = EnglishLanguagePack.symbols2Rows
     override val longPressAccents: Map<Char, List<Char>> = emptyMap()
 
+    override val sttLocale: String? = "vi-VN"
+
     override fun composer(): Composer = TelexComposer()
 
     /**

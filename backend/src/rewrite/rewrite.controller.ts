@@ -24,7 +24,7 @@ export class RewriteController {
   @ApiBearerAuth()
   @Post()
   async rewrite(@Req() req: any, @Body() dto: RewriteDto) {
-    return this.rewriteService.rewrite(req.user.id, dto.text, dto.tone, dto.target_language, dto.source_language);
+    return this.rewriteService.rewrite(req.user.id, dto.text, dto.tone, dto.target_language, dto.source_language, dto.input_kind);
   }
 
   @Post('trial')
@@ -33,6 +33,6 @@ export class RewriteController {
       (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
       req.socket.remoteAddress ||
       'unknown';
-    return this.rewriteService.trialRewrite(dto.text, dto.tone, clientIp, dto.target_language, dto.source_language);
+    return this.rewriteService.trialRewrite(dto.text, dto.tone, clientIp, dto.target_language, dto.source_language, dto.input_kind);
   }
 }

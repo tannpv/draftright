@@ -17,10 +17,40 @@ var TonePrompts = map[string]string{
 // GrammarCheckPrompt mirrors Node's GRAMMAR_CHECK_PROMPT (rewrite.service.ts line 25).
 const GrammarCheckPrompt = `You are a grammar and spelling checker. Analyze the given text and return a JSON object with two fields: 1) "score": a number from 0 to 100 rating the overall writing quality, 2) "issues": an array of objects, each with "type" (one of "spelling", "grammar", or "style"), "offset" (character position where the issue starts, 0-based), "length" (number of characters the issue spans), "original" (the exact text that has the issue), "suggestion" (the corrected text), and "reason" (a brief explanation). If the text has no issues, return {"score": 100, "issues": []}. Return ONLY the JSON object, no markdown, no code fences, no explanations.`
 
-// ResolvePrompt mirrors Node's resolvePrompt (rewrite.service.ts lines 30-40).
+// SpeechPreamble mirrors Node's SPEECH_PREAMBLE (backend/src/rewrite/tones.ts)
+// byte-for-byte — note the trailing single space; do not trim it.
+const SpeechPreamble = "The input is dictated speech: remove filler words and false starts, restore punctuation and casing, keep the meaning and language. "
+
+// wireInputKind is a package-local typed wire value used only for the
+// speech-preamble comparison below, distinct from
+// internal/rewrite/domain.InputKind. This package deliberately does not
+// import internal/rewrite/domain in production code (only prompts_test.go
+// imports it, to assert SpeechPreamble stays byte-identical across the
+// zero-dep boundary) — parity exists to independently mirror Node's TS
+// source so domain's real implementation can be verified against it;
+// importing domain here would let a domain bug silently "verify" itself.
+// The literal is still worth a typed constant instead of a bare string at
+// the comparison site.
+type wireInputKind string
+
+const wireInputKindSpeech wireInputKind = "speech"
+
+// ResolvePrompt mirrors Node's resolvePrompt (rewrite.service.ts lines 31-45).
 // Node returns null for an unknown tone; Go returns "" (callers treat "" as
-// unknown-tone).
-func ResolvePrompt(tone, targetLanguage, sourceLanguage string) string {
+// unknown-tone). When inputKind == "speech", SpeechPreamble is prepended to
+// any non-empty resolved prompt — grammar_check, translate, and every tone in
+// TonePrompts alike; absent/typed leaves the prompt unchanged.
+func ResolvePrompt(tone, targetLanguage, sourceLanguage, inputKind string) string {
+	base := resolveBasePrompt(tone, targetLanguage, sourceLanguage)
+	if base != "" && wireInputKind(inputKind) == wireInputKindSpeech {
+		return SpeechPreamble + base
+	}
+	return base
+}
+
+// resolveBasePrompt resolves the tone/translate/grammar_check prompt before
+// the speech preamble (if any) is applied.
+func resolveBasePrompt(tone, targetLanguage, sourceLanguage string) string {
 	if tone == "grammar_check" {
 		return GrammarCheckPrompt
 	}

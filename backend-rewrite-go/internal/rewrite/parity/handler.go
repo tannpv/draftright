@@ -19,8 +19,8 @@ import (
 // rewriter is the handler's consumer-side port; *Service satisfies it. Kept on
 // the consumer side (CLAUDE.md guardrail) so tests inject a fake without a DB.
 type rewriter interface {
-	Rewrite(ctx context.Context, userID, text, tone, target, source string) (any, error)
-	TrialRewrite(ctx context.Context, text, tone, clientIp, target, source string) (any, error)
+	Rewrite(ctx context.Context, userID, text, tone, target, source, inputKind string) (any, error)
+	TrialRewrite(ctx context.Context, text, tone, clientIp, target, source, inputKind string) (any, error)
 }
 
 // Handler serves POST /rewrite.
@@ -60,13 +60,13 @@ func (h *Handler) Rewrite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	text, tone, target, source, msg := validateRewrite(raw)
+	text, tone, target, source, inputKind, msg := validateRewrite(raw)
 	if msg != "" {
 		shared.WriteError(w, r, "invalid-input", msg)
 		return
 	}
 
-	out, err := h.svc.Rewrite(r.Context(), claims.UserID(), text, tone, target, source)
+	out, err := h.svc.Rewrite(r.Context(), claims.UserID(), text, tone, target, source, inputKind)
 	if err != nil {
 		var ute *UnknownToneError
 		switch {
@@ -114,13 +114,13 @@ func (h *Handler) Trial(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	text, tone, target, source, msg := validateRewrite(raw)
+	text, tone, target, source, inputKind, msg := validateRewrite(raw)
 	if msg != "" {
 		shared.WriteError(w, r, "invalid-input", msg)
 		return
 	}
 
-	out, err := h.svc.TrialRewrite(r.Context(), text, tone, clientIP(r), target, source)
+	out, err := h.svc.TrialRewrite(r.Context(), text, tone, clientIP(r), target, source, inputKind)
 	if err != nil {
 		var ute *UnknownToneError
 		switch {

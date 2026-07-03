@@ -13,6 +13,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Keyboard voice input (dictate → AI polish). -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
     <!-- Bug-report sheet (Settings → Report a bug) optionally attaches a
          screenshot from the camera. Gallery access on Android 13+ uses
          the system Photo Picker which doesn't require a permission. -->
@@ -118,6 +121,15 @@
                 <data android:mimeType="text/plain" />
             </intent-filter>
         </activity>
+
+        <!-- Permission trampoline: transparent activity for requesting device permissions
+             via startActivity(). Result reported back to IME via SharedSettings flag. -->
+        <activity
+            android:name="com.draftright.keyboard.RequestPermissionActivity"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:exported="false" />
 
         <!-- Floating bubble service. Runs as foreground service with a
              low-priority persistent notification while the user has the

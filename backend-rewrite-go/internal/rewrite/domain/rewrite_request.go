@@ -12,15 +12,17 @@ const MaxInputChars = 5000
 // same validation path — invalid inputs can never reach the use case
 // layer (Rule #1: invariants enforced at the boundary, not scattered).
 type RewriteRequest struct {
-	text string
-	tone Tone
-	lang string
+	text      string
+	tone      Tone
+	lang      string
+	inputKind InputKind
 }
 
 // NewRewriteRequest validates + builds. Trims whitespace from text to
 // match NestJS DTO behaviour. lang is optional (only used by the
-// `translate` tone); validated lightly.
-func NewRewriteRequest(text, toneStr, lang string) (RewriteRequest, error) {
+// `translate` tone); validated lightly. inputKindStr is optional —
+// empty defaults to InputKindTyped (see ParseInputKind).
+func NewRewriteRequest(text, toneStr, lang, inputKindStr string) (RewriteRequest, error) {
 	t := strings.TrimSpace(text)
 	if t == "" {
 		return RewriteRequest{}, ErrInvalidInput
@@ -38,13 +40,18 @@ func NewRewriteRequest(text, toneStr, lang string) (RewriteRequest, error) {
 		// let OpenAI invent a destination.
 		return RewriteRequest{}, ErrInvalidInput
 	}
-	return RewriteRequest{text: t, tone: tone, lang: strings.TrimSpace(lang)}, nil
+	inputKind, err := ParseInputKind(inputKindStr)
+	if err != nil {
+		return RewriteRequest{}, err
+	}
+	return RewriteRequest{text: t, tone: tone, lang: strings.TrimSpace(lang), inputKind: inputKind}, nil
 }
 
 // Getters — value type, no mutation possible from outside.
-func (r RewriteRequest) Text() string { return r.text }
-func (r RewriteRequest) Tone() Tone   { return r.tone }
-func (r RewriteRequest) Lang() string { return r.lang }
+func (r RewriteRequest) Text() string         { return r.text }
+func (r RewriteRequest) Tone() Tone           { return r.tone }
+func (r RewriteRequest) Lang() string         { return r.lang }
+func (r RewriteRequest) InputKind() InputKind { return r.inputKind }
 
 // InputLength is the character count the use case logs into usage_logs
 // (NestJS calls it `input_length`).

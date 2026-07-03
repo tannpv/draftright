@@ -50,7 +50,7 @@ func userWithQuota(used int64, limit int32) *domain.User {
 
 func reqOK(t *testing.T) domain.RewriteRequest {
 	t.Helper()
-	r, err := domain.NewRewriteRequest("hello world", "polished", "")
+	r, err := domain.NewRewriteRequest("hello world", "polished", "", "")
 	require.NoError(t, err)
 	return r
 }

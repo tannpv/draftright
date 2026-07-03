@@ -37,6 +37,7 @@ class BackendClient {
         text: String,
         tone: Tone,
         settings: SharedSettings,
+        inputKind: InputKind = InputKind.TYPED,
         onResult: (Result<String>) -> Unit
     ) {
         thread {
@@ -58,6 +59,7 @@ class BackendClient {
                     if (tone == Tone.TRANSLATE) {
                         put("target_language", settings.translateLanguage)
                     }
+                    if (inputKind != InputKind.TYPED) put("input_kind", inputKind.apiValue)
                 }
 
                 val endpoint = settings.backendUrl.trimEnd('/') + "/rewrite"

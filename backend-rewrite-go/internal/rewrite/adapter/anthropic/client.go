@@ -213,7 +213,7 @@ func (c *Client) buildRequest(req domain.RewriteRequest) map[string]any {
 		"model":      c.model,
 		"max_tokens": c.maxTokens,
 		"stream":     true,
-		"system":     c.systemFmt(req.Tone()),
+		"system":     domain.ApplySpeechPreamble(c.systemFmt(req.Tone()), req.InputKind()),
 		"messages": []map[string]string{
 			{"role": "user", "content": req.Text()},
 		},

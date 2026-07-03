@@ -49,6 +49,32 @@ class SharedSettings(context: Context) {
     val activeLanguageId: String
         get() = prefs.getString("flutter.draftright.activeLanguageId", "en") ?: "en"
 
+    // --- Voice permission trampoline (VOICE-011) -------------------------
+    // These three are IME-internal state, not Flutter-owned prefs — backed by
+    // the same SharedPreferences file (not an IME field) because the IME
+    // process is not guaranteed to survive the system permission dialog
+    // shown by RequestPermissionActivity.
+
+    /** True while a mic-permission request launched by [handleMicTapped]-style
+     *  callers is in flight. Set right before launching the trampoline;
+     *  cleared once the IME consumes [voicePermissionResult]. */
+    var voicePermissionRequested: Boolean
+        get() = prefs.getBoolean(KEY_VOICE_PERMISSION_REQUESTED, false)
+        set(value) = prefs.edit().putBoolean(KEY_VOICE_PERMISSION_REQUESTED, value).apply()
+
+    /** rawMode captured at the moment permission was requested, so the
+     *  resumed session starts in the same mode the user originally tapped. */
+    var pendingVoiceRawMode: Boolean
+        get() = prefs.getBoolean(KEY_PENDING_VOICE_RAW_MODE, false)
+        set(value) = prefs.edit().putBoolean(KEY_PENDING_VOICE_RAW_MODE, value).apply()
+
+    /** [VOICE_PERMISSION_GRANTED] / [VOICE_PERMISSION_DENIED], written by
+     *  `RequestPermissionActivity` once the system dialog resolves. Null
+     *  while the dialog is still open or nothing is pending. */
+    var voicePermissionResult: String?
+        get() = prefs.getString(KEY_VOICE_PERMISSION_RESULT, null)
+        set(value) = prefs.edit().putString(KEY_VOICE_PERMISSION_RESULT, value).apply()
+
     private fun parseStringList(raw: String?) = Companion.parseStringList(raw)
 
     internal companion object {
@@ -59,6 +85,14 @@ class SharedSettings(context: Context) {
         // switching).
         const val LEGACY_LIST_PREFIX = "VGhpcyBpcyB0aGUgcHJlZml4IGZvciBhIGxpc3Qu"
         const val JSON_LIST_PREFIX = "$LEGACY_LIST_PREFIX!"
+
+        /** [voicePermissionResult] values written by `RequestPermissionActivity`. */
+        const val VOICE_PERMISSION_GRANTED = "granted"
+        const val VOICE_PERMISSION_DENIED = "denied"
+
+        const val KEY_VOICE_PERMISSION_REQUESTED = "dr_voice_permission_requested"
+        const val KEY_PENDING_VOICE_RAW_MODE = "dr_pending_voice_raw_mode"
+        const val KEY_VOICE_PERMISSION_RESULT = "dr_voice_permission_result"
 
         internal fun parseStringList(raw: String?): List<String> {
             if (raw.isNullOrBlank()) return emptyList()

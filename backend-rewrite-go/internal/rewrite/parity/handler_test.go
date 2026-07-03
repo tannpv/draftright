@@ -18,21 +18,21 @@ type stubRewriter struct {
 	out any
 	err error
 	got struct {
-		userID, text, tone, target, source string
+		userID, text, tone, target, source, inputKind string
 	}
 	trialOut struct {
-		text, tone, clientIp, target, source string
+		text, tone, clientIp, target, source, inputKind string
 	}
 }
 
-func (s *stubRewriter) Rewrite(_ context.Context, userID, text, tone, target, source string) (any, error) {
-	s.got.userID, s.got.text, s.got.tone, s.got.target, s.got.source = userID, text, tone, target, source
+func (s *stubRewriter) Rewrite(_ context.Context, userID, text, tone, target, source, inputKind string) (any, error) {
+	s.got.userID, s.got.text, s.got.tone, s.got.target, s.got.source, s.got.inputKind = userID, text, tone, target, source, inputKind
 	return s.out, s.err
 }
 
 // trialGot records what the Trial path passed (clientIp instead of userID).
-func (s *stubRewriter) TrialRewrite(_ context.Context, text, tone, clientIp, target, source string) (any, error) {
-	s.trialOut.text, s.trialOut.tone, s.trialOut.clientIp, s.trialOut.target, s.trialOut.source = text, tone, clientIp, target, source
+func (s *stubRewriter) TrialRewrite(_ context.Context, text, tone, clientIp, target, source, inputKind string) (any, error) {
+	s.trialOut.text, s.trialOut.tone, s.trialOut.clientIp, s.trialOut.target, s.trialOut.source, s.trialOut.inputKind = text, tone, clientIp, target, source, inputKind
 	return s.out, s.err
 }
 
