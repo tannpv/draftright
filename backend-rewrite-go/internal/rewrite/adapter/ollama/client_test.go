@@ -2,6 +2,7 @@ package ollama_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -36,7 +37,7 @@ func streamNDJSON(w http.ResponseWriter, tokens []string) {
 
 func mustReq(t *testing.T) domain.RewriteRequest {
 	t.Helper()
-	r, err := domain.NewRewriteRequest("hi", "polished", "")
+	r, err := domain.NewRewriteRequest("hi", "polished", "", "")
 	require.NoError(t, err)
 	return r
 }
@@ -176,4 +177,47 @@ func TestClient_IDAndName(t *testing.T) {
 	c := ollama.New(id)
 	require.Equal(t, id, c.ID())
 	require.Equal(t, "ollama", c.Name())
+}
+
+func TestClient_Stream_PrependsSpeechPreambleWhenSpeechInput(t *testing.T) {
+	t.Parallel()
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		streamNDJSON(w, nil)
+	}))
+	defer srv.Close()
+
+	speechReq, err := domain.NewRewriteRequest("hi", "polished", "", "speech")
+	require.NoError(t, err)
+
+	c := ollama.New(uuid.New(), ollama.WithEndpoint(srv.URL))
+	tokens, errs := c.Stream(context.Background(), speechReq)
+	_, finalErr := drainTokens(t, tokens, errs)
+	require.NoError(t, finalErr)
+
+	messages, _ := gotBody["messages"].([]any)
+	require.NotEmpty(t, messages)
+	system, _ := messages[0].(map[string]any)
+	require.True(t, strings.HasPrefix(system["content"].(string), domain.SpeechPreamble))
+}
+
+func TestClient_Stream_OmitsSpeechPreambleWhenTyped(t *testing.T) {
+	t.Parallel()
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		streamNDJSON(w, nil)
+	}))
+	defer srv.Close()
+
+	c := ollama.New(uuid.New(), ollama.WithEndpoint(srv.URL))
+	tokens, errs := c.Stream(context.Background(), mustReq(t))
+	_, finalErr := drainTokens(t, tokens, errs)
+	require.NoError(t, finalErr)
+
+	messages, _ := gotBody["messages"].([]any)
+	require.NotEmpty(t, messages)
+	system, _ := messages[0].(map[string]any)
+	require.False(t, strings.HasPrefix(system["content"].(string), domain.SpeechPreamble))
 }

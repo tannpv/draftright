@@ -2,6 +2,7 @@ package openai_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -40,7 +41,7 @@ func streamChunks(w http.ResponseWriter, tokens []string, withDone bool) {
 
 func mustReq(t *testing.T) domain.RewriteRequest {
 	t.Helper()
-	r, err := domain.NewRewriteRequest("hi", "polished", "")
+	r, err := domain.NewRewriteRequest("hi", "polished", "", "")
 	require.NoError(t, err)
 	return r
 }
@@ -208,6 +209,49 @@ func TestNew_TemperatureAndLocalLayoutOptions(t *testing.T) {
 		openai.WithLocalLayout(true),
 	)
 	require.NotNil(t, c)
+}
+
+func TestClient_Stream_PrependsSpeechPreambleWhenSpeechInput(t *testing.T) {
+	t.Parallel()
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		streamChunks(w, nil, true /* withDone */)
+	}))
+	defer srv.Close()
+
+	speechReq, err := domain.NewRewriteRequest("hi", "polished", "", "speech")
+	require.NoError(t, err)
+
+	c := openai.New(uuid.New(), "k", openai.WithEndpoint(srv.URL))
+	tokens, errs := c.Stream(context.Background(), speechReq)
+	_, finalErr := drainTokens(t, tokens, errs)
+	require.NoError(t, finalErr)
+
+	messages, _ := gotBody["messages"].([]any)
+	require.NotEmpty(t, messages)
+	system, _ := messages[0].(map[string]any)
+	require.True(t, strings.HasPrefix(system["content"].(string), domain.SpeechPreamble))
+}
+
+func TestClient_Stream_OmitsSpeechPreambleWhenTyped(t *testing.T) {
+	t.Parallel()
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		streamChunks(w, nil, true /* withDone */)
+	}))
+	defer srv.Close()
+
+	c := openai.New(uuid.New(), "k", openai.WithEndpoint(srv.URL))
+	tokens, errs := c.Stream(context.Background(), mustReq(t))
+	_, finalErr := drainTokens(t, tokens, errs)
+	require.NoError(t, finalErr)
+
+	messages, _ := gotBody["messages"].([]any)
+	require.NotEmpty(t, messages)
+	system, _ := messages[0].(map[string]any)
+	require.False(t, strings.HasPrefix(system["content"].(string), domain.SpeechPreamble))
 }
 
 func TestClient_IDAndName(t *testing.T) {

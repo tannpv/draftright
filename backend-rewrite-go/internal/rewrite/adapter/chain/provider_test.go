@@ -17,7 +17,7 @@ import (
 
 func mustReq(t *testing.T) domain.RewriteRequest {
 	t.Helper()
-	r, err := domain.NewRewriteRequest("hi", "polished", "")
+	r, err := domain.NewRewriteRequest("hi", "polished", "", "")
 	require.NoError(t, err)
 	return r
 }

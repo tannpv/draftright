@@ -2,6 +2,7 @@ package anthropic_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -38,7 +39,7 @@ func streamDeltas(w http.ResponseWriter, tokens []string) {
 
 func mustReq(t *testing.T) domain.RewriteRequest {
 	t.Helper()
-	r, err := domain.NewRewriteRequest("hi", "polished", "")
+	r, err := domain.NewRewriteRequest("hi", "polished", "", "")
 	require.NoError(t, err)
 	return r
 }
@@ -166,4 +167,43 @@ func TestClient_IDAndName(t *testing.T) {
 	c := anthropic.New(id, "k")
 	require.Equal(t, id, c.ID())
 	require.Equal(t, "anthropic", c.Name())
+}
+
+func TestClient_Stream_PrependsSpeechPreambleWhenSpeechInput(t *testing.T) {
+	t.Parallel()
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		streamDeltas(w, nil)
+	}))
+	defer srv.Close()
+
+	speechReq, err := domain.NewRewriteRequest("hi", "polished", "", "speech")
+	require.NoError(t, err)
+
+	c := anthropic.New(uuid.New(), "k", anthropic.WithEndpoint(srv.URL))
+	tokens, errs := c.Stream(context.Background(), speechReq)
+	_, finalErr := drainTokens(t, tokens, errs)
+	require.NoError(t, finalErr)
+
+	system, _ := gotBody["system"].(string)
+	require.True(t, strings.HasPrefix(system, domain.SpeechPreamble))
+}
+
+func TestClient_Stream_OmitsSpeechPreambleWhenTyped(t *testing.T) {
+	t.Parallel()
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		streamDeltas(w, nil)
+	}))
+	defer srv.Close()
+
+	c := anthropic.New(uuid.New(), "k", anthropic.WithEndpoint(srv.URL))
+	tokens, errs := c.Stream(context.Background(), mustReq(t))
+	_, finalErr := drainTokens(t, tokens, errs)
+	require.NoError(t, finalErr)
+
+	system, _ := gotBody["system"].(string)
+	require.False(t, strings.HasPrefix(system, domain.SpeechPreamble))
 }
