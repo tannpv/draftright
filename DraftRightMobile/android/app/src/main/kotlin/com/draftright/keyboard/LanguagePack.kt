@@ -19,6 +19,9 @@ interface LanguagePack {
     val symbols2Rows: List<List<KeyDef>>
     val longPressAccents: Map<Char, List<Char>>
 
+    /** BCP-47 tag for on-device speech recognition; null = voice input unavailable for this pack. */
+    val sttLocale: String? get() = null
+
     /** Default: no composition (Latin packs type directly). JP/VI override. */
     fun composer(): Composer = PassthroughComposer()
 

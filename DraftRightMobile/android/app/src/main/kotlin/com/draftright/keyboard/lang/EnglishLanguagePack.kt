@@ -21,6 +21,8 @@ object EnglishLanguagePack : LanguagePack {
 
     override val longPressAccents: Map<Char, List<Char>> = emptyMap()
 
+    override val sttLocale: String? = "en-US"
+
     /**
      * Cached engine — same lazy double-check pattern as VietnameseLanguagePack.
      * One InMemoryWordList per English IME session, regardless of how many
