@@ -27,6 +27,13 @@ class SpeechRecognizerVoiceInput(private val context: Context) : VoiceInput {
     private var recognizer: SpeechRecognizer? = null
     private val timeoutHandler = Handler(Looper.getMainLooper())
     private var timeoutRunnable: Runnable? = null
+    /**
+     * Session-complete flag guarding terminal callbacks and timeout runnable.
+     * All of start()/RecognitionListener callbacks/the timeout runnable execute on the main
+     * looper (platform contract for SpeechRecognizer + our Handler(mainLooper)), so [finished]
+     * requires no synchronization; the guard exists for message-queue ordering (once set true,
+     * no more callbacks fire for this session).
+     */
     private var finished = false
 
     override fun start(localeTag: String, listener: VoiceInput.Listener) {
@@ -54,6 +61,7 @@ class SpeechRecognizerVoiceInput(private val context: Context) : VoiceInput {
             }
 
             override fun onPartialResults(partialResults: Bundle?) {
+                if (finished) return
                 firstResult(partialResults)?.let { listener.onPartial(it) }
             }
 
