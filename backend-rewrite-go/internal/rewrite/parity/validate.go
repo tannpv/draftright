@@ -11,6 +11,10 @@ import (
 // place (Rule #1 — never hardcode the 8 ids twice).
 var toneInMessage = "tone must be one of the following values: " + strings.Join(ToneIDs, ", ")
 
+// inputKindInMessage is class-validator's @IsIn message for the `input_kind`
+// property. Built from InputKindIDs so the list lives in exactly one place.
+var inputKindInMessage = "input_kind must be one of the following values: " + strings.Join(InputKindIDs, ", ")
+
 // resolveString reproduces class-validator's @IsString view of one property:
 //   - key absent (nil)                 → ("", isString=false)
 //   - present JSON string              → (value, isString=true)
@@ -26,24 +30,31 @@ func resolveString(raw *json.RawMessage) (val string, isString bool) {
 	return s, true
 }
 
-// toneIn reports whether tone is one of the canonical ToneIDs.
-func toneIn(tone string) bool {
-	for _, id := range ToneIDs {
-		if id == tone {
+// containsString reports whether s equals one of vals.
+func containsString(vals []string, s string) bool {
+	for _, v := range vals {
+		if v == s {
 			return true
 		}
 	}
 	return false
 }
 
+// toneIn reports whether tone is one of the canonical ToneIDs.
+func toneIn(tone string) bool {
+	return containsString(ToneIDs, tone)
+}
+
 // validateRewrite reproduces the NestJS global ValidationPipe
 // ({whitelist:true, forbidNonWhitelisted:true}) over RewriteDto, in
-// property-declaration order (text, tone, target_language, source_language):
+// property-declaration order (text, tone, target_language, source_language,
+// input_kind):
 //
 //	@IsString()              text          (NO length cap, NO trim)
 //	@IsIn(TONE_IDS)          tone
 //	@IsOptional @IsString()  target_language?
 //	@IsOptional @IsString()  source_language?
+//	@IsOptional @IsIn(INPUT_KIND_IDS) input_kind?
 //
 // On any failure Node throws BadRequestException(constraintStrings[]),
 // AllExceptionsFilter joins them with ". " (each verbatim — none hit a
@@ -55,16 +66,16 @@ func toneIn(tone string) bool {
 // realistic case) are byte-exact; exotic multi-error ordering is pinned by the
 // shadow gate and intentionally not over-engineered.
 //
-// Returns the parsed text/tone/target/source and a combined error message
-// (failures joined with ". "); empty msg = valid.
-func validateRewrite(raw []byte) (text, tone, target, source, msg string) {
+// Returns the parsed text/tone/target/source/inputKind and a combined error
+// message (failures joined with ". "); empty msg = valid.
+func validateRewrite(raw []byte) (text, tone, target, source, inputKind, msg string) {
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &fields); err != nil || fields == nil {
 		// Parse error, or a non-object/null body. Mirror the unknown-key path's
 		// generic phrasing handled by the caller; validateRewrite itself returns
 		// a sentinel that the handler maps. We keep this simple: surface the
 		// @IsString + @IsIn pair as if the body were empty (text + tone missing).
-		return "", "", "", "", "text must be a string. " + toneInMessage
+		return "", "", "", "", "", "text must be a string. " + toneInMessage
 	}
 
 	// field returns the raw message pointer for a key (nil when absent), so
@@ -110,9 +121,20 @@ func validateRewrite(raw []byte) (text, tone, target, source, msg string) {
 		}
 	}
 
+	// input_kind — @IsOptional @IsIn(INPUT_KIND_IDS). Present and (non-string OR
+	// not one of {typed, speech}) → the IN message, matching class-validator's
+	// @IsIn behavior for a non-string value.
+	if ik := field("input_kind"); ik != nil {
+		if v, ok := resolveString(ik); !ok || !containsString(InputKindIDs, v) {
+			msgs = append(msgs, inputKindInMessage)
+		} else {
+			inputKind = v
+		}
+	}
+
 	// forbidNonWhitelisted: any key outside the whitelist is rejected.
 	known := map[string]struct{}{
-		"text": {}, "tone": {}, "target_language": {}, "source_language": {},
+		"text": {}, "tone": {}, "target_language": {}, "source_language": {}, "input_kind": {},
 	}
 	for k := range fields {
 		if _, ok := known[k]; !ok {
@@ -120,5 +142,5 @@ func validateRewrite(raw []byte) (text, tone, target, source, msg string) {
 		}
 	}
 
-	return text, tone, target, source, strings.Join(msgs, ". ")
+	return text, tone, target, source, inputKind, strings.Join(msgs, ". ")
 }

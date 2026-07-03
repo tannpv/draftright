@@ -39,3 +39,8 @@ var ToneIDs = func() []string {
 	}
 	return ids
 }()
+
+// InputKindIDs is all valid input_kind values for POST /rewrite (used for DTO
+// validation). Mirrors Node's INPUT_KIND_IDS = ['typed', 'speech']
+// (backend/src/rewrite/tones.ts).
+var InputKindIDs = []string{"typed", "speech"}

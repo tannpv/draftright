@@ -187,7 +187,7 @@ const failedGrammar = `{"score":0,"issues":[],"error":"Failed to parse grammar a
 // Rewrite ports RewriteService.rewrite(): quota gate → callAI → envelope.
 // Returns an opaque marshalable value (rewriteEnvelope or grammarEnvelope) on
 // success, or one of the typed errors above.
-func (s *Service) Rewrite(ctx context.Context, userID, text, tone, target, source string) (any, error) {
+func (s *Service) Rewrite(ctx context.Context, userID, text, tone, target, source, inputKind string) (any, error) {
 	dailyLimit, err := s.ents.ResolveDailyLimit(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -203,7 +203,7 @@ func (s *Service) Rewrite(ctx context.Context, userID, text, tone, target, sourc
 		return nil, ErrQuotaExceeded
 	}
 
-	out, err := s.callAI(ctx, text, tone, target, source)
+	out, err := s.callAI(ctx, text, tone, target, source, inputKind)
 	if err != nil {
 		return nil, err
 	}
@@ -225,7 +225,7 @@ func (s *Service) Rewrite(ctx context.Context, userID, text, tone, target, sourc
 
 // TrialRewrite ports RewriteService.trialRewrite(): IP-keyed daily gate →
 // callAI → usage-free envelope. The clientIp only forms the rate-limit key.
-func (s *Service) TrialRewrite(ctx context.Context, text, tone, clientIp, target, source string) (any, error) {
+func (s *Service) TrialRewrite(ctx context.Context, text, tone, clientIp, target, source, inputKind string) (any, error) {
 	today := s.now().UTC().Format("2006-01-02")
 	key := "trial:" + clientIp + ":" + today
 
@@ -245,7 +245,7 @@ func (s *Service) TrialRewrite(ctx context.Context, text, tone, clientIp, target
 		text = string(r[:500])
 	}
 
-	out, err := s.callAI(ctx, text, tone, target, source)
+	out, err := s.callAI(ctx, text, tone, target, source, inputKind)
 	if err != nil {
 		return nil, err
 	}
@@ -260,8 +260,8 @@ func (s *Service) TrialRewrite(ctx context.Context, text, tone, clientIp, target
 // and return the raw provider text. Returns *UnknownToneError for an unknown
 // tone or ErrProviderFailed for any provider error. Exposed (lowercase but
 // reusable in-package) so the trial endpoint can share it.
-func (s *Service) callAI(ctx context.Context, text, tone, target, source string) (string, error) {
-	prompt := ResolvePrompt(tone, target, source)
+func (s *Service) callAI(ctx context.Context, text, tone, target, source, inputKind string) (string, error) {
+	prompt := ResolvePrompt(tone, target, source, inputKind)
 	if prompt == "" {
 		return "", &UnknownToneError{Tone: tone}
 	}

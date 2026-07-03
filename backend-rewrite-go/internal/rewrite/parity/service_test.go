@@ -87,7 +87,7 @@ func TestTrialRewrite_OverLimit(t *testing.T) {
 	lim := &fakeTrialLimiter{count: 3} // next Incr returns 4 > limit 3
 	svc := NewService(&fakeCompleter{text: "x"}, &fakeEnts{}, &fakeUsage{}).
 		WithTrial(lim, 3, fixedNow())
-	_, err := svc.TrialRewrite(context.Background(), "hi", "polished", "1.2.3.4", "", "")
+	_, err := svc.TrialRewrite(context.Background(), "hi", "polished", "1.2.3.4", "", "", "")
 	if !errors.Is(err, ErrTrialLimit) {
 		t.Fatalf("err = %v, want ErrTrialLimit", err)
 	}
@@ -97,7 +97,7 @@ func TestTrialRewrite_NormalToneEnvelope(t *testing.T) {
 	lim := &fakeTrialLimiter{}
 	svc := NewService(&fakeCompleter{text: "Hello."}, &fakeEnts{}, &fakeUsage{}).
 		WithTrial(lim, 3, fixedNow())
-	out, err := svc.TrialRewrite(context.Background(), "hi", "polished", "1.2.3.4", "", "")
+	out, err := svc.TrialRewrite(context.Background(), "hi", "polished", "1.2.3.4", "", "", "")
 	if err != nil {
 		t.Fatalf("TrialRewrite: %v", err)
 	}
@@ -118,7 +118,7 @@ func TestTrialRewrite_GrammarCheckEnvelope(t *testing.T) {
 	lim := &fakeTrialLimiter{}
 	svc := NewService(&fakeCompleter{text: `{"score":90,"issues":[]}`}, &fakeEnts{}, &fakeUsage{}).
 		WithTrial(lim, 3, fixedNow())
-	out, err := svc.TrialRewrite(context.Background(), "hi", "grammar_check", "1.2.3.4", "", "")
+	out, err := svc.TrialRewrite(context.Background(), "hi", "grammar_check", "1.2.3.4", "", "", "")
 	if err != nil {
 		t.Fatalf("TrialRewrite: %v", err)
 	}
@@ -134,7 +134,7 @@ func TestTrialRewrite_FailOpen(t *testing.T) {
 	lim := &fakeTrialLimiter{err: errors.New("redis down")}
 	svc := NewService(&fakeCompleter{text: "Hello."}, &fakeEnts{}, &fakeUsage{}).
 		WithTrial(lim, 3, fixedNow())
-	out, err := svc.TrialRewrite(context.Background(), "hi", "polished", "1.2.3.4", "", "")
+	out, err := svc.TrialRewrite(context.Background(), "hi", "polished", "1.2.3.4", "", "", "")
 	if err != nil {
 		t.Fatalf("fail-open should proceed, got %v", err)
 	}
@@ -148,7 +148,7 @@ func TestTrialRewrite_ProviderFailed(t *testing.T) {
 	lim := &fakeTrialLimiter{}
 	svc := NewService(&fakeCompleter{err: errors.New("upstream 500")}, &fakeEnts{}, &fakeUsage{}).
 		WithTrial(lim, 3, fixedNow())
-	_, err := svc.TrialRewrite(context.Background(), "hi", "polished", "1.2.3.4", "", "")
+	_, err := svc.TrialRewrite(context.Background(), "hi", "polished", "1.2.3.4", "", "", "")
 	if !errors.Is(err, ErrProviderFailed) {
 		t.Fatalf("err = %v, want ErrProviderFailed", err)
 	}
@@ -163,7 +163,7 @@ func TestRewrite_NoDefaultProvider(t *testing.T) {
 		&fakeEnts{limit: 500},
 		&fakeUsage{count: 0},
 	)
-	_, err := svc.Rewrite(context.Background(), "u1", "hi", "polished", "", "")
+	_, err := svc.Rewrite(context.Background(), "u1", "hi", "polished", "", "", "")
 	if !errors.Is(err, ErrNoDefaultProvider) {
 		t.Fatalf("err = %v, want ErrNoDefaultProvider", err)
 	}
@@ -178,7 +178,7 @@ func TestRewrite_RewriteToneEnvelope(t *testing.T) {
 		&fakeEnts{limit: 500},
 		&fakeUsage{count: 0},
 	)
-	out, err := svc.Rewrite(context.Background(), "u1", "hi", "polished", "", "")
+	out, err := svc.Rewrite(context.Background(), "u1", "hi", "polished", "", "", "")
 	if err != nil {
 		t.Fatalf("Rewrite: %v", err)
 	}
@@ -198,7 +198,7 @@ func TestRewrite_QuotaExceeded(t *testing.T) {
 		&fakeEnts{limit: 500},
 		&fakeUsage{count: 500},
 	)
-	_, err := svc.Rewrite(context.Background(), "u1", "hi", "polished", "", "")
+	_, err := svc.Rewrite(context.Background(), "u1", "hi", "polished", "", "", "")
 	if !errors.Is(err, ErrQuotaExceeded) {
 		t.Fatalf("err = %v, want ErrQuotaExceeded", err)
 	}
@@ -212,7 +212,7 @@ func TestRewrite_UnlimitedSentinel(t *testing.T) {
 		&fakeEnts{limit: -1},
 		&fakeUsage{count: 9999},
 	)
-	out, err := svc.Rewrite(context.Background(), "u1", "hi", "polished", "", "")
+	out, err := svc.Rewrite(context.Background(), "u1", "hi", "polished", "", "", "")
 	if err != nil {
 		t.Fatalf("Rewrite: %v", err)
 	}
@@ -229,7 +229,7 @@ func TestRewrite_ProviderFailed(t *testing.T) {
 		&fakeEnts{limit: 500},
 		&fakeUsage{count: 0},
 	)
-	_, err := svc.Rewrite(context.Background(), "u1", "hi", "polished", "", "")
+	_, err := svc.Rewrite(context.Background(), "u1", "hi", "polished", "", "", "")
 	if !errors.Is(err, ErrProviderFailed) {
 		t.Fatalf("err = %v, want ErrProviderFailed", err)
 	}
@@ -241,7 +241,7 @@ func TestRewrite_GrammarCheckEnvelope(t *testing.T) {
 		&fakeEnts{limit: 500},
 		&fakeUsage{count: 2},
 	)
-	out, err := svc.Rewrite(context.Background(), "u1", "hi", "grammar_check", "", "")
+	out, err := svc.Rewrite(context.Background(), "u1", "hi", "grammar_check", "", "", "")
 	if err != nil {
 		t.Fatalf("Rewrite: %v", err)
 	}
@@ -258,7 +258,7 @@ func TestRewrite_GrammarCheckParseFailure(t *testing.T) {
 		&fakeEnts{limit: 500},
 		&fakeUsage{count: 0},
 	)
-	out, err := svc.Rewrite(context.Background(), "u1", "hi", "grammar_check", "", "")
+	out, err := svc.Rewrite(context.Background(), "u1", "hi", "grammar_check", "", "", "")
 	if err != nil {
 		t.Fatalf("Rewrite: %v", err)
 	}
@@ -277,7 +277,7 @@ func TestRewrite_UnknownTone(t *testing.T) {
 		&fakeEnts{limit: 500},
 		&fakeUsage{count: 0},
 	)
-	_, err := svc.Rewrite(context.Background(), "u1", "hi", "bogus", "", "")
+	_, err := svc.Rewrite(context.Background(), "u1", "hi", "bogus", "", "", "")
 	var ute *UnknownToneError
 	if !errors.As(err, &ute) {
 		t.Fatalf("err = %v, want *UnknownToneError", err)
@@ -300,7 +300,7 @@ func TestRewrite_LogsOnSuccess(t *testing.T) {
 		&fakeUsage{count: 0},
 	).WithRewriteLog(lg)
 
-	if _, err := svc.Rewrite(context.Background(), "u1", "hi", "polished", "", ""); err != nil {
+	if _, err := svc.Rewrite(context.Background(), "u1", "hi", "polished", "", "", ""); err != nil {
 		t.Fatalf("Rewrite: %v", err)
 	}
 	if len(lg.entries) != 1 {
@@ -326,7 +326,7 @@ func TestRewrite_LogsRawOutputForGrammar(t *testing.T) {
 		&fakeUsage{count: 0},
 	).WithRewriteLog(lg)
 
-	if _, err := svc.Rewrite(context.Background(), "u1", "hi", "grammar_check", "", ""); err != nil {
+	if _, err := svc.Rewrite(context.Background(), "u1", "hi", "grammar_check", "", "", ""); err != nil {
 		t.Fatalf("Rewrite: %v", err)
 	}
 	if len(lg.entries) != 1 {
@@ -349,7 +349,7 @@ func TestRewrite_NoLogOnProviderError(t *testing.T) {
 		&fakeUsage{count: 0},
 	).WithRewriteLog(lg)
 
-	if _, err := svc.Rewrite(context.Background(), "u1", "hi", "polished", "", ""); !errors.Is(err, ErrProviderFailed) {
+	if _, err := svc.Rewrite(context.Background(), "u1", "hi", "polished", "", "", ""); !errors.Is(err, ErrProviderFailed) {
 		t.Fatalf("err = %v, want ErrProviderFailed", err)
 	}
 	if len(lg.entries) != 0 {
@@ -367,7 +367,7 @@ func TestRewrite_NoLogOnUnknownTone(t *testing.T) {
 		&fakeUsage{count: 0},
 	).WithRewriteLog(lg)
 
-	if _, err := svc.Rewrite(context.Background(), "u1", "hi", "bogus", "", ""); err == nil {
+	if _, err := svc.Rewrite(context.Background(), "u1", "hi", "bogus", "", "", ""); err == nil {
 		t.Fatal("expected UnknownToneError")
 	}
 	if len(lg.entries) != 0 {
@@ -388,7 +388,7 @@ func TestTrialRewrite_LogsTruncatedInput(t *testing.T) {
 	for i := range long {
 		long[i] = 'a'
 	}
-	if _, err := svc.TrialRewrite(context.Background(), string(long), "polished", "1.2.3.4", "", ""); err != nil {
+	if _, err := svc.TrialRewrite(context.Background(), string(long), "polished", "1.2.3.4", "", "", ""); err != nil {
 		t.Fatalf("TrialRewrite: %v", err)
 	}
 	if len(lg.entries) != 1 {
@@ -406,7 +406,7 @@ func TestRewrite_NilLoggerSkipsCapture(t *testing.T) {
 		&fakeEnts{limit: 500},
 		&fakeUsage{count: 0},
 	)
-	if _, err := svc.Rewrite(context.Background(), "u1", "hi", "polished", "", ""); err != nil {
+	if _, err := svc.Rewrite(context.Background(), "u1", "hi", "polished", "", "", ""); err != nil {
 		t.Fatalf("Rewrite with nil logger: %v", err)
 	}
 }
