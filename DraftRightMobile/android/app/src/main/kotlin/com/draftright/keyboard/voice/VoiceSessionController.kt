@@ -1,5 +1,7 @@
 package com.draftright.keyboard.voice
 
+import java.util.concurrent.atomic.AtomicInteger
+
 /**
  * Outcome of one voice session — the single shape [DraftRightIME]'s commit
  * path switches on. Speech is unrepeatable, so every failure mode still
@@ -38,6 +40,7 @@ class VoiceSessionController(
     private val polish: (text: String, onResult: (Result<String>) -> Unit) -> Unit,
     private val onState: (State) -> Unit,
     private val onOutcome: (VoiceOutcome) -> Unit,
+    private val now: () -> Long = System::currentTimeMillis,
 ) {
     enum class State { IDLE, LISTENING, PROCESSING }
 
@@ -45,6 +48,17 @@ class VoiceSessionController(
         const val RAW_FALLBACK_HINT = "Polish failed — inserted your words as spoken"
     }
 
+    // Threading contract: startSession/cancelSession are only ever called on
+    // the IME's main thread. Recognizer callbacks (onPartial/onFinal/onError)
+    // also arrive on the main thread, but `polish` may run its completion on
+    // any worker thread. `state` is @Volatile so a worker thread's read (e.g.
+    // via isCurrent's happens-before edge below) sees the latest value, and
+    // `generation` is an AtomicInteger so a polish completion racing a
+    // main-thread cancelSession() always compares against a consistent,
+    // visible value — the generation captured before polish started is
+    // compared with a fresh get() at completion time, guarding outcome
+    // emission against the stale-callback race.
+    @Volatile
     private var state: State = State.IDLE
     private var partialCallback: ((String) -> Unit)? = null
 
@@ -52,7 +66,10 @@ class VoiceSessionController(
     // superseded session (a late polish result, a stray recognizer event)
     // can recognize themselves as stale and no-op instead of emitting a
     // second outcome for a session that already finished.
-    private var generation = 0
+    private val generation = AtomicInteger(0)
+
+    private var lastPartialForwardedAt: Long = 0L
+    private var hasForwardedPartial: Boolean = false
 
     /** Registers the live-transcript callback for the candidate bar. */
     fun onPartialText(cb: (String) -> Unit) {
@@ -60,13 +77,19 @@ class VoiceSessionController(
     }
 
     fun startSession(localeTag: String, rawMode: Boolean) {
-        val sessionGeneration = ++generation
+        val sessionGeneration = generation.incrementAndGet()
+        hasForwardedPartial = false
         setState(State.LISTENING)
 
         voice.start(localeTag, object : VoiceInput.Listener {
             override fun onPartial(text: String) {
                 if (!isCurrent(sessionGeneration)) return
-                partialCallback?.invoke(text)
+                val elapsed = now() - lastPartialForwardedAt
+                if (!hasForwardedPartial || elapsed >= VoiceConfig.PARTIAL_DEBOUNCE_MS) {
+                    hasForwardedPartial = true
+                    lastPartialForwardedAt = now()
+                    partialCallback?.invoke(text)
+                }
             }
 
             override fun onFinal(text: String) {
@@ -85,7 +108,7 @@ class VoiceSessionController(
 
     fun cancelSession() {
         if (state == State.IDLE) return
-        generation++ // invalidate any in-flight listener/polish callbacks
+        generation.incrementAndGet() // invalidate any in-flight listener/polish callbacks
         voice.cancel()
         setState(State.IDLE)
         onOutcome(VoiceOutcome.Nothing_)
@@ -109,7 +132,7 @@ class VoiceSessionController(
         }
     }
 
-    private fun isCurrent(sessionGeneration: Int) = sessionGeneration == generation
+    private fun isCurrent(sessionGeneration: Int) = sessionGeneration == generation.get()
 
     private fun setState(newState: State) {
         state = newState

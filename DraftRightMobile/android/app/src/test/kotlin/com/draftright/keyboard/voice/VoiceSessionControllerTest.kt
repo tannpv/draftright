@@ -156,14 +156,16 @@ class VoiceSessionControllerTest {
 
     @Test fun `onPartialText forwards live transcript while listening`() {
         val fake = FakeVoiceInput()
+        var time = 0L
         val partials = mutableListOf<String>()
         val c = VoiceSessionController(fake,
             polish = { _, cb -> cb(Result.success("done")) },
-            onState = {}, onOutcome = {})
+            onState = {}, onOutcome = {}, now = { time })
         c.onPartialText { partials.add(it) }
 
         c.startSession("en-US", rawMode = false)
         fake.listener!!.onPartial("um")
+        time += VoiceConfig.PARTIAL_DEBOUNCE_MS // outside the debounce window
         fake.listener!!.onPartial("um hello")
 
         assertEquals(listOf("um", "um hello"), partials)
@@ -180,5 +182,43 @@ class VoiceSessionControllerTest {
 
         assertTrue(outcomes.isEmpty())
         assertEquals(0, fake.cancelCalls)
+    }
+
+    @Test fun `rapid partials within the debounce window are throttled after the first`() {  // TC: VOICE-010
+        val fake = FakeVoiceInput()
+        var time = 0L
+        val partials = mutableListOf<String>()
+        val c = VoiceSessionController(fake,
+            polish = { _, cb -> cb(Result.success("done")) },
+            onState = {}, onOutcome = {}, now = { time })
+        c.onPartialText { partials.add(it) }
+
+        c.startSession("en-US", rawMode = false)
+        fake.listener!!.onPartial("a") // first partial of the session always forwarded
+        time += 50
+        fake.listener!!.onPartial("ab") // 50ms since last forward — dropped
+        time += 99
+        fake.listener!!.onPartial("abc") // 149ms since last forward — still dropped
+
+        assertEquals(listOf("a"), partials)
+    }
+
+    @Test fun `partials spaced at least the debounce interval apart are all forwarded`() {  // TC: VOICE-010
+        val fake = FakeVoiceInput()
+        var time = 0L
+        val partials = mutableListOf<String>()
+        val c = VoiceSessionController(fake,
+            polish = { _, cb -> cb(Result.success("done")) },
+            onState = {}, onOutcome = {}, now = { time })
+        c.onPartialText { partials.add(it) }
+
+        c.startSession("en-US", rawMode = false)
+        fake.listener!!.onPartial("a")
+        time += 150
+        fake.listener!!.onPartial("ab")
+        time += 150
+        fake.listener!!.onPartial("abc")
+
+        assertEquals(listOf("a", "ab", "abc"), partials)
     }
 }
