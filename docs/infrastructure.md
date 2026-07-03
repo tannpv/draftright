@@ -60,6 +60,7 @@ Post-deploy: `docker ps` (all healthy) + `curl https://api.draftright.info/healt
 - **Go backend ignores `NODE_ENV` — prod mode needs `APP_ENV=production`** (set in compose; issue #46).
 - **Streaming `/v1/rewrite` reads `OPENAI_API_KEY` from env, NOT from the `ai_providers` table.** Compose pins `AI_PROVIDERS=openai` + `OPENAI_PROVIDER_ID` (the row used for `usage_logs` FK), but the actual key comes from `/opt/draftright/.env`. If env key and the DB row drift, streaming 401s silently while the parity `/rewrite` path (DB-keyed) keeps working. Bit prod until 2026-07-02 — the env held the Ollama Cloud key.
 - Dev `.env.dev` has a standalone `DATABASE_URL` whose password can drift from `POSTGRES_PASSWORD` — fresh pg volumes init from the latter; align with `ALTER USER` if the dev backend crash-loops on `28P01`.
+- **`/var/lib/draftright/bug-reports` must be owned by uid 65532** (distroless `nonroot` the Go backend runs as) — a droplet rebuild/rsync that leaves it `deploy:deploy 755` makes every screenshot bug-report 500 silently (EACCES, no ERROR log — #67). Fix: `sudo chown -R 65532:65532 /var/lib/draftright/bug-reports`.
 - Caddy `request_body max_size 6MB` on both API vhosts (bug-report screenshots; a proxy 413 without CORS headers masquerades as a CORS error).
 
 ## Databases
