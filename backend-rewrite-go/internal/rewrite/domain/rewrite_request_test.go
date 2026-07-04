@@ -11,7 +11,7 @@ import (
 )
 
 func TestNewRewriteRequest_HappyPath(t *testing.T) {
-	r, err := domain.NewRewriteRequest("Hello world.", "polished", "")
+	r, err := domain.NewRewriteRequest("Hello world.", "polished", "", "")
 	require.NoError(t, err)
 	require.Equal(t, "Hello world.", r.Text())
 	require.Equal(t, domain.TonePolished, r.Tone())
@@ -19,36 +19,53 @@ func TestNewRewriteRequest_HappyPath(t *testing.T) {
 }
 
 func TestNewRewriteRequest_TrimsWhitespace(t *testing.T) {
-	r, err := domain.NewRewriteRequest("   hi   ", "natural", "")
+	r, err := domain.NewRewriteRequest("   hi   ", "natural", "", "")
 	require.NoError(t, err)
 	require.Equal(t, "hi", r.Text())
 }
 
 func TestNewRewriteRequest_RejectsEmpty(t *testing.T) {
-	_, err := domain.NewRewriteRequest("   ", "polished", "")
+	_, err := domain.NewRewriteRequest("   ", "polished", "", "")
 	require.ErrorIs(t, err, domain.ErrInvalidInput)
 }
 
 func TestNewRewriteRequest_RejectsTooLong(t *testing.T) {
 	tooLong := strings.Repeat("a", domain.MaxInputChars+1)
-	_, err := domain.NewRewriteRequest(tooLong, "polished", "")
+	_, err := domain.NewRewriteRequest(tooLong, "polished", "", "")
 	require.ErrorIs(t, err, domain.ErrInvalidInput)
 }
 
 func TestNewRewriteRequest_RejectsUnknownTone(t *testing.T) {
-	_, err := domain.NewRewriteRequest("hi", "shouty", "")
+	_, err := domain.NewRewriteRequest("hi", "shouty", "", "")
 	require.ErrorIs(t, err, domain.ErrInvalidInput)
 }
 
 func TestNewRewriteRequest_TranslateRequiresLang(t *testing.T) {
-	_, err := domain.NewRewriteRequest("hello", "translate", "")
+	_, err := domain.NewRewriteRequest("hello", "translate", "", "")
 	require.ErrorIs(t, err, domain.ErrInvalidInput)
 }
 
 func TestNewRewriteRequest_TranslateAcceptsLang(t *testing.T) {
-	r, err := domain.NewRewriteRequest("hello", "translate", "vi")
+	r, err := domain.NewRewriteRequest("hello", "translate", "vi", "")
 	require.NoError(t, err)
 	require.Equal(t, "vi", r.Lang())
+}
+
+func TestNewRewriteRequest_InputKindDefaultsTyped(t *testing.T) {
+	r, err := domain.NewRewriteRequest("hi", "polished", "", "")
+	require.NoError(t, err)
+	require.Equal(t, domain.InputKindTyped, r.InputKind())
+}
+
+func TestNewRewriteRequest_InputKindAcceptsSpeech(t *testing.T) {
+	r, err := domain.NewRewriteRequest("hi", "polished", "", "speech")
+	require.NoError(t, err)
+	require.Equal(t, domain.InputKindSpeech, r.InputKind())
+}
+
+func TestNewRewriteRequest_RejectsUnknownInputKind(t *testing.T) {
+	_, err := domain.NewRewriteRequest("hi", "polished", "", "banana")
+	require.ErrorIs(t, err, domain.ErrInvalidInput)
 }
 
 func TestParseTone_AcceptsAllSupported(t *testing.T) {

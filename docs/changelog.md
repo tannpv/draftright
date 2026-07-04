@@ -1,5 +1,24 @@
 # DraftRight Changelog
 
+## 2026-07-02
+
+### Go backend: streaming /v1/rewrite training-data capture → PRODUCTION (#58)
+- Streaming `/v1/rewrite` (SSE, Go-only path used by macOS in Go-backend mode) now writes a `rewrite_logs` row on every clean stream finish, carrying the real served model + provider of the winning failover-chain leaf (new `internal/rewrite/provenance` package).
+- Deployed dev (api.dev) then prod; verified end-to-end on both (dev rows 126→128, prod 6346→6347 with `model=gpt-4o-mini`). Closes the training-data gap left by #36.
+
+### Prod fix: /v1/rewrite OpenAI 401 (wrong key in env)
+- `/opt/draftright/.env` `OPENAI_API_KEY` held the Ollama Cloud key, so every prod streaming rewrite silently failed with OpenAI 401 since the cutover. Replaced with the correct OpenAI key (the `ai_providers` row `OPENAI_PROVIDER_ID` pins). Lesson recorded in `docs/infrastructure.md`: the streaming path reads the key from env, not from the DB row.
+
+### Security: #49 rotation inventory
+- Audited prod + dev for secrets that were admin-readable before the #29/#30 masking fix (2026-06-20). Must rotate: OpenAI key (identical dev+prod), Ollama Cloud key, SePay key. LS / Stripe / Resend need no rotation (configured post-fix or env-only). Checklist on issue #49.
+
+## 2026-06-21/22
+
+### Infra: prod droplet downsized 4GB→2GB (#54)
+- Migrated to $12 2GB/1vCPU/50GB Singapore droplet via manual clean rebuild; cutover by reassigning the DO Reserved IP `129.212.208.248` — zero DNS changes. Old droplet destroyed. Full runbook + gotchas in `docs/infrastructure.md` and project memory.
+- Lemon Squeezy live keys configured in prod `app_settings` (2026-06-23) — subscribe flow fully live.
+
+
 ## 2026-05-13
 
 ### Feedback public board (Spec C)

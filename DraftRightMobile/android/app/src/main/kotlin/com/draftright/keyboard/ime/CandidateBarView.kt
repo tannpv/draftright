@@ -27,6 +27,8 @@ class CandidateBarView(context: Context) : HorizontalScrollView(context) {
     /** Invoked when the user taps a chip. Caller commits + resets composer. */
     var onCandidatePicked: ((Candidate) -> Unit)? = null
 
+    private var partialTranscriptView: TextView? = null
+
     private val row = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
@@ -49,6 +51,7 @@ class CandidateBarView(context: Context) : HorizontalScrollView(context) {
      */
     fun setCandidates(candidates: List<Candidate>) {
         row.removeAllViews()
+        partialTranscriptView = null
         if (candidates.isEmpty()) {
             visibility = View.GONE
             return
@@ -58,6 +61,42 @@ class CandidateBarView(context: Context) : HorizontalScrollView(context) {
         for (cand in candidates) {
             row.addView(buildChip(cand))
         }
+    }
+
+    /**
+     * Live, non-interactive preview of an in-progress voice transcript.
+     * Deliberately NOT routed through [buildChip]: chips wire a tap-to-commit
+     * click listener, and tapping a transcript that's still being revised by
+     * the recognizer would race the final commit that lands when dictation
+     * finishes (the bug the prior implementer avoided by not wiring this at
+     * all). This renders one plain, unclickable, full-width TextView instead.
+     *
+     * Passing null clears the preview and restores normal candidate/GONE
+     * behavior — the next [setCandidates] call decides what shows.
+     */
+    fun setPartialTranscript(text: String?) {
+        row.removeAllViews()
+        partialTranscriptView = null
+        if (text == null) {
+            visibility = View.GONE
+            return
+        }
+        visibility = View.VISIBLE
+        scrollX = 0
+        val tv = TextView(context).apply {
+            this.text = text
+            setTextColor(TEXT_COLOR)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            setPadding(dp(14), dp(8), dp(14), dp(8))
+            isClickable = false
+            isFocusable = false
+        }
+        val lp = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        )
+        partialTranscriptView = tv
+        row.addView(tv, lp)
     }
 
     private fun buildChip(candidate: Candidate): TextView {

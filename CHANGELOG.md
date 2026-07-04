@@ -23,6 +23,11 @@ A Windows-only line under `### Windows` will never appear in the macOS
 If a version needs the user to *do* something after updating, say so
 explicitly under an **Action needed:** line inside the relevant sub-section.
 
+## 2.3.24 — 2026-07-04
+### macOS
+- The rewrite shortcut no longer fails silently. If no text is selected (or the app you're in doesn't share its selection), a small hint now appears at your cursor — "Select text first, then press the shortcut" — instead of nothing happening.
+- More reliable text capture in terminals and Console, where copying can take a moment longer: the app now waits and retries briefly instead of giving up instantly.
+
 ## 2.3.23 — 2026-06-12
 ### Windows
 - Fixed an error when opening **Manage subscription** on a plan that has no self-service billing portal (for example a plan granted by an administrator, or paid via QR code / bank transfer). Instead of a raw "API 404" error, the app now explains that the plan has no billing portal and to contact support.

@@ -1,0 +1,17 @@
+{
+  "name": "rewrite_input_kind_invalid",
+  "method": "POST",
+  "path": "/rewrite",
+  "headers": {
+    "Authorization": "Bearer {{user_token}}",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "text": "hello",
+    "tone": "simple",
+    "input_kind": "banana"
+  },
+  "ignore_value_of": [
+    "request_id"
+  ]
+}

@@ -44,6 +44,7 @@ type rewriteBody struct {
 	Tone           string `json:"tone"`
 	TargetLanguage string `json:"target_language,omitempty"`
 	SourceLanguage string `json:"source_language,omitempty"`
+	InputKind      string `json:"input_kind,omitempty"`
 }
 
 // ServeHTTP is the entry point. Three phases:
@@ -108,7 +109,7 @@ func (h *RewriteHandler) parseBody(r *http.Request) (domain.RewriteRequest, erro
 		// collapse here. Caller surfaces 400.
 		return domain.RewriteRequest{}, domain.ErrInvalidInput
 	}
-	return domain.NewRewriteRequest(body.Text, body.Tone, body.TargetLanguage)
+	return domain.NewRewriteRequest(body.Text, body.Tone, body.TargetLanguage, body.InputKind)
 }
 
 // streamSSE consumes the use-case channels and forwards each token

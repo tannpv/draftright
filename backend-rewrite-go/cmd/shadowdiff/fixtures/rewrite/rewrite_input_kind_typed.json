@@ -1,0 +1,18 @@
+{
+  "name": "rewrite_input_kind_typed",
+  "method": "POST",
+  "path": "/rewrite",
+  "headers": {
+    "Authorization": "Bearer {{user_token}}",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "text": "hello world",
+    "tone": "simple",
+    "input_kind": "typed"
+  },
+  "ignore_value_of": [
+    "rewritten_text",
+    "usage_today"
+  ]
+}
