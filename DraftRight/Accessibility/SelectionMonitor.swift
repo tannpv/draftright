@@ -208,7 +208,24 @@ final class SelectionMonitor {
         keyDown?.post(tap: .cgSessionEventTap)
         keyUp?.post(tap: .cgSessionEventTap)
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+        // Poll the pasteboard a few times instead of a single 0.3s check. A
+        // synthesized Cmd+C can take longer to land in apps that aren't
+        // AX-cooperative (terminals, Console.app) — a fixed one-shot wait
+        // reads too early and reports "no text" for a copy that arrives 0.4s
+        // later. Retry at 0.15 / 0.35 / 0.6s before giving up.
+        pollClipboardForSelection(pasteboard, savedChangeCount: savedChangeCount, delays: [0.15, 0.35, 0.6])
+    }
+
+    /// Poll the pasteboard at each delay; fire onTextSelected on the first
+    /// non-empty change, or surface a visible failure hint after the last try.
+    private func pollClipboardForSelection(_ pasteboard: NSPasteboard, savedChangeCount: Int, delays: [Double]) {
+        guard let delay = delays.first else {
+            // Exhausted every attempt with no clipboard change → capture failed.
+            reportCaptureFailure()
+            return
+        }
+        let remaining = Array(delays.dropFirst())
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
             guard let self = self else { return }
             if pasteboard.changeCount != savedChangeCount {
                 let text = (pasteboard.string(forType: .string) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -219,7 +236,57 @@ final class SelectionMonitor {
                     return
                 }
             }
-            DRLogger.log("Hotkey: no text found", category: .monitor)
+            self.pollClipboardForSelection(pasteboard, savedChangeCount: savedChangeCount, delays: remaining)
+        }
+    }
+
+    /// Both AX read and the Cmd+C fallback came up empty. Log rich diagnostics
+    /// (which app had focus, what role) so a repro is self-explaining, and show
+    /// the user a transient hint so the hotkey never fails silently.
+    private func reportCaptureFailure() {
+        let app = NSWorkspace.shared.frontmostApplication?.localizedName ?? "unknown"
+        DRLogger.warn("Hotkey: no text found (frontmost=\(app), AX+Cmd+C both empty)", category: .monitor)
+        showTransientHint("Select text first, then press the shortcut", at: NSEvent.mouseLocation)
+    }
+
+    /// Small floating label at the cursor that fades itself out. Reuses the
+    /// nonactivating-panel pattern the pencil/loading indicators use so it
+    /// never steals focus from the app the user is working in.
+    private func showTransientHint(_ message: String, at point: CGPoint) {
+        let label = NSTextField(labelWithString: message)
+        label.font = .systemFont(ofSize: 12, weight: .medium)
+        label.textColor = .white
+        label.alignment = .center
+        label.sizeToFit()
+
+        let padding: CGFloat = 10
+        let size = CGSize(width: label.frame.width + padding * 2, height: label.frame.height + padding)
+        label.frame = NSRect(x: padding, y: padding / 2, width: label.frame.width, height: label.frame.height)
+
+        let container = NSView(frame: NSRect(origin: .zero, size: size))
+        container.wantsLayer = true
+        container.layer?.backgroundColor = NSColor.systemRed.withAlphaComponent(0.9).cgColor
+        container.layer?.cornerRadius = 8
+        container.addSubview(label)
+
+        let origin = CGPoint(x: point.x + 12, y: point.y + 12)
+        let panel = ClickablePanel(
+            contentRect: NSRect(origin: origin, size: size),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.level = .floating
+        panel.hasShadow = true
+        panel.isReleasedWhenClosed = false
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.contentView = container
+        panel.orderFrontRegardless()
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+            panel.orderOut(nil)
         }
     }
 
