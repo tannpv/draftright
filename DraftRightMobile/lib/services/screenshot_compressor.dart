@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:image/image.dart' as img;
+import 'package:path_provider/path_provider.dart';
 
 import 'package:draftright_mobile/services/logger_service.dart';
 
@@ -65,7 +66,11 @@ class ScreenshotCompressor {
 
       final jpg = img.encodeJpg(resized, quality: quality);
 
-      final dir = outputDir ?? Directory.systemTemp;
+      // On device use the app's temp dir (always writable); tests pass their
+      // own dir. Directory.systemTemp is unreliable on Android — a failed
+      // write there would drop us back to the raw file and re-introduce the
+      // 413 this whole class exists to prevent (issue #68).
+      final dir = outputDir ?? await getTemporaryDirectory();
       final out = File(
           '${dir.path}/dr_bugshot_${DateTime.now().microsecondsSinceEpoch}.jpg');
       await out.writeAsBytes(jpg, flush: true);

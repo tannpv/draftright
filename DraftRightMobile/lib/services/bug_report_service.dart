@@ -125,13 +125,26 @@ class BugReportService {
         return const SubmitBugReportResult(ok: true);
       }
       final body = await streamed.stream.bytesToString();
+      final status = streamed.statusCode;
       DRLogger.warn(
-        'Bug report failed: ${streamed.statusCode} $body',
+        'Bug report failed: $status $body',
         category: 'BUG_REPORT',
       );
+      // 413 = request body over the server's cap. The screenshot is the only
+      // large part, so point the user at it (their connection is fine — a
+      // generic "check your connection" here is misleading; issue #68).
+      if (status == 413) {
+        return const SubmitBugReportResult(
+          ok: false,
+          errorMessage:
+              'That screenshot is too large to upload. Remove it or attach a smaller image.',
+        );
+      }
       return SubmitBugReportResult(
         ok: false,
-        errorMessage: _extractServerMessage(body) ?? _genericFailure,
+        // Fall back to the status code so a failure is never a dead end.
+        errorMessage:
+            _extractServerMessage(body) ?? 'Server error ($status). Please try again.',
       );
     } catch (e) {
       DRLogger.warn('Bug report exception: $e', category: 'BUG_REPORT');
@@ -139,9 +152,9 @@ class BugReportService {
     }
   }
 
-  /// Pulls the user-friendly `message` field out of a NestJS error body.
-  /// Tolerates both `{"message": "…"}` and `{"message": ["…"]}` (class-validator
-  /// returns an array when multiple constraints fail).
+  /// Pulls a user-friendly reason out of an error body. Handles both the
+  /// NestJS shape `{"message": "…"}` / `{"message": ["…"]}` (class-validator
+  /// returns an array) and the Go backend shape `{"error": "…"}`.
   static String? _extractServerMessage(String body) {
     try {
       final parsed = jsonDecode(body);
@@ -149,6 +162,8 @@ class BugReportService {
         final m = parsed['message'];
         if (m is String && m.isNotEmpty) return m;
         if (m is List && m.isNotEmpty) return m.first.toString();
+        final e = parsed['error'];
+        if (e is String && e.isNotEmpty) return e;
       }
     } catch (_) {/* body wasn't JSON — fall through */}
     return null;
