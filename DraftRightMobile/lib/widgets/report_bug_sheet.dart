@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 
 import 'package:draftright_mobile/services/auth_service.dart';
 import 'package:draftright_mobile/services/bug_report_service.dart';
+import 'package:draftright_mobile/services/screenshot_compressor.dart';
 
 /// Opens the "Report a bug" sheet. Bottom sheet on Android; Cupertino
 /// modal popup on iOS for native feel.
@@ -74,6 +75,11 @@ class _ReportBugSheetState extends State<_ReportBugSheet> {
   File? _screenshot;
   bool _submitting = false;
 
+  // Failures are shown in this in-sheet banner, NOT via ScaffoldMessenger: a
+  // snackbar renders *behind* the modal sheet and is invisible, which is why
+  // a failed submit looked like "nothing happened" (issue #68). Null = hidden.
+  String? _errorText;
+
   static final _emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
 
   @override
@@ -90,21 +96,27 @@ class _ReportBugSheetState extends State<_ReportBugSheet> {
         imageQuality: 85,
       );
       if (picked == null) return;
-      final file = File(picked.path);
+
+      // Downscale + recompress before we ever check the size or upload. This
+      // is what keeps the multipart body under the backend's 5 MB cap; the
+      // raw pick (esp. a camera photo) can be 8-11 MB and would 413 (#68).
+      final file =
+          await ScreenshotCompressor.compressForUpload(File(picked.path));
       final length = await file.length();
       if (length > BugReportService.maxScreenshotBytes) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Screenshot too large (max 5 MB).')),
-        );
+        setState(() => _errorText =
+            'That screenshot is too large even after compression (max 5 MB). '
+            'Try a smaller image.');
         return;
       }
-      setState(() => _screenshot = file);
+      setState(() {
+        _screenshot = file;
+        _errorText = null;
+      });
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not load image: $e')),
-      );
+      setState(() => _errorText = 'Could not load that image: $e');
     }
   }
 
@@ -116,7 +128,10 @@ class _ReportBugSheetState extends State<_ReportBugSheet> {
     if (_submitting) return;
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
-    setState(() => _submitting = true);
+    setState(() {
+      _submitting = true;
+      _errorText = null;
+    });
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
 
@@ -155,15 +170,11 @@ class _ReportBugSheetState extends State<_ReportBugSheet> {
       );
     } else {
       // Surface the server's explanation (e.g. "only PNG or JPEG screenshots
-      // are accepted") instead of a generic failure so the user can
-      // self-correct — no more silent fails.
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(result.errorMessage
-              ?? 'Could not submit bug report. Check your connection and try again.'),
-          duration: const Duration(seconds: 6),
-        ),
-      );
+      // are accepted") in an in-sheet banner. A snackbar here is invisible —
+      // it renders behind the still-open modal sheet, which is exactly why a
+      // failed submit looked like "nothing happened" (issue #68).
+      setState(() => _errorText = result.errorMessage ??
+          'Could not submit bug report. Check your connection and try again.');
     }
   }
 
@@ -313,6 +324,31 @@ class _ReportBugSheetState extends State<_ReportBugSheet> {
                       ),
                     ),
                   ],
+                ),
+              ],
+              if (_errorText != null) ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.red.shade400),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.error_outline,
+                          color: Colors.red.shade400, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _errorText!,
+                          style: TextStyle(color: Colors.red.shade400),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
               const SizedBox(height: 20),

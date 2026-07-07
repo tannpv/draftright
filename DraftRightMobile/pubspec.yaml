@@ -28,6 +28,12 @@ dependencies:
   window_manager: ^0.3.0
   screen_retriever: ^0.1.0
   image_picker: ^1.2.2
+  # Pure-Dart image decode/resize/encode — downscales picked screenshots
+  # before upload so the multipart body stays well under the backend's 5 MB
+  # cap (a near-5 MB image otherwise 413s: the client guards the image file
+  # size, the server guards the whole body). Pure Dart → runs in flutter test
+  # and needs no pod/gradle native step. See screenshot_compressor.dart.
+  image: ^4.3.0
   # Universal Link / App Link listener used by the payment-return
   # flow (LS hosted-checkout redirects to https://draftright.info/
   # payment/success?ref=...).  Stream-based API; mirrors share_service.

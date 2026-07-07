@@ -7,7 +7,7 @@
 //
 // Covers: validation guard (description < 10 chars), successful submission
 // with the correct multipart payload (description / source / user_email),
-// and the success/failure snackbars.
+// the success snackbar, and the in-sheet failure banner (issue #68).
 
 import 'dart:async';
 import 'dart:convert';
@@ -136,7 +136,11 @@ void main() {
     await pumpUntil(tester, find.text('Report a bug'), present: false);
   });
 
-  testWidgets('shows an error snackbar when the backend rejects', (tester) async {
+  // The failure message shows in an in-sheet banner, NOT a snackbar: a
+  // snackbar renders behind the still-open modal sheet and is invisible,
+  // which made a failed submit look like nothing happened (issue #68).
+  testWidgets('shows an in-sheet error banner when the backend rejects',
+      (tester) async {
     statusToReturn = 500;
     await pumpHarness(tester);
 
@@ -148,6 +152,7 @@ void main() {
 
     await pumpUntil(
         tester, find.textContaining('Could not submit bug report'));
+    expect(find.byIcon(Icons.error_outline), findsOneWidget); // visible banner
     expect(find.text('Report a bug'), findsOneWidget); // sheet stays open
   });
 }
