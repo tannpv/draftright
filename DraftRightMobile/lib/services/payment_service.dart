@@ -221,10 +221,21 @@ class PaymentService {
     final pro = _pickProPlan(plans, currency: currency, billingPeriod: billingPeriod);
     if (pro == null) {
       final cadence = billingPeriod?.wireName ?? 'any';
+      // Log the technical detail (currency/cadence/method/catalog size) for
+      // triage, but never surface the raw enum to the user — the old message
+      // leaked "PaymentMethodKind.lemonsqueezy" into a snackbar (BUG-42, seen
+      // when a backend's plan catalog was missing the Pro rows).
+      DRLogger.warn(
+        'No Pro plan matched: currency=$currency cadence=$cadence '
+        'method=${method?.wireName} catalog=${plans.length} plans',
+        category: 'PAYMENT',
+      );
+      final methodName =
+          (method != null ? PaymentMethodDescriptor.forKind(method)?.displayName : null) ??
+              'this payment method';
       throw Exception(
-        currency != null
-            ? 'Could not find a Pro plan in $currency ($cadence) for $method'
-            : 'Could not find a Pro plan ($cadence) in the catalog',
+        '$methodName isn\'t available right now. '
+        'Please try a different payment method or contact support.',
       );
     }
     final planId = (pro['id'] ?? '').toString();
