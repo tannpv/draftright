@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -155,6 +156,11 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 			// Storage.Save rejected a mime the controller allowed (webp/heic/…).
 			shared.WriteError(w, r, "invalid-input", errMimeNotAllowed)
 		default:
+			// Log the real cause — a Storage.Save EACCES (e.g. an env whose
+			// BugReportsDir volume isn't mounted/writable) otherwise vanishes
+			// behind the generic 500, making it invisible in server logs (#67).
+			slog.Default().ErrorContext(r.Context(), "bug-report create failed",
+				"err", err, "has_screenshot", file != nil)
 			shared.WriteError(w, r, "internal", "bug-reports failed")
 		}
 		return
