@@ -62,6 +62,20 @@ platform :android do
     UI.success("Uploaded #{AAB_PATH} to Closed Testing.")
   end
 
+  desc "Upload AAB to Open Testing (Play track 'beta')."
+  lane :open do
+    upload_to_play_store(
+      aab: AAB_PATH,
+      track: "beta",
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+      skip_upload_changelogs: false,
+      release_status: "completed",
+    )
+    UI.success("Uploaded #{AAB_PATH} to Open Testing.")
+  end
+
   desc "Upload AAB to Production track as a DRAFT (manual promote required)."
   lane :production_draft do
     upload_to_play_store(
