@@ -35,6 +35,11 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
+          # Pinned to the known-good local toolchain. Latest stable enforces
+          # JVM-target consistency and fails compiling flutter_facebook_auth
+          # (Java 1.8 vs Kotlin 17). Unpin only after aligning plugin JVM
+          # targets in Gradle.
+          flutter-version: 3.41.4
           channel: stable
           cache: true
 
