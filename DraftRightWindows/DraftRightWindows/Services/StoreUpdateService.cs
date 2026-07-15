@@ -63,6 +63,26 @@ public class StoreUpdateService : IUpdateService
         }
     }
 
+    /// <summary>True iff the app is running as a packaged (MSIX) app of ANY
+    /// signature — Store, Developer, or Enterprise. The HTTP `.exe` self-updater
+    /// can never replace an MSIX package, so any packaged build must avoid it
+    /// (a Store-signed check alone let sideloaded/dev-signed MSIX builds fall
+    /// through to the HTTP updater and hang on the "Downloading" window).
+    /// Wrapped in try/catch because non-packaged .exe builds throw on
+    /// Package.Current access.</summary>
+    public static bool IsPackaged()
+    {
+        try
+        {
+            _ = Package.Current.Id;
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     /// <inheritdoc/>
     public async Task CheckIfNeededAsync()
     {

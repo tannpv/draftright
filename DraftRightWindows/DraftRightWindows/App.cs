@@ -278,14 +278,15 @@ public class App : Application
         var currentVersion = asmVer.EndsWith(".0") ? asmVer.Substring(0, asmVer.Length - 2) : asmVer;
         DRLogger.Log($"UpdateService current version: {currentVersion} (assembly {asmVer})",
             DRLogger.Category.APP);
-        // Store-installed (MSIX): updates come from Microsoft Store via the
-        // Windows.Services.Store API. Sideload (.exe installer): updates come
-        // from draftright.info via the HTTP poller. Detection is via
-        // Package.Current.SignatureKind — wrapped in IsStoreInstall() because
-        // non-packaged builds throw on Package.Current access.
-        if (StoreUpdateService.IsStoreInstall())
+        // Any PACKAGED (MSIX) build — Store, Developer, or Enterprise signed —
+        // must NOT run the HTTP `.exe` self-updater: it can't replace an MSIX
+        // package and just pops a "Downloading DraftRight" window that hangs
+        // forever. Only genuinely unpackaged sideload `.exe` builds use the HTTP
+        // poller. (Previously this keyed on SignatureKind==Store, so a
+        // sideloaded/dev-signed MSIX fell through to the HTTP updater and hung.)
+        if (StoreUpdateService.IsPackaged())
         {
-            DRLogger.Log("Update backend: Microsoft Store (MSIX install detected)",
+            DRLogger.Log("Update backend: Microsoft Store (MSIX/packaged install detected)",
                 DRLogger.Category.APP);
             UpdateService = new StoreUpdateService(currentVersion);
         }
