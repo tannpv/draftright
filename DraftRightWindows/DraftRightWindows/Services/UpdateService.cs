@@ -450,6 +450,11 @@ public class UpdateService : IUpdateService
                     }
                     else
                     {
+                        // No Content-Length (chunked transfer / some CDNs): we
+                        // can't compute a percentage, so show a moving marquee
+                        // instead of a Continuous bar frozen at 0% — otherwise a
+                        // download that IS progressing looks hung.
+                        ui?.SetIndeterminate($"Downloading DraftRight v{version}...", hideBackgroundButton: false);
                         await src.CopyToAsync(dst, attemptCts.Token);
                     }
                 }
