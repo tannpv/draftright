@@ -15,7 +15,7 @@
   <Identity
       Name="SouthernMartin.DraftRight"
       Publisher="CN=D60C776E-6F95-4693-82A9-C924FBF21545"
-      Version="2.3.24.0" />
+      Version="2.3.25.0" />
 
   <mp:PhoneIdentity PhoneProductId="d4a8f7b2-9c3e-4a1d-8f6b-2e5a7c9d1b3a" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 
