@@ -184,13 +184,21 @@ public class App : Application
         // prompted to sign in again instead of looping on 401s.
         Api.OnUnauthorized = async () =>
         {
+            // Did a real session exist before this 401? On a FRESH INSTALL the
+            // user has never signed in (no access token), so a 401 from a
+            // first-run authed probe must NOT surface "your session has
+            // expired" — there was no session to expire. Only prompt when a
+            // session actually existed. (Captured before ClearTokens wipes it.)
+            var hadSession = Auth.IsLoggedIn;
             var refreshToken = Auth.RefreshToken;
             if (string.IsNullOrEmpty(refreshToken))
             {
                 DRLogger.Log("Auto-refresh: no refresh_token stored — clearing session.", DRLogger.Category.AUTH);
                 Auth.ClearTokens();
                 Api.ClearToken();
-                RaiseSessionExpired();
+                // Never-logged-in first run → stay silent; the normal
+                // signed-out UI already invites the user to sign in.
+                if (hadSession) RaiseSessionExpired();
                 return false;
             }
             try
