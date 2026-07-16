@@ -88,6 +88,13 @@ class SpeechRecognizerVoiceInput(private val context: Context) : VoiceInput {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, localeTag)
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            // Hold-to-talk: keep listening through pauses until the user
+            // releases (which calls stop()). These are hints; some OEM
+            // recognizers ignore them — the 30 s LISTEN_TIMEOUT_MS backstop
+            // and the release-to-stop path still bound the session.
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, VoiceConfig.HOLD_SILENCE_MS)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, VoiceConfig.HOLD_SILENCE_MS)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, VoiceConfig.HOLD_MIN_SPEECH_MS)
         }
         recognizer.startListening(intent)
 
@@ -102,13 +109,12 @@ class SpeechRecognizerVoiceInput(private val context: Context) : VoiceInput {
     }
 
     override fun stop() {
-        // Destroys the recognizer immediately, so the async final onResults
-        // that stopListening() would normally deliver is dropped. No caller
-        // today ("stop and keep what you heard" isn't in the UX); a future
-        // caller wanting that behavior must defer terminalCleanup() until
-        // onResults/onError fires.
+        // stopListening() is async — the recognizer still delivers a final
+        // onResults (or onError) after this call. Cleanup is deliberately
+        // deferred to those callbacks (or, failing that, the timeout
+        // runnable) rather than done here, so the final transcript isn't
+        // dropped by destroying the recognizer out from under it.
         recognizer?.stopListening()
-        terminalCleanup()
     }
 
     override fun cancel() {

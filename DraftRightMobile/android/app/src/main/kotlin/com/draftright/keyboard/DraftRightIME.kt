@@ -134,15 +134,20 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
         // locale AND the device actually has a speech recognizer (some
         // OEM builds / emulators ship none). Checked once here at pack
         // resolution time, not duplicated inside ToolbarView.
-        val micHandler: ((Boolean) -> Unit)? =
+        val voiceHold: ToolbarView.VoiceHoldListener? =
             if (controller!!.current.sttLocale != null && SpeechRecognizer.isRecognitionAvailable(this)) {
-                { rawMode -> handleMicTapped(rawMode) }
+                object : ToolbarView.VoiceHoldListener {
+                    override fun onHoldStart(): Boolean = handleVoiceHoldStart()
+                    override fun onCancelArmedChanged(armed: Boolean) { handleVoiceCancelArmed(armed) }
+                    override fun onHoldEnd(cancelled: Boolean) = handleVoiceHoldEnd(cancelled)
+                    override fun onTooShortTap() = showBanner("Hold to talk")
+                }
             } else null
 
         val tb = ToolbarView(this,
             onToneSelected = { tone -> handleToneSelected(tone) },
             onUndo = { handleUndo() },
-            onMicTapped = micHandler
+            voiceHold = voiceHold
         )
         toolbar = tb
         root.addView(tb)
@@ -451,31 +456,39 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
 
     // --- Voice input -----------------------------------------------------
 
-    private fun handleMicTapped(rawMode: Boolean) {
-        // Spec: "Tap mic again or Back = cancel." The mic stays tappable for
-        // the whole session (see ToolbarView.setVoiceState doc) instead of
-        // being disabled, so a tap while LISTENING/PROCESSING is a deliberate
-        // cancel gesture, not a re-entrant start — rawMode is ignored here
-        // since there's no new session to start.
-        if (voiceState != VoiceSessionController.State.IDLE) {
-            voiceSession.cancelSession()
-            return
-        }
-        val locale = controller?.current?.sttLocale ?: return
+    /**
+     * Returns whether a voice session actually started, so the caller
+     * ([ToolbarView]'s `armRunnable`) knows whether a later release should
+     * end *this* session rather than a stale, still-finishing previous one
+     * (see [ToolbarView.VoiceHoldListener.onHoldStart]).
+     */
+    private fun handleVoiceHoldStart(): Boolean {
+        if (voiceState != VoiceSessionController.State.IDLE) return false
+        val locale = controller?.current?.sttLocale ?: return false
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            // VOICE-011: persist what we were about to do so the trampoline's
-            // result can resume it in onWindowShown, even if the process was
-            // recreated while the system permission dialog was up front.
-            settings.pendingVoiceRawMode = rawMode
+            // Hold-to-talk always records raw; persist for the permission
+            // trampoline's resume path (kept for parity with the prior flow).
+            settings.pendingVoiceRawMode = true
             settings.voicePermissionRequested = true
             RequestPermissionActivity.launch(this, Manifest.permission.RECORD_AUDIO)
-            return
+            return false
         }
-        voiceSession.startSession(locale, rawMode)
+        voiceSession.startSession(locale, rawMode = true)
+        return true
+    }
+
+    private fun handleVoiceCancelArmed(armed: Boolean) = mainHandler.post {
+        candidateBar?.setPartialTranscript(
+            if (armed) "◀ release to cancel" else null
+        )
+    }
+
+    private fun handleVoiceHoldEnd(cancelled: Boolean) {
+        if (cancelled) voiceSession.cancelSession() else voiceSession.finishSession()
     }
 
     /**
-     * Consumes a pending mic-permission request recorded by [handleMicTapped]
+     * Consumes a pending mic-permission request recorded by [handleVoiceHoldStart]
      * once [RequestPermissionActivity] reports a result via [SharedSettings]
      * (VOICE-011). No-ops when there is nothing pending, or the trampoline
      * hasn't resolved yet (result still null while its dialog is up).
@@ -514,8 +527,8 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         // Back while a voice session is active (LISTENING or PROCESSING)
         // cancels it instead of dismissing the keyboard out from under an
-        // in-progress recording/polish — matches the mic-tap cancel gesture
-        // in handleMicTapped, which cancels for either state too.
+        // in-progress recording/polish — matches the slide-away-to-cancel
+        // gesture in handleVoiceHoldEnd, which cancels for either state too.
         if (keyCode == KeyEvent.KEYCODE_BACK && voiceState != VoiceSessionController.State.IDLE) {
             voiceSession.cancelSession()
             return true
