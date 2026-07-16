@@ -14,6 +14,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
+import com.draftright.keyboard.voice.MicHoldGesture
 import com.draftright.keyboard.voice.VoiceSessionController
 
 class ToolbarView(
@@ -21,14 +22,22 @@ class ToolbarView(
     private val onToneSelected: (Tone) -> Unit,
     private val onUndo: () -> Unit,
     /**
-     * Null hides the mic button entirely. IME passes null when the active
-     * pack has no [LanguagePack.sttLocale] or the device has no speech
-     * recognizer (see DraftRightIME.onCreateInputView) — Rule #1: the
-     * capability check lives once, at the call site, not duplicated here.
-     * `true` argument = raw mode (long-press), `false` = polished (tap).
+     * Voice hold-to-talk callbacks, or null to hide the mic entirely. IME
+     * passes null when the active pack has no [LanguagePack.sttLocale] or the
+     * device has no speech recognizer (capability check at the call site).
      */
-    private val onMicTapped: ((Boolean) -> Unit)? = null
+    private val voiceHold: VoiceHoldListener? = null
 ) : LinearLayout(context) {
+
+    /** Hold-to-talk lifecycle for the mic button. */
+    interface VoiceHoldListener {
+        /** Finger held past the arm threshold — begin recording. */
+        fun onHoldStart()
+        /** The slide-away-to-cancel state changed (update the hint). */
+        fun onCancelArmedChanged(armed: Boolean)
+        /** Finger lifted — [cancelled] true = discard, false = insert. */
+        fun onHoldEnd(cancelled: Boolean)
+    }
 
     private val toneButtons = mutableMapOf<Tone, View>()
     private var undoButton: TextView? = null
@@ -84,7 +93,7 @@ class ToolbarView(
 
         // Mic button — only built when the IME actually offers voice input
         // for the active language on this device (see class doc above).
-        onMicTapped?.let { tapped ->
+        voiceHold?.let { hold ->
             val mic = ImageView(context).apply {
                 setImageResource(KeyIcons.resolve("mic"))
                 imageTintList = iconTint
@@ -92,36 +101,51 @@ class ToolbarView(
                 setBackgroundResource(android.R.drawable.btn_default)
                 val pad = dpToPx(9)
                 setPadding(pad, pad, pad, pad)
-                layoutParams = LayoutParams(dpToPx(44), dpToPx(40)).apply {
-                    marginEnd = dpToPx(2)
-                }
-                contentDescription = "Voice input"
+                layoutParams = LayoutParams(dpToPx(44), dpToPx(40)).apply { marginEnd = dpToPx(2) }
+                contentDescription = "Hold to talk"
             }
 
-            // Same tap-vs-long-press mechanism as QwertyKeyboardView's key
-            // touch handler (reused, not reinvented): a postDelayed runnable
-            // armed on ACTION_DOWN and cancelled on ACTION_UP/CANCEL. Firing
-            // the runnable flags longPressFired so ACTION_UP doesn't also
-            // fire the tap action.
-            var longPressFired = false
-            val longPressRunnable = Runnable {
-                longPressFired = true
-                tapped(true) // raw mode
+            val slopPx = dpToPx(MicHoldGesture.DEFAULT_SLOP_DP).toFloat()
+            var downX = 0f
+            var downY = 0f
+            var started = false        // arm fired → recording
+            var cancelArmed = false
+            val armRunnable = Runnable {
+                started = true
+                cancelArmed = false
+                hold.onHoldStart()
             }
+
             mic.setOnTouchListener { v, event ->
                 when (event.action) {
                     MotionEvent.ACTION_DOWN -> {
-                        longPressFired = false
-                        v.postDelayed(longPressRunnable, SpecialKeys.LONG_PRESS_MS)
+                        downX = event.rawX; downY = event.rawY
+                        started = false; cancelArmed = false
+                        v.postDelayed(armRunnable, MicHoldGesture.ARM_MS)
+                        true
+                    }
+                    MotionEvent.ACTION_MOVE -> {
+                        if (started) {
+                            val armed = MicHoldGesture.isCancelArmed(
+                                event.rawX - downX, event.rawY - downY, slopPx)
+                            if (armed != cancelArmed) {
+                                cancelArmed = armed
+                                hold.onCancelArmedChanged(armed)
+                            }
+                        }
                         true
                     }
                     MotionEvent.ACTION_UP -> {
-                        v.removeCallbacks(longPressRunnable)
-                        if (!longPressFired) tapped(false) // polished mode
+                        v.removeCallbacks(armRunnable)
+                        if (started) hold.onHoldEnd(cancelled = cancelArmed)
+                        // else: released before arm → treated as a no-op tap
+                        started = false; cancelArmed = false
                         true
                     }
                     MotionEvent.ACTION_CANCEL -> {
-                        v.removeCallbacks(longPressRunnable)
+                        v.removeCallbacks(armRunnable)
+                        if (started) hold.onHoldEnd(cancelled = true)
+                        started = false; cancelArmed = false
                         true
                     }
                     else -> false
