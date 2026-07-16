@@ -23,6 +23,12 @@ A Windows-only line under `### Windows` will never appear in the macOS
 If a version needs the user to *do* something after updating, say so
 explicitly under an **Action needed:** line inside the relevant sub-section.
 
+## 2.3.25 — 2026-07-16
+### Windows
+- Fixed the update process hanging forever. Installing from the Microsoft Store no longer shows a "Downloading / Updating" window that never finishes — Store and MSIX builds now update through the correct path instead of trying to run a desktop installer that can't replace a Store app.
+- When an update's size isn't reported by the server, the progress bar now animates as a moving "in progress" bar instead of sitting frozen at 0%.
+- Fixed a "your session has expired" popup appearing on a brand-new install where you had never signed in.
+
 ## 2.3.24 — 2026-07-04
 ### macOS
 - The rewrite shortcut no longer fails silently. If no text is selected (or the app you're in doesn't share its selection), a small hint now appears at your cursor — "Select text first, then press the shortcut" — instead of nothing happening.
