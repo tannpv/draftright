@@ -88,6 +88,13 @@ class SpeechRecognizerVoiceInput(private val context: Context) : VoiceInput {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, localeTag)
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            // Hold-to-talk: keep listening through pauses until the user
+            // releases (which calls stop()). These are hints; some OEM
+            // recognizers ignore them — the 30 s LISTEN_TIMEOUT_MS backstop
+            // and the release-to-stop path still bound the session.
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, VoiceConfig.HOLD_SILENCE_MS)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, VoiceConfig.HOLD_SILENCE_MS)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 1_000L)
         }
         recognizer.startListening(intent)
 
