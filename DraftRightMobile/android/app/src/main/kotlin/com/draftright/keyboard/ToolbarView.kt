@@ -31,12 +31,20 @@ class ToolbarView(
 
     /** Hold-to-talk lifecycle for the mic button. */
     interface VoiceHoldListener {
-        /** Finger held past the arm threshold — begin recording. */
-        fun onHoldStart()
+        /**
+         * Finger held past the arm threshold — begin recording. Returns
+         * whether a session actually started: the IME may decline (not
+         * IDLE, no locale, permission not yet granted), in which case the
+         * caller must not treat a later release as ending a session — see
+         * [ToolbarView]'s `armRunnable`.
+         */
+        fun onHoldStart(): Boolean
         /** The slide-away-to-cancel state changed (update the hint). */
         fun onCancelArmedChanged(armed: Boolean)
         /** Finger lifted — [cancelled] true = discard, false = insert. */
         fun onHoldEnd(cancelled: Boolean)
+        /** Finger released before the arm threshold — flash a hint. */
+        fun onTooShortTap()
     }
 
     private val toneButtons = mutableMapOf<Tone, View>()
@@ -111,9 +119,8 @@ class ToolbarView(
             var started = false        // arm fired → recording
             var cancelArmed = false
             val armRunnable = Runnable {
-                started = true
                 cancelArmed = false
-                hold.onHoldStart()
+                started = hold.onHoldStart()
             }
 
             mic.setOnTouchListener { v, event ->
@@ -137,8 +144,12 @@ class ToolbarView(
                     }
                     MotionEvent.ACTION_UP -> {
                         v.removeCallbacks(armRunnable)
-                        if (started) hold.onHoldEnd(cancelled = cancelArmed)
-                        // else: released before arm → treated as a no-op tap
+                        if (started) {
+                            hold.onHoldEnd(cancelled = cancelArmed)
+                        } else {
+                            // Released before arm → too-short tap, flash the hint.
+                            hold.onTooShortTap()
+                        }
                         started = false; cancelArmed = false
                         true
                     }
@@ -207,8 +218,9 @@ class ToolbarView(
      * LISTENING/PROCESSING, and restores them for IDLE. Without this, a tap on
      * a tone button during an active voice session fires a rewrite call that
      * races the voice commit for the same InputConnection. Note: the mic
-     * button itself is intentionally left enabled in every state — tapping it
-     * mid-session is the spec's cancel gesture (see DraftRightIME.handleMicTapped).
+     * button itself is intentionally left enabled in every state — the
+     * slide-away-to-cancel gesture (see DraftRightIME.handleVoiceHoldEnd) is
+     * how a session gets cancelled mid-hold.
      */
     fun setVoiceState(state: VoiceSessionController.State) {
         val mic = micButton ?: return

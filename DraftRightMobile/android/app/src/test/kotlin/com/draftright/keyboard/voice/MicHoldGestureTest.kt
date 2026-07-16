@@ -26,4 +26,12 @@ class MicHoldGestureTest {
     @Test fun `sliding down within field is not cancel-armed at small distance`() {
         assertFalse(MicHoldGesture.isCancelArmed(0f, 40f, slop))
     }
+
+    @Test fun `sliding down far is NOT cancel-armed`() {
+        assertFalse(MicHoldGesture.isCancelArmed(0f, 300f, slop))
+    }
+
+    @Test fun `sliding right far is NOT cancel-armed`() {
+        assertFalse(MicHoldGesture.isCancelArmed(300f, 0f, slop))
+    }
 }

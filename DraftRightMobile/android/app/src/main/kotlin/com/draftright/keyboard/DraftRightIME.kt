@@ -137,9 +137,10 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
         val voiceHold: ToolbarView.VoiceHoldListener? =
             if (controller!!.current.sttLocale != null && SpeechRecognizer.isRecognitionAvailable(this)) {
                 object : ToolbarView.VoiceHoldListener {
-                    override fun onHoldStart() = handleVoiceHoldStart()
+                    override fun onHoldStart(): Boolean = handleVoiceHoldStart()
                     override fun onCancelArmedChanged(armed: Boolean) { handleVoiceCancelArmed(armed) }
                     override fun onHoldEnd(cancelled: Boolean) = handleVoiceHoldEnd(cancelled)
+                    override fun onTooShortTap() = showBanner("Hold to talk")
                 }
             } else null
 
@@ -455,18 +456,25 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
 
     // --- Voice input -----------------------------------------------------
 
-    private fun handleVoiceHoldStart() {
-        if (voiceState != VoiceSessionController.State.IDLE) return
-        val locale = controller?.current?.sttLocale ?: return
+    /**
+     * Returns whether a voice session actually started, so the caller
+     * ([ToolbarView]'s `armRunnable`) knows whether a later release should
+     * end *this* session rather than a stale, still-finishing previous one
+     * (see [ToolbarView.VoiceHoldListener.onHoldStart]).
+     */
+    private fun handleVoiceHoldStart(): Boolean {
+        if (voiceState != VoiceSessionController.State.IDLE) return false
+        val locale = controller?.current?.sttLocale ?: return false
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             // Hold-to-talk always records raw; persist for the permission
             // trampoline's resume path (kept for parity with the prior flow).
             settings.pendingVoiceRawMode = true
             settings.voicePermissionRequested = true
             RequestPermissionActivity.launch(this, Manifest.permission.RECORD_AUDIO)
-            return
+            return false
         }
         voiceSession.startSession(locale, rawMode = true)
+        return true
     }
 
     private fun handleVoiceCancelArmed(armed: Boolean) = mainHandler.post {
@@ -480,7 +488,7 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
     }
 
     /**
-     * Consumes a pending mic-permission request recorded by [handleMicTapped]
+     * Consumes a pending mic-permission request recorded by [handleVoiceHoldStart]
      * once [RequestPermissionActivity] reports a result via [SharedSettings]
      * (VOICE-011). No-ops when there is nothing pending, or the trampoline
      * hasn't resolved yet (result still null while its dialog is up).
@@ -519,8 +527,8 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         // Back while a voice session is active (LISTENING or PROCESSING)
         // cancels it instead of dismissing the keyboard out from under an
-        // in-progress recording/polish — matches the mic-tap cancel gesture
-        // in handleMicTapped, which cancels for either state too.
+        // in-progress recording/polish — matches the slide-away-to-cancel
+        // gesture in handleVoiceHoldEnd, which cancels for either state too.
         if (keyCode == KeyEvent.KEYCODE_BACK && voiceState != VoiceSessionController.State.IDLE) {
             voiceSession.cancelSession()
             return true

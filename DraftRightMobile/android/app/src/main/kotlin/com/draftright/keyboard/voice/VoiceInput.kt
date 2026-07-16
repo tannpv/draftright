@@ -40,4 +40,7 @@ object VoiceConfig {
     /** Silence window while holding the mic — long enough that a pause
      *  mid-sentence doesn't auto-end the session before the user releases. */
     const val HOLD_SILENCE_MS = 10_000L
+    /** Minimum recording length the platform recognizer requires before it
+     *  will treat the session as having spoken input. */
+    const val HOLD_MIN_SPEECH_MS = 1_000L
 }
