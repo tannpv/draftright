@@ -8,11 +8,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   <div class="pt-12 pb-24">
     <div class="mx-auto max-w-3xl px-6 prose prose-invert prose-gray">
       <h1>Privacy Policy</h1>
-      <p class="text-gray-400">Last updated: March 2026</p>
+      <p class="text-gray-400">Last updated: July 2026</p>
 
       <h2>What We Collect</h2>
       <p>
-        DraftRight is designed with your privacy in mind. We collect only the minimum data needed to provide the service.
+        DraftRight is designed with your privacy in mind. We collect only the data needed to provide and improve the service.
       </p>
 
       <h2>Account Data</h2>
@@ -20,21 +20,31 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         When you create a Pro account, we collect your email address and payment information. Payment processing is handled securely by our third-party payment provider. We never store your full credit card number.
       </p>
 
-      <h2>Usage Data</h2>
+      <h2>Voice Input</h2>
       <p>
-        We collect anonymous usage statistics such as the number of rewrites performed, selected tones, and platform used. This data is aggregated and cannot be used to identify individual users. We do <strong>not</strong> store the text you submit for rewriting after the rewrite is complete.
+        Some platforms let you dictate text with the microphone instead of typing. Speech is transcribed to text on your device by your operating system's speech recognizer; DraftRight receives only the resulting text. A dictated transcript is then handled exactly like text you typed — including the rewrite and retention described below. We access the microphone only while you hold the mic button to dictate, and we do not record or store raw audio.
+      </p>
+
+      <h2>Usage &amp; Rewrite Data</h2>
+      <p>
+        We collect usage statistics such as the number of rewrites performed, selected tones, and platform used.
+      </p>
+      <p>
+        In addition, the text you submit for rewriting — whether typed or dictated by voice — together with the rewritten result, the selected tone, and the AI model used, is stored to operate, evaluate, and improve the service (including training and quality review). These rewrite records are <strong>not linked to your account or any personal identifier</strong> — they are stored without your name, email, or user ID.
       </p>
 
       <h2>Third-Party Services</h2>
       <p>
-        DraftRight uses OpenAI's API to process rewrites. When you submit text for rewriting, it is sent to OpenAI for processing. OpenAI's data usage policies apply to this processing. We recommend reviewing
-        <a href="https://openai.com/policies/privacy-policy" class="text-brand-400 hover:underline">OpenAI's Privacy Policy</a>
-        for details on how they handle data.
+        DraftRight processes rewrites using a configurable AI provider. By default this may be OpenAI's API or another provider selected by the operator (such as Anthropic, or a locally hosted model). When a cloud provider is used, the text you submit is sent to that provider for processing and their data policies apply. For OpenAI, we recommend reviewing
+        <a href="https://openai.com/policies/privacy-policy" class="text-brand-400 hover:underline">OpenAI's Privacy Policy</a>.
       </p>
 
       <h2>Data Retention</h2>
       <p>
-        Text submitted for rewriting is processed in real-time and not stored after the rewrite is returned. Account data is retained for the duration of your account. If you delete your account, all associated data is permanently removed within 30 days.
+        Account data is retained for the duration of your account. If you delete your account, all data associated with your account is permanently removed within 30 days.
+      </p>
+      <p>
+        Rewrite records (submitted and rewritten text, tone, and model) are retained to improve the service. Because these records are not linked to your account or any personal identifier, deleting your account does not remove them — there is nothing that ties an individual rewrite record back to you.
       </p>
 
       <h2>Contact</h2>

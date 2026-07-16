@@ -55,9 +55,10 @@ class SharedSettings(context: Context) {
     // process is not guaranteed to survive the system permission dialog
     // shown by RequestPermissionActivity.
 
-    /** True while a mic-permission request launched by [handleMicTapped]-style
-     *  callers is in flight. Set right before launching the trampoline;
-     *  cleared once the IME consumes [voicePermissionResult]. */
+    /** True while a mic-permission request launched by
+     *  DraftRightIME.handleVoiceHoldStart-style callers is in flight. Set
+     *  right before launching the trampoline; cleared once the IME consumes
+     *  [voicePermissionResult]. */
     var voicePermissionRequested: Boolean
         get() = prefs.getBoolean(KEY_VOICE_PERMISSION_REQUESTED, false)
         set(value) = prefs.edit().putBoolean(KEY_VOICE_PERMISSION_REQUESTED, value).apply()

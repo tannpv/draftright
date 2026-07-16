@@ -124,6 +124,22 @@ class VoiceSessionController(
         }
     }
 
+    /**
+     * Release on the mic (hold-to-talk): stop the recognizer and let it
+     * deliver the final transcript through the existing onFinal path (→
+     * VoiceOutcome.Raw for a rawMode session). No-op unless LISTENING — a
+     * pause longer than the recognizer's silence window may already have
+     * ended the session, in which case there is nothing to finalize.
+     * Synchronized on the same lock as cancelSession()/handleFinal so a
+     * release racing an auto-delivered final can't double-emit.
+     */
+    fun finishSession() {
+        synchronized(this) {
+            if (state != State.LISTENING) return
+            voice.stop()
+        }
+    }
+
     private fun handleFinal(text: String, rawMode: Boolean, sessionGeneration: Int) {
         if (rawMode) {
             // Same TOCTOU concern as cancelSession(): the isCurrent check and

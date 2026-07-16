@@ -17,12 +17,13 @@ class VoiceSessionControllerTest {
         var listener: VoiceInput.Listener? = null
         var startCalls = 0
         var cancelCalls = 0
+        var stopCalls = 0
 
         override fun start(localeTag: String, listener: VoiceInput.Listener) {
             startCalls++
             this.listener = listener
         }
-        override fun stop() {}
+        override fun stop() { stopCalls++ }   // keeps listener; real recognizer then fires onFinal
         override fun cancel() {
             cancelCalls++
             listener = null
@@ -250,5 +251,27 @@ class VoiceSessionControllerTest {
         fake.listener!!.onPartial("abc")
 
         assertEquals(listOf("a", "ab", "abc"), partials)
+    }
+
+    @Test fun `finishSession stops recognizer then commits raw final`() {
+        val fake = FakeVoiceInput()
+        val outcomes = mutableListOf<VoiceOutcome>()
+        val c = VoiceSessionController(fake,
+            polish = { _, cb -> cb(Result.success("should-not-run")) },
+            onState = {}, onOutcome = { outcomes.add(it) })
+
+        c.startSession("vi-VN", rawMode = true)
+        c.finishSession()
+        assertEquals(1, fake.stopCalls)          // release asks recognizer to finalize
+        fake.listener!!.onFinal("xin chào")      // recognizer delivers the final
+
+        assertEquals(listOf<VoiceOutcome>(VoiceOutcome.Raw("xin chào", hint = null)), outcomes)
+    }
+
+    @Test fun `finishSession when idle is a no-op`() {
+        val fake = FakeVoiceInput()
+        val c = VoiceSessionController(fake, polish = { _, _ -> }, onState = {}, onOutcome = {})
+        c.finishSession()
+        assertEquals(0, fake.stopCalls)
     }
 }
