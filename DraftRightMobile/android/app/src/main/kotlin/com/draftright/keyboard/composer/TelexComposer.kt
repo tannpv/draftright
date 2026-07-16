@@ -199,6 +199,9 @@ class TelexComposer : Composer {
             val cluster = findLastVowelCluster(buffer)
             if (cluster != null) {
                 for (i in cluster.first until cluster.last) {
+                    // Skip the 'u' of a 'qu' onset — it is a glide, not the 'u'
+                    // of a "uo"→"ươ" cluster (quo+w → quơ, not qươ).
+                    if (i >= 1 && buffer[i - 1].lowercaseChar() == 'q') continue
                     if (buffer[i].lowercaseChar() == 'u' && buffer[i + 1].lowercaseChar() == 'o') {
                         val u2 = caseMap('ư', buffer[i].isUpperCase() || wIsUpper)
                         val o2 = caseMap('ơ', buffer[i + 1].isUpperCase() || wIsUpper)
@@ -236,8 +239,25 @@ class TelexComposer : Composer {
 
         private fun applyTone(buffer: String, toneChar: Char): String {
             val cluster = findLastVowelCluster(buffer) ?: return buffer
-            val start = cluster.first
+            var start = cluster.first
             val endInclusive = cluster.last
+            // qu/gi onset glide: the 'u' after 'q' (or 'i' after 'g') is a glide,
+            // not part of the tone-bearing nucleus, WHEN another vowel follows.
+            // Skip it so the tone — and the diphthong promotion below — target
+            // the real nucleus: quá not qúa, giá not gía, quón not quốn. When the
+            // glide is the only vowel (gì, qu-) start == endInclusive and it is
+            // left alone (that vowel IS the nucleus).
+            if (start in 1 until endInclusive) {
+                val prev = buffer[start - 1].lowercaseChar()
+                val glide = buffer[start].lowercaseChar()
+                // 'gi' is an onset only when the 'g' is standalone — NOT the
+                // 'g' inside 'ng'/'ngh' (ngià keeps its tone on i, not gi-onset).
+                val giOnset = prev == 'g' && glide == 'i' &&
+                    (start < 2 || buffer[start - 2].lowercaseChar() != 'n')
+                if ((prev == 'q' && glide == 'u') || giOnset) {
+                    start += 1
+                }
+            }
             val clusterLen = endInclusive - start + 1
             val hasTrailingConsonant = endInclusive < buffer.length - 1
 
