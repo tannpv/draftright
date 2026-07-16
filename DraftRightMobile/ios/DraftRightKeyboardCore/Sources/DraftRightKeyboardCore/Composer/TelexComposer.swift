@@ -201,6 +201,9 @@ public final class TelexComposer: Composer {
         if let cluster = findLastVowelCluster(chars) {
             var i = cluster.start
             while i < cluster.end {
+                // Skip the 'u' of a 'qu' onset — it is a glide, not the 'u' of a
+                // "uo"→"ươ" cluster (quo+w → quơ, not qươ).
+                if i >= 1 && Character(chars[i - 1].lowercased()) == "q" { i += 1; continue }
                 if Character(chars[i].lowercased()) == "u" && Character(chars[i + 1].lowercased()) == "o" {
                     let u2: Character = (chars[i].isUppercase || wIsUpper) ? "Ư" : "ư"
                     let o2: Character = (chars[i + 1].isUppercase || wIsUpper) ? "Ơ" : "ơ"
@@ -227,13 +230,29 @@ public final class TelexComposer: Composer {
     static func applyTone(_ buf: String, _ toneChar: Character) -> String {
         let chars = Array(buf)
         guard let cluster = findLastVowelCluster(chars) else { return buf }
-        let clusterLen = cluster.end - cluster.start + 1
-        let hasTrailingConsonant = cluster.end < chars.count - 1
+        var start = cluster.start
+        let end = cluster.end
+        // qu/gi onset glide: the 'u' after 'q' (or 'i' after 'g') is a glide, not
+        // part of the tone-bearing nucleus, WHEN another vowel follows. Skip it so
+        // the tone — and the diphthong promotion below — target the real nucleus:
+        // quá not qúa, giá not gía, quón not quốn. 'gi' is an onset only when the
+        // 'g' is standalone (NOT the 'g' in 'ng'/'ngh' — ngià keeps tone on i).
+        if start >= 1 && start < end {
+            let prev = Character(chars[start - 1].lowercased())
+            let glide = Character(chars[start].lowercased())
+            let giOnset = prev == "g" && glide == "i" &&
+                (start < 2 || Character(chars[start - 2].lowercased()) != "n")
+            if (prev == "q" && glide == "u") || giOnset {
+                start += 1
+            }
+        }
+        let clusterLen = end - start + 1
+        let hasTrailingConsonant = end < chars.count - 1
 
         // Auto-promote 2-vowel ie/uo/ye clusters.
-        if clusterLen == 2 && !TelexState.isSpecialVowel(chars[cluster.end]) {
-            let first = Character(chars[cluster.start].lowercased())
-            let second = Character(chars[cluster.end].lowercased())
+        if clusterLen == 2 && !TelexState.isSpecialVowel(chars[end]) {
+            let first = Character(chars[start].lowercased())
+            let second = Character(chars[end].lowercased())
             let promoted: Character?
             if (first == "i" && second == "e") || (first == "y" && second == "e") {
                 promoted = "ê"
@@ -243,18 +262,18 @@ public final class TelexComposer: Composer {
                 promoted = nil
             }
             if let p = promoted {
-                let promotedChar: Character = chars[cluster.end].isUppercase ? Character(p.uppercased()) : p
+                let promotedChar: Character = chars[end].isUppercase ? Character(p.uppercased()) : p
                 var newChars = chars
-                newChars[cluster.end] = promotedChar
-                return applyToneAt(newChars, cluster.end, toneChar)
+                newChars[end] = promotedChar
+                return applyToneAt(newChars, end, toneChar)
             }
         }
 
         // Auto-promote 3-vowel uoi/ieu/yeu clusters.
-        if clusterLen == 3 && !TelexState.isSpecialVowel(chars[cluster.start + 1]) {
-            let first = Character(chars[cluster.start].lowercased())
-            let mid = Character(chars[cluster.start + 1].lowercased())
-            let last = Character(chars[cluster.end].lowercased())
+        if clusterLen == 3 && !TelexState.isSpecialVowel(chars[start + 1]) {
+            let first = Character(chars[start].lowercased())
+            let mid = Character(chars[start + 1].lowercased())
+            let last = Character(chars[end].lowercased())
             let promoted: Character?
             if first == "u" && mid == "o" && last == "i" {
                 promoted = "ô"
@@ -264,14 +283,14 @@ public final class TelexComposer: Composer {
                 promoted = nil
             }
             if let p = promoted {
-                let promotedChar: Character = chars[cluster.start + 1].isUppercase ? Character(p.uppercased()) : p
+                let promotedChar: Character = chars[start + 1].isUppercase ? Character(p.uppercased()) : p
                 var newChars = chars
-                newChars[cluster.start + 1] = promotedChar
-                return applyToneAt(newChars, cluster.start + 1, toneChar)
+                newChars[start + 1] = promotedChar
+                return applyToneAt(newChars, start + 1, toneChar)
             }
         }
 
-        let targetIdx = pickToneVowelIndex(chars, cluster.start, cluster.end, hasTrailingConsonant)
+        let targetIdx = pickToneVowelIndex(chars, start, end, hasTrailingConsonant)
         return applyToneAt(chars, targetIdx, toneChar)
     }
 
