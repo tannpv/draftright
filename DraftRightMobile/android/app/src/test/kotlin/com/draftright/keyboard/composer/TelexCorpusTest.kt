@@ -59,6 +59,12 @@ class TelexCorpusTest {
         "kae" to "kae",       // no false circumflex when no matching vowel
         "bee" to "bê",
         "beee" to "bee",      // re-type cancels ê back to e + literal
+        // qu/gi onset glide — tone must land on the nucleus, not the glide (#76)
+        "quas" to "quá", "quar" to "quả", "quys" to "quý", "quej" to "quẹ",
+        "quos" to "quó", "quons" to "quón", "quowf" to "quờ",
+        "gias" to "giá", "giaf" to "già", "gios" to "gió", "giups" to "giúp",
+        "ngiax" to "ngĩa",    // 'ng'+ia keeps tone on i (NOT a gi onset)
+        "quoocs" to "quốc",   // real ô word still correct
     )
 
     @Test fun `telex corpus`() {
