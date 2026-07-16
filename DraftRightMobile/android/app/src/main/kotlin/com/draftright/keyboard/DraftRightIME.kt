@@ -199,6 +199,18 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
         super.onUpdateSelection(
             oldSelStart, oldSelEnd, newSelStart, newSelEnd, candidatesStart, candidatesEnd,
         )
+        // An external change (the app cleared the field after "send", or the user
+        // tapped elsewhere) removed the composing region while our composer still
+        // holds a word. Reset it so the stale word doesn't stick to the next
+        // keystroke — e.g. Zalo: type "tấn" → tap send → type "g" → "tấng" (#71).
+        // During active composition the region is >= 0; it only reaches -1 on a
+        // commit (where we already reset) or an external clear, so this is safe.
+        val composing = controller?.composer?.currentComposingText().orEmpty()
+        if (composing.isNotEmpty() && candidatesStart == -1 && candidatesEnd == -1) {
+            currentInputConnection?.finishComposingText()
+            controller?.composer?.reset()
+            refreshCandidates()
+        }
         // The cursor moved (a letter committed, Enter, or a manual tap). Re-read
         // the platform caps mode so shift tracks sentence boundaries.
         updateAutoCaps()
@@ -305,15 +317,22 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
 
     override fun onEnter() {
         val ic = currentInputConnection ?: return
+        // Commit any pending Telex composition and clear the composer BEFORE the
+        // editor action / newline. Otherwise the buffer (e.g. "tấn") survives the
+        // send and the next keystroke composes on top of it → "tấng" (#71).
+        ic.finishComposingText()
+        controller?.composer?.reset()
         val ei = currentInputEditorInfo
         if (ei != null && ei.imeOptions and EditorInfo.IME_FLAG_NO_ENTER_ACTION == 0) {
             val action = ei.imeOptions and EditorInfo.IME_MASK_ACTION
             if (action != EditorInfo.IME_ACTION_NONE && action != EditorInfo.IME_ACTION_UNSPECIFIED) {
                 ic.performEditorAction(action)
+                refreshCandidates()
                 return
             }
         }
         ic.commitText("\n", 1)
+        refreshCandidates()
     }
 
     override fun onSpace() {
