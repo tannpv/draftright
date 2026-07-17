@@ -274,6 +274,30 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
         controller?.let { keyboard?.languagePack = it.current }
     }
 
+    /**
+     * Guard against a silent external field clear before applying a keystroke.
+     *
+     * Some apps wipe their own text field WITHOUT notifying the IME — Zalo's
+     * in-app send button clears its EditText but fires no onUpdateSelection and
+     * no finishComposingText (#71). Our composer keeps the sent word (e.g.
+     * "Tấn"), so the next keystroke composes on top of it → "Tấng".
+     *
+     * onUpdateSelection / onEnter resets only cover apps that DO signal the
+     * clear. This is the reliable backstop: on every keystroke, confirm the
+     * text actually in front of the cursor still matches the composer's buffer.
+     * If it diverged, the field was cleared/changed behind our back, so drop the
+     * stale buffer and let the keystroke start a fresh word.
+     */
+    private fun dropStaleComposerIfFieldDiverged(ic: android.view.inputmethod.InputConnection) {
+        val composing = controller?.composer?.currentComposingText().orEmpty()
+        if (composing.isEmpty()) return
+        val before = ic.getTextBeforeCursor(composing.length, 0)?.toString()
+        if (ComposerFieldSync.hasDiverged(composing, before)) {
+            ic.finishComposingText()
+            controller?.composer?.reset()
+        }
+    }
+
     override fun onCharTyped(char: String) {
         val ic = currentInputConnection ?: return
         val c = controller
@@ -282,6 +306,7 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
             refreshCandidates()
             return
         }
+        dropStaleComposerIfFieldDiverged(ic)
         when (val outcome = c.onKey(char[0])) {
             is KeystrokeOutcome.Commit -> ic.commitText(outcome.text, 1)
             is KeystrokeOutcome.Composing -> ic.setComposingText(outcome.text, 1)
@@ -299,6 +324,7 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
             refreshCandidates()
             return
         }
+        dropStaleComposerIfFieldDiverged(ic)
         when (val outcome = c.onBackspace()) {
             is KeystrokeOutcome.Commit -> ic.commitText(outcome.text, 1)
             is KeystrokeOutcome.Composing -> ic.setComposingText(outcome.text, 1)
@@ -347,6 +373,7 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
             refreshCandidates()
             return
         }
+        dropStaleComposerIfFieldDiverged(ic)
         when (val outcome = c.onKey(' ')) {
             is KeystrokeOutcome.Commit -> ic.commitText(outcome.text, 1)
             is KeystrokeOutcome.Composing -> ic.setComposingText(outcome.text, 1)
