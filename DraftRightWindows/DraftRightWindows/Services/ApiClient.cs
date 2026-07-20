@@ -366,9 +366,11 @@ public sealed class ApiClient : IDisposable
             var body = await response.Content.ReadAsStringAsync();
             if (!response.IsSuccessStatusCode)
             {
+                var detail = ExtractServerMessage(body);
                 throw new ApiException(
-                    $"API {(int)response.StatusCode} {response.ReasonPhrase}: {body}",
-                    response.StatusCode);
+                    $"API {(int)response.StatusCode} {response.ReasonPhrase}: {detail}",
+                    response.StatusCode,
+                    serverMessage: detail);
             }
             return body;
         }
@@ -431,45 +433,68 @@ public sealed class ApiClient : IDisposable
         }
     }
 
+    /// <summary>
+    /// Extracts a user-facing message from an error response body, handling
+    /// every shape our backends emit:
+    ///   • NestJS class-validator: {"message":["email must be an email"]} (string[])
+    ///   • NestJS other errors:    {"message":"…"} (string)
+    ///   • Go backend:             {"error":"Account disabled","code":"…"} (string)
+    /// Without the Go `error` case, its bodies fell through to the raw JSON and
+    /// users saw stack-trace soup (BUG-44: "Account disabled" leaked as JSON
+    /// after the Go cutover). Falls back to the raw body when unparseable.
+    /// See BUG-18 / BUG-19 (2026-05-29) for the original NestJS handling.
+    /// </summary>
+    internal static string ExtractServerMessage(string body)
+    {
+        if (string.IsNullOrWhiteSpace(body)) return body;
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object) return body;
+
+            if (root.TryGetProperty("message", out var msg))
+            {
+                if (msg.ValueKind == JsonValueKind.String)
+                {
+                    var s = msg.GetString();
+                    if (!string.IsNullOrEmpty(s)) return s;
+                }
+                else if (msg.ValueKind == JsonValueKind.Array && msg.GetArrayLength() > 0)
+                {
+                    // Join with "; " so multi-field validations show all problems.
+                    var parts = new List<string>();
+                    foreach (var el in msg.EnumerateArray())
+                    {
+                        var s = el.GetString();
+                        if (!string.IsNullOrEmpty(s)) parts.Add(s);
+                    }
+                    if (parts.Count > 0) return string.Join("; ", parts);
+                }
+            }
+
+            // Go backend error shape: {"error":"…","code":"…","request_id":"…"}.
+            if (root.TryGetProperty("error", out var err)
+                && err.ValueKind == JsonValueKind.String)
+            {
+                var s = err.GetString();
+                if (!string.IsNullOrEmpty(s)) return s;
+            }
+        }
+        catch
+        {
+            /* body wasn't JSON — keep raw */
+        }
+        return body;
+    }
+
     private static async Task<T> HandleResponse<T>(HttpResponseMessage response)
     {
         var body = await response.Content.ReadAsStringAsync();
 
         if (!response.IsSuccessStatusCode)
         {
-            // Extract a user-facing message from the error body. NestJS
-            // class-validator returns `{"message":["email must be an email"]}`
-            // (string[]) for DTO failures and `{"message":"…"}` (string) for
-            // most other errors — we have to handle both, otherwise the
-            // array falls through to the raw JSON body and the user sees
-            // stack-trace soup. See BUG-18 / BUG-19 (2026-05-29).
-            string detail = body;
-            try
-            {
-                using var doc = JsonDocument.Parse(body);
-                if (doc.RootElement.TryGetProperty("message", out var msg))
-                {
-                    if (msg.ValueKind == JsonValueKind.String)
-                    {
-                        detail = msg.GetString() ?? body;
-                    }
-                    else if (msg.ValueKind == JsonValueKind.Array && msg.GetArrayLength() > 0)
-                    {
-                        // Join with "; " so multi-field validations show all problems.
-                        var parts = new List<string>();
-                        foreach (var el in msg.EnumerateArray())
-                        {
-                            var s = el.GetString();
-                            if (!string.IsNullOrEmpty(s)) parts.Add(s);
-                        }
-                        if (parts.Count > 0) detail = string.Join("; ", parts);
-                    }
-                }
-            }
-            catch
-            {
-                /* body wasn't JSON — keep raw */
-            }
+            string detail = ExtractServerMessage(body);
 
             // Truncated body preview so error log entries don't bloat the log
             // with multi-KB stack traces from the backend.
