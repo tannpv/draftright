@@ -200,28 +200,14 @@ final class SelectionMonitor {
         let pasteboard = NSPasteboard.general
         let savedChangeCount = pasteboard.changeCount
 
-        // Wait for the user to release the hotkey's modifier keys BEFORE
-        // synthesizing Cmd+C. If we post while Shift/Control/Option from the
-        // hotkey combo are still physically held, .hidSystemState merges them
-        // into the synthetic event and the "Cmd+C" becomes Cmd+Shift+C (etc.).
-        // Modifier-sensitive, non-AX apps — Terminal, Console — then don't copy
-        // and capture fails with a false "Select text first". (AX-cooperative
-        // apps never reach this fallback.) #63's retry fixed *timing*, not this
-        // *modifier contamination*.
-        waitForModifiersToClear { [weak self] in
-            guard let self = self else { return }
-            self.synthesizeCopy()
-            // Poll the pasteboard a few times instead of a single 0.3s check. A
-            // synthesized Cmd+C can take longer to land in apps that aren't
-            // AX-cooperative (terminals, Console.app). Retry at 0.15/0.35/0.6s.
-            self.pollClipboardForSelection(pasteboard, savedChangeCount: savedChangeCount, delays: [0.15, 0.35, 0.6])
-        }
-    }
+        // Snapshot the current clipboard BEFORE synthesizing copy. It's the
+        // last-resort source for apps where AX exposes no selection AND a
+        // synthesized ⌘C is ignored — most notably Terminal on macOS 26, which
+        // hides the mouse selection from AX and blocks injected keystrokes. In
+        // that case the user's own ⌘C (done before the hotkey) is the only way
+        // in, so we reuse whatever they copied.
+        let preClipboard = (pasteboard.string(forType: .string) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
 
-    /// Posts a clean synthetic Cmd+C. Callers must ensure no hardware modifiers
-    /// are held (see `waitForModifiersToClear`), otherwise .hidSystemState
-    /// merges them into the event.
-    private func synthesizeCopy() {
         let source = CGEventSource(stateID: .hidSystemState)
         let keyDown = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_ANSI_C), keyDown: true)
         keyDown?.flags = .maskCommand
@@ -229,31 +215,29 @@ final class SelectionMonitor {
         keyUp?.flags = .maskCommand
         keyDown?.post(tap: .cgSessionEventTap)
         keyUp?.post(tap: .cgSessionEventTap)
-    }
 
-    /// Invokes `then` once every keyboard modifier has been released, or after a
-    /// short timeout (~0.4s) so a user who keeps the combo held still gets a
-    /// best-effort copy. Polls on the main queue at 0.05s intervals.
-    private func waitForModifiersToClear(attempt: Int = 0, then: @escaping () -> Void) {
-        let relevant: NSEvent.ModifierFlags = [.command, .shift, .option, .control]
-        let held = NSEvent.modifierFlags.intersection(relevant)
-        if held.isEmpty || attempt >= 8 {
-            if attempt >= 8 {
-                DRLogger.warn("Hotkey: modifiers still held after wait — copying anyway", category: .monitor)
-            }
-            then()
-            return
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
-            self?.waitForModifiersToClear(attempt: attempt + 1, then: then)
-        }
+        // Poll the pasteboard a few times instead of a single 0.3s check. A
+        // synthesized Cmd+C can take longer to land in apps that aren't
+        // AX-cooperative (terminals, Console.app) — a fixed one-shot wait
+        // reads too early and reports "no text" for a copy that arrives 0.4s
+        // later. Retry at 0.15 / 0.35 / 0.6s before giving up.
+        pollClipboardForSelection(pasteboard, savedChangeCount: savedChangeCount, preClipboard: preClipboard, delays: [0.15, 0.35, 0.6])
     }
 
     /// Poll the pasteboard at each delay; fire onTextSelected on the first
-    /// non-empty change, or surface a visible failure hint after the last try.
-    private func pollClipboardForSelection(_ pasteboard: NSPasteboard, savedChangeCount: Int, delays: [Double]) {
+    /// non-empty change. If the synthesized ⌘C never lands (blocked), fall back
+    /// to the pre-existing clipboard, and only then surface the failure hint.
+    private func pollClipboardForSelection(_ pasteboard: NSPasteboard, savedChangeCount: Int, preClipboard: String, delays: [Double]) {
         guard let delay = delays.first else {
-            // Exhausted every attempt with no clipboard change → capture failed.
+            // Synthesized ⌘C changed nothing (blocked, e.g. Terminal on macOS
+            // 26). Use whatever the user already had on the clipboard — their
+            // own ⌘C of the selection — before giving up.
+            if !preClipboard.isEmpty {
+                DRLogger.log("Hotkey clipboard fallback: \(preClipboard.count) chars (pre-existing)", category: .monitor)
+                DiffWindow.shared.anchorPoint = NSEvent.mouseLocation
+                onTextSelected?(preClipboard)
+                return
+            }
             reportCaptureFailure()
             return
         }
@@ -269,17 +253,17 @@ final class SelectionMonitor {
                     return
                 }
             }
-            self.pollClipboardForSelection(pasteboard, savedChangeCount: savedChangeCount, delays: remaining)
+            self.pollClipboardForSelection(pasteboard, savedChangeCount: savedChangeCount, preClipboard: preClipboard, delays: remaining)
         }
     }
 
-    /// Both AX read and the Cmd+C fallback came up empty. Log rich diagnostics
-    /// (which app had focus, what role) so a repro is self-explaining, and show
-    /// the user a transient hint so the hotkey never fails silently.
+    /// AX read, the synthesized ⌘C, and the pre-existing clipboard all came up
+    /// empty. Log diagnostics (which app had focus) and show a transient hint
+    /// that guides the copy-first flow terminals now require.
     private func reportCaptureFailure() {
         let app = NSWorkspace.shared.frontmostApplication?.localizedName ?? "unknown"
-        DRLogger.warn("Hotkey: no text found (frontmost=\(app), AX+Cmd+C both empty)", category: .monitor)
-        showTransientHint("Select text first, then press the shortcut", at: NSEvent.mouseLocation)
+        DRLogger.warn("Hotkey: no text found (frontmost=\(app), AX+Cmd+C+clipboard all empty)", category: .monitor)
+        showTransientHint("Select text and copy (⌘C), then press the shortcut", at: NSEvent.mouseLocation)
     }
 
     /// Small floating label at the cursor that fades itself out. Reuses the
