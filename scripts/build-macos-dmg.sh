@@ -81,9 +81,16 @@ mkdir -p "$TMP_DMG_DIR"
 cp -R "$APP" "$TMP_DMG_DIR/"
 ln -s /Applications "$TMP_DMG_DIR/Applications"
 
+# -fs HFS+ forces an HFS+ (not APFS) filesystem. Modern macOS otherwise images
+# the source as APFS, whose `hdiutil attach` output puts the mount point on a
+# non-last line — the shipped in-app updater (<= 2.3.28) parses the LAST line's
+# last field and grabbed "Apple_APFS", failing with "The folder Apple_APFS
+# doesn't exist". HFS+ keeps the mount point on the last line so every shipped
+# updater can mount the DMG.
 hdiutil create \
   -volname "DraftRight $VERSION" \
   -srcfolder "$TMP_DMG_DIR" \
+  -fs HFS+ \
   -ov -format UDZO \
   "$DMG"
 
