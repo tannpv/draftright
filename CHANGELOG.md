@@ -23,6 +23,12 @@ A Windows-only line under `### Windows` will never appear in the macOS
 If a version needs the user to *do* something after updating, say so
 explicitly under an **Action needed:** line inside the relevant sub-section.
 
+## 2.3.26 — 2026-07-20
+### Windows
+- Sign-in errors now read in plain language. When the server rejects a login (for example a disabled account), the app shows the actual reason instead of a raw block of code/JSON.
+- The "Downloading DraftRight" window now shows a real progress bar while an update downloads, instead of a blank spinner that made a large update look stuck. You can still choose "Continue in background".
+- The Settings window is larger, resizable, and scales properly on high-DPI displays, so it no longer looks tiny or cramped.
+
 ## 2.3.25 — 2026-07-16
 ### Windows
 - Fixed the update process hanging forever. Installing from the Microsoft Store no longer shows a "Downloading / Updating" window that never finishes — Store and MSIX builds now update through the correct path instead of trying to run a desktop installer that can't replace a Store app.
