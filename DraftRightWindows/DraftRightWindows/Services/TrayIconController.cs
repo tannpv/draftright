@@ -71,19 +71,13 @@ internal sealed class TrayIconController : IDisposable
         _trayIcon = new WinForms.NotifyIcon();
         _trayIcon.Text = "DraftRight";
 
-        var exePath = Environment.ProcessPath;
-        if (exePath != null)
-        {
-            var icoPath = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(exePath)!, "Assets", "DraftRight.ico");
-            if (System.IO.File.Exists(icoPath))
-                _baseTrayIcon = new Icon(icoPath);
-            else
-                _baseTrayIcon = (Icon)SystemIcons.Application.Clone();
-        }
-        else
-        {
-            _baseTrayIcon = (Icon)SystemIcons.Application.Clone();
-        }
+        // Embedded-resource load — survives single-file publish where the .ico
+        // isn't next to the exe (#78). Clone so this controller owns/disposes
+        // its own copy without touching AppIcon's shared cached instance.
+        var appIcon = Helpers.AppIcon.Load();
+        _baseTrayIcon = appIcon != null
+            ? (Icon)appIcon.Clone()
+            : (Icon)SystemIcons.Application.Clone();
         _trayIcon.Icon = _baseTrayIcon;
         // Pre-build the badged variant once so RefreshUpdateMenuItem can swap
         // it in without recompositing on every update-state change.
