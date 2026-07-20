@@ -433,6 +433,13 @@ public sealed class ApiClient : IDisposable
         }
     }
 
+    // Error-body field names our backends use. NestJS carries the human
+    // message under "message"; the Go backend uses "error" (alongside "code"
+    // and "request_id"). Named so a future backend shape is a one-line add,
+    // not another buried literal (Rule #1: no magic strings).
+    private const string ErrorBodyMessageField = "message";
+    private const string ErrorBodyErrorField = "error";
+
     /// <summary>
     /// Extracts a user-facing message from an error response body, handling
     /// every shape our backends emit:
@@ -453,7 +460,7 @@ public sealed class ApiClient : IDisposable
             var root = doc.RootElement;
             if (root.ValueKind != JsonValueKind.Object) return body;
 
-            if (root.TryGetProperty("message", out var msg))
+            if (root.TryGetProperty(ErrorBodyMessageField, out var msg))
             {
                 if (msg.ValueKind == JsonValueKind.String)
                 {
@@ -474,7 +481,7 @@ public sealed class ApiClient : IDisposable
             }
 
             // Go backend error shape: {"error":"…","code":"…","request_id":"…"}.
-            if (root.TryGetProperty("error", out var err)
+            if (root.TryGetProperty(ErrorBodyErrorField, out var err)
                 && err.ValueKind == JsonValueKind.String)
             {
                 var s = err.GetString();

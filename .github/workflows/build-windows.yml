@@ -32,6 +32,50 @@ permissions:
   contents: write
 
 jobs:
+  # ── Unit tests ────────────────────────────────────────────────────────
+  # Runs the xUnit suite (DraftRightWindows.Tests) so regressions like the
+  # BUG-44 error-body parser or the update-hang logic fail CI instead of
+  # shipping. Kept as its own fast job; the build/msix jobs don't depend on
+  # it so a green build artifact is still produced for inspection, but a red
+  # test run is visible as a required check on the PR.
+  test:
+    name: Unit tests
+    runs-on: windows-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: DraftRightWindows
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '8.0.x'
+
+      # The test project references the app project, which references
+      # GoogleOAuth.cs → GoogleOAuthConfig.cs must exist to compile. Same
+      # secret-materialization as the build jobs.
+      - name: Write GoogleOAuthConfig.cs from secret
+        shell: pwsh
+        env:
+          GOOGLE_OAUTH_CLIENT_SECRET_WINDOWS: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET_WINDOWS }}
+        run: |
+          if (-not $env:GOOGLE_OAUTH_CLIENT_SECRET_WINDOWS) {
+            Write-Error "GOOGLE_OAUTH_CLIENT_SECRET_WINDOWS repo secret is not set."
+            exit 1
+          }
+          $src = "DraftRightWindows/Services/GoogleOAuthConfig.cs.template"
+          $dst = "DraftRightWindows/Services/GoogleOAuthConfig.cs"
+          (Get-Content $src -Raw).Replace("REPLACE_ME", $env:GOOGLE_OAUTH_CLIENT_SECRET_WINDOWS) | Set-Content -Path $dst -Encoding UTF8
+          Write-Host "Wrote $dst from template"
+
+      - name: Test
+        run: dotnet test DraftRightWindows.Tests/DraftRightWindows.Tests.csproj -c Debug --logger "console;verbosity=normal"
+
   build:
     name: Build ${{ matrix.runtime }}
     runs-on: windows-latest

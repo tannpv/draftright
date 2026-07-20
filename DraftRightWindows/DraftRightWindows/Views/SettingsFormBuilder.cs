@@ -22,6 +22,13 @@ internal static class SettingsFormBuilder
     private static readonly Color SuccessGreen = Color.FromArgb(34, 197, 94);
     private static readonly Color BorderColor = Color.FromArgb(51, 65, 85);
 
+    // ── Window geometry ──────────────────────────────────────
+    // Default is comfortable for the 6 tabs; MinimumSize keeps content usable
+    // when the user shrinks the (now resizable) window (BUG-46). Named so the
+    // "how big is Settings" answer lives in one place, not two bare literals.
+    private static readonly Size DefaultClientSize = new(640, 660);
+    private static readonly Size MinWindowSize = new(520, 560);
+
     public static WinForms.Form Create()
     {
         var form = new WinForms.Form
@@ -33,8 +40,8 @@ internal static class SettingsFormBuilder
             // behavior and gives every tab a consistent baseline.
             AutoScaleMode = WinForms.AutoScaleMode.Dpi,
             Font = new Font("Segoe UI", 9f),
-            ClientSize = new Size(640, 660),
-            MinimumSize = new Size(520, 560),
+            ClientSize = DefaultClientSize,
+            MinimumSize = MinWindowSize,
             StartPosition = WinForms.FormStartPosition.CenterScreen,
             BackColor = BgDark,
             ForeColor = TextPrimary,
