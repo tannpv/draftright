@@ -23,6 +23,10 @@ A Windows-only line under `### Windows` will never appear in the macOS
 If a version needs the user to *do* something after updating, say so
 explicitly under an **Action needed:** line inside the relevant sub-section.
 
+## 2.3.27 — 2026-07-20
+### Windows
+- Fixed the DraftRight icon showing blank on the taskbar and in the system tray (and on the Settings / bug-report dialogs). The icon now loads reliably regardless of how the app was installed.
+
 ## 2.3.26 — 2026-07-20
 ### Windows
 - Sign-in errors now read in plain language. When the server rejects a login (for example a disabled account), the app shows the actual reason instead of a raw block of code/JSON.
