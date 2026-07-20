@@ -388,15 +388,21 @@ final class UpdateService: ObservableObject {
         process.waitUntilExit()
 
         let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        let lines = output.split(separator: "\n")
-        guard let lastLine = lines.last else {
-            throw NSError(domain: "UpdateService", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to mount DMG"])
+        // hdiutil attach output is "<dev-node>\t<content-hint>\t<mount-point>".
+        // The mount-point column is populated only on the volume's line and is
+        // an absolute path; other lines (partition schemes like "Apple_APFS")
+        // have none. Scan for the last field that is an absolute path — robust
+        // to APFS vs HFS+ output ordering. The old "last line, last field"
+        // parse grabbed "Apple_APFS" from an APFS image and failed with
+        // "The folder Apple_APFS doesn't exist".
+        for line in output.split(separator: "\n").reversed() {
+            let parts = line.components(separatedBy: "\t")
+            if let last = parts.last?.trimmingCharacters(in: .whitespaces),
+               last.hasPrefix("/") {
+                return last
+            }
         }
-        let parts = lastLine.split(separator: "\t")
-        guard let mountPoint = parts.last?.trimmingCharacters(in: .whitespaces) else {
-            throw NSError(domain: "UpdateService", code: 2, userInfo: [NSLocalizedDescriptionKey: "Could not parse mount point"])
-        }
-        return mountPoint
+        throw NSError(domain: "UpdateService", code: 2, userInfo: [NSLocalizedDescriptionKey: "Could not parse DMG mount point from hdiutil output"])
     }
 
     private func unmountDMG(_ mountPoint: String) {
