@@ -7,6 +7,8 @@ struct DraftRightApp: App {
     @StateObject private var appModel: AppModel
 
     init() {
+        Self.enforceSingleInstance()
+
         let model = AppModel()
         _appModel = StateObject(wrappedValue: model)
 
@@ -23,6 +25,27 @@ struct DraftRightApp: App {
 
         DispatchQueue.main.async {
             Self.startServices(appModel: model)
+        }
+    }
+
+    /// Quit immediately if another DraftRight instance is already running, so a
+    /// second menu-bar icon never appears. This is needed because the launchd
+    /// KeepAlive agent launches the executable directly (bypassing the
+    /// LaunchServices single-instance guard), so the agent's RunAtLoad launch
+    /// and a manual launch could otherwise coexist. Deterministic survivor: the
+    /// lowest PID (first launched) stays; any higher-PID duplicate exits(0). A
+    /// clean exit is a "successful" exit, so the KeepAlive agent
+    /// (SuccessfulExit=false) does NOT respawn it — no spawn/exit loop.
+    private static func enforceSingleInstance() {
+        let me = NSRunningApplication.current
+        let bundleID = Bundle.main.bundleIdentifier ?? "com.draftright.app.v2"
+        let hasOlderInstance = NSRunningApplication
+            .runningApplications(withBundleIdentifier: bundleID)
+            .contains { $0.processIdentifier != me.processIdentifier
+                        && $0.processIdentifier < me.processIdentifier }
+        if hasOlderInstance {
+            DRLogger.log("Single-instance guard: another DraftRight (lower PID) already running — exiting this duplicate", category: .app)
+            exit(0)
         }
     }
 
