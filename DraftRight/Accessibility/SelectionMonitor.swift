@@ -200,6 +200,28 @@ final class SelectionMonitor {
         let pasteboard = NSPasteboard.general
         let savedChangeCount = pasteboard.changeCount
 
+        // Wait for the user to release the hotkey's modifier keys BEFORE
+        // synthesizing Cmd+C. If we post while Shift/Control/Option from the
+        // hotkey combo are still physically held, .hidSystemState merges them
+        // into the synthetic event and the "Cmd+C" becomes Cmd+Shift+C (etc.).
+        // Modifier-sensitive, non-AX apps — Terminal, Console — then don't copy
+        // and capture fails with a false "Select text first". (AX-cooperative
+        // apps never reach this fallback.) #63's retry fixed *timing*, not this
+        // *modifier contamination*.
+        waitForModifiersToClear { [weak self] in
+            guard let self = self else { return }
+            self.synthesizeCopy()
+            // Poll the pasteboard a few times instead of a single 0.3s check. A
+            // synthesized Cmd+C can take longer to land in apps that aren't
+            // AX-cooperative (terminals, Console.app). Retry at 0.15/0.35/0.6s.
+            self.pollClipboardForSelection(pasteboard, savedChangeCount: savedChangeCount, delays: [0.15, 0.35, 0.6])
+        }
+    }
+
+    /// Posts a clean synthetic Cmd+C. Callers must ensure no hardware modifiers
+    /// are held (see `waitForModifiersToClear`), otherwise .hidSystemState
+    /// merges them into the event.
+    private func synthesizeCopy() {
         let source = CGEventSource(stateID: .hidSystemState)
         let keyDown = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_ANSI_C), keyDown: true)
         keyDown?.flags = .maskCommand
@@ -207,13 +229,24 @@ final class SelectionMonitor {
         keyUp?.flags = .maskCommand
         keyDown?.post(tap: .cgSessionEventTap)
         keyUp?.post(tap: .cgSessionEventTap)
+    }
 
-        // Poll the pasteboard a few times instead of a single 0.3s check. A
-        // synthesized Cmd+C can take longer to land in apps that aren't
-        // AX-cooperative (terminals, Console.app) — a fixed one-shot wait
-        // reads too early and reports "no text" for a copy that arrives 0.4s
-        // later. Retry at 0.15 / 0.35 / 0.6s before giving up.
-        pollClipboardForSelection(pasteboard, savedChangeCount: savedChangeCount, delays: [0.15, 0.35, 0.6])
+    /// Invokes `then` once every keyboard modifier has been released, or after a
+    /// short timeout (~0.4s) so a user who keeps the combo held still gets a
+    /// best-effort copy. Polls on the main queue at 0.05s intervals.
+    private func waitForModifiersToClear(attempt: Int = 0, then: @escaping () -> Void) {
+        let relevant: NSEvent.ModifierFlags = [.command, .shift, .option, .control]
+        let held = NSEvent.modifierFlags.intersection(relevant)
+        if held.isEmpty || attempt >= 8 {
+            if attempt >= 8 {
+                DRLogger.warn("Hotkey: modifiers still held after wait — copying anyway", category: .monitor)
+            }
+            then()
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            self?.waitForModifiersToClear(attempt: attempt + 1, then: then)
+        }
     }
 
     /// Poll the pasteboard at each delay; fire onTextSelected on the first
