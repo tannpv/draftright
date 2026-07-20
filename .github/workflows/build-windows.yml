@@ -74,7 +74,13 @@ jobs:
           Write-Host "Wrote $dst from template"
 
       - name: Test
-        run: dotnet test DraftRightWindows.Tests/DraftRightWindows.Tests.csproj -c Debug --logger "console;verbosity=normal"
+        # WindowsAppSDKSelfContained=false: the app csproj sets it true
+        # unconditionally, but the self-contained target needs a RID/arch that a
+        # plain `dotnet test` (no -r) can't supply → "requires a supported
+        # Windows architecture". Unit tests exercise plain logic (ApiClient,
+        # UpdateService) and don't need the packaged WindowsAppSDK runtime, so
+        # build framework-dependent for the test run.
+        run: dotnet test DraftRightWindows.Tests/DraftRightWindows.Tests.csproj -c Debug -p:WindowsAppSDKSelfContained=false --logger "console;verbosity=normal"
 
   build:
     name: Build ${{ matrix.runtime }}
