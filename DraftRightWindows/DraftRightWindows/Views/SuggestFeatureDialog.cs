@@ -63,15 +63,10 @@ internal static class SuggestFeatureDialog
             ShowInTaskbar = true,
         };
 
-        var exePath = Environment.ProcessPath;
-        if (exePath != null)
-        {
-            var icoPath = Path.Combine(Path.GetDirectoryName(exePath)!, "Assets", "DraftRight.ico");
-            if (File.Exists(icoPath))
-            {
-                try { form.Icon = new Icon(icoPath); } catch { /* best-effort icon */ }
-            }
-        }
+        // Embedded-resource load — survives single-file publish where the .ico
+        // isn't next to the exe (#78). See Helpers/AppIcon.
+        var ico = Helpers.AppIcon.Load();
+        if (ico != null) form.Icon = ico;
 
         // ── Layout ───────────────────────────────────────────
         int y = 16;
