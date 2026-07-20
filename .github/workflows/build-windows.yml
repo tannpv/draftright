@@ -41,7 +41,10 @@ jobs:
   test:
     name: Unit tests
     runs-on: windows-latest
-    timeout-minutes: 15
+    # 25 min (matches the build jobs): a RID-less Debug restore of the
+    # WindowsAppSDK-heavy app graph is slower than the `-r win-x64` build jobs,
+    # and a 15-min cap cancelled the run mid-restore.
+    timeout-minutes: 25
 
     defaults:
       run:
