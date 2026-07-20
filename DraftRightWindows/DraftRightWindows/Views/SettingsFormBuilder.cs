@@ -22,18 +22,33 @@ internal static class SettingsFormBuilder
     private static readonly Color SuccessGreen = Color.FromArgb(34, 197, 94);
     private static readonly Color BorderColor = Color.FromArgb(51, 65, 85);
 
+    // ── Window geometry ──────────────────────────────────────
+    // Default is comfortable for the 6 tabs; MinimumSize keeps content usable
+    // when the user shrinks the (now resizable) window (BUG-46). Named so the
+    // "how big is Settings" answer lives in one place, not two bare literals.
+    private static readonly Size DefaultClientSize = new(640, 660);
+    private static readonly Size MinWindowSize = new(520, 560);
+
     public static WinForms.Form Create()
     {
         var form = new WinForms.Form
         {
             Text = "DraftRight Settings",
-            Width = 520,
-            Height = 560,
+            // DPI-aware so the window and its controls scale up on high-DPI /
+            // scaled displays instead of rendering tiny and cramped (BUG-46).
+            // A base Font is the scaling reference for AutoScaleMode.Font-style
+            // behavior and gives every tab a consistent baseline.
+            AutoScaleMode = WinForms.AutoScaleMode.Dpi,
+            Font = new Font("Segoe UI", 9f),
+            ClientSize = DefaultClientSize,
+            MinimumSize = MinWindowSize,
             StartPosition = WinForms.FormStartPosition.CenterScreen,
             BackColor = BgDark,
             ForeColor = TextPrimary,
-            FormBorderStyle = WinForms.FormBorderStyle.FixedSingle,
-            MaximizeBox = false,
+            // Resizable (was FixedSingle) so users can enlarge the window when
+            // content feels cramped; maximize enabled for the same reason.
+            FormBorderStyle = WinForms.FormBorderStyle.Sizable,
+            MaximizeBox = true,
         };
 
         SetFormIcon(form);

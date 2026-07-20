@@ -32,6 +32,13 @@ permissions:
   contents: write
 
 jobs:
+  # NOTE: no unit-test job here. The xUnit suite (DraftRightWindows.Tests)
+  # references the WinUI app assembly, whose CsWinRT/WinUI module initializer
+  # bootstraps the WinRT runtime at load — which hangs in a headless CI test
+  # host (discovery never completes; "All tests finished running" with zero
+  # tests). Running them in CI needs a pure-logic test project that does NOT
+  # load the WinUI assembly. Tracked as a follow-up; until then tests run on a
+  # dev Windows box. See issue for the headless test-harness work.
   build:
     name: Build ${{ matrix.runtime }}
     runs-on: windows-latest

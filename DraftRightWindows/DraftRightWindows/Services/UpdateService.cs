@@ -116,6 +116,16 @@ public class UpdateService : IUpdateService
     // and the Refresh path can never race two writers onto the same temp file.
     private Task? _stagingTask;
     private readonly object _stagingLock = new();
+    // Sentinel for _stagingPercent: no byte progress known yet (download not
+    // started, or a chunked response with no Content-Length).
+    private const int StagingPercentUnknown = -1;
+    // How often the foreground "install" window samples _stagingPercent.
+    private const int StagingProgressPollMs = 250;
+    // Live percent (0-100) of the in-flight silent staging download, or
+    // StagingPercentUnknown. Lets the foreground "install" path show a real
+    // progress bar while it waits on staging, instead of a bare marquee that
+    // makes a large download look hung (BUG-45).
+    private volatile int _stagingPercent = StagingPercentUnknown;
 
     /// <summary>True when the available update's installer is already on disk
     /// and ready to run.</summary>
@@ -302,6 +312,7 @@ public class UpdateService : IUpdateService
 
         UpdateProgressUI? ui = null;
         using var backgroundCts = new System.Threading.CancellationTokenSource();
+        using var pollCts = new System.Threading.CancellationTokenSource();
         try
         {
             ui = UpdateProgressUI.ShowOnNewThread(info.Version);
@@ -309,9 +320,38 @@ public class UpdateService : IUpdateService
             ui.SetIndeterminate($"Downloading DraftRight v{info.Version}...", hideBackgroundButton: false);
             ui.CancelRequested += backgroundCts.Cancel;
 
+            // Mirror the silent staging download's live percent onto the
+            // progress window so a large download shows a moving bar instead of
+            // a bare marquee that reads as "hung forever" (BUG-45). Falls back
+            // to the marquee while percent is unknown (-1: no Content-Length or
+            // not started yet).
+            UpdateProgressUI localUi = ui;
+            _ = Task.Run(async () =>
+            {
+                int shownPct = StagingPercentUnknown;
+                bool marquee = true;
+                while (!pollCts.IsCancellationRequested)
+                {
+                    int pct = _stagingPercent;
+                    if (pct != StagingPercentUnknown)
+                    {
+                        if (pct != shownPct) { localUi.SetProgress(pct); shownPct = pct; }
+                        marquee = false;
+                    }
+                    else if (!marquee)
+                    {
+                        localUi.SetIndeterminate($"Downloading DraftRight v{info.Version}...", hideBackgroundButton: false);
+                        marquee = true;
+                    }
+                    try { await Task.Delay(StagingProgressPollMs, pollCts.Token); }
+                    catch (OperationCanceledException) { break; }
+                }
+            });
+
             // Either staging finishes, or the user clicks "Continue in background".
             var backgrounded = Task.Delay(System.Threading.Timeout.Infinite, backgroundCts.Token);
             await Task.WhenAny(staging, backgrounded);
+            pollCts.Cancel();
 
             if (backgroundCts.IsCancellationRequested)
             {
@@ -356,7 +396,11 @@ public class UpdateService : IUpdateService
     {
         try
         {
-            var path = await TryDownloadInstallerAsync(info.WindowsUrl, info.Version, expectedSha256: ResolveWindowsSha256(info));
+            _stagingPercent = StagingPercentUnknown;
+            var path = await TryDownloadInstallerAsync(
+                info.WindowsUrl, info.Version,
+                expectedSha256: ResolveWindowsSha256(info),
+                onProgress: pct => _stagingPercent = pct);
             if (path == null) return;
             // Guard against AvailableUpdate having changed while we downloaded.
             if (AvailableUpdate?.Version != info.Version)
@@ -410,7 +454,7 @@ public class UpdateService : IUpdateService
         return Convert.ToHexString(sha.ComputeHash(fs)).ToLowerInvariant();
     }
 
-    internal async Task<string?> TryDownloadInstallerAsync(string url, string version, UpdateProgressUI? ui = null, int attempts = 3, System.Threading.CancellationToken externalCt = default, string? expectedSha256 = null)
+    internal async Task<string?> TryDownloadInstallerAsync(string url, string version, UpdateProgressUI? ui = null, int attempts = 3, System.Threading.CancellationToken externalCt = default, string? expectedSha256 = null, Action<int>? onProgress = null)
     {
         var name = Path.GetFileName(new Uri(url).LocalPath);
         if (string.IsNullOrEmpty(name)) name = $"DraftRight-{version}-setup.exe";
@@ -444,9 +488,14 @@ public class UpdateService : IUpdateService
                 using (var src = await resp.Content.ReadAsStreamAsync(attemptCts.Token))
                 using (var dst = new FileStream(dest, FileMode.Create, FileAccess.Write))
                 {
-                    if (ui != null && size > 0)
+                    if (size > 0 && (ui != null || onProgress != null))
                     {
-                        await CopyWithProgressAsync(src, dst, size.Value, ui, attemptCts.Token);
+                        // Report percent to the foreground UI (interactive
+                        // install) AND/OR the onProgress callback (silent
+                        // staging feeding _stagingPercent, so the awaited
+                        // "install" path can show a real bar — BUG-45).
+                        void Report(int pct) { ui?.SetProgress(pct); onProgress?.Invoke(pct); }
+                        await CopyWithProgressAsync(src, dst, size.Value, Report, attemptCts.Token);
                     }
                     else
                     {
@@ -508,7 +557,7 @@ public class UpdateService : IUpdateService
         return null;
     }
 
-    private static async Task CopyWithProgressAsync(Stream src, Stream dst, long total, UpdateProgressUI ui, System.Threading.CancellationToken ct)
+    private static async Task CopyWithProgressAsync(Stream src, Stream dst, long total, Action<int> report, System.Threading.CancellationToken ct)
     {
         var buffer = new byte[81920];
         long downloaded = 0;
@@ -521,7 +570,7 @@ public class UpdateService : IUpdateService
             var percent = (int)(downloaded * 100 / total);
             if (percent != lastPercent)
             {
-                ui.SetProgress(percent);
+                report(percent);
                 lastPercent = percent;
             }
         }

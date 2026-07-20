@@ -63,6 +63,21 @@ final class TelexComposerTests: XCTestCase {
         XCTAssertEqual(finalText("t", "i", "e", "s", "n", "g"), "tiếng")
     }
 
+    // qu/gi onset glide — tone lands on the nucleus, not the glide (#76 parity).
+    func test_quas_composes_quá() { XCTAssertEqual(finalText("q", "u", "a", "s"), "quá") }
+    func test_quar_composes_quả() { XCTAssertEqual(finalText("q", "u", "a", "r"), "quả") }
+    func test_quys_composes_quý() { XCTAssertEqual(finalText("q", "u", "y", "s"), "quý") }
+    func test_quos_composes_quó() { XCTAssertEqual(finalText("q", "u", "o", "s"), "quó") }
+    func test_quons_composes_quón() { XCTAssertEqual(finalText("q", "u", "o", "n", "s"), "quón") }
+    func test_quowf_composes_quờ() { XCTAssertEqual(finalText("q", "u", "o", "w", "f"), "quờ") }
+    func test_quoocs_composes_quốc() { XCTAssertEqual(finalText("q", "u", "o", "o", "c", "s"), "quốc") }
+    func test_gias_composes_giá() { XCTAssertEqual(finalText("g", "i", "a", "s"), "giá") }
+    func test_giaf_composes_già() { XCTAssertEqual(finalText("g", "i", "a", "f"), "già") }
+    func test_gios_composes_gió() { XCTAssertEqual(finalText("g", "i", "o", "s"), "gió") }
+    func test_giups_composes_giúp() { XCTAssertEqual(finalText("g", "i", "u", "p", "s"), "giúp") }
+    // 'ng'+ia is NOT a gi onset — tone stays on i.
+    func test_ngiax_composes_ngĩa() { XCTAssertEqual(finalText("n", "g", "i", "a", "x"), "ngĩa") }
+
     func test_backspace_from_việt_yields_việ() {
         let c = TelexComposer()
         for k in "vietj" { _ = c.onKey(k) }
