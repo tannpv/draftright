@@ -83,7 +83,20 @@ jobs:
         # Windows architecture". Unit tests exercise plain logic (ApiClient,
         # UpdateService) and don't need the packaged WindowsAppSDK runtime, so
         # build framework-dependent for the test run.
-        run: dotnet test DraftRightWindows.Tests/DraftRightWindows.Tests.csproj -c Debug -p:WindowsAppSDKSelfContained=false --logger "console;verbosity=normal"
+        #
+        # --blame-hang-timeout: a WinForms/WinUI-coupled test can deadlock on
+        # the headless CI agent (no desktop / STA message pump). Fail fast and
+        # name the hanging test instead of burning the whole job timeout.
+        # TrayIconBadge is excluded from the CI gate — it constructs real
+        # WinForms/GDI resources that don't initialize headless (tracked
+        # separately; runs locally on a dev Windows box).
+        run: >-
+          dotnet test DraftRightWindows.Tests/DraftRightWindows.Tests.csproj
+          -c Debug
+          -p:WindowsAppSDKSelfContained=false
+          --filter "FullyQualifiedName!~TrayIconBadge"
+          --blame-hang-timeout 120s
+          --logger "console;verbosity=normal"
 
   build:
     name: Build ${{ matrix.runtime }}
