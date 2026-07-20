@@ -23,6 +23,10 @@ A Windows-only line under `### Windows` will never appear in the macOS
 If a version needs the user to *do* something after updating, say so
 explicitly under an **Action needed:** line inside the relevant sub-section.
 
+## 2.3.28 — 2026-07-20
+### macOS
+- Fixed the rewrite shortcut not working in Terminal. Recent macOS versions stop apps from reading a Terminal selection automatically, so DraftRight now uses the text you copy: in Terminal, press ⌘C first, then your rewrite shortcut. Every other app still works with just the shortcut (no copy needed).
+
 ## 2.3.27 — 2026-07-20
 ### Windows
 - Fixed the DraftRight icon showing blank on the taskbar and in the system tray (and on the Settings / bug-report dialogs). The icon now loads reliably regardless of how the app was installed.
