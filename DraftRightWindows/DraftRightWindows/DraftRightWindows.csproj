@@ -54,6 +54,13 @@
     <Content Include="Assets\DraftRight.ico">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <!-- Also embed the icon so window/taskbar icon loading has no on-disk
+         dependency — single-file publish extracts Content to a temp dir, not
+         next to the exe, which broke the old file-path lookup (#78). Loaded via
+         Helpers/AppIcon.cs using this LogicalName. -->
+    <EmbeddedResource Include="Assets\DraftRight.ico">
+      <LogicalName>DraftRight.ico</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
   <!-- MSIX manifest + visual assets: only included in packaged (Store) mode. -->
   <ItemGroup Condition="'$(WindowsPackageType)' == 'MSIX'">

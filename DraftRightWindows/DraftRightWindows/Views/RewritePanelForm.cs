@@ -209,13 +209,10 @@ public sealed class RewritePanelForm : WinForms.Form
 
     private void SetIcon()
     {
-        var exePath = Environment.ProcessPath;
-        if (exePath == null) return;
-        var icoPath = Path.Combine(Path.GetDirectoryName(exePath)!, "Assets", "DraftRight.ico");
-        if (File.Exists(icoPath))
-        {
-            try { Icon = new Icon(icoPath); } catch { /* best-effort */ }
-        }
+        // Embedded-resource load — survives single-file publish where the .ico
+        // isn't next to the exe (#78). See Helpers/AppIcon.
+        var ico = Helpers.AppIcon.Load();
+        if (ico != null) Icon = ico;
     }
 
     private WinForms.TableLayoutPanel BuildToneGrid()
