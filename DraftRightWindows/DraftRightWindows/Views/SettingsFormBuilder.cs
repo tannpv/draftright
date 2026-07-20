@@ -27,13 +27,21 @@ internal static class SettingsFormBuilder
         var form = new WinForms.Form
         {
             Text = "DraftRight Settings",
-            Width = 520,
-            Height = 560,
+            // DPI-aware so the window and its controls scale up on high-DPI /
+            // scaled displays instead of rendering tiny and cramped (BUG-46).
+            // A base Font is the scaling reference for AutoScaleMode.Font-style
+            // behavior and gives every tab a consistent baseline.
+            AutoScaleMode = WinForms.AutoScaleMode.Dpi,
+            Font = new Font("Segoe UI", 9f),
+            ClientSize = new Size(640, 660),
+            MinimumSize = new Size(520, 560),
             StartPosition = WinForms.FormStartPosition.CenterScreen,
             BackColor = BgDark,
             ForeColor = TextPrimary,
-            FormBorderStyle = WinForms.FormBorderStyle.FixedSingle,
-            MaximizeBox = false,
+            // Resizable (was FixedSingle) so users can enlarge the window when
+            // content feels cramped; maximize enabled for the same reason.
+            FormBorderStyle = WinForms.FormBorderStyle.Sizable,
+            MaximizeBox = true,
         };
 
         SetFormIcon(form);
