@@ -116,11 +116,16 @@ public class UpdateService : IUpdateService
     // and the Refresh path can never race two writers onto the same temp file.
     private Task? _stagingTask;
     private readonly object _stagingLock = new();
-    // Live percent (0-100) of the in-flight silent staging download, or -1 when
-    // no byte progress is known yet. Lets the foreground "install" path show a
-    // real progress bar while it waits on staging, instead of a bare marquee
-    // that makes a large download look hung (BUG-45).
-    private volatile int _stagingPercent = -1;
+    // Sentinel for _stagingPercent: no byte progress known yet (download not
+    // started, or a chunked response with no Content-Length).
+    private const int StagingPercentUnknown = -1;
+    // How often the foreground "install" window samples _stagingPercent.
+    private const int StagingProgressPollMs = 250;
+    // Live percent (0-100) of the in-flight silent staging download, or
+    // StagingPercentUnknown. Lets the foreground "install" path show a real
+    // progress bar while it waits on staging, instead of a bare marquee that
+    // makes a large download look hung (BUG-45).
+    private volatile int _stagingPercent = StagingPercentUnknown;
 
     /// <summary>True when the available update's installer is already on disk
     /// and ready to run.</summary>
@@ -323,12 +328,12 @@ public class UpdateService : IUpdateService
             UpdateProgressUI localUi = ui;
             _ = Task.Run(async () =>
             {
-                int shownPct = -1;
+                int shownPct = StagingPercentUnknown;
                 bool marquee = true;
                 while (!pollCts.IsCancellationRequested)
                 {
                     int pct = _stagingPercent;
-                    if (pct >= 0)
+                    if (pct != StagingPercentUnknown)
                     {
                         if (pct != shownPct) { localUi.SetProgress(pct); shownPct = pct; }
                         marquee = false;
@@ -338,7 +343,7 @@ public class UpdateService : IUpdateService
                         localUi.SetIndeterminate($"Downloading DraftRight v{info.Version}...", hideBackgroundButton: false);
                         marquee = true;
                     }
-                    try { await Task.Delay(250, pollCts.Token); }
+                    try { await Task.Delay(StagingProgressPollMs, pollCts.Token); }
                     catch (OperationCanceledException) { break; }
                 }
             });
@@ -391,7 +396,7 @@ public class UpdateService : IUpdateService
     {
         try
         {
-            _stagingPercent = -1;
+            _stagingPercent = StagingPercentUnknown;
             var path = await TryDownloadInstallerAsync(
                 info.WindowsUrl, info.Version,
                 expectedSha256: ResolveWindowsSha256(info),
