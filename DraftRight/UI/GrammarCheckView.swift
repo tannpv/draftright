@@ -172,13 +172,10 @@ struct GrammarCheckView: View {
         var attr = AttributedString(currentText)
 
         for issue in remainingIssues {
-            guard issue.offset >= 0, issue.offset + issue.length <= currentText.count else { continue }
-            let startIndex = currentText.index(currentText.startIndex, offsetBy: issue.offset, limitedBy: currentText.endIndex)
-            let endIndex = startIndex.flatMap { currentText.index($0, offsetBy: issue.length, limitedBy: currentText.endIndex) }
-
-            guard let start = startIndex, let end = endIndex else { continue }
-            let range = start..<end
-            guard let attrRange = Range(range, in: attr) else { continue }
+            // Content-based resolution (see Fix logic below) — LLM offsets
+            // drift, so highlighting by raw offset underlined the wrong words.
+            guard let range = Self.resolveRange(of: issue, in: currentText),
+                  let attrRange = Range(range, in: attr) else { continue }
 
             attr[attrRange].backgroundColor = issue.color.withAlphaComponent(0.15)
             attr[attrRange].underlineStyle = .thick
@@ -270,36 +267,50 @@ struct GrammarCheckView: View {
     }
 
     // MARK: - Fix logic
+    //
+    // LLM-reported offsets are UNRELIABLE (models count tokens/bytes, drift by
+    // ±N) — trusting them spliced suggestions into the middle of words
+    // ("showswincorrectlyectly", BR#49). Every range is therefore re-resolved
+    // from the issue's `original` CONTENT in the current text at the moment of
+    // use; the numeric offset only disambiguates between duplicate occurrences
+    // (nearest wins). Remaining issues need no offset bookkeeping after an
+    // apply — they re-resolve on their own next use.
 
-    private func applyFix(_ issue: GrammarIssue) {
-        guard issue.offset >= 0, issue.offset + issue.length <= currentText.count else { return }
-        let start = currentText.index(currentText.startIndex, offsetBy: issue.offset, limitedBy: currentText.endIndex)
-        let end = start.flatMap { currentText.index($0, offsetBy: issue.length, limitedBy: currentText.endIndex) }
-
-        guard let s = start, let e = end else { return }
-        currentText.replaceSubrange(s..<e, with: issue.suggestion)
-
-        let lengthDiff = issue.suggestion.count - issue.length
-        remainingIssues = remainingIssues.compactMap { i in
-            if i.id == issue.id { return nil }
-            if i.offset > issue.offset {
-                return GrammarIssue(
-                    type: i.type, offset: i.offset + lengthDiff, length: i.length,
-                    original: i.original, suggestion: i.suggestion, reason: i.reason
-                )
-            }
-            return i
+    /// Locates `issue.original` in `text`, preferring the occurrence nearest
+    /// the LLM-claimed offset. Returns nil when the original string no longer
+    /// exists (stale issue — e.g. already fixed by an overlapping apply).
+    static func resolveRange(of issue: GrammarIssue, in text: String) -> Range<String.Index>? {
+        guard !issue.original.isEmpty else { return nil }
+        var candidates: [Range<String.Index>] = []
+        var searchFrom = text.startIndex
+        while let r = text.range(of: issue.original, range: searchFrom..<text.endIndex) {
+            candidates.append(r)
+            searchFrom = r.upperBound
+        }
+        guard !candidates.isEmpty else { return nil }
+        let claimed = max(0, min(issue.offset, text.count))
+        return candidates.min { a, b in
+            abs(text.distance(from: text.startIndex, to: a.lowerBound) - claimed)
+                < abs(text.distance(from: text.startIndex, to: b.lowerBound) - claimed)
         }
     }
 
+    private func applyFix(_ issue: GrammarIssue) {
+        if let range = Self.resolveRange(of: issue, in: currentText) {
+            currentText.replaceSubrange(range, with: issue.suggestion)
+        }
+        // Applied or stale either way — drop it. Survivors re-resolve from
+        // content on their next render/click, so no offset shifting.
+        remainingIssues.removeAll { $0.id == issue.id }
+    }
+
     private func fixAll() {
-        let sorted = remainingIssues.sorted { $0.offset > $1.offset }
-        for issue in sorted {
-            guard issue.offset >= 0, issue.offset + issue.length <= currentText.count else { continue }
-            let start = currentText.index(currentText.startIndex, offsetBy: issue.offset, limitedBy: currentText.endIndex)
-            let end = start.flatMap { currentText.index($0, offsetBy: issue.length, limitedBy: currentText.endIndex) }
-            guard let s = start, let e = end else { continue }
-            currentText.replaceSubrange(s..<e, with: issue.suggestion)
+        // Apply one at a time, re-resolving against the evolving text — order
+        // no longer matters because ranges come from content, not offsets.
+        for issue in remainingIssues {
+            if let range = Self.resolveRange(of: issue, in: currentText) {
+                currentText.replaceSubrange(range, with: issue.suggestion)
+            }
         }
         remainingIssues = []
     }
