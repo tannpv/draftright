@@ -49,6 +49,13 @@ const (
 	sandboxAPI = "https://api-m.sandbox.paypal.com"
 )
 
+// buyerUnavailable is the buyer-facing message for configuration problems. The
+// ops detail (which setting is missing, which script to run) goes to the
+// server log ONLY — checkout errors surface verbatim in the client apps, and
+// instructing a customer to "run scripts/paypal-create-plans.ts" is a leak
+// (#83 / BR#48). Byte-identical to Node's PayPalStrategy.BUYER_UNAVAILABLE.
+const buyerUnavailable = "PayPal is temporarily unavailable. Please choose another payment method."
+
 // Creds is the PayPal credential set, resolved by the caller per call
 // (DB-priority with env fallback, mode defaulting to sandbox).
 type Creds struct {
@@ -113,7 +120,8 @@ func (s *Strategy) getAccessToken(ctx context.Context, c Creds) (string, error) 
 	s.mu.Unlock()
 
 	if c.ClientID == "" || c.ClientSecret == "" {
-		return "", errors.New("PayPal is not configured. Set the client ID + secret in admin Settings → Payment.")
+		slog.Error("PayPal is not configured. Set the client ID + secret in admin Settings → Payment.")
+		return "", errors.New(buyerUnavailable)
 	}
 	basic := base64.StdEncoding.EncodeToString([]byte(c.ClientID + ":" + c.ClientSecret))
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
@@ -170,10 +178,11 @@ func (s *Strategy) CreateCheckout(ctx context.Context, p strategy.Payment, plan 
 		period = "yearly"
 	}
 	if planID == "" {
-		return strategy.Result{}, fmt.Errorf(
+		slog.Error(fmt.Sprintf(
 			"No PayPal billing plan configured for %s billing. Set paypal_plan_%s in admin Settings → Payment (run scripts/paypal-create-plans.ts to create them).",
 			period, period,
-		)
+		))
+		return strategy.Result{}, errors.New(buyerUnavailable)
 	}
 
 	token, err := s.getAccessToken(ctx, c)
