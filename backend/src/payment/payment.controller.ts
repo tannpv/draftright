@@ -120,4 +120,12 @@ export class PaymentController {
   async lemonSqueezyWebhook(@Req() req: RawBodyRequest<Request>) {
     return this.paymentService.handleWebhook(PaymentMethod.LEMONSQUEEZY, req.rawBody, req.headers);
   }
+
+  // PayPal signs via transmission headers verified against our webhook ID,
+  // not an HMAC over the body — but we still pass the raw body so the
+  // strategy controls the exact JSON sent to verify-webhook-signature.
+  @Post('webhook/paypal')
+  async paypalWebhook(@Req() req: RawBodyRequest<Request>) {
+    return this.paymentService.handleWebhook(PaymentMethod.PAYPAL, req.rawBody, req.headers);
+  }
 }

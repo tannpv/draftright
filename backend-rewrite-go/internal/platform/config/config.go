@@ -118,6 +118,13 @@ type Config struct {
 	LemonSqueezyAPIKey        string
 	LemonSqueezyStoreID       string
 	LemonSqueezyWebhookSecret string
+	PayPalClientID            string
+	PayPalClientSecret        string
+	PayPalMode                string
+	PayPalWebhookID           string
+	PayPalPlanMonthly         string
+	PayPalPlanYearly          string
+	AppName                   string
 	CassoAPIKey               string
 	SepayAPIKey               string
 	VietQRBankID              string
@@ -197,6 +204,13 @@ func Load() (*Config, error) {
 		LemonSqueezyAPIKey:        os.Getenv("LEMONSQUEEZY_API_KEY"),
 		LemonSqueezyStoreID:       os.Getenv("LEMONSQUEEZY_STORE_ID"),
 		LemonSqueezyWebhookSecret: os.Getenv("LEMONSQUEEZY_WEBHOOK_SECRET"),
+		PayPalClientID:            os.Getenv("PAYPAL_CLIENT_ID"),
+		PayPalClientSecret:        os.Getenv("PAYPAL_CLIENT_SECRET"),
+		PayPalMode:                os.Getenv("PAYPAL_MODE"),
+		PayPalWebhookID:           os.Getenv("PAYPAL_WEBHOOK_ID"),
+		PayPalPlanMonthly:         os.Getenv("PAYPAL_PLAN_MONTHLY"),
+		PayPalPlanYearly:          os.Getenv("PAYPAL_PLAN_YEARLY"),
+		AppName:                   envOr("APP_NAME", "DraftRight"),
 		CassoAPIKey:               os.Getenv("CASSO_API_KEY"),
 		SepayAPIKey:               os.Getenv("SEPAY_API_KEY"),
 		VietQRBankID:              os.Getenv("VIETQR_BANK_ID"),

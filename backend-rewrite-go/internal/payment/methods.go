@@ -11,14 +11,16 @@ const DefaultPaymentMethod = string(MethodStripe)
 
 // registeredMethods is the ordered key set of Node's strategy Map
 // (payment.service.ts constructor). These are the methods that actually have a
-// backend strategy and can therefore check out. paypal + momo are enum values
-// with NO strategy and are deliberately absent. 3b's strategies must cover
-// EXACTLY this set; keep it the single source of truth.
+// backend strategy and can therefore check out. momo is an enum value with NO
+// strategy and is deliberately absent. The order mirrors the Node Map insertion
+// order (paypal between lemonsqueezy and apple_pay) because
+// AssertMethodsRegisterable interpolates this list into its error message.
 var registeredMethods = []string{
 	string(MethodStripe),
 	string(MethodVietQR),
 	string(MethodBankTransfer),
 	string(MethodLemonSqueezy),
+	string(MethodPayPal),
 	string(MethodApplePay),
 	string(MethodGooglePay),
 }

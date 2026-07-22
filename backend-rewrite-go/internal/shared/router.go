@@ -95,6 +95,7 @@ type Router struct {
 	PaymentWebhookCasso        http.Handler // POST /payment/webhook/casso        (public)
 	PaymentWebhookSepay        http.Handler // POST /payment/webhook/sepay        (public)
 	PaymentWebhookLemonSqueezy http.Handler // POST /payment/webhook/lemonsqueezy (public)
+	PaymentWebhookPayPal       http.Handler // POST /payment/webhook/paypal       (public)
 
 	// Phase 4a ancillary endpoints. All PUBLIC (mounted before the auth
 	// group). Errors accepts an optional best-effort JWT (the handler reads
@@ -305,6 +306,9 @@ func (r *Router) Build() http.Handler {
 	}
 	if r.PaymentWebhookLemonSqueezy != nil {
 		mux.Method(http.MethodPost, "/payment/webhook/lemonsqueezy", r.PaymentWebhookLemonSqueezy)
+	}
+	if r.PaymentWebhookPayPal != nil {
+		mux.Method(http.MethodPost, "/payment/webhook/paypal", r.PaymentWebhookPayPal)
 	}
 
 	// Phase 4a ancillary public endpoints — mounted BEFORE the auth group

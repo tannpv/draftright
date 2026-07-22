@@ -10,7 +10,7 @@ import (
 )
 
 const getAppSettings = `-- name: GetAppSettings :one
-SELECT id, environment, trial_limit, token_expiry_minutes, max_input_length, supported_languages, stripe_secret_key, stripe_webhook_secret, paypal_client_id, paypal_client_secret, paypal_mode, momo_partner_code, momo_access_key, momo_secret_key, momo_mode, vietqr_bank_id, vietqr_account_number, vietqr_account_name, casso_api_key, sepay_api_key, google_client_id, google_client_secret, apple_client_id, apple_team_id, apple_key_id, updated_at, refresh_token_expiry_days, stripe_mode, sepay_mode, resend_api_key, email_from, client_log_level, payment_methods_enabled, lemonsqueezy_api_key, lemonsqueezy_store_id, lemonsqueezy_webhook_secret, lemonsqueezy_variant_monthly, lemonsqueezy_variant_yearly FROM app_settings ORDER BY updated_at ASC LIMIT 1
+SELECT id, environment, trial_limit, token_expiry_minutes, max_input_length, supported_languages, stripe_secret_key, stripe_webhook_secret, paypal_client_id, paypal_client_secret, paypal_mode, momo_partner_code, momo_access_key, momo_secret_key, momo_mode, vietqr_bank_id, vietqr_account_number, vietqr_account_name, casso_api_key, sepay_api_key, google_client_id, google_client_secret, apple_client_id, apple_team_id, apple_key_id, updated_at, refresh_token_expiry_days, stripe_mode, sepay_mode, resend_api_key, email_from, client_log_level, payment_methods_enabled, lemonsqueezy_api_key, lemonsqueezy_store_id, lemonsqueezy_webhook_secret, lemonsqueezy_variant_monthly, lemonsqueezy_variant_yearly, paypal_webhook_id, paypal_plan_monthly, paypal_plan_yearly FROM app_settings ORDER BY updated_at ASC LIMIT 1
 `
 
 func (q *Queries) GetAppSettings(ctx context.Context) (AppSetting, error) {
@@ -55,12 +55,15 @@ func (q *Queries) GetAppSettings(ctx context.Context) (AppSetting, error) {
 		&i.LemonsqueezyWebhookSecret,
 		&i.LemonsqueezyVariantMonthly,
 		&i.LemonsqueezyVariantYearly,
+		&i.PaypalWebhookID,
+		&i.PaypalPlanMonthly,
+		&i.PaypalPlanYearly,
 	)
 	return i, err
 }
 
 const insertDefaultAppSettings = `-- name: InsertDefaultAppSettings :one
-INSERT INTO app_settings DEFAULT VALUES RETURNING id, environment, trial_limit, token_expiry_minutes, max_input_length, supported_languages, stripe_secret_key, stripe_webhook_secret, paypal_client_id, paypal_client_secret, paypal_mode, momo_partner_code, momo_access_key, momo_secret_key, momo_mode, vietqr_bank_id, vietqr_account_number, vietqr_account_name, casso_api_key, sepay_api_key, google_client_id, google_client_secret, apple_client_id, apple_team_id, apple_key_id, updated_at, refresh_token_expiry_days, stripe_mode, sepay_mode, resend_api_key, email_from, client_log_level, payment_methods_enabled, lemonsqueezy_api_key, lemonsqueezy_store_id, lemonsqueezy_webhook_secret, lemonsqueezy_variant_monthly, lemonsqueezy_variant_yearly
+INSERT INTO app_settings DEFAULT VALUES RETURNING id, environment, trial_limit, token_expiry_minutes, max_input_length, supported_languages, stripe_secret_key, stripe_webhook_secret, paypal_client_id, paypal_client_secret, paypal_mode, momo_partner_code, momo_access_key, momo_secret_key, momo_mode, vietqr_bank_id, vietqr_account_number, vietqr_account_name, casso_api_key, sepay_api_key, google_client_id, google_client_secret, apple_client_id, apple_team_id, apple_key_id, updated_at, refresh_token_expiry_days, stripe_mode, sepay_mode, resend_api_key, email_from, client_log_level, payment_methods_enabled, lemonsqueezy_api_key, lemonsqueezy_store_id, lemonsqueezy_webhook_secret, lemonsqueezy_variant_monthly, lemonsqueezy_variant_yearly, paypal_webhook_id, paypal_plan_monthly, paypal_plan_yearly
 `
 
 func (q *Queries) InsertDefaultAppSettings(ctx context.Context) (AppSetting, error) {
@@ -105,6 +108,9 @@ func (q *Queries) InsertDefaultAppSettings(ctx context.Context) (AppSetting, err
 		&i.LemonsqueezyWebhookSecret,
 		&i.LemonsqueezyVariantMonthly,
 		&i.LemonsqueezyVariantYearly,
+		&i.PaypalWebhookID,
+		&i.PaypalPlanMonthly,
+		&i.PaypalPlanYearly,
 	)
 	return i, err
 }

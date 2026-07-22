@@ -70,6 +70,16 @@ export type WebhookAction =
   | { type: 'lemonsqueezy_payment_failed';   lemonsqueezy_subscription_id: string }
   | { type: 'lemonsqueezy_subscription_canceled'; lemonsqueezy_subscription_id: string }
   | { type: 'lemonsqueezy_subscription_expired';  lemonsqueezy_subscription_id: string }
+  // PayPal Subscriptions webhook events. Same generic shape as LS —
+  // the subscription id is PayPal's `resource.id` (subscription events)
+  // or `resource.billing_agreement_id` (PAYMENT.SALE.COMPLETED), and
+  // `reference_code` echoes back from the subscription `custom_id`.
+  // PaymentService.handleWebhook dispatches these to the generic
+  // SubscriptionsService.*ByStoreRef helpers with StoreType.PAYPAL.
+  | { type: 'paypal_payment_success'; reference_code: string; paypal_subscription_id: string; current_period_end: number /* unix sec */ }
+  | { type: 'paypal_payment_failed';   paypal_subscription_id: string }
+  | { type: 'paypal_subscription_canceled'; paypal_subscription_id: string }
+  | { type: 'paypal_subscription_expired';  paypal_subscription_id: string }
   | { type: 'ignored' };
 
 // The strategy contract is BasePaymentStrategy (abstract class). These are the

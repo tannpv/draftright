@@ -138,6 +138,66 @@ func (s *Service) HandleWebhook(ctx context.Context, method string, payload []by
 		_, _ = s.subsWriter.ExpireByStoreRef(ctx, string(StoreLemonSqueezy), action.LSSubscriptionID)
 		return WebhookResult{Success: true}, nil
 
+	case strategy.ActionPayPalPaymentSuccess:
+		// First-cycle activation carries a reference code (from the ACTIVATED
+		// webhook's custom_id) → complete the pending payment + stamp the
+		// store ref. Renewals (PAYMENT.SALE.COMPLETED) arrive with no
+		// reference code → extend expiry via store ref. On the first cycle
+		// ACTIVATED already completed the payment, so a following
+		// SALE.COMPLETED finds no pending payment and extends to the same
+		// next_billing_time (idempotent no-op).
+		var pending *WebhookPayment
+		if action.ReferenceCode != "" {
+			pay, err := s.webhookRepo.PaymentForWebhook(ctx, action.ReferenceCode)
+			if err != nil {
+				return WebhookResult{}, err
+			}
+			if pay != nil && pay.Status == "pending" {
+				pending = pay
+			}
+		}
+		if pending != nil {
+			done, ref, err := s.completePayment(ctx, action.ReferenceCode, "completed")
+			if err != nil {
+				return WebhookResult{}, err
+			}
+			if done {
+				_ = s.subsWriter.StampStoreRef(ctx, action.ReferenceCode, string(StorePayPal), action.PayPalSubscriptionID)
+			}
+			return result(done, ref), nil
+		}
+		// Renewal — extend expiry.
+		if action.CurrentPeriodEnd > 0 {
+			_, _ = s.subsWriter.ExtendByStoreRef(ctx, string(StorePayPal), action.PayPalSubscriptionID, time.Unix(action.CurrentPeriodEnd, 0))
+		}
+		// Node: reference_code: action.reference_code || undefined — the key is
+		// omitted entirely when the action carried no reference.
+		if action.ReferenceCode == "" {
+			return WebhookResult{Success: true}, nil
+		}
+		ref := action.ReferenceCode
+		return WebhookResult{Success: true, ReferenceCode: &ref}, nil
+
+	case strategy.ActionPayPalPaymentFailed:
+		// Renewal charge failed — notify, don't revoke (that's EXPIRED's job).
+		sub, _ := s.subsWriter.FindByStoreRef(ctx, string(StorePayPal), action.PayPalSubscriptionID)
+		if sub != nil && sub.UserEmail != "" {
+			name := sub.UserName
+			if name == "" {
+				name = sub.UserEmail
+			}
+			s.emailer.PaymentFailed(ctx, sub.UserEmail, name, sub.PlanName)
+		}
+		return WebhookResult{Success: true}, nil
+
+	case strategy.ActionPayPalSubCanceled:
+		_, _ = s.subsWriter.CancelByStoreRef(ctx, string(StorePayPal), action.PayPalSubscriptionID)
+		return WebhookResult{Success: true}, nil
+
+	case strategy.ActionPayPalSubExpired:
+		_, _ = s.subsWriter.ExpireByStoreRef(ctx, string(StorePayPal), action.PayPalSubscriptionID)
+		return WebhookResult{Success: true}, nil
+
 	case strategy.ActionDisputeCreated:
 		return WebhookResult{Success: true}, nil
 

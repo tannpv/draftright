@@ -59,6 +59,9 @@ type patchBody struct {
 	PaypalClientID             *string `json:"paypal_client_id"`
 	PaypalClientSecret         *string `json:"paypal_client_secret"`
 	PaypalMode                 *string `json:"paypal_mode"`
+	PaypalWebhookID            *string `json:"paypal_webhook_id"`
+	PaypalPlanMonthly          *string `json:"paypal_plan_monthly"`
+	PaypalPlanYearly           *string `json:"paypal_plan_yearly"`
 	MomoPartnerCode            *string `json:"momo_partner_code"`
 	MomoAccessKey              *string `json:"momo_access_key"`
 	MomoSecretKey              *string `json:"momo_secret_key"`
@@ -135,6 +138,9 @@ func (h *Handler) Patch(w http.ResponseWriter, r *http.Request) {
 		PaypalClientID:             body.PaypalClientID,
 		PaypalClientSecret:         body.PaypalClientSecret,
 		PaypalMode:                 body.PaypalMode,
+		PaypalWebhookID:            body.PaypalWebhookID,
+		PaypalPlanMonthly:          body.PaypalPlanMonthly,
+		PaypalPlanYearly:           body.PaypalPlanYearly,
 		MomoPartnerCode:            body.MomoPartnerCode,
 		MomoAccessKey:              body.MomoAccessKey,
 		MomoSecretKey:              body.MomoSecretKey,
