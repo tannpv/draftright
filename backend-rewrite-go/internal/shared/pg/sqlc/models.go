@@ -149,6 +149,9 @@ const (
 	SubscriptionsStoreTypeEnumAdminGranted SubscriptionsStoreTypeEnum = "admin_granted"
 	SubscriptionsStoreTypeEnumLemonsqueezy SubscriptionsStoreTypeEnum = "lemonsqueezy"
 	SubscriptionsStoreTypeEnumStripe       SubscriptionsStoreTypeEnum = "stripe"
+	SubscriptionsStoreTypeEnumVietqr       SubscriptionsStoreTypeEnum = "vietqr"
+	SubscriptionsStoreTypeEnumBankTransfer SubscriptionsStoreTypeEnum = "bank_transfer"
+	SubscriptionsStoreTypeEnumPaypal       SubscriptionsStoreTypeEnum = "paypal"
 )
 
 func (e *SubscriptionsStoreTypeEnum) Scan(src interface{}) error {
@@ -365,6 +368,9 @@ type AppSetting struct {
 	LemonsqueezyWebhookSecret  string           `db:"lemonsqueezy_webhook_secret" json:"lemonsqueezy_webhook_secret"`
 	LemonsqueezyVariantMonthly string           `db:"lemonsqueezy_variant_monthly" json:"lemonsqueezy_variant_monthly"`
 	LemonsqueezyVariantYearly  string           `db:"lemonsqueezy_variant_yearly" json:"lemonsqueezy_variant_yearly"`
+	PaypalWebhookID            string           `db:"paypal_webhook_id" json:"paypal_webhook_id"`
+	PaypalPlanMonthly          string           `db:"paypal_plan_monthly" json:"paypal_plan_monthly"`
+	PaypalPlanYearly           string           `db:"paypal_plan_yearly" json:"paypal_plan_yearly"`
 }
 
 type BugReport struct {
