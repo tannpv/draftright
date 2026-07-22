@@ -5,6 +5,7 @@ import { PaymentService } from './payment.service';
 import { StripeStrategy } from './strategies/stripe.strategy';
 import { VietQRStrategy } from './strategies/vietqr.strategy';
 import { LemonSqueezyStrategy } from './strategies/lemonsqueezy.strategy';
+import { PayPalStrategy } from './strategies/paypal.strategy';
 import { Payment } from './entities/payment.entity';
 import { User } from '../users/entities/user.entity';
 import { AppSettings } from '../admin/entities/app-settings.entity';
@@ -24,7 +25,7 @@ import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
     SubscriptionsModule,
   ],
   controllers: [PaymentController],
-  providers: [PaymentService, StripeStrategy, VietQRStrategy, LemonSqueezyStrategy],
+  providers: [PaymentService, StripeStrategy, VietQRStrategy, LemonSqueezyStrategy, PayPalStrategy],
   exports: [PaymentService],
 })
 export class PaymentModule {}

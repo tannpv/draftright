@@ -107,6 +107,17 @@ export const envSchema = z.object({
   LEMONSQUEEZY_STORE_ID: z.coerce.number().int().positive().optional(),
   LEMONSQUEEZY_PRO_VARIANT_ID: z.coerce.number().int().positive().optional(),
 
+  // --- Payment: PayPal (recurring subscriptions) ---------------------
+  // Env fallback for first-deploy/dev; live values are set per-env in
+  // AppSettings (admin Settings → Payment) so keys rotate without redeploy.
+  // paypal_mode ('sandbox'|'live') selects the API base URL.
+  PAYPAL_CLIENT_ID: z.string().optional(),
+  PAYPAL_CLIENT_SECRET: z.string().optional(),
+  PAYPAL_WEBHOOK_ID: z.string().optional(),
+  PAYPAL_PLAN_MONTHLY: z.string().optional(),
+  PAYPAL_PLAN_YEARLY: z.string().optional(),
+  PAYPAL_MODE: z.enum(['sandbox', 'live']).optional(),
+
   // --- Payment: VietQR / SePay / Casso -------------------------------
   VIETQR_BANK_ID: z.string().optional(),
   VIETQR_ACCOUNT_NUMBER: z.string().optional(),

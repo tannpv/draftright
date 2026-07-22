@@ -17,6 +17,7 @@ describe('PaymentService — enabled methods', () => {
   const subsService = {} as any;
   const stripeStrategy = { createCheckout: jest.fn(), verifyWebhook: jest.fn() } as any;
   const vietqrStrategy = { createCheckout: jest.fn(), verifyWebhook: jest.fn() } as any;
+  const paypalStrategy = { createCheckout: jest.fn(), verifyWebhook: jest.fn(), cancelSubscription: jest.fn() } as any;
   const emailService = { sendSubscriptionActivated: jest.fn(), sendSubscriptionExpired: jest.fn() } as any;
 
   let svc: PaymentService;
@@ -32,7 +33,7 @@ describe('PaymentService — enabled methods', () => {
     const cfg = { get: () => undefined } as any;
     const notifier = { notify: jest.fn().mockResolvedValue(undefined) } as any;
     svc = new PaymentService(
-      paymentRepo, userRepo, settingsRepo, plansService, subsService, stripeStrategy, vietqrStrategy, lemonSqueezyStrategy, emailService, cfg, notifier,
+      paymentRepo, userRepo, settingsRepo, plansService, subsService, stripeStrategy, vietqrStrategy, lemonSqueezyStrategy, paypalStrategy, emailService, cfg, notifier,
     );
   });
   afterAll(() => {
@@ -61,13 +62,21 @@ describe('PaymentService — enabled methods', () => {
     expect(await svc.getEnabledMethods()).toEqual(['stripe']);
   });
 
-  it('assertMethodsRegisterable rejects a method with no strategy (paypal)', () => {
-    expect(() => svc.assertMethodsRegisterable('stripe,paypal')).toThrow(/paypal/);
+  it('assertMethodsRegisterable rejects a method with no strategy (momo)', () => {
+    expect(() => svc.assertMethodsRegisterable('stripe,momo')).toThrow(/momo/);
   });
 
-  it('assertMethodsRegisterable accepts registered methods + blank input', () => {
-    expect(() => svc.assertMethodsRegisterable('stripe,vietqr,lemonsqueezy')).not.toThrow();
+  it('assertMethodsRegisterable accepts registered methods incl. paypal + blank input', () => {
+    expect(() => svc.assertMethodsRegisterable('stripe,vietqr,lemonsqueezy,paypal')).not.toThrow();
     expect(() => svc.assertMethodsRegisterable('')).not.toThrow();
+  });
+
+  it('createCheckout dispatches to PayPalStrategy when paypal is enabled (PAYPAL-002)', async () => {
+    findOneSettings.mockResolvedValue({ payment_methods_enabled: 'paypal' });
+    plansService.findById.mockResolvedValue({ id: 'p1', price_cents: 499, currency: 'USD', billing_period: 'monthly' });
+    paypalStrategy.createCheckout.mockResolvedValue({ payment: {}, redirect_url: 'https://paypal.com/approve/x' });
+    await svc.createCheckout('u1', 'p1', 'paypal');
+    expect(paypalStrategy.createCheckout).toHaveBeenCalled();
   });
 
   it('createCheckout rejects a method that is not enabled', async () => {
@@ -98,6 +107,8 @@ describe('PaymentService — getCustomerPortalUrl dispatch', () => {
   const stripeStrategy       = { createCheckout: jest.fn(), verifyWebhook: jest.fn(), getCustomerPortalUrl: jest.fn() } as any;
   const vietqrStrategy       = { createCheckout: jest.fn(), verifyWebhook: jest.fn(), getCustomerPortalUrl: jest.fn().mockResolvedValue(null) } as any;
   const lemonSqueezyStrategy = { createCheckout: jest.fn(), verifyWebhook: jest.fn(), getCustomerPortalUrl: jest.fn() } as any;
+  // PayPal has no hosted portal → getCustomerPortalUrl returns null.
+  const paypalStrategy       = { createCheckout: jest.fn(), verifyWebhook: jest.fn(), getCustomerPortalUrl: jest.fn().mockResolvedValue(null), cancelSubscription: jest.fn() } as any;
 
   let svc: PaymentService;
   beforeEach(() => {
@@ -106,7 +117,7 @@ describe('PaymentService — getCustomerPortalUrl dispatch', () => {
     const notifier = { notify: jest.fn().mockResolvedValue(undefined) } as any;
     svc = new PaymentService(
       paymentRepo, userRepo, settingsRepo, plansService, subsService,
-      stripeStrategy, vietqrStrategy, lemonSqueezyStrategy, emailService, cfg, notifier,
+      stripeStrategy, vietqrStrategy, lemonSqueezyStrategy, paypalStrategy, emailService, cfg, notifier,
     );
   });
 
@@ -150,5 +161,87 @@ describe('PaymentService — getCustomerPortalUrl dispatch', () => {
   it('throws NotFound when user does not exist', async () => {
     userRepo.findOne.mockResolvedValue(null);
     await expect(svc.getCustomerPortalUrl('ghost')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('throws NotFound for a PayPal-sourced subscription (no hosted portal) (PAYPAL-014)', async () => {
+    userRepo.findOne.mockResolvedValue({ id: 'u6' });
+    subsService.findActiveByUserId.mockResolvedValue({ store_type: 'paypal' });
+    await expect(svc.getCustomerPortalUrl('u6')).rejects.toBeInstanceOf(NotFoundException);
+    expect(paypalStrategy.getCustomerPortalUrl).not.toHaveBeenCalled();
+  });
+});
+
+describe('PaymentService — PayPal webhook + cancel dispatch', () => {
+  const settingsRepo = { findOne: jest.fn().mockResolvedValue({ payment_methods_enabled: 'paypal' }) } as any;
+  const plansService = { findById: jest.fn() } as any;
+  const paymentRepo  = { findOne: jest.fn().mockResolvedValue(null), create: jest.fn(), save: jest.fn() } as any;
+  const userRepo     = { findOne: jest.fn() } as any;
+  const subsService  = {
+    findActiveByUserId: jest.fn(),
+    findByStoreRef: jest.fn(),
+    extendByStoreRef: jest.fn().mockResolvedValue(1),
+    cancelByStoreRef: jest.fn().mockResolvedValue(1),
+    expireByStoreRef: jest.fn().mockResolvedValue(1),
+  } as any;
+  const emailService = { sendPaymentFailed: jest.fn() } as any;
+  const stripeStrategy = { verifyWebhook: jest.fn() } as any;
+  const vietqrStrategy = { verifyWebhook: jest.fn() } as any;
+  const lemonSqueezyStrategy = { verifyWebhook: jest.fn() } as any;
+  const paypalStrategy = { verifyWebhook: jest.fn(), cancelSubscription: jest.fn().mockResolvedValue(true) } as any;
+
+  let svc: PaymentService;
+  beforeEach(() => {
+    jest.clearAllMocks();
+    settingsRepo.findOne.mockResolvedValue({ payment_methods_enabled: 'paypal' });
+    paymentRepo.findOne.mockResolvedValue(null); // no pending payment → renewal branch
+    subsService.extendByStoreRef.mockResolvedValue(1);
+    subsService.cancelByStoreRef.mockResolvedValue(1);
+    subsService.expireByStoreRef.mockResolvedValue(1);
+    paypalStrategy.cancelSubscription.mockResolvedValue(true);
+    const cfg = { get: () => undefined } as any;
+    const notifier = { notify: jest.fn() } as any;
+    svc = new PaymentService(
+      paymentRepo, userRepo, settingsRepo, plansService, subsService,
+      stripeStrategy, vietqrStrategy, lemonSqueezyStrategy, paypalStrategy, emailService, cfg, notifier,
+    );
+  });
+
+  it('renewal (paypal_payment_success, no pending) extends via store-ref (PAYPAL-009)', async () => {
+    const nextUnix = 1800000000;
+    paypalStrategy.verifyWebhook.mockResolvedValue({
+      type: 'paypal_payment_success', reference_code: '', paypal_subscription_id: 'I-SUB-1', current_period_end: nextUnix,
+    });
+    await svc.handleWebhook('paypal', Buffer.from('{}'), {});
+    expect(subsService.extendByStoreRef).toHaveBeenCalledWith('paypal', 'I-SUB-1', new Date(nextUnix * 1000));
+  });
+
+  it('CANCELLED → cancelByStoreRef(PAYPAL, subId) (PAYPAL-011)', async () => {
+    paypalStrategy.verifyWebhook.mockResolvedValue({ type: 'paypal_subscription_canceled', paypal_subscription_id: 'I-SUB-2' });
+    await svc.handleWebhook('paypal', Buffer.from('{}'), {});
+    expect(subsService.cancelByStoreRef).toHaveBeenCalledWith('paypal', 'I-SUB-2');
+  });
+
+  it('EXPIRED → expireByStoreRef(PAYPAL, subId) (PAYPAL-012)', async () => {
+    paypalStrategy.verifyWebhook.mockResolvedValue({ type: 'paypal_subscription_expired', paypal_subscription_id: 'I-SUB-3' });
+    await svc.handleWebhook('paypal', Buffer.from('{}'), {});
+    expect(subsService.expireByStoreRef).toHaveBeenCalledWith('paypal', 'I-SUB-3');
+  });
+
+  it('PAYMENT.FAILED → emails user, does NOT revoke access (PAYPAL-013)', async () => {
+    subsService.findByStoreRef.mockResolvedValue({ user_id: 'u1', plan: { name: 'Pro' } });
+    userRepo.findOne.mockResolvedValue({ id: 'u1', email: 'a@b.c', name: 'A' });
+    paypalStrategy.verifyWebhook.mockResolvedValue({ type: 'paypal_payment_failed', paypal_subscription_id: 'I-SUB-4' });
+    await svc.handleWebhook('paypal', Buffer.from('{}'), {});
+    expect(emailService.sendPaymentFailed).toHaveBeenCalledWith('a@b.c', 'A', 'Pro');
+    expect(subsService.expireByStoreRef).not.toHaveBeenCalled();
+  });
+
+  it('cancelActiveSubscription (paypal) calls strategy cancel, keeps expires_at (PAYPAL-014)', async () => {
+    const expires = new Date('2099-01-01T00:00:00Z');
+    userRepo.findOne.mockResolvedValue({ id: 'u1' });
+    subsService.findActiveByUserId.mockResolvedValue({ store_type: 'paypal', store_transaction_id: 'I-SUB-5', expires_at: expires });
+    const res = await svc.cancelActiveSubscription('u1');
+    expect(paypalStrategy.cancelSubscription).toHaveBeenCalledWith('I-SUB-5');
+    expect(res).toEqual({ cancelled: true, expires_at: expires });
   });
 });
