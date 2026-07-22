@@ -251,9 +251,9 @@ func TestCreateCheckout_MissingPlanIDErrors(t *testing.T) {
 	_, err := s.CreateCheckout(context.Background(),
 		strategy.Payment{ReferenceCode: "DR-PRO-XY"},
 		strategy.Plan{BillingPeriod: "yearly"}, strategy.Options{})
-	want := "No PayPal billing plan configured for yearly billing. Set paypal_plan_yearly in admin Settings → Payment (run scripts/paypal-create-plans.ts to create them)."
+	want := "PayPal is temporarily unavailable. Please choose another payment method."
 	if err == nil || err.Error() != want {
-		t.Fatalf("want exact Node message, got %v", err)
+		t.Fatalf("want buyer-safe Node-parity message, got %v", err)
 	}
 	if n := api.tokenCalls.Load(); n != 0 {
 		t.Fatalf("must fail before hitting PayPal, token calls=%d", n)
@@ -271,9 +271,9 @@ func TestCreateCheckout_UnconfiguredErrors(t *testing.T) {
 	_, err := s.CreateCheckout(context.Background(),
 		strategy.Payment{ReferenceCode: "DR-PRO-XY"},
 		strategy.Plan{BillingPeriod: "monthly"}, strategy.Options{})
-	want := "PayPal is not configured. Set the client ID + secret in admin Settings → Payment."
+	want := "PayPal is temporarily unavailable. Please choose another payment method."
 	if err == nil || err.Error() != want {
-		t.Fatalf("want not-configured message, got %v", err)
+		t.Fatalf("want buyer-safe unavailable message, got %v", err)
 	}
 }
 

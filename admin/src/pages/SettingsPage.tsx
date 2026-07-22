@@ -240,9 +240,45 @@ export default function SettingsPage() {
   const paymentMethodsSet = new Set(
     (settings.payment_methods_enabled || '').split(',').map((s) => s.trim()).filter(Boolean),
   );
+  // A method may only be ENABLED once its provider is configured — enabling an
+  // unconfigured provider instantly breaks live checkout (the mobile apps render
+  // the method as soon as it appears in /payment/methods) and leaks ops-facing
+  // config errors to customers (#83). Disabling is always allowed. The
+  // predicates mirror each provider card's StatusDot plus what checkout itself
+  // needs (PayPal: creds + both plan IDs + webhook, per the #82 runbook order).
+  const methodConfigured = (key: string): boolean => {
+    switch (key) {
+      case 'stripe':
+        return !!settings.stripe_secret_key;
+      case 'paypal':
+        return !!settings.paypal_client_id && !!settings.paypal_client_secret
+          && !!settings.paypal_plan_monthly && !!settings.paypal_plan_yearly
+          && !!settings.paypal_webhook_id;
+      case 'vietqr':
+      case 'bank_transfer':
+        return !!settings.vietqr_account_number;
+      default:
+        return true;
+    }
+  };
+
+  const methodLabel = (key: string): string =>
+    PAYMENT_METHODS.find((m) => m.key === key)?.label ?? key;
+
   const toggleMethod = (key: string) => {
     const next = new Set(paymentMethodsSet);
-    next.has(key) ? next.delete(key) : next.add(key);
+    if (next.has(key)) {
+      next.delete(key);
+    } else {
+      if (!methodConfigured(key)) {
+        setToast({
+          message: `${methodLabel(key)} is not configured yet — fill in its card below (and save) before enabling it.`,
+          type: 'error',
+        });
+        return;
+      }
+      next.add(key);
+    }
     set('payment_methods_enabled')([...next].join(','));
   };
 

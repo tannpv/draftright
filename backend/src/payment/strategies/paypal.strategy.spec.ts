@@ -98,7 +98,7 @@ describe('PayPalStrategy.createCheckout', () => {
     const strat = makeStrategy({ ...baseSettings, paypal_plan_monthly: '' });
     await expect(
       strat.createCheckout({ reference_code: 'r', plan: { billing_period: 'monthly' } } as any, {}),
-    ).rejects.toThrow(/No PayPal billing plan configured for monthly/);
+    ).rejects.toThrow(/PayPal is temporarily unavailable/);
     expect(calls.some((c) => c.url.endsWith('/v1/billing/subscriptions'))).toBe(false);
   });
 
@@ -107,7 +107,7 @@ describe('PayPalStrategy.createCheckout', () => {
     const strat = makeStrategy({ ...baseSettings, paypal_client_id: '' });
     await expect(
       strat.createCheckout({ reference_code: 'r', plan: { billing_period: 'monthly' } } as any, {}),
-    ).rejects.toThrow(/PayPal is not configured/);
+    ).rejects.toThrow(/PayPal is temporarily unavailable/);
   });
 });
 

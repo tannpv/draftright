@@ -43,6 +43,14 @@ export class PayPalStrategy extends BasePaymentStrategy {
   private static readonly LIVE_API = 'https://api-m.paypal.com';
   private static readonly SANDBOX_API = 'https://api-m.sandbox.paypal.com';
 
+  // Buyer-facing message for configuration problems. The ops detail (which
+  // setting is missing, which script to run) goes to the server log ONLY —
+  // checkout errors surface verbatim in the client apps, and instructing a
+  // customer to "run scripts/paypal-create-plans.ts" is a leak (#83 / BR#48).
+  // The Go port mirrors this string byte-for-byte.
+  private static readonly BUYER_UNAVAILABLE =
+    'PayPal is temporarily unavailable. Please choose another payment method.';
+
   private tokenCache: { token: string; expiresAtMs: number } | null = null;
 
   constructor(
@@ -89,7 +97,8 @@ export class PayPalStrategy extends BasePaymentStrategy {
     }
     const { clientId, clientSecret, baseUrl } = await this.getCredentials();
     if (!clientId || !clientSecret) {
-      throw new Error('PayPal is not configured. Set the client ID + secret in admin Settings → Payment.');
+      this.logger.error('PayPal is not configured. Set the client ID + secret in admin Settings → Payment.');
+      throw new Error(PayPalStrategy.BUYER_UNAVAILABLE);
     }
     const basic = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
     const res = await fetch(`${baseUrl}/v1/oauth2/token`, {
@@ -123,11 +132,12 @@ export class PayPalStrategy extends BasePaymentStrategy {
     const isYearly = (plan.billing_period || 'monthly') === 'yearly';
     const planId = isYearly ? planYearly : planMonthly;
     if (!planId) {
-      throw new Error(
+      this.logger.error(
         `No PayPal billing plan configured for ${isYearly ? 'yearly' : 'monthly'} billing. ` +
           `Set paypal_plan_${isYearly ? 'yearly' : 'monthly'} in admin Settings → Payment ` +
           `(run scripts/paypal-create-plans.ts to create them).`,
       );
+      throw new Error(PayPalStrategy.BUYER_UNAVAILABLE);
     }
 
     const token = await this.getAccessToken();
