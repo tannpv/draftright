@@ -143,7 +143,7 @@ func (f fakeVariants) LemonSqueezyVariants(ctx context.Context) (string, string,
 func webhookSvc(settings fakeSettings, strat strategy.Strategy, repo WebhookRepo, subs SubsWriter, emailer WebhookEmailer, variants VariantResolver) *Service {
 	svc := &Service{
 		settings:   settings,
-		strategies: map[string]strategy.Strategy{"stripe": strat, "vietqr": strat, "lemonsqueezy": strat, "bank_transfer": strat},
+		strategies: map[string]strategy.Strategy{"stripe": strat, "vietqr": strat, "lemonsqueezy": strat, "bank_transfer": strat, "paypal": strat},
 		now:        func() time.Time { return time.Unix(1700000000, 0).UTC() },
 	}
 	return svc.WithWebhook(repo, subs, emailer, variants)
@@ -356,5 +356,177 @@ func TestHandleWebhook_LSPaymentFailedEmails(t *testing.T) {
 	}
 	if em.failedName != "u@x.com" {
 		t.Fatalf("empty name should fall back to email, got %q", em.failedName)
+	}
+}
+
+// --- PayPal webhook actions (port of the Node payment.service.spec PayPal
+// cases). First cycle: ACTIVATED carries the reference code → complete the
+// pending payment + stamp store ref. Renewals arrive with no reference code →
+// extend by store ref, and the response omits reference_code entirely.
+
+func TestHandleWebhook_PayPalActivatedCompletesAndStamps(t *testing.T) {
+	repo := &fakeWebhookRepo{pay: &WebhookPayment{
+		ID: "p1", UserID: "u1", PlanID: "pl1", Status: "pending",
+		Currency: "USD", Method: "paypal", BillingPeriod: "monthly",
+	}}
+	subs := &fakeSubsWriter{}
+	svc := webhookSvc(fakeSettings{csv: "paypal", found: true},
+		fakeVerifier{action: strategy.WebhookAction{
+			Type: strategy.ActionPayPalPaymentSuccess, ReferenceCode: "DR-PRO-PP",
+			PayPalSubscriptionID: "I-SUB-9", CurrentPeriodEnd: 1767225600,
+		}}, repo, subs, &noopEmailer{}, fakeVariants{})
+
+	res, err := svc.HandleWebhook(context.Background(), "paypal", nil, http.Header{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Success || res.ReferenceCode == nil || *res.ReferenceCode != "DR-PRO-PP" {
+		t.Fatalf("bad result: %+v", res)
+	}
+	if subs.stamped != "paypal:I-SUB-9" {
+		t.Fatalf("PayPal store ref not stamped: %q", subs.stamped)
+	}
+	if !subs.granted || subs.grantStore != "paypal" {
+		t.Fatalf("subscription not granted with paypal store type: %+v", subs)
+	}
+	if subs.extended != "" {
+		t.Fatalf("first cycle must not take the renewal branch: %q", subs.extended)
+	}
+}
+
+func TestHandleWebhook_PayPalRenewalExtendsWithoutRef(t *testing.T) {
+	// PAYMENT.SALE.COMPLETED: no reference code → renewal branch. The response
+	// is {success:true} with reference_code omitted (Node: `|| undefined`).
+	subs := &fakeSubsWriter{}
+	svc := webhookSvc(fakeSettings{csv: "paypal", found: true},
+		fakeVerifier{action: strategy.WebhookAction{
+			Type:                 strategy.ActionPayPalPaymentSuccess,
+			PayPalSubscriptionID: "I-SUB-1", CurrentPeriodEnd: 1767225600,
+		}}, &fakeWebhookRepo{}, subs, &noopEmailer{}, fakeVariants{})
+
+	res, err := svc.HandleWebhook(context.Background(), "paypal", nil, http.Header{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Success || res.ReferenceCode != nil {
+		t.Fatalf("renewal must be {success:true} with no ref key: %+v", res)
+	}
+	if subs.extended != "paypal:I-SUB-1" {
+		t.Fatalf("renewal did not extend by store ref: %q", subs.extended)
+	}
+}
+
+func TestHandleWebhook_PayPalRenewalZeroPeriodSkipsExtend(t *testing.T) {
+	// cpe=0 (next_billing_time unavailable) → Node skips the extend entirely.
+	subs := &fakeSubsWriter{}
+	svc := webhookSvc(fakeSettings{csv: "paypal", found: true},
+		fakeVerifier{action: strategy.WebhookAction{
+			Type:                 strategy.ActionPayPalPaymentSuccess,
+			PayPalSubscriptionID: "I-SUB-0",
+		}}, &fakeWebhookRepo{}, subs, &noopEmailer{}, fakeVariants{})
+
+	res, err := svc.HandleWebhook(context.Background(), "paypal", nil, http.Header{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Success || subs.extended != "" {
+		t.Fatalf("cpe=0 must not extend: res=%+v extended=%q", res, subs.extended)
+	}
+}
+
+func TestHandleWebhook_PayPalSettledPaymentTakesRenewalBranch(t *testing.T) {
+	// A SALE.COMPLETED right after ACTIVATED: the payment is already completed,
+	// so even with a reference code present the pending lookup misses and the
+	// renewal branch extends (idempotent no-op to the same next_billing_time).
+	repo := &fakeWebhookRepo{pay: &WebhookPayment{
+		ID: "p1", UserID: "u1", PlanID: "pl1", Status: "completed",
+		Currency: "USD", Method: "paypal", BillingPeriod: "monthly",
+	}}
+	subs := &fakeSubsWriter{}
+	svc := webhookSvc(fakeSettings{csv: "paypal", found: true},
+		fakeVerifier{action: strategy.WebhookAction{
+			Type: strategy.ActionPayPalPaymentSuccess, ReferenceCode: "DR-PRO-PP",
+			PayPalSubscriptionID: "I-SUB-9", CurrentPeriodEnd: 1767225600,
+		}}, repo, subs, &noopEmailer{}, fakeVariants{})
+
+	res, err := svc.HandleWebhook(context.Background(), "paypal", nil, http.Header{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Success || res.ReferenceCode == nil || *res.ReferenceCode != "DR-PRO-PP" {
+		t.Fatalf("bad result: %+v", res)
+	}
+	if subs.stamped != "" || subs.extended != "paypal:I-SUB-9" {
+		t.Fatalf("settled payment must extend, not stamp: %+v", subs)
+	}
+}
+
+func TestHandleWebhook_PayPalPaymentFailedEmails(t *testing.T) {
+	subs := &fakeSubsWriter{found: &subscription.StoreRefSub{
+		UserEmail: "u@x.com", UserName: "", PlanName: "Pro",
+	}}
+	em := &noopEmailer{}
+	svc := webhookSvc(fakeSettings{csv: "paypal", found: true},
+		fakeVerifier{action: strategy.WebhookAction{
+			Type: strategy.ActionPayPalPaymentFailed, PayPalSubscriptionID: "I-SUB-4",
+		}}, &fakeWebhookRepo{}, subs, em, fakeVariants{})
+
+	res, err := svc.HandleWebhook(context.Background(), "paypal", nil, http.Header{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Success || res.ReferenceCode != nil {
+		t.Fatalf("payment-failed must be {success:true} with no ref: %+v", res)
+	}
+	if !em.failed || em.failedName != "u@x.com" {
+		t.Fatalf("expected failure email with email-as-name fallback: %+v", em)
+	}
+}
+
+func TestHandleWebhook_PayPalPaymentFailedUnknownSubSkips(t *testing.T) {
+	em := &noopEmailer{}
+	svc := webhookSvc(fakeSettings{csv: "paypal", found: true},
+		fakeVerifier{action: strategy.WebhookAction{
+			Type: strategy.ActionPayPalPaymentFailed, PayPalSubscriptionID: "I-UNKNOWN",
+		}}, &fakeWebhookRepo{}, &fakeSubsWriter{}, em, fakeVariants{})
+
+	res, err := svc.HandleWebhook(context.Background(), "paypal", nil, http.Header{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Success || em.failed {
+		t.Fatalf("unknown sub must succeed without email: res=%+v emailed=%v", res, em.failed)
+	}
+}
+
+func TestHandleWebhook_PayPalCanceledCancels(t *testing.T) {
+	subs := &fakeSubsWriter{}
+	svc := webhookSvc(fakeSettings{csv: "paypal", found: true},
+		fakeVerifier{action: strategy.WebhookAction{
+			Type: strategy.ActionPayPalSubCanceled, PayPalSubscriptionID: "I-SUB-C",
+		}}, &fakeWebhookRepo{}, subs, &noopEmailer{}, fakeVariants{})
+
+	res, err := svc.HandleWebhook(context.Background(), "paypal", nil, http.Header{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Success || subs.cancelled != "paypal:I-SUB-C" {
+		t.Fatalf("did not cancel by store ref: res=%+v cancelled=%q", res, subs.cancelled)
+	}
+}
+
+func TestHandleWebhook_PayPalExpiredExpires(t *testing.T) {
+	subs := &fakeSubsWriter{}
+	svc := webhookSvc(fakeSettings{csv: "paypal", found: true},
+		fakeVerifier{action: strategy.WebhookAction{
+			Type: strategy.ActionPayPalSubExpired, PayPalSubscriptionID: "I-SUB-3",
+		}}, &fakeWebhookRepo{}, subs, &noopEmailer{}, fakeVariants{})
+
+	res, err := svc.HandleWebhook(context.Background(), "paypal", nil, http.Header{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Success || subs.expired != "paypal:I-SUB-3" {
+		t.Fatalf("did not expire by store ref: res=%+v expired=%q", res, subs.expired)
 	}
 }

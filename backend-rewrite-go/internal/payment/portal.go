@@ -9,15 +9,32 @@ import (
 	"github.com/tannpv/draftright-rewrite/internal/shared"
 )
 
-// storeTypeStrategyKey maps a subscription's store_type to the registered
-// strategy key. Mirrors the switch in getCustomerPortalUrl/cancelActiveSubscription:
-// only stripe + lemonsqueezy have a portal / programmatic cancel.
-func storeTypeStrategyKey(storeType string) (string, bool) {
+// storeTypePortalKey maps a subscription's store_type to the strategy key for
+// the customer-portal path. Mirrors getCustomerPortalUrl's switch: only
+// stripe + lemonsqueezy have a hosted portal (PayPal deliberately absent —
+// it has no portal concept).
+func storeTypePortalKey(storeType string) (string, bool) {
 	switch storeType {
 	case "stripe":
 		return "stripe", true
 	case "lemonsqueezy":
 		return "lemonsqueezy", true
+	default:
+		return "", false
+	}
+}
+
+// storeTypeCancelKey maps a subscription's store_type to the strategy key for
+// the in-app cancel path. Mirrors cancelActiveSubscription's switch: PayPal
+// has no hosted portal but DOES support programmatic cancel.
+func storeTypeCancelKey(storeType string) (string, bool) {
+	switch storeType {
+	case "stripe":
+		return "stripe", true
+	case "lemonsqueezy":
+		return "lemonsqueezy", true
+	case "paypal":
+		return "paypal", true
 	default:
 		return "", false
 	}
@@ -44,7 +61,7 @@ func (s *Service) CustomerPortalURL(ctx context.Context, userID string) (string,
 	if sub == nil {
 		return "", notFound("No active subscription to manage")
 	}
-	key, ok := storeTypeStrategyKey(sub.StoreType)
+	key, ok := storeTypePortalKey(sub.StoreType)
 	if !ok {
 		return "", notFound("Subscriptions sourced from '" + sub.StoreType + "' have no self-service portal")
 	}
@@ -101,7 +118,7 @@ func (s *Service) CancelActiveSubscription(ctx context.Context, userID string) (
 	if sub.StoreTransactionID == "" {
 		return nil, notFound("Subscription has no provider reference to cancel")
 	}
-	key, ok := storeTypeStrategyKey(sub.StoreType)
+	key, ok := storeTypeCancelKey(sub.StoreType)
 	if !ok {
 		return nil, notFound("Subscriptions sourced from '" + sub.StoreType + "' can't be cancelled in-app")
 	}

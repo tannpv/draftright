@@ -39,7 +39,13 @@ SELECT stripe_secret_key,
        lemonsqueezy_store_id,
        lemonsqueezy_variant_monthly,
        lemonsqueezy_variant_yearly,
-       lemonsqueezy_webhook_secret
+       lemonsqueezy_webhook_secret,
+       paypal_client_id,
+       paypal_client_secret,
+       paypal_mode,
+       paypal_webhook_id,
+       paypal_plan_monthly,
+       paypal_plan_yearly
 FROM app_settings
 LIMIT 1
 `
@@ -57,6 +63,12 @@ type GetPaymentCredentialsRow struct {
 	LemonsqueezyVariantMonthly string `db:"lemonsqueezy_variant_monthly" json:"lemonsqueezy_variant_monthly"`
 	LemonsqueezyVariantYearly  string `db:"lemonsqueezy_variant_yearly" json:"lemonsqueezy_variant_yearly"`
 	LemonsqueezyWebhookSecret  string `db:"lemonsqueezy_webhook_secret" json:"lemonsqueezy_webhook_secret"`
+	PaypalClientID             string `db:"paypal_client_id" json:"paypal_client_id"`
+	PaypalClientSecret         string `db:"paypal_client_secret" json:"paypal_client_secret"`
+	PaypalMode                 string `db:"paypal_mode" json:"paypal_mode"`
+	PaypalWebhookID            string `db:"paypal_webhook_id" json:"paypal_webhook_id"`
+	PaypalPlanMonthly          string `db:"paypal_plan_monthly" json:"paypal_plan_monthly"`
+	PaypalPlanYearly           string `db:"paypal_plan_yearly" json:"paypal_plan_yearly"`
 }
 
 // Checkout-time provider credentials from the singleton app_settings row.
@@ -78,6 +90,12 @@ func (q *Queries) GetPaymentCredentials(ctx context.Context) (GetPaymentCredenti
 		&i.LemonsqueezyVariantMonthly,
 		&i.LemonsqueezyVariantYearly,
 		&i.LemonsqueezyWebhookSecret,
+		&i.PaypalClientID,
+		&i.PaypalClientSecret,
+		&i.PaypalMode,
+		&i.PaypalWebhookID,
+		&i.PaypalPlanMonthly,
+		&i.PaypalPlanYearly,
 	)
 	return i, err
 }

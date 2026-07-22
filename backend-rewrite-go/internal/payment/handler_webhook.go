@@ -54,3 +54,8 @@ func (h *Handler) SepayWebhook(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) LemonSqueezyWebhook(w http.ResponseWriter, r *http.Request) {
 	h.webhook(w, r, string(MethodLemonSqueezy))
 }
+
+// PayPalWebhook: POST /payment/webhook/paypal (public).
+func (h *Handler) PayPalWebhook(w http.ResponseWriter, r *http.Request) {
+	h.webhook(w, r, string(MethodPayPal))
+}

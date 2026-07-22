@@ -45,6 +45,7 @@ import (
 	paymentpkg "github.com/tannpv/draftright-rewrite/internal/payment"
 	paymentstrategy "github.com/tannpv/draftright-rewrite/internal/payment/strategy"
 	"github.com/tannpv/draftright-rewrite/internal/payment/strategy/lemonsqueezy"
+	"github.com/tannpv/draftright-rewrite/internal/payment/strategy/paypal"
 	"github.com/tannpv/draftright-rewrite/internal/payment/strategy/stripe"
 	"github.com/tannpv/draftright-rewrite/internal/payment/strategy/vietqr"
 	planspkg "github.com/tannpv/draftright-rewrite/internal/plans"
@@ -182,6 +183,7 @@ func main() {
 		PaymentWebhookCasso:        core.paymentWebhookCasso,
 		PaymentWebhookSepay:        core.paymentWebhookSepay,
 		PaymentWebhookLemonSqueezy: core.paymentWebhookLemonSqueezy,
+		PaymentWebhookPayPal:       core.paymentWebhookPayPal,
 		MintExtToken:               core.mintExtToken,
 		ListExtTokens:              core.listExtTokens,
 		RevokeExtToken:             core.revokeExtToken,
@@ -661,11 +663,34 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 			VariantYearly:  creds.LemonSqueezyVariantYearly,
 			WebhookSecret:  paymentstrategy.ResolveCredential(creds.LemonSqueezyWebhookSecret, cfg.LemonSqueezyWebhookSecret),
 		}, cfg.WebsiteURL)
+		// PayPal reads credentials LIVE per call (mirrors Node's getCredentials
+		// → getSettings): rotating creds/plans/mode in admin Settings takes
+		// effect without a restart. DB value wins, env is the first-deploy
+		// fallback, mode defaults to sandbox.
+		paypalStrat := paypal.New(func(ctx context.Context) (paypal.Creds, error) {
+			c, err := paymentSettings.Credentials(ctx)
+			if err != nil {
+				return paypal.Creds{}, err
+			}
+			mode := paymentstrategy.ResolveCredential(c.PayPalMode, cfg.PayPalMode)
+			if mode == "" {
+				mode = "sandbox"
+			}
+			return paypal.Creds{
+				ClientID:     paymentstrategy.ResolveCredential(c.PayPalClientID, cfg.PayPalClientID),
+				ClientSecret: paymentstrategy.ResolveCredential(c.PayPalClientSecret, cfg.PayPalClientSecret),
+				WebhookID:    paymentstrategy.ResolveCredential(c.PayPalWebhookID, cfg.PayPalWebhookID),
+				PlanMonthly:  paymentstrategy.ResolveCredential(c.PayPalPlanMonthly, cfg.PayPalPlanMonthly),
+				PlanYearly:   paymentstrategy.ResolveCredential(c.PayPalPlanYearly, cfg.PayPalPlanYearly),
+				Mode:         mode,
+			}, nil
+		}, cfg.AppName, cfg.WebsiteURL)
 		strategies := map[string]paymentstrategy.Strategy{
 			"stripe":        stripeStrat,
 			"vietqr":        vietqrStrat,
 			"bank_transfer": vietqrStrat,
 			"lemonsqueezy":  lsStrat,
+			"paypal":        paypalStrat,
 			"apple_pay":     stripeStrat,
 			"google_pay":    stripeStrat,
 		}
@@ -700,6 +725,7 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 		core.paymentWebhookCasso = http.HandlerFunc(paymentHandler.CassoWebhook)
 		core.paymentWebhookSepay = http.HandlerFunc(paymentHandler.SepayWebhook)
 		core.paymentWebhookLemonSqueezy = http.HandlerFunc(paymentHandler.LemonSqueezyWebhook)
+		core.paymentWebhookPayPal = http.HandlerFunc(paymentHandler.PayPalWebhook)
 
 		// Daily subscription-expiry cron (ports NestJS @Cron("0 09 * * *")).
 		// Reuses the same subReader (it satisfies subpkg.CronRepo via
@@ -884,6 +910,7 @@ type coreHandlers struct {
 	paymentWebhookCasso        http.Handler // POST /payment/webhook/casso
 	paymentWebhookSepay        http.Handler // POST /payment/webhook/sepay
 	paymentWebhookLemonSqueezy http.Handler // POST /payment/webhook/lemonsqueezy
+	paymentWebhookPayPal       http.Handler // POST /payment/webhook/paypal
 
 	// Extension-token handlers (set when pool != nil; all JWT-gated).
 	mintExtToken   http.Handler // POST   /auth/extension-tokens

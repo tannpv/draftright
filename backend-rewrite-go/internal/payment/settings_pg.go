@@ -53,6 +53,12 @@ type Credentials struct {
 	LemonSqueezyVariantMonthly string
 	LemonSqueezyVariantYearly  string
 	LemonSqueezyWebhookSecret  string
+	PayPalClientID             string
+	PayPalClientSecret         string
+	PayPalMode                 string
+	PayPalWebhookID            string
+	PayPalPlanMonthly          string
+	PayPalPlanYearly           string
 }
 
 // Credentials reads the singleton app_settings credential row. A missing row
@@ -79,6 +85,12 @@ func (a *SettingsAdapter) Credentials(ctx context.Context) (Credentials, error) 
 		LemonSqueezyVariantMonthly: row.LemonsqueezyVariantMonthly,
 		LemonSqueezyVariantYearly:  row.LemonsqueezyVariantYearly,
 		LemonSqueezyWebhookSecret:  row.LemonsqueezyWebhookSecret,
+		PayPalClientID:             row.PaypalClientID,
+		PayPalClientSecret:         row.PaypalClientSecret,
+		PayPalMode:                 row.PaypalMode,
+		PayPalWebhookID:            row.PaypalWebhookID,
+		PayPalPlanMonthly:          row.PaypalPlanMonthly,
+		PayPalPlanYearly:           row.PaypalPlanYearly,
 	}, nil
 }
 
