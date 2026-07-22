@@ -62,6 +62,7 @@ func NewPgRepo(q *sqlc.Queries, p pool) *PgRepo { return &PgRepo{q: q, pool: p} 
 const selectCols = "id, environment, trial_limit, token_expiry_minutes, refresh_token_expiry_days, " +
 	"max_input_length, supported_languages, payment_methods_enabled, stripe_secret_key, " +
 	"stripe_webhook_secret, stripe_mode, paypal_client_id, paypal_client_secret, paypal_mode, " +
+	"paypal_webhook_id, paypal_plan_monthly, paypal_plan_yearly, " +
 	"momo_partner_code, momo_access_key, momo_secret_key, momo_mode, vietqr_bank_id, " +
 	"vietqr_account_number, vietqr_account_name, casso_api_key, sepay_api_key, sepay_mode, " +
 	"resend_api_key, email_from, google_client_id, google_client_secret, apple_client_id, " +
@@ -144,6 +145,15 @@ func patchSQL(p Patch) (set string, args []any) {
 	}
 	if p.PaypalMode != nil {
 		add("paypal_mode", *p.PaypalMode)
+	}
+	if p.PaypalWebhookID != nil {
+		add("paypal_webhook_id", *p.PaypalWebhookID)
+	}
+	if p.PaypalPlanMonthly != nil {
+		add("paypal_plan_monthly", *p.PaypalPlanMonthly)
+	}
+	if p.PaypalPlanYearly != nil {
+		add("paypal_plan_yearly", *p.PaypalPlanYearly)
 	}
 	if p.MomoPartnerCode != nil {
 		add("momo_partner_code", *p.MomoPartnerCode)
@@ -236,6 +246,9 @@ func fromRow(row sqlc.AppSetting) AppSettings {
 		PaypalClientID:             row.PaypalClientID,
 		PaypalClientSecret:         row.PaypalClientSecret,
 		PaypalMode:                 row.PaypalMode,
+		PaypalWebhookID:            row.PaypalWebhookID,
+		PaypalPlanMonthly:          row.PaypalPlanMonthly,
+		PaypalPlanYearly:           row.PaypalPlanYearly,
 		MomoPartnerCode:            row.MomoPartnerCode,
 		MomoAccessKey:              row.MomoAccessKey,
 		MomoSecretKey:              row.MomoSecretKey,
@@ -286,6 +299,9 @@ func scanSettings(row pgx.Row) (AppSettings, error) {
 		&s.PaypalClientID,
 		&s.PaypalClientSecret,
 		&s.PaypalMode,
+		&s.PaypalWebhookID,
+		&s.PaypalPlanMonthly,
+		&s.PaypalPlanYearly,
 		&s.MomoPartnerCode,
 		&s.MomoAccessKey,
 		&s.MomoSecretKey,

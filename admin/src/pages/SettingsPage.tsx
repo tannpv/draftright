@@ -24,6 +24,12 @@ interface Settings {
   stripe_secret_key: string;
   stripe_webhook_secret: string;
   stripe_mode: string;
+  paypal_client_id: string;
+  paypal_client_secret: string;
+  paypal_mode: string;
+  paypal_plan_monthly: string;
+  paypal_plan_yearly: string;
+  paypal_webhook_id: string;
   vietqr_bank_id: string;
   vietqr_account_number: string;
   vietqr_account_name: string;
@@ -47,6 +53,7 @@ interface Settings {
 
 const PAYMENT_METHODS: { key: string; label: string }[] = [
   { key: 'stripe', label: 'Card (Stripe)' },
+  { key: 'paypal', label: 'PayPal' },
   { key: 'vietqr', label: 'VietQR' },
   { key: 'bank_transfer', label: 'Bank Transfer' },
 ];
@@ -127,12 +134,31 @@ function StatusDot({ configured }: { configured: boolean }) {
   );
 }
 
+// Live/sandbox|test mode pill next to a payment-provider heading. Shared by
+// every provider card (Stripe, PayPal, SePay) so the badge styling lives in one
+// place instead of being copy-pasted per card.
+function ModeBadge({ mode }: { mode: string }) {
+  const live = mode === 'live';
+  return (
+    <span style={{
+      marginLeft: 10, fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 4,
+      background: live ? 'rgba(19,222,185,0.12)' : 'rgba(255,174,31,0.12)',
+      color: live ? 'var(--success)' : 'var(--warning)',
+      textTransform: 'uppercase' as const,
+    }}>
+      {mode}
+    </span>
+  );
+}
+
 export default function SettingsPage() {
   const defaults: Settings = {
     environment: 'testing', trial_limit: 3, token_expiry_minutes: 15, refresh_token_expiry_days: 90, max_input_length: 3000,
     supported_languages: ALL_LANGUAGES.join(','),
     payment_methods_enabled: '',
     stripe_secret_key: '', stripe_webhook_secret: '', stripe_mode: 'test',
+    paypal_client_id: '', paypal_client_secret: '', paypal_mode: 'sandbox',
+    paypal_plan_monthly: '', paypal_plan_yearly: '', paypal_webhook_id: '',
     vietqr_bank_id: 'MB', vietqr_account_number: '', vietqr_account_name: '',
     casso_api_key: '', sepay_api_key: '', sepay_mode: 'sandbox',
     resend_api_key: '', email_from: 'DraftRight <noreply@draftright.info>',
@@ -379,12 +405,7 @@ export default function SettingsPage() {
           <div className="card" style={{ marginBottom: 24 }}>
             <h2 style={{ color: 'var(--text)', fontSize: 16, fontWeight: 600, marginBottom: 4 }}>
               <StatusDot configured={!!settings.stripe_secret_key} />💳 Stripe
-              <span style={{ marginLeft: 10, fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 4,
-                  background: settings.stripe_mode === 'live' ? 'rgba(19,222,185,0.12)' : 'rgba(255,174,31,0.12)',
-                  color: settings.stripe_mode === 'live' ? 'var(--success)' : 'var(--warning)',
-                  textTransform: 'uppercase' as const }}>
-                {settings.stripe_mode}
-              </span>
+              <ModeBadge mode={settings.stripe_mode} />
             </h2>
             <p style={{ color: 'var(--muted)', fontSize: 12, marginBottom: 16 }}>Credit/debit cards, Apple Pay, Google Pay</p>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
@@ -398,6 +419,30 @@ export default function SettingsPage() {
                 </select>
                 <p style={{ color: 'var(--muted)', fontSize: 11, marginTop: 4 }}>Switch when keys are sk_live_/whsec_ from live mode.</p>
               </div>
+            </div>
+          </div>
+
+          {/* PayPal */}
+          <div className="card" style={{ marginBottom: 24 }}>
+            <h2 style={{ color: 'var(--text)', fontSize: 16, fontWeight: 600, marginBottom: 4 }}>
+              <StatusDot configured={!!settings.paypal_client_id} />🅿️ PayPal
+              <ModeBadge mode={settings.paypal_mode} />
+            </h2>
+            <p style={{ color: 'var(--muted)', fontSize: 12, marginBottom: 16 }}>Native recurring subscriptions — USD plans only (from the Plans page). VN buyers use VietQR.</p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
+              <TextField label="Client ID" value={settings.paypal_client_id} onChange={set('paypal_client_id')} placeholder="AeA1QI...ZxYw" hint="PayPal Developer → REST app" />
+              <SecretField label="Client Secret" value={settings.paypal_client_secret} onChange={set('paypal_client_secret')} placeholder="EJk3...9rTq" hint="From the same REST app" />
+              <div>
+                <label style={{ display: 'block', color: 'var(--text)', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Mode</label>
+                <select value={settings.paypal_mode} onChange={e => set('paypal_mode')(e.target.value)} className="dark-input">
+                  <option value="sandbox">Sandbox</option>
+                  <option value="live">Live</option>
+                </select>
+                <p style={{ color: 'var(--muted)', fontSize: 11, marginTop: 4 }}>Sandbox for testing; Live for real charges.</p>
+              </div>
+              <TextField label="Monthly Plan ID" value={settings.paypal_plan_monthly} onChange={set('paypal_plan_monthly')} placeholder="P-5ML4...GALI" hint="From paypal-create-plans.ts" />
+              <TextField label="Yearly Plan ID" value={settings.paypal_plan_yearly} onChange={set('paypal_plan_yearly')} placeholder="P-1AB2...WXYZ" hint="From paypal-create-plans.ts" />
+              <TextField label="Webhook ID" value={settings.paypal_webhook_id} onChange={set('paypal_webhook_id')} placeholder="8SR...K2N" hint="PayPal Developer → Webhooks" />
             </div>
           </div>
 
@@ -423,12 +468,7 @@ export default function SettingsPage() {
           <div className="card" style={{ marginBottom: 24 }}>
             <h2 style={{ color: 'var(--text)', fontSize: 16, fontWeight: 600, marginBottom: 4 }}>
               <StatusDot configured={!!settings.casso_api_key || !!settings.sepay_api_key} />🔔 Auto-verification (Casso / SePay)
-              <span style={{ marginLeft: 10, fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 4,
-                  background: settings.sepay_mode === 'live' ? 'rgba(19,222,185,0.12)' : 'rgba(255,174,31,0.12)',
-                  color: settings.sepay_mode === 'live' ? 'var(--success)' : 'var(--warning)',
-                  textTransform: 'uppercase' as const }}>
-                {settings.sepay_mode}
-              </span>
+              <ModeBadge mode={settings.sepay_mode} />
             </h2>
             <p style={{ color: 'var(--muted)', fontSize: 12, marginBottom: 16 }}>Automatic bank transfer verification — configure one or both</p>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>

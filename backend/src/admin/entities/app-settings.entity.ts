@@ -53,6 +53,19 @@ export class AppSettings {
   @Column({ type: 'varchar', length: 20, default: 'sandbox' })
   paypal_mode: string;
 
+  // PayPal webhook ID — used to verify inbound webhook signatures via
+  // PayPal's verify-webhook-signature API (PayPal does not sign with HMAC).
+  @Column({ type: 'varchar', length: 100, default: '' })
+  paypal_webhook_id: string;
+
+  // PayPal billing-plan IDs (P-XXXX), one per DraftRight billing period.
+  // Created once via scripts/paypal-create-plans.ts against the USD plans.
+  @Column({ type: 'varchar', length: 100, default: '' })
+  paypal_plan_monthly: string;
+
+  @Column({ type: 'varchar', length: 100, default: '' })
+  paypal_plan_yearly: string;
+
   // --- Payment: Momo ---
   @Column({ type: 'varchar', length: 500, default: '' })
   momo_partner_code: string;

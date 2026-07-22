@@ -75,7 +75,10 @@ CREATE TYPE public.subscriptions_store_type_enum AS ENUM (
     'apple_iap',
     'admin_granted',
     'lemonsqueezy',
-    'stripe'
+    'stripe',
+    'vietqr',
+    'bank_transfer',
+    'paypal'
 );
 
 
@@ -225,7 +228,10 @@ CREATE TABLE public.app_settings (
     lemonsqueezy_store_id character varying(50) DEFAULT ''::character varying NOT NULL,
     lemonsqueezy_webhook_secret character varying(100) DEFAULT ''::character varying NOT NULL,
     lemonsqueezy_variant_monthly character varying(50) DEFAULT ''::character varying NOT NULL,
-    lemonsqueezy_variant_yearly character varying(50) DEFAULT ''::character varying NOT NULL
+    lemonsqueezy_variant_yearly character varying(50) DEFAULT ''::character varying NOT NULL,
+    paypal_webhook_id character varying(100) DEFAULT ''::character varying NOT NULL,
+    paypal_plan_monthly character varying(100) DEFAULT ''::character varying NOT NULL,
+    paypal_plan_yearly character varying(100) DEFAULT ''::character varying NOT NULL
 );
 
 

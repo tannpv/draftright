@@ -15,5 +15,9 @@ export const LS_PERIOD_MS = 31 * DAY;
 // --- URLs (env with sane local fallback) ---
 /** Public website base, e.g. for payment success/cancel redirects. */
 export const websiteUrl = (): string => process.env.WEBSITE_URL || 'http://localhost:4000';
+
+// Product/brand name shown to users on payment provider checkouts + emails.
+// Env-overridable so the same code white-labels without edits (single source).
+export const appName = (): string => process.env.APP_NAME || 'DraftRight';
 /** Backend base, e.g. for provider IPN/webhook callbacks. */
 export const backendUrl = (): string => process.env.BACKEND_URL || 'http://localhost:3000';

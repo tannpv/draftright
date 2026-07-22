@@ -14,6 +14,7 @@ func TestAppSettings_JSONKeyOrder(t *testing.T) {
 		"refresh_token_expiry_days", "max_input_length", "supported_languages",
 		"payment_methods_enabled", "stripe_secret_key", "stripe_webhook_secret",
 		"stripe_mode", "paypal_client_id", "paypal_client_secret", "paypal_mode",
+		"paypal_webhook_id", "paypal_plan_monthly", "paypal_plan_yearly",
 		"momo_partner_code", "momo_access_key", "momo_secret_key", "momo_mode",
 		"vietqr_bank_id", "vietqr_account_number", "vietqr_account_name",
 		"casso_api_key", "sepay_api_key", "sepay_mode", "resend_api_key", "email_from",
@@ -43,6 +44,9 @@ func TestAppSettings_MasksSecrets(t *testing.T) {
 		StripeSecretKey: "sk_live_abcdefghijklmnop", ResendAPIKey: "re_abcdefghijklmnop",
 		GoogleClientSecret: "gocspx-abcdefghijklmnop", AppleTeamID: "ABCDE12345",
 		AppleKeyID: "KEY1234567", PaypalClientID: "paypal-public-id-value",
+		// PayPal webhook + plan IDs are public identifiers, never masked.
+		PaypalWebhookID: "8SR12345WEBHOOK", PaypalPlanMonthly: "P-MONTHLY-PLAN-ID",
+		PaypalPlanYearly: "P-YEARLY-PLAN-ID",
 	}
 	b, _ := json.Marshal(s)
 	body := string(b)
@@ -54,6 +58,11 @@ func TestAppSettings_MasksSecrets(t *testing.T) {
 	// Apple IDs and public client IDs are NOT masked.
 	if !strings.Contains(body, "ABCDE12345") || !strings.Contains(body, "paypal-public-id-value") {
 		t.Errorf("non-secret identifier wrongly masked: %s", body)
+	}
+	for _, raw := range []string{"8SR12345WEBHOOK", "P-MONTHLY-PLAN-ID", "P-YEARLY-PLAN-ID"} {
+		if !strings.Contains(body, raw) {
+			t.Errorf("paypal identifier %q wrongly masked: %s", raw, body)
+		}
 	}
 	if !strings.Contains(body, `"stripe_secret_key":"sk_…mnop"`) {
 		t.Errorf("expected masked stripe key: %s", body)

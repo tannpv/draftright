@@ -7,7 +7,7 @@ import (
 
 func TestRegisteredMethods(t *testing.T) {
 	got := RegisteredMethods()
-	want := []string{"stripe", "vietqr", "bank_transfer", "lemonsqueezy", "apple_pay", "google_pay"}
+	want := []string{"stripe", "vietqr", "bank_transfer", "lemonsqueezy", "paypal", "apple_pay", "google_pay"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("RegisteredMethods() = %v, want %v", got, want)
 	}
@@ -45,12 +45,15 @@ func TestAssertMethodsRegisterable(t *testing.T) {
 	if err := AssertMethodsRegisterable(""); err != nil {
 		t.Fatalf("blank CSV is allowed (falls back to default), got %v", err)
 	}
-	err := AssertMethodsRegisterable("stripe,paypal,momo")
-	if err == nil {
-		t.Fatal("paypal+momo have no strategy → must error")
+	if err := AssertMethodsRegisterable("stripe,paypal"); err != nil {
+		t.Fatalf("paypal now has a strategy → must pass, got %v", err)
 	}
-	want := "Cannot enable payment method(s) with no backend strategy: paypal, momo. " +
-		"Registered methods: stripe, vietqr, bank_transfer, lemonsqueezy, apple_pay, google_pay."
+	err := AssertMethodsRegisterable("stripe,momo")
+	if err == nil {
+		t.Fatal("momo has no strategy → must error")
+	}
+	want := "Cannot enable payment method(s) with no backend strategy: momo. " +
+		"Registered methods: stripe, vietqr, bank_transfer, lemonsqueezy, paypal, apple_pay, google_pay."
 	if err.Error() != want {
 		t.Fatalf("error =\n%q\nwant\n%q", err.Error(), want)
 	}

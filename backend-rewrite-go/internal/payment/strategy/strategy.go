@@ -89,6 +89,10 @@ const (
 	ActionLSPaymentFailed        = "lemonsqueezy_payment_failed"
 	ActionLSSubscriptionCanceled = "lemonsqueezy_subscription_canceled"
 	ActionLSSubscriptionExpired  = "lemonsqueezy_subscription_expired"
+	ActionPayPalPaymentSuccess   = "paypal_payment_success"
+	ActionPayPalPaymentFailed    = "paypal_payment_failed"
+	ActionPayPalSubCanceled      = "paypal_subscription_canceled"
+	ActionPayPalSubExpired       = "paypal_subscription_expired"
 	ActionIgnored                = "ignored"
 )
 
@@ -106,6 +110,7 @@ type WebhookAction struct {
 	LSSubscriptionID     string
 	LSCustomerID         string
 	LSVariantID          string
+	PayPalSubscriptionID string
 }
 
 // Ignored is the no-op action (returned for events we don't act on).

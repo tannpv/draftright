@@ -39,6 +39,12 @@ SELECT stripe_secret_key,
        lemonsqueezy_store_id,
        lemonsqueezy_variant_monthly,
        lemonsqueezy_variant_yearly,
-       lemonsqueezy_webhook_secret
+       lemonsqueezy_webhook_secret,
+       paypal_client_id,
+       paypal_client_secret,
+       paypal_mode,
+       paypal_webhook_id,
+       paypal_plan_monthly,
+       paypal_plan_yearly
 FROM app_settings
 LIMIT 1;

@@ -34,6 +34,9 @@ type AppSettings struct {
 	PaypalClientID             string
 	PaypalClientSecret         string
 	PaypalMode                 string
+	PaypalWebhookID            string
+	PaypalPlanMonthly          string
+	PaypalPlanYearly           string
 	MomoPartnerCode            string
 	MomoAccessKey              string
 	MomoSecretKey              string
@@ -78,6 +81,9 @@ type Patch struct {
 	PaypalClientID             *string
 	PaypalClientSecret         *string
 	PaypalMode                 *string
+	PaypalWebhookID            *string
+	PaypalPlanMonthly          *string
+	PaypalPlanYearly           *string
 	MomoPartnerCode            *string
 	MomoAccessKey              *string
 	MomoSecretKey              *string
@@ -119,6 +125,9 @@ func (s AppSettings) MarshalJSON() ([]byte, error) {
 		PaypalClientID             string `json:"paypal_client_id"`
 		PaypalClientSecret         string `json:"paypal_client_secret"`
 		PaypalMode                 string `json:"paypal_mode"`
+		PaypalWebhookID            string `json:"paypal_webhook_id"`
+		PaypalPlanMonthly          string `json:"paypal_plan_monthly"`
+		PaypalPlanYearly           string `json:"paypal_plan_yearly"`
 		MomoPartnerCode            string `json:"momo_partner_code"`
 		MomoAccessKey              string `json:"momo_access_key"`
 		MomoSecretKey              string `json:"momo_secret_key"`
@@ -162,6 +171,9 @@ func (s AppSettings) MarshalJSON() ([]byte, error) {
 		PaypalClientID:             s.PaypalClientID,
 		PaypalClientSecret:         shared.MaskSecret(s.PaypalClientSecret),
 		PaypalMode:                 s.PaypalMode,
+		PaypalWebhookID:            s.PaypalWebhookID,
+		PaypalPlanMonthly:          s.PaypalPlanMonthly,
+		PaypalPlanYearly:           s.PaypalPlanYearly,
 		MomoPartnerCode:            s.MomoPartnerCode,
 		MomoAccessKey:              shared.MaskSecret(s.MomoAccessKey),
 		MomoSecretKey:              shared.MaskSecret(s.MomoSecretKey),

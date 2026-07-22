@@ -10,6 +10,7 @@ import { BasePaymentStrategy } from './strategies/base-payment.strategy';
 import { StripeStrategy } from './strategies/stripe.strategy';
 import { VietQRStrategy } from './strategies/vietqr.strategy';
 import { LemonSqueezyStrategy } from './strategies/lemonsqueezy.strategy';
+import { PayPalStrategy } from './strategies/paypal.strategy';
 import { PlansService } from '../plans/plans.service';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { User } from '../users/entities/user.entity';
@@ -40,6 +41,7 @@ export class PaymentService {
     private readonly stripeStrategy: StripeStrategy,
     private readonly vietqrStrategy: VietQRStrategy,
     private readonly lemonSqueezyStrategy: LemonSqueezyStrategy,
+    private readonly paypalStrategy: PayPalStrategy,
     private readonly emailService: EmailService,
     private readonly cfg: ConfigService<EnvSchema, true>,
     private readonly notifier: SubscriptionNotifier,
@@ -53,6 +55,7 @@ export class PaymentService {
       [PaymentMethod.VIETQR,        this.vietqrStrategy],
       [PaymentMethod.BANK_TRANSFER, this.vietqrStrategy],
       [PaymentMethod.LEMONSQUEEZY,  this.lemonSqueezyStrategy],
+      [PaymentMethod.PAYPAL,        this.paypalStrategy],
       // Apple Pay + Google Pay both run on Stripe (LS has no
       // wallet-token API).  They produce the same PaymentIntent /
       // webhook flow as STRIPE — same strategy, different
@@ -260,10 +263,12 @@ export class PaymentService {
     }
 
     // Same store_type → PaymentMethod mapping as getCustomerPortalUrl.
+    // PayPal has no hosted portal but DOES support programmatic cancel.
     let method: string | null = null;
     switch (sub.store_type) {
       case 'stripe':       method = PaymentMethod.STRIPE;       break;
       case 'lemonsqueezy': method = PaymentMethod.LEMONSQUEEZY; break;
+      case 'paypal':       method = PaymentMethod.PAYPAL;       break;
       default:             method = null;
     }
     if (!method) {
@@ -432,6 +437,85 @@ export class PaymentService {
           action.lemonsqueezy_subscription_id,
         );
         this.logger.log(`Expired LS sub ${action.lemonsqueezy_subscription_id} (rows=${rows})`);
+        return { success: true };
+      }
+
+      // PayPal Subscriptions variants — same generic store-ref helpers as
+      // Lemon Squeezy, keyed on StoreType.PAYPAL.
+      case 'paypal_payment_success': {
+        // First-cycle activation carries a reference_code (from the
+        // ACTIVATED webhook's custom_id) → complete the pending Payment +
+        // stamp the store_ref. Renewals (PAYMENT.SALE.COMPLETED) arrive with
+        // no reference_code → extend expiry via store_ref. On the first cycle
+        // ACTIVATED already completed the payment, so a following
+        // SALE.COMPLETED finds no pending payment and extends to the same
+        // next_billing_time (idempotent no-op).
+        const pending = action.reference_code
+          ? await this.paymentRepo.findOne({
+              where: { reference_code: action.reference_code, status: PaymentStatus.PENDING },
+            })
+          : null;
+        if (pending) {
+          const completion = await this.completePayment(action.reference_code, 'completed');
+          if (completion.success) {
+            await this.subscriptionsService.stampStoreRef(
+              action.reference_code,
+              storeTypeForMethod(PaymentMethod.PAYPAL),
+              action.paypal_subscription_id,
+            );
+          }
+          return completion;
+        }
+        // Renewal — extend expiry.
+        if (action.current_period_end > 0) {
+          const expiresAt = new Date(action.current_period_end * 1000);
+          const rows = await this.subscriptionsService.extendByStoreRef(
+            storeTypeForMethod(PaymentMethod.PAYPAL),
+            action.paypal_subscription_id,
+            expiresAt,
+          );
+          this.logger.log(`Renewed PayPal sub ${action.paypal_subscription_id} → expires ${expiresAt.toISOString()} (rows=${rows})`);
+        }
+        return { success: true, reference_code: action.reference_code || undefined };
+      }
+
+      case 'paypal_payment_failed': {
+        // Renewal charge failed — notify, don't revoke (that's EXPIRED's job).
+        const sub = await this.subscriptionsService.findByStoreRef(
+          storeTypeForMethod(PaymentMethod.PAYPAL),
+          action.paypal_subscription_id,
+        );
+        if (!sub) {
+          this.logger.warn(`PayPal payment_failed for unknown sub ${action.paypal_subscription_id} — skipped`);
+          return { success: true };
+        }
+        try {
+          const user = await this.userRepo.findOne({ where: { id: sub.user_id } });
+          if (user?.email && sub.plan) {
+            await this.emailService.sendPaymentFailed(user.email, user.name || user.email, sub.plan.name);
+          }
+        } catch (err: any) {
+          this.logger.warn(`Failed to email PayPal payment_failed: ${err.message}`);
+        }
+        this.logger.log(`Notified user of PayPal payment failure on sub ${action.paypal_subscription_id}`);
+        return { success: true };
+      }
+
+      case 'paypal_subscription_canceled': {
+        const rows = await this.subscriptionsService.cancelByStoreRef(
+          storeTypeForMethod(PaymentMethod.PAYPAL),
+          action.paypal_subscription_id,
+        );
+        this.logger.log(`Cancelled PayPal sub ${action.paypal_subscription_id} (rows=${rows})`);
+        return { success: true };
+      }
+
+      case 'paypal_subscription_expired': {
+        const rows = await this.subscriptionsService.expireByStoreRef(
+          storeTypeForMethod(PaymentMethod.PAYPAL),
+          action.paypal_subscription_id,
+        );
+        this.logger.log(`Expired PayPal sub ${action.paypal_subscription_id} (rows=${rows})`);
         return { success: true };
       }
 
