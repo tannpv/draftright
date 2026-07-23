@@ -409,13 +409,6 @@ class _HomeScreenState extends State<HomeScreen> {
       onSharedText: (text) {
         if (mounted) _openShareRewrite(text);
       },
-      onBubbleEmptyClipboard: () {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Clipboard is empty. Copy text first, then tap the bubble.'),
-          duration: Duration(seconds: 3),
-        ));
-      },
     );
     // Restart floating bubble if the user had it enabled last session.
     // No-op on iOS / desktop / web (channel returns false).

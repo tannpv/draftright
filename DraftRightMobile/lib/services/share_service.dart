@@ -21,13 +21,11 @@ class ShareService {
     }
   }
 
-  /// Subscribe to in-flight shares + bubble events.
-  /// Pass `null` to clear.
+  /// Subscribe to in-flight shares (ACTION_SEND). Pass `null` to clear.
   static void setHandler({
     void Function(String text)? onSharedText,
-    void Function()? onBubbleEmptyClipboard,
   }) {
-    if (onSharedText == null && onBubbleEmptyClipboard == null) {
+    if (onSharedText == null) {
       _channel.setMethodCallHandler(null);
       return;
     }
@@ -35,10 +33,7 @@ class ShareService {
       switch (call.method) {
         case 'onSharedText':
           final text = (call.arguments as String?)?.trim() ?? '';
-          if (text.isNotEmpty) onSharedText?.call(text);
-          break;
-        case 'onBubbleEmptyClipboard':
-          onBubbleEmptyClipboard?.call();
+          if (text.isNotEmpty) onSharedText(text);
           break;
       }
     });
