@@ -22,6 +22,9 @@ import android.view.View
 import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.TextView
+import com.draftright.draftright_mobile.bubble.BubbleRewriteCoordinator
+import com.draftright.draftright_mobile.bubble.RewriteAccessibilityService
+import com.draftright.keyboard.SharedSettings
 import kotlin.math.abs
 
 /**
@@ -212,6 +215,16 @@ class FloatingBubbleService : Service() {
     }
 
     private fun onBubbleTap() {
+        // In-place rewrite path: opt-in setting on AND the AccessibilityService
+        // enabled → rewrite the focused field where the user is, no app switch.
+        // Falls through to the existing launch-MainActivity flow otherwise, so
+        // users who haven't enabled accessibility keep the clipboard behavior.
+        val settings = SharedSettings(this)
+        if (settings.bubbleInPlaceEnabled && RewriteAccessibilityService.isReady) {
+            BubbleRewriteCoordinator(this).rewriteFocusedField()
+            return
+        }
+
         // Don't read clipboard from this background service — Android 10+
         // (API 29) restricts ClipboardManager.getPrimaryClip() to the
         // foreground app. Instead launch MainActivity with a custom

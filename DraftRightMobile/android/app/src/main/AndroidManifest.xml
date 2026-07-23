@@ -142,6 +142,23 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Floating overlay button that opens DraftRight rewrite UI from any app, similar to chat-head bubbles." />
         </service>
+
+        <!-- Optional in-place rewrite: reads the focused text field and replaces
+             it with an AI rewrite via ACTION_SET_TEXT. Opt-in (bubbleInPlaceEnabled)
+             and gated behind an in-app disclosure + the user enabling it in
+             Accessibility settings. Requires a Play Console permissions
+             declaration before release. -->
+        <service
+            android:name="com.draftright.draftright_mobile.bubble.RewriteAccessibilityService"
+            android:exported="true"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
     </application>
     <!-- Android 11+ package visibility (https://developer.android.com/training/package-visibility).
          Without these <queries> declarations, url_launcher's canLaunchUrl()
