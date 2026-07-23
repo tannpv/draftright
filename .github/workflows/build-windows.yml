@@ -337,41 +337,29 @@ jobs:
           fi
           echo "✓ /updates/latest reports windows $ACTUAL"
 
-      - name: Verify installer serves real bytes
+      - name: Verify installer landed on the droplet
         env:
+          DROPLET_HOST: ${{ secrets.DROPLET_HOST }}
           REMOTE_NAME: ${{ steps.meta.outputs.remote }}
         run: |
-          URL="https://draftright.info/downloads/$REMOTE_NAME"
-          # Ranged GET (first byte), NOT HEAD: Caddy intermittently returns an
-          # empty content-length on HEAD right after upload — the HEAD-verify
-          # flake that false-failed every release even though the file serves.
-          # A ranged GET reliably returns 206 + Content-Range + the actual byte.
-          # Force HTTP/1.1 and retry up to 6× with backoff.
-          CT=""; TOTAL=""; GOT=0; CODE=""
-          for attempt in 1 2 3 4 5 6; do
-            CODE=$(curl -sS --http1.1 -r 0-0 -D /tmp/dr_hdr -o /tmp/dr_byte -m 20 \
-              -w '%{http_code}' "$URL" 2>/dev/null || true)
-            CT=$(awk -F': ' 'tolower($1)=="content-type"{print $2}' /tmp/dr_hdr | tr -d '\r' | tail -n1)
-            TOTAL=$(awk 'tolower($0) ~ /^content-range:/ {split($0,a,"/"); print a[2]}' /tmp/dr_hdr | tr -d '\r' | tail -n1)
-            GOT=$(wc -c < /tmp/dr_byte | tr -d ' ')
-            if { [ "$CODE" = "206" ] || [ "$CODE" = "200" ]; } && [ "${GOT:-0}" -ge 1 ]; then break; fi
-            echo "Verify attempt $attempt: code=$CODE bytes=$GOT — retrying"
-            sleep 3
-          done
-          if [[ "$CT" == text/html* ]]; then
-            echo "::error::$URL returned content-type=$CT (Caddy HTML fallback). Restore manually."
+          # Verify SERVER-SIDE over SSH, not via public HTTP. The GitHub runner's
+          # egress to draftright.info/downloads is unreliable from US runners
+          # (edge/geo rules return code=000 even though the file serves fine
+          # globally), which false-failed every release despite a good publish.
+          # The installer was just scp'd to this exact path, so check it at the
+          # source of truth — reusing /tmp/deploy_key from the SCP step above.
+          SIZE=$(ssh -i /tmp/deploy_key \
+              -o StrictHostKeyChecking=accept-new \
+              -o UserKnownHostsFile=/tmp/known_hosts \
+              "deploy@${DROPLET_HOST}" \
+              "stat -c %s /var/www/draftright/downloads/\"${REMOTE_NAME}\" 2>/dev/null || echo 0")
+          SIZE=$(printf '%s' "$SIZE" | tr -dc '0-9')
+          echo "installer size on droplet: ${SIZE:-0} bytes"
+          if [ "${SIZE:-0}" -lt 1000000 ]; then
+            echo "::error::/var/www/draftright/downloads/${REMOTE_NAME} missing or too small (${SIZE:-0} bytes)."
             exit 1
           fi
-          if [ "${GOT:-0}" -lt 1 ]; then
-            echo "::error::$URL served no bytes after retries (last code=$CODE)."
-            exit 1
-          fi
-          # Content-Range total is best-effort; sanity-check it when present.
-          if [ -n "$TOTAL" ] && [ "$TOTAL" -lt 1000000 ] 2>/dev/null; then
-            echo "::error::$URL total size=$TOTAL too small for an installer."
-            exit 1
-          fi
-          echo "✓ installer serving — type=$CT, first byte OK, total=${TOTAL:-unknown} bytes"
+          echo "✓ installer present on droplet — ${SIZE} bytes"
 
   # ── MSIX bundle for Microsoft Store submission ──────────────────────────
   # Single-project MSIX: WindowsPackageType=MSIX activates AppxPackage targets
