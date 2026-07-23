@@ -77,6 +77,14 @@ jobs:
       - name: Build release AAB
         run: flutter build appbundle --release
 
+      - name: Export AAB artifact (for manual console upload)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: draftright-aab
+          path: build/app/outputs/bundle/release/app-release.aab
+          if-no-file-found: warn
+
       - name: Upload to Play
         working-directory: android
         run: bundle exec fastlane "$TRACK"
