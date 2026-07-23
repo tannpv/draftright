@@ -23,6 +23,10 @@ A Windows-only line under `### Windows` will never appear in the macOS
 If a version needs the user to *do* something after updating, say so
 explicitly under an **Action needed:** line inside the relevant sub-section.
 
+## 2.3.31 — 2026-07-23
+### Windows
+- Fixed the rewrite shortcut (Ctrl+Shift+R) sometimes doing nothing at all after you selected text. When Windows blocks DraftRight from copying your highlighted text — usually because the active window is running as administrator — the app now tells you what happened instead of failing silently, and you can copy the text yourself (Ctrl+C) then press the shortcut. If nothing is selected, or the panel fails to open, you now get a clear tray message explaining why.
+
 ## 2.3.30 — 2026-07-22
 ### macOS
 - Fixed Grammar Check scrambling your text when applying fixes (letters spliced into the middle of words). Corrections are now located by their actual content, so every "Fix" and "Fix All" lands exactly on the intended word — including in Vietnamese text.
