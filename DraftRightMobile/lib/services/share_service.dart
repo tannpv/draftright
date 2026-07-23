@@ -95,4 +95,22 @@ class ShareService {
       await _channel.invokeMethod<void>('dismissToBackground');
     } catch (_) {/* swallow */}
   }
+
+  /// Launch system Accessibility settings so the user can enable the
+  /// in-place rewrite service. No-op on iOS / desktop / web.
+  static Future<void> openAccessibilitySettings() async {
+    try {
+      await _channel.invokeMethod<void>('openAccessibilitySettings');
+    } catch (_) {/* swallow */}
+  }
+
+  /// True iff the AccessibilityService backing in-place rewrite is enabled
+  /// and bound. False on iOS / desktop / web.
+  static Future<bool> isInPlaceRewriteReady() async {
+    try {
+      return await _channel.invokeMethod<bool>('isInPlaceRewriteReady') ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
 }

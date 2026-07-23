@@ -32,6 +32,7 @@ class SettingsService extends ChangeNotifier {
   List<String> _enabledTones = Tone.values.map((t) => t.apiValue).toList();
   String _defaultTone = '';
   bool _floatingBubbleEnabled = false;
+  bool _inPlaceRewriteEnabled = false;
   bool _autoCloseAfterRewrite = true;
   List<String> _enabledLanguageIds = const ['en'];
   String _activeLanguageId = 'en';
@@ -44,6 +45,7 @@ class SettingsService extends ChangeNotifier {
   List<String> get enabledTones => List.unmodifiable(_enabledTones);
   String get defaultTone => _defaultTone;
   bool get floatingBubbleEnabled => _floatingBubbleEnabled;
+  bool get inPlaceRewriteEnabled => _inPlaceRewriteEnabled;
   bool get autoCloseAfterRewrite => _autoCloseAfterRewrite;
   List<String> get enabledLanguageIds => List.unmodifiable(_enabledLanguageIds);
   String get activeLanguageId => _activeLanguageId;
@@ -64,6 +66,7 @@ class SettingsService extends ChangeNotifier {
         ?? Tone.values.map((t) => t.apiValue).toList();
     _defaultTone = _prefs.getString('draftright.defaultTone') ?? '';
     _floatingBubbleEnabled = _prefs.getBool('draftright.floatingBubbleEnabled') ?? false;
+    _inPlaceRewriteEnabled = _prefs.getBool('draftright.bubbleInPlaceEnabled') ?? false;
     _autoCloseAfterRewrite = _prefs.getBool('draftright.autoCloseAfterRewrite') ?? true;
     _enabledLanguageIds = _prefs.getStringList('draftright.enabledLanguageIds')
         ?? const ['en'];
@@ -119,6 +122,14 @@ class SettingsService extends ChangeNotifier {
   Future<void> setFloatingBubbleEnabled(bool value) async {
     _floatingBubbleEnabled = value;
     await _prefs.setBool('draftright.floatingBubbleEnabled', value);
+    notifyListeners();
+  }
+
+  /// Opt-in for bubble in-place rewrite via the AccessibilityService. The
+  /// native side reads the same key (flutter.draftright.bubbleInPlaceEnabled).
+  Future<void> setInPlaceRewriteEnabled(bool value) async {
+    _inPlaceRewriteEnabled = value;
+    await _prefs.setBool('draftright.bubbleInPlaceEnabled', value);
     notifyListeners();
   }
 

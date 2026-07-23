@@ -137,6 +137,22 @@ class MainActivity : FlutterFragmentActivity() {
                     // downloaded language packs are readable by the keyboard.
                     result.success(filesDir.absolutePath)
                 }
+                "openAccessibilitySettings" -> {
+                    // Deep-link to system Accessibility settings so the user can
+                    // enable DraftRight's in-place rewrite service.
+                    startActivity(
+                        Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    )
+                    result.success(null)
+                }
+                "isInPlaceRewriteReady" -> {
+                    // True when the AccessibilityService is enabled + bound.
+                    result.success(
+                        com.draftright.draftright_mobile.bubble
+                            .RewriteAccessibilityService.isReady
+                    )
+                }
                 else -> result.notImplemented()
             }
         }

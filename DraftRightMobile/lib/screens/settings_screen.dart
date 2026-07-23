@@ -13,6 +13,22 @@ import 'package:draftright_mobile/services/ime_manifest_client.dart';
 import 'package:draftright_mobile/services/ime_pack_service.dart';
 import 'package:draftright_mobile/widgets/language_packs_section.dart';
 
+/// Prominent-disclosure copy shown before the user opts in to in-place rewrite
+/// (Play "Prominent Disclosure & Consent"). Kept in one place, not inlined.
+/// VN copy + Play Console declaration:
+/// docs/superpowers/plans/2026-07-23-android-bubble-a11y-play-declaration.md
+const String _kInPlaceRewriteDisclosure =
+    'To rewrite text right where you type it, DraftRight uses Android\'s '
+    'Accessibility service. When — and only when — you tap the DraftRight '
+    'bubble, it reads the text in the field you\'re editing and replaces it '
+    'with your chosen rewrite.\n\n'
+    '• It runs only on your tap — never in the background.\n'
+    '• Your text is sent only to the DraftRight rewrite service you '
+    'configured, to produce the rewrite. It is not sold, shared, or used '
+    'for ads.\n'
+    '• Password fields are always skipped.\n'
+    '• You can turn this off anytime in Settings.';
+
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 
@@ -173,6 +189,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
         content: Text('Could not start the bubble. Try again.'),
       ));
     }
+  }
+
+  Future<void> _setInPlaceRewrite(SettingsService settings, bool enable) async {
+    final messenger = ScaffoldMessenger.of(context);
+    if (!enable) {
+      await settings.setInPlaceRewriteEnabled(false);
+      return;
+    }
+    // Prominent disclosure + affirmative consent before enabling (Play policy).
+    final consented = await _showInPlaceDisclosure();
+    if (consented != true) return;
+    await settings.setInPlaceRewriteEnabled(true);
+    messenger.showSnackBar(const SnackBar(
+      content: Text('Enable "DraftRight" in Accessibility, then tap the bubble over a text field.'),
+    ));
+    await ShareService.openAccessibilitySettings();
+  }
+
+  Future<bool?> _showInPlaceDisclosure() {
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Turn on one-tap rewrite in any app'),
+        content: const SingleChildScrollView(
+          child: Text(_kInPlaceRewriteDisclosure),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Not now'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Turn on'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _logout() async {
@@ -396,6 +450,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 enabled: settings.floatingBubbleEnabled,
                 onChanged: (value) => _setBubble(settings, value),
               ),
+              if (settings.floatingBubbleEnabled) ...[
+                const SizedBox(height: 8),
+                Card(
+                  child: SwitchListTile(
+                    secondary: const Icon(Icons.auto_fix_high),
+                    title: const Text('One-tap rewrite (in place)'),
+                    subtitle: const Text(
+                      'Tap the bubble to rewrite text right where you type it — no copy-paste. '
+                      'Uses Android Accessibility; you enable it once. Unsupported fields (some '
+                      'browsers/apps) fall back to copying the rewrite.',
+                    ),
+                    value: settings.inPlaceRewriteEnabled,
+                    onChanged: (v) => _setInPlaceRewrite(settings, v),
+                  ),
+                ),
+              ],
               const SizedBox(height: 8),
               Card(
                 child: SwitchListTile(
