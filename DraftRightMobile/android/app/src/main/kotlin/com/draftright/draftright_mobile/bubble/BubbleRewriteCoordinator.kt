@@ -27,7 +27,12 @@ class BubbleRewriteCoordinator(private val context: Context) {
 
     private companion object { const val TAG = "DRBubble" }
 
-    fun rewriteFocusedField() {
+    /**
+     * @param onBusy invoked with true when the network rewrite starts and false
+     *   when it finishes (success or failure) — the bubble uses it to pulse while
+     *   the user waits. Not called for the early guard returns (nothing async).
+     */
+    fun rewriteFocusedField(onBusy: (Boolean) -> Unit = {}) {
         val service = RewriteAccessibilityService.instance
         val captured = service?.captureFocusedInput()
         Log.d(TAG, "rewriteFocusedField: service=${service != null} captured=$captured")
@@ -56,9 +61,11 @@ class BubbleRewriteCoordinator(private val context: Context) {
         }
 
         Log.d(TAG, "  calling /rewrite tone=${settings.bubblePresetTone.apiValue}")
+        onBusy(true)
         toast(R.string.bubble_rewrite_working)
         backend.rewrite(source, settings.bubblePresetTone, settings) { result ->
             main.post {
+                onBusy(false)
                 result
                     .onSuccess { rewritten ->
                         Log.d(TAG, "  /rewrite OK len=${rewritten.length}")

@@ -20,6 +20,8 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import android.animation.ObjectAnimator
+import android.animation.ValueAnimator
 import android.provider.Settings
 import android.widget.FrameLayout
 import android.widget.TextView
@@ -84,6 +86,8 @@ class FloatingBubbleService : Service() {
     }
 
     private fun stopBubble() {
+        busyAnimator?.cancel()
+        busyAnimator = null
         bubbleView?.let { runCatching { windowManager.removeView(it) } }
         bubbleView = null
         unregisterClipboardListener()
@@ -229,7 +233,27 @@ class FloatingBubbleService : Service() {
             )
             return
         }
-        BubbleRewriteCoordinator(this).rewriteFocusedField()
+        // Pulse the bubble while the rewrite is in flight so the user knows to wait.
+        BubbleRewriteCoordinator(this).rewriteFocusedField { busy -> setBubbleBusy(busy) }
+    }
+
+    private var busyAnimator: ObjectAnimator? = null
+
+    /** Flicker the bubble (fade in/out) while a rewrite is in progress. */
+    private fun setBubbleBusy(busy: Boolean) {
+        val view = bubbleView ?: return
+        busyAnimator?.cancel()
+        if (busy) {
+            busyAnimator = ObjectAnimator.ofFloat(view, View.ALPHA, 1f, 0.25f).apply {
+                duration = 350
+                repeatMode = ValueAnimator.REVERSE
+                repeatCount = ValueAnimator.INFINITE
+                start()
+            }
+        } else {
+            busyAnimator = null
+            view.alpha = 1f
+        }
     }
 
     // ── Clipboard pulse ────────────────────────────────────────────────────
