@@ -392,7 +392,10 @@ public class App : Application
     {
         if (!Auth.IsLoggedIn)
         {
-            DRLogger.Log("Hotkey fired but user is not logged in — ignoring.", DRLogger.Category.HOTKEY);
+            DRLogger.Log("Hotkey fired but user is not logged in — notifying.", DRLogger.Category.HOTKEY);
+            _tray?.ShowError(
+                "DraftRight — sign in required",
+                "Sign in to DraftRight (tray menu → Settings) before using the rewrite hotkey.");
             return;
         }
 
@@ -403,14 +406,30 @@ public class App : Application
 
         DRLogger.Log($"Hotkey fired — capturing selection from HWND 0x{_sourceWindow:X}", DRLogger.Category.HOTKEY);
 
-        var text = await Clipboard.GetSelectedTextAsync();
+        var capture = await Clipboard.GetSelectedTextAsync();
 
-        if (string.IsNullOrWhiteSpace(text))
+        if (string.IsNullOrWhiteSpace(capture.Text))
         {
-            DRLogger.Log("No text selected — ignoring hotkey.", DRLogger.Category.HOTKEY);
+            // Never silently swallow the hotkey — tell the user why nothing happened.
+            switch (capture.Status)
+            {
+                case SelectionCaptureStatus.SendInputBlocked:
+                    DRLogger.Warn("Selection capture blocked (SendInput rejected) — notifying user.", DRLogger.Category.HOTKEY);
+                    _tray?.ShowError(
+                        "DraftRight — couldn't read your selection",
+                        "Windows blocked DraftRight from copying the highlighted text. This usually means the active window is running as administrator. Fix: copy the text yourself (Ctrl+C), then press the hotkey again — or run DraftRight as administrator.");
+                    break;
+                default: // NoSelection
+                    DRLogger.Log("No text selected — notifying user.", DRLogger.Category.HOTKEY);
+                    _tray?.ShowInfo(
+                        "DraftRight — no text selected",
+                        "Highlight the text you want to rewrite, then press the rewrite hotkey (Ctrl+Shift+R).");
+                    break;
+            }
             return;
         }
 
+        var text = capture.Text!;
         var mode = Settings.AppMode;
         DRLogger.Log($"Captured {text.Length} chars — mode={mode.ApiValue()}.", DRLogger.Category.HOTKEY);
 
@@ -512,6 +531,11 @@ public class App : Application
             catch (Exception ex)
             {
                 DRLogger.Error($"Panel: EXCEPTION {ex.GetType().Name}: {ex.Message}", DRLogger.Category.PANEL);
+                // Capture succeeded but the panel failed to open — don't leave the
+                // user staring at nothing after a valid selection.
+                _tray?.ShowError(
+                    "DraftRight — couldn't open the rewrite panel",
+                    $"Something went wrong opening the panel ({ex.GetType().Name}). Please try the hotkey again; if it keeps happening, report a bug from the tray menu.");
             }
             finally
             {
