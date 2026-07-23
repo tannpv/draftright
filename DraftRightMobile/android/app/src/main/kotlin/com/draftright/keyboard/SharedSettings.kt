@@ -43,12 +43,6 @@ class SharedSettings(context: Context) {
         get() = Tone.fromApiValue(prefs.getString("flutter.draftright.bubblePresetTone", null))
             ?: Tone.POLISHED
 
-    /** Opt-in gate for in-place bubble rewrite via the AccessibilityService.
-     *  Off by default — the disclosure + accessibility-grant flow flips it on;
-     *  when off, the bubble keeps its existing clipboard/picker behavior. */
-    val bubbleInPlaceEnabled: Boolean
-        get() = prefs.getBoolean("flutter.draftright.bubbleInPlaceEnabled", false)
-
     /** IDs of enabled keyboard languages, in user-chosen order.
      *  Stored as a JSON array string from the Flutter side, parsed by
      *  removing brackets and splitting on commas — Flutter's

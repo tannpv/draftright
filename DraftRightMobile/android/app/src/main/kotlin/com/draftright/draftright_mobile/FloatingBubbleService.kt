@@ -20,11 +20,13 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import android.provider.Settings
 import android.widget.FrameLayout
 import android.widget.TextView
+import android.widget.Toast
 import com.draftright.draftright_mobile.bubble.BubbleRewriteCoordinator
 import com.draftright.draftright_mobile.bubble.RewriteAccessibilityService
-import com.draftright.keyboard.SharedSettings
+import com.draftright.draftright_mobile.v2.R
 import kotlin.math.abs
 
 /**
@@ -215,26 +217,19 @@ class FloatingBubbleService : Service() {
     }
 
     private fun onBubbleTap() {
-        // In-place rewrite path: opt-in setting on AND the AccessibilityService
-        // enabled → rewrite the focused field where the user is, no app switch.
-        // Falls through to the existing launch-MainActivity flow otherwise, so
-        // users who haven't enabled accessibility keep the clipboard behavior.
-        val settings = SharedSettings(this)
-        if (settings.bubbleInPlaceEnabled && RewriteAccessibilityService.isReady) {
-            BubbleRewriteCoordinator(this).rewriteFocusedField()
+        // The bubble does one-tap in-place rewrite: read the focused field and
+        // replace it with an AI rewrite in the user's chosen tone. This needs the
+        // AccessibilityService; if it isn't enabled, guide the user to enable it
+        // rather than failing silently.
+        if (!RewriteAccessibilityService.isReady) {
+            Toast.makeText(this, R.string.bubble_enable_accessibility, Toast.LENGTH_LONG).show()
+            startActivity(
+                Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
             return
         }
-
-        // Don't read clipboard from this background service — Android 10+
-        // (API 29) restricts ClipboardManager.getPrimaryClip() to the
-        // foreground app. Instead launch MainActivity with a custom
-        // action; MainActivity reads the clipboard from foreground in
-        // onResume (where the read is allowed) and forwards it to Flutter.
-        val launch = Intent(this, MainActivity::class.java).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-            action = MainActivity.ACTION_OPEN_FROM_BUBBLE
-        }
-        startActivity(launch)
+        BubbleRewriteCoordinator(this).rewriteFocusedField()
     }
 
     // ── Clipboard pulse ────────────────────────────────────────────────────

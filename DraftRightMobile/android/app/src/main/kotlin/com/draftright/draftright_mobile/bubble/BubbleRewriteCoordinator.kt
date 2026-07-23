@@ -4,6 +4,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.widget.Toast
 import com.draftright.draftright_mobile.v2.R
 import com.draftright.keyboard.BackendClient
@@ -24,11 +25,15 @@ class BubbleRewriteCoordinator(private val context: Context) {
     private val main = Handler(Looper.getMainLooper())
     private val backend = BackendClient()
 
+    private companion object { const val TAG = "DRBubble" }
+
     fun rewriteFocusedField() {
         val service = RewriteAccessibilityService.instance
         val captured = service?.captureFocusedInput()
+        Log.d(TAG, "rewriteFocusedField: service=${service != null} captured=$captured")
 
         if (captured?.isPassword == true) {
+            Log.d(TAG, "  password field — blocked")
             toast(R.string.bubble_rewrite_password_blocked)
             return
         }
@@ -36,23 +41,31 @@ class BubbleRewriteCoordinator(private val context: Context) {
         // Prefer the focused field's text; fall back to clipboard as the source
         // when the field can't be read (a11y off / WebView).
         val source = captured?.text?.takeIf { it.isNotBlank() } ?: clipboardText()
+        Log.d(TAG, "  source len=${source?.length ?: -1}")
         if (source.isNullOrBlank()) {
+            Log.d(TAG, "  no source — toasting no-field/empty")
             toast(if (service == null) R.string.bubble_rewrite_no_field else R.string.bubble_rewrite_empty)
             return
         }
 
         val settings = SharedSettings(context)
         if (settings.bearerToken.isEmpty()) {
+            Log.d(TAG, "  no bearer token — login required")
             toast(R.string.bubble_rewrite_login_required)
             return
         }
 
+        Log.d(TAG, "  calling /rewrite tone=${settings.bubblePresetTone.apiValue}")
         toast(R.string.bubble_rewrite_working)
         backend.rewrite(source, settings.bubblePresetTone, settings) { result ->
             main.post {
                 result
-                    .onSuccess { rewritten -> deliver(rewritten, captured) }
+                    .onSuccess { rewritten ->
+                        Log.d(TAG, "  /rewrite OK len=${rewritten.length}")
+                        deliver(rewritten, captured)
+                    }
                     .onFailure { err ->
+                        Log.d(TAG, "  /rewrite FAIL: ${err.message}")
                         toast(err.message ?: context.getString(R.string.bubble_rewrite_failed))
                     }
             }
@@ -62,12 +75,15 @@ class BubbleRewriteCoordinator(private val context: Context) {
     private fun deliver(rewritten: String, captured: CapturedInput?) {
         val service = RewriteAccessibilityService.instance
         val canInPlace = service != null && captured?.replaceable == true
+        Log.d(TAG, "deliver: canInPlace=$canInPlace replaceable=${captured?.replaceable}")
         if (canInPlace && InPlaceAccessibilityTarget(service!!).deliver(rewritten)) {
+            Log.d(TAG, "  delivered in place OK")
             toast(R.string.bubble_rewrite_done)
             return
         }
         val label = context.getString(R.string.bubble_clip_label)
         val copied = ClipboardFallbackTarget(context, label).deliver(rewritten)
+        Log.d(TAG, "  in-place failed → clipboard fallback copied=$copied")
         toast(if (copied) R.string.bubble_rewrite_copied_fallback else R.string.bubble_rewrite_failed)
     }
 

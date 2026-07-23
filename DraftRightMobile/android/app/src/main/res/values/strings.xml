@@ -11,4 +11,5 @@
     <string name="bubble_rewrite_copied_fallback">Rewrite copied — paste to replace.</string>
     <string name="bubble_rewrite_failed">Rewrite failed. Please try again.</string>
     <string name="bubble_a11y_description">Lets the DraftRight bubble read the text field you\'re typing in and replace it with an AI-rewritten version, in place. Text is sent only to your configured DraftRight rewrite service; nothing else is collected.</string>
+    <string name="bubble_enable_accessibility">Enable DraftRight in Accessibility to rewrite text with the bubble.</string>
 </resources>

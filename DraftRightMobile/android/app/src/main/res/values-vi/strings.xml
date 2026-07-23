@@ -10,4 +10,5 @@
     <string name="bubble_rewrite_copied_fallback">Đã sao chép bản viết lại — dán để thay thế.</string>
     <string name="bubble_rewrite_failed">Viết lại thất bại. Vui lòng thử lại.</string>
     <string name="bubble_a11y_description">Cho phép bong bóng DraftRight đọc ô văn bản bạn đang gõ và thay bằng bản viết lại bằng AI, ngay tại chỗ. Văn bản chỉ được gửi tới dịch vụ viết lại DraftRight của bạn; không thu thập gì khác.</string>
+    <string name="bubble_enable_accessibility">Bật DraftRight trong Trợ năng để viết lại văn bản bằng bong bóng.</string>
 </resources>
