@@ -20,8 +20,15 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import android.animation.ObjectAnimator
+import android.animation.ValueAnimator
+import android.provider.Settings
 import android.widget.FrameLayout
 import android.widget.TextView
+import android.widget.Toast
+import com.draftright.draftright_mobile.bubble.BubbleRewriteCoordinator
+import com.draftright.draftright_mobile.bubble.RewriteAccessibilityService
+import com.draftright.draftright_mobile.v2.R
 import kotlin.math.abs
 
 /**
@@ -79,6 +86,8 @@ class FloatingBubbleService : Service() {
     }
 
     private fun stopBubble() {
+        busyAnimator?.cancel()
+        busyAnimator = null
         bubbleView?.let { runCatching { windowManager.removeView(it) } }
         bubbleView = null
         unregisterClipboardListener()
@@ -212,16 +221,39 @@ class FloatingBubbleService : Service() {
     }
 
     private fun onBubbleTap() {
-        // Don't read clipboard from this background service — Android 10+
-        // (API 29) restricts ClipboardManager.getPrimaryClip() to the
-        // foreground app. Instead launch MainActivity with a custom
-        // action; MainActivity reads the clipboard from foreground in
-        // onResume (where the read is allowed) and forwards it to Flutter.
-        val launch = Intent(this, MainActivity::class.java).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-            action = MainActivity.ACTION_OPEN_FROM_BUBBLE
+        // The bubble does one-tap in-place rewrite: read the focused field and
+        // replace it with an AI rewrite in the user's chosen tone. This needs the
+        // AccessibilityService; if it isn't enabled, guide the user to enable it
+        // rather than failing silently.
+        if (!RewriteAccessibilityService.isReady) {
+            Toast.makeText(this, R.string.bubble_enable_accessibility, Toast.LENGTH_LONG).show()
+            startActivity(
+                Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+            return
         }
-        startActivity(launch)
+        // Pulse the bubble while the rewrite is in flight so the user knows to wait.
+        BubbleRewriteCoordinator(this).rewriteFocusedField { busy -> setBubbleBusy(busy) }
+    }
+
+    private var busyAnimator: ObjectAnimator? = null
+
+    /** Flicker the bubble (fade in/out) while a rewrite is in progress. */
+    private fun setBubbleBusy(busy: Boolean) {
+        val view = bubbleView ?: return
+        busyAnimator?.cancel()
+        if (busy) {
+            busyAnimator = ObjectAnimator.ofFloat(view, View.ALPHA, 1f, 0.25f).apply {
+                duration = 350
+                repeatMode = ValueAnimator.REVERSE
+                repeatCount = ValueAnimator.INFINITE
+                start()
+            }
+        } else {
+            busyAnimator = null
+            view.alpha = 1f
+        }
     }
 
     // ── Clipboard pulse ────────────────────────────────────────────────────

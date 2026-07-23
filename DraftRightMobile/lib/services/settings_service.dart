@@ -32,6 +32,7 @@ class SettingsService extends ChangeNotifier {
   List<String> _enabledTones = Tone.values.map((t) => t.apiValue).toList();
   String _defaultTone = '';
   bool _floatingBubbleEnabled = false;
+  String _bubblePresetTone = 'polished';
   bool _autoCloseAfterRewrite = true;
   List<String> _enabledLanguageIds = const ['en'];
   String _activeLanguageId = 'en';
@@ -44,6 +45,7 @@ class SettingsService extends ChangeNotifier {
   List<String> get enabledTones => List.unmodifiable(_enabledTones);
   String get defaultTone => _defaultTone;
   bool get floatingBubbleEnabled => _floatingBubbleEnabled;
+  String get bubblePresetTone => _bubblePresetTone;
   bool get autoCloseAfterRewrite => _autoCloseAfterRewrite;
   List<String> get enabledLanguageIds => List.unmodifiable(_enabledLanguageIds);
   String get activeLanguageId => _activeLanguageId;
@@ -64,6 +66,7 @@ class SettingsService extends ChangeNotifier {
         ?? Tone.values.map((t) => t.apiValue).toList();
     _defaultTone = _prefs.getString('draftright.defaultTone') ?? '';
     _floatingBubbleEnabled = _prefs.getBool('draftright.floatingBubbleEnabled') ?? false;
+    _bubblePresetTone = _prefs.getString('draftright.bubblePresetTone') ?? 'polished';
     _autoCloseAfterRewrite = _prefs.getBool('draftright.autoCloseAfterRewrite') ?? true;
     _enabledLanguageIds = _prefs.getStringList('draftright.enabledLanguageIds')
         ?? const ['en'];
@@ -119,6 +122,15 @@ class SettingsService extends ChangeNotifier {
   Future<void> setFloatingBubbleEnabled(bool value) async {
     _floatingBubbleEnabled = value;
     await _prefs.setBool('draftright.floatingBubbleEnabled', value);
+    notifyListeners();
+  }
+
+  /// Preset tone the floating bubble applies to each one-tap rewrite (the
+  /// "simple mode" default tone). Stored as the stable Tone.apiValue; the
+  /// native coordinator reads the same key (flutter.draftright.bubblePresetTone).
+  Future<void> setBubblePresetTone(String apiValue) async {
+    _bubblePresetTone = apiValue;
+    await _prefs.setString('draftright.bubblePresetTone', apiValue);
     notifyListeners();
   }
 

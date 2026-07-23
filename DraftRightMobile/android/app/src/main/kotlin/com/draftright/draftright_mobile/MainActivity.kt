@@ -1,6 +1,5 @@
 package com.draftright.draftright_mobile
 
-import android.content.ClipboardManager
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -36,50 +35,18 @@ import io.flutter.plugin.common.MethodChannel
  * throws `StripeConfigException` on the first SDK call.
  */
 class MainActivity : FlutterFragmentActivity() {
-    companion object {
-        const val ACTION_OPEN_FROM_BUBBLE = "com.draftright.bubble.OPEN"
-    }
-
     private val channelName = "draftright/share"
     private var pendingSharedText: String? = null
-    private var pendingBubbleClipboardRead = false
     private var channel: MethodChannel? = null
 
     override fun onCreate(savedInstanceState: android.os.Bundle?) {
         super.onCreate(savedInstanceState)
         pendingSharedText = extractSharedText(intent)
-        if (intent?.action == ACTION_OPEN_FROM_BUBBLE) pendingBubbleClipboardRead = true
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        if (intent.action == ACTION_OPEN_FROM_BUBBLE) {
-            // Defer clipboard read to onResume — Android 10+ only allows
-            // the read while we have window focus.
-            pendingBubbleClipboardRead = true
-            return
-        }
         val text = extractSharedText(intent) ?: return
-        pendingSharedText = text
-        channel?.invokeMethod("onSharedText", text)
-    }
-
-    override fun onWindowFocusChanged(hasFocus: Boolean) {
-        super.onWindowFocusChanged(hasFocus)
-        if (!hasFocus) return
-        if (!pendingBubbleClipboardRead) return
-        // Android 10+ only grants clipboard access to apps with actual
-        // window focus.  onResume() fires too early — the focus
-        // transition from the previous app to ours hasn't completed.
-        // onWindowFocusChanged(true) is the first reliable point.
-        pendingBubbleClipboardRead = false
-        val cm = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
-        val text = cm.primaryClip?.getItemAt(0)
-            ?.coerceToText(this)?.toString()?.trim().orEmpty()
-        if (text.isEmpty()) {
-            channel?.invokeMethod("onBubbleEmptyClipboard", null)
-            return
-        }
         pendingSharedText = text
         channel?.invokeMethod("onSharedText", text)
     }
@@ -136,6 +103,22 @@ class MainActivity : FlutterFragmentActivity() {
                     // App files dir — shared with the IME (same package), so
                     // downloaded language packs are readable by the keyboard.
                     result.success(filesDir.absolutePath)
+                }
+                "openAccessibilitySettings" -> {
+                    // Deep-link to system Accessibility settings so the user can
+                    // enable DraftRight's in-place rewrite service.
+                    startActivity(
+                        Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    )
+                    result.success(null)
+                }
+                "isInPlaceRewriteReady" -> {
+                    // True when the AccessibilityService is enabled + bound.
+                    result.success(
+                        com.draftright.draftright_mobile.bubble
+                            .RewriteAccessibilityService.isReady
+                    )
                 }
                 else -> result.notImplemented()
             }

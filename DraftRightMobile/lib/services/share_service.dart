@@ -21,13 +21,11 @@ class ShareService {
     }
   }
 
-  /// Subscribe to in-flight shares + bubble events.
-  /// Pass `null` to clear.
+  /// Subscribe to in-flight shares (ACTION_SEND). Pass `null` to clear.
   static void setHandler({
     void Function(String text)? onSharedText,
-    void Function()? onBubbleEmptyClipboard,
   }) {
-    if (onSharedText == null && onBubbleEmptyClipboard == null) {
+    if (onSharedText == null) {
       _channel.setMethodCallHandler(null);
       return;
     }
@@ -35,10 +33,7 @@ class ShareService {
       switch (call.method) {
         case 'onSharedText':
           final text = (call.arguments as String?)?.trim() ?? '';
-          if (text.isNotEmpty) onSharedText?.call(text);
-          break;
-        case 'onBubbleEmptyClipboard':
-          onBubbleEmptyClipboard?.call();
+          if (text.isNotEmpty) onSharedText(text);
           break;
       }
     });
@@ -94,5 +89,23 @@ class ShareService {
     try {
       await _channel.invokeMethod<void>('dismissToBackground');
     } catch (_) {/* swallow */}
+  }
+
+  /// Launch system Accessibility settings so the user can enable the
+  /// in-place rewrite service. No-op on iOS / desktop / web.
+  static Future<void> openAccessibilitySettings() async {
+    try {
+      await _channel.invokeMethod<void>('openAccessibilitySettings');
+    } catch (_) {/* swallow */}
+  }
+
+  /// True iff the AccessibilityService backing in-place rewrite is enabled
+  /// and bound. False on iOS / desktop / web.
+  static Future<bool> isInPlaceRewriteReady() async {
+    try {
+      return await _channel.invokeMethod<bool>('isInPlaceRewriteReady') ?? false;
+    } catch (_) {
+      return false;
+    }
   }
 }

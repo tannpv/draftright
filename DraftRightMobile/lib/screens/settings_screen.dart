@@ -12,6 +12,35 @@ import 'package:draftright_mobile/models/language_module.dart';
 import 'package:draftright_mobile/services/ime_manifest_client.dart';
 import 'package:draftright_mobile/services/ime_pack_service.dart';
 import 'package:draftright_mobile/widgets/language_packs_section.dart';
+import 'package:draftright_mobile/models/tone.dart';
+
+/// Tones the floating bubble can apply as its one-tap preset. Excludes
+/// Grammar Check (returns structured issues, not a rewrite) and Translate
+/// (needs a target language) — those aren't "rewrite in place" tones.
+const List<Tone> _bubbleRewriteTones = [
+  Tone.simple,
+  Tone.natural,
+  Tone.polished,
+  Tone.concise,
+  Tone.technical,
+  Tone.claude,
+];
+
+/// Prominent-disclosure copy shown before the user opts in to in-place rewrite
+/// (Play "Prominent Disclosure & Consent"). Kept in one place, not inlined.
+/// VN copy + Play Console declaration:
+/// docs/superpowers/plans/2026-07-23-android-bubble-a11y-play-declaration.md
+const String _kInPlaceRewriteDisclosure =
+    'To rewrite text right where you type it, DraftRight uses Android\'s '
+    'Accessibility service. When — and only when — you tap the DraftRight '
+    'bubble, it reads the text in the field you\'re editing and replaces it '
+    'with your chosen rewrite.\n\n'
+    '• It runs only on your tap — never in the background.\n'
+    '• Your text is sent only to the DraftRight rewrite service you '
+    'configured, to produce the rewrite. It is not sold, shared, or used '
+    'for ads.\n'
+    '• Password fields are always skipped.\n'
+    '• You can turn this off anytime in Settings.';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -100,9 +129,9 @@ class _FloatingBubbleTile extends StatelessWidget {
         children: [
           SwitchListTile(
             secondary: const Icon(Icons.bubble_chart_outlined),
-            title: const Text('Show floating bubble'),
+            title: const Text('Floating rewrite bubble'),
             subtitle: const Text(
-              'A draggable button stays on screen. Copy text, tap the bubble, pick a tone — paste back. Works in any app.',
+              'A draggable button stays on screen. Type in any app, tap the bubble — your text is rewritten in place with your chosen tone. No copy-paste.',
             ),
             value: enabled,
             onChanged: onChanged,
@@ -110,7 +139,7 @@ class _FloatingBubbleTile extends StatelessWidget {
           if (!enabled) const Padding(
             padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
             child: Text(
-              'Asks for "Display over other apps" permission once. We do not read your screen — only the clipboard, and only when you tap the bubble.',
+              'Asks once for "Display over other apps" and Accessibility, so the bubble can read the field you\'re typing in and replace it. Text is sent only to your DraftRight rewrite service, only when you tap the bubble.',
               style: TextStyle(fontSize: 12, color: Colors.grey),
             ),
           ),
@@ -166,13 +195,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await ShareService.openOverlaySettings();
       return;
     }
+    // The bubble rewrites in place via the AccessibilityService — show the
+    // prominent disclosure and get affirmative consent before enabling (Play policy).
+    final consented = await _showInPlaceDisclosure();
+    if (consented != true) return;
     final ok = await ShareService.startBubble();
     await settings.setFloatingBubbleEnabled(ok);
     if (!ok) {
       messenger.showSnackBar(const SnackBar(
         content: Text('Could not start the bubble. Try again.'),
       ));
+      return;
     }
+    // Guide the user to enable the AccessibilityService the bubble needs.
+    messenger.showSnackBar(const SnackBar(
+      content: Text('Enable "DraftRight" in Accessibility, then tap the bubble over a text field.'),
+    ));
+    await ShareService.openAccessibilitySettings();
+  }
+
+  Future<bool?> _showInPlaceDisclosure() {
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Turn on one-tap rewrite in any app'),
+        content: const SingleChildScrollView(
+          child: Text(_kInPlaceRewriteDisclosure),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Not now'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Turn on'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _logout() async {
@@ -396,6 +457,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 enabled: settings.floatingBubbleEnabled,
                 onChanged: (value) => _setBubble(settings, value),
               ),
+              if (settings.floatingBubbleEnabled) ...[
+                const SizedBox(height: 8),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('One-tap tone',
+                            style: TextStyle(fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 4),
+                        const Text(
+                          'The bubble rewrites your text in place using this tone — like '
+                          'One-Click mode on Mac/Windows.',
+                          style: TextStyle(fontSize: 12, color: Colors.grey),
+                        ),
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<String>(
+                          value: settings.bubblePresetTone,
+                          decoration: const InputDecoration(border: OutlineInputBorder()),
+                          items: _bubbleRewriteTones
+                              .map((t) => DropdownMenuItem(
+                                    value: t.apiValue,
+                                    child: Row(children: [
+                                      Icon(t.icon, size: 18),
+                                      const SizedBox(width: 8),
+                                      Text(t.displayName),
+                                    ]),
+                                  ))
+                              .toList(),
+                          onChanged: (v) {
+                            if (v != null) settings.setBubblePresetTone(v);
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
               const SizedBox(height: 8),
               Card(
                 child: SwitchListTile(

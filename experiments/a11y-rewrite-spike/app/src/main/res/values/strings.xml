@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">A11y Rewrite Spike</string>
+    <string name="a11y_description">Feasibility spike: reads the focused text field and replaces its contents with an UPPERCASED version to test whether ACTION_SET_TEXT works across apps. Local transform only — no network, no data leaves the device.</string>
+</resources>
