@@ -6,6 +6,30 @@ using System.Threading.Tasks;
 namespace DraftRightWindows.Services;
 
 /// <summary>
+/// Why a <see cref="ClipboardService.GetSelectedTextAsync"/> call did (or did not)
+/// yield text. Lets the caller give the user a specific reason instead of silently
+/// swallowing the hotkey when nothing comes back.
+/// </summary>
+public enum SelectionCaptureStatus
+{
+    /// <summary>Text was captured (either from the simulated copy or a manual-copy fallback).</summary>
+    Captured,
+
+    /// <summary>
+    /// SendInput was rejected (returned 0) so the simulated Ctrl+C never reached the
+    /// target window — UIPI/elevation mismatch, BlockInput, or a different desktop —
+    /// and there was no pre-existing clipboard text to fall back to.
+    /// </summary>
+    SendInputBlocked,
+
+    /// <summary>The copy fired but the clipboard stayed empty — nothing was selected.</summary>
+    NoSelection,
+}
+
+/// <summary>Result of a selection-capture attempt: the text (if any) plus why.</summary>
+public readonly record struct SelectionCapture(string? Text, SelectionCaptureStatus Status);
+
+/// <summary>
 /// Clipboard operations: read selected text via simulated Ctrl+C, set clipboard content.
 /// Uses Win32 SendInput and clipboard APIs.
 /// </summary>
@@ -120,10 +144,37 @@ public sealed class ClipboardService
     // ── Public API ──────────────────────────────────────────
 
     /// <summary>
+    /// Given the clipboard text that existed before the copy, the text observed
+    /// after the simulated Ctrl+C, and how many SendInput events Windows accepted,
+    /// decide what (if anything) was captured.
+    ///
+    /// Pure and Win32-free so it can be unit-tested. The load-bearing rule: when
+    /// SendInput was rejected (<paramref name="sentEvents"/> == 0) the simulated
+    /// copy never happened, so we fall back to whatever the user had copied by hand.
+    /// This restores the "copy the text yourself, then press the hotkey" workaround —
+    /// which is otherwise impossible because <see cref="GetSelectedTextAsync"/> clears
+    /// the clipboard before copying.
+    /// </summary>
+    public static SelectionCapture DecideCapture(string? original, string? afterCopy, uint sentEvents)
+    {
+        if (!string.IsNullOrWhiteSpace(afterCopy))
+            return new SelectionCapture(afterCopy, SelectionCaptureStatus.Captured);
+
+        if (sentEvents == 0)
+        {
+            return !string.IsNullOrWhiteSpace(original)
+                ? new SelectionCapture(original, SelectionCaptureStatus.Captured)
+                : new SelectionCapture(null, SelectionCaptureStatus.SendInputBlocked);
+        }
+
+        return new SelectionCapture(null, SelectionCaptureStatus.NoSelection);
+    }
+
+    /// <summary>
     /// Captures the currently selected text in the foreground application.
     /// Saves/restores the existing clipboard content around the operation.
     /// </summary>
-    public async Task<string?> GetSelectedTextAsync()
+    public async Task<SelectionCapture> GetSelectedTextAsync()
     {
         var fg0 = NativeForegroundWindow();
         DRLogger.Log($"GetSelectedTextAsync start fg=0x{fg0:X}", DRLogger.Category.HOTKEY);
@@ -169,7 +220,12 @@ public sealed class ClipboardService
         if (originalClipboard != null)
             SetClipboardText(originalClipboard);
 
-        return selectedText;
+        // 7. Classify the outcome so the caller can tell the user *why* nothing
+        //    was captured (blocked vs. no selection) instead of silently no-op'ing.
+        var result = DecideCapture(originalClipboard, selectedText, sent);
+        DRLogger.Log($"  step7: capture status={result.Status} textLen={(result.Text?.Length ?? -1)}",
+            DRLogger.Category.HOTKEY);
+        return result;
     }
 
     /// <summary>

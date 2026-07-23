@@ -193,6 +193,13 @@ internal sealed class TrayIconController : IDisposable
 
     /// <summary>Show an error balloon from the tray icon (best-effort).</summary>
     public void ShowError(string title, string message)
+        => ShowBalloon(WinForms.ToolTipIcon.Error, title, message);
+
+    /// <summary>Show an informational balloon from the tray icon (best-effort).</summary>
+    public void ShowInfo(string title, string message)
+        => ShowBalloon(WinForms.ToolTipIcon.Info, title, message);
+
+    private void ShowBalloon(WinForms.ToolTipIcon icon, string title, string message)
     {
         try
         {
@@ -200,7 +207,7 @@ internal sealed class TrayIconController : IDisposable
             {
                 _trayIcon.BalloonTipTitle = title;
                 _trayIcon.BalloonTipText = message;
-                _trayIcon.BalloonTipIcon = WinForms.ToolTipIcon.Error;
+                _trayIcon.BalloonTipIcon = icon;
                 _trayIcon.ShowBalloonTip(4000);
             }
         }
