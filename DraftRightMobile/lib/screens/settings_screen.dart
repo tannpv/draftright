@@ -496,18 +496,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
               ],
-              const SizedBox(height: 8),
-              Card(
-                child: SwitchListTile(
-                  secondary: const Icon(Icons.exit_to_app),
-                  title: const Text('Auto-return to your app'),
-                  subtitle: const Text(
-                    'After a rewrite, DraftRight closes and returns you to the app you were in. Just paste.',
-                  ),
-                  value: settings.autoCloseAfterRewrite,
-                  onChanged: (v) => settings.setAutoCloseAfterRewrite(v),
-                ),
-              ),
 
               const SizedBox(height: 24),
               const Text('Help', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),

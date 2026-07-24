@@ -56,16 +56,6 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
-            <!-- ACTION_SEND for text/plain — appears in any app's Share sheet.
-                 Reliable on Samsung One UI / Xiaomi MIUI / Huawei EMUI, which
-                 strip third-party PROCESS_TEXT actions out of the long-press
-                 overflow.  User selects text → Share → DraftRight → tone
-                 picker → result auto-copied → paste back. -->
-            <intent-filter>
-                <action android:name="android.intent.action.SEND" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="text/plain" />
-            </intent-filter>
             <!-- App Link for payment-return.  When Lemon Squeezy
                  redirects the in-app browser to <host>/payment/...
                  after checkout, autoVerify=true tells Android to skip

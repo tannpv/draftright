@@ -33,7 +33,6 @@ class SettingsService extends ChangeNotifier {
   String _defaultTone = '';
   bool _floatingBubbleEnabled = false;
   String _bubblePresetTone = 'polished';
-  bool _autoCloseAfterRewrite = true;
   List<String> _enabledLanguageIds = const ['en'];
   String _activeLanguageId = 'en';
   String _lastSeenVersion = '';
@@ -46,7 +45,6 @@ class SettingsService extends ChangeNotifier {
   String get defaultTone => _defaultTone;
   bool get floatingBubbleEnabled => _floatingBubbleEnabled;
   String get bubblePresetTone => _bubblePresetTone;
-  bool get autoCloseAfterRewrite => _autoCloseAfterRewrite;
   List<String> get enabledLanguageIds => List.unmodifiable(_enabledLanguageIds);
   String get activeLanguageId => _activeLanguageId;
 
@@ -67,7 +65,6 @@ class SettingsService extends ChangeNotifier {
     _defaultTone = _prefs.getString('draftright.defaultTone') ?? '';
     _floatingBubbleEnabled = _prefs.getBool('draftright.floatingBubbleEnabled') ?? false;
     _bubblePresetTone = _prefs.getString('draftright.bubblePresetTone') ?? 'polished';
-    _autoCloseAfterRewrite = _prefs.getBool('draftright.autoCloseAfterRewrite') ?? true;
     _enabledLanguageIds = _prefs.getStringList('draftright.enabledLanguageIds')
         ?? const ['en'];
     if (_enabledLanguageIds.isEmpty) _enabledLanguageIds = const ['en'];
@@ -131,12 +128,6 @@ class SettingsService extends ChangeNotifier {
   Future<void> setBubblePresetTone(String apiValue) async {
     _bubblePresetTone = apiValue;
     await _prefs.setString('draftright.bubblePresetTone', apiValue);
-    notifyListeners();
-  }
-
-  Future<void> setAutoCloseAfterRewrite(bool value) async {
-    _autoCloseAfterRewrite = value;
-    await _prefs.setBool('draftright.autoCloseAfterRewrite', value);
     notifyListeners();
   }
 

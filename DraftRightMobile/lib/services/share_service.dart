@@ -1,43 +1,9 @@
 import 'package:flutter/services.dart';
 
-/// Bridge to the Android side's ACTION_SEND handler + floating-bubble
-/// service. iOS wires up its own share extension separately; on iOS the
-/// bubble methods are no-ops.
+/// Bridge to the Android floating-bubble + overlay/accessibility permissions.
+/// iOS wires up its own share extension separately; on iOS these are no-ops.
 class ShareService {
   static const _channel = MethodChannel('draftright/share');
-
-  // ── Share intent ────────────────────────────────────────────────────────
-
-  /// Drain any text the user shared while the app was not running.
-  /// Returns null if there's no pending share.  Idempotent — once read,
-  /// the native side clears its buffer.
-  static Future<String?> getInitialSharedText() async {
-    try {
-      return await _channel.invokeMethod<String>('getInitialSharedText');
-    } on MissingPluginException {
-      return null;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  /// Subscribe to in-flight shares (ACTION_SEND). Pass `null` to clear.
-  static void setHandler({
-    void Function(String text)? onSharedText,
-  }) {
-    if (onSharedText == null) {
-      _channel.setMethodCallHandler(null);
-      return;
-    }
-    _channel.setMethodCallHandler((call) async {
-      switch (call.method) {
-        case 'onSharedText':
-          final text = (call.arguments as String?)?.trim() ?? '';
-          if (text.isNotEmpty) onSharedText(text);
-          break;
-      }
-    });
-  }
 
   // ── Floating bubble (Tier 1) ───────────────────────────────────────────
 
@@ -80,15 +46,6 @@ class ShareService {
     } catch (_) {
       return false;
     }
-  }
-
-  /// Send DraftRight to the back of the task stack so the previous
-  /// foreground app comes back. Called after a successful rewrite so the
-  /// user doesn't have to navigate back manually before pasting.
-  static Future<void> dismissToBackground() async {
-    try {
-      await _channel.invokeMethod<void>('dismissToBackground');
-    } catch (_) {/* swallow */}
   }
 
   /// Launch system Accessibility settings so the user can enable the
