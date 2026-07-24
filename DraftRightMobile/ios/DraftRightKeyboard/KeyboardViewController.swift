@@ -285,7 +285,21 @@ class KeyboardViewController: UIInputViewController {
 // MARK: - ToolbarViewDelegate
 
 extension KeyboardViewController: ToolbarViewDelegate {
+    /// Tone icon tapped → rewrite, then let the user confirm via the diff sheet.
     func toolbarDidSelectTone(_ tone: Tone) {
+        performRewrite(tone: tone, autoApply: false)
+    }
+
+    /// One-tap button → rewrite with the preset tone and apply directly
+    /// (no diff confirm). Undo stays available as the safety net.
+    func toolbarDidTapOneTap() {
+        performRewrite(tone: settings.oneTapTone, autoApply: true)
+    }
+
+    /// Shared rewrite flow for both entry points. `autoApply` picks the
+    /// one-tap fast path (replace in place immediately) over the tone
+    /// path (preview in the diff sheet first).
+    private func performRewrite(tone: Tone, autoApply: Bool) {
         let text = readFullText().trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
 
@@ -295,14 +309,19 @@ extension KeyboardViewController: ToolbarViewDelegate {
         }
 
         originalText = text
-        toolbar.setLoading(tone)
+        if autoApply { toolbar.setOneTapLoading() } else { toolbar.setLoading(tone) }
 
         aiClient.rewrite(text: text, tone: tone, settings: settings) { [weak self] result in
             DispatchQueue.main.async {
                 self?.toolbar.clearLoading()
                 switch result {
                 case .success(let rewritten):
-                    self?.showDiffSheet(original: text, rewritten: rewritten)
+                    if autoApply {
+                        self?.replaceAllText(with: rewritten)
+                        self?.toolbar.showUndo()
+                    } else {
+                        self?.showDiffSheet(original: text, rewritten: rewritten)
+                    }
                 case .failure(let error):
                     self?.showBanner(error.localizedDescription, color: .systemRed)
                 }

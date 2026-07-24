@@ -331,4 +331,12 @@ class AuthService extends ChangeNotifier {
     await _syncToAppGroup('draftright.activeLanguageId', id);
   }
 
+  /// Sync the one-tap preset tone (Tone.apiValue) to App Group so the iOS
+  /// keyboard's one-tap rewrite button uses the same default as the app's
+  /// picker (and the Android bubble). Key is platform-neutral on purpose —
+  /// it drives the keyboard here, the floating bubble on Android.
+  static Future<void> syncOneTapToneToAppGroup(String apiValue) async {
+    await _syncToAppGroup('draftright.oneTapTone', apiValue);
+  }
+
 }
