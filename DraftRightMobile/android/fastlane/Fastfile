@@ -48,6 +48,25 @@ platform :android do
     UI.success("Uploaded #{AAB_PATH} to Internal Testing.")
   end
 
+  desc "Upload AAB to Internal Testing as a DRAFT (does not roll out; lets the " \
+       "bundle land in Play + a draft release without the release-review gate — " \
+       "used to stage a build whose Play policy declaration is still pending)."
+  lane :internal_draft do
+    upload_to_play_store(
+      aab: AAB_PATH,
+      track: "internal",
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+      skip_upload_changelogs: false,
+      release_status: "draft",
+    )
+    UI.success(
+      "Uploaded #{AAB_PATH} to Internal Testing as a draft. " \
+      "Complete the release in Play Console → Internal testing (declaration + rollout)."
+    )
+  end
+
   desc "Upload AAB to Closed Testing (legacy name: 'alpha')."
   lane :closed do
     upload_to_play_store(
