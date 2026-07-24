@@ -36,7 +36,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               child: PageView(
                 controller: _pageController,
                 onPageChanged: (index) => setState(() => _currentPage = index),
-                children: pages,
+                children: pages.map(_scrollableCentered).toList(),
               ),
             ),
             Padding(
@@ -75,6 +75,20 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  /// Lets a fixed-height, vertically-centered page scroll instead of
+  /// overflowing on short screens: the content stays centered when it fits the
+  /// viewport and becomes scrollable when it doesn't.
+  Widget _scrollableCentered(Widget page) {
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+          child: IntrinsicHeight(child: page),
         ),
       ),
     );
