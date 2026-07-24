@@ -10,6 +10,7 @@ on:
         default: internal
         options:
           - internal
+          - internal_draft
           - closed
           - open
           - production_draft
