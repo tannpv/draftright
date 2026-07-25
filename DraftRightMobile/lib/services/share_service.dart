@@ -1,9 +1,23 @@
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 
 /// Bridge to the Android floating-bubble + overlay/accessibility permissions.
 /// iOS wires up its own share extension separately; on iOS these are no-ops.
 class ShareService {
   static const _channel = MethodChannel('draftright/share');
+
+  /// The floating bubble needs `SYSTEM_ALERT_WINDOW` (draw over other apps)
+  /// plus an `AccessibilityService` to read/replace the focused field — both
+  /// Android-only. iOS has no cross-app overlay (sandbox), so the bubble UI
+  /// must never surface there. UI gates on this, never on `Platform` directly.
+  static bool get supportsFloatingBubble => !kIsWeb && Platform.isAndroid;
+
+  /// iOS has no bubble, but its custom keyboard exposes a one-tap ⚡ rewrite
+  /// that applies the same preset tone (read from the App Group). So the
+  /// one-tap tone selector is still worth showing on iOS — without the
+  /// Android-only overlay toggle.
+  static bool get supportsKeyboardOneTap => !kIsWeb && Platform.isIOS;
 
   // ── Floating bubble (Tier 1) ───────────────────────────────────────────
 
