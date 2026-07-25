@@ -214,6 +214,47 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await ShareService.openAccessibilitySettings();
   }
 
+  /// Preset one-tap tone selector, shared by the Android bubble and the iOS
+  /// keyboard ⚡ (both read the same `bubblePresetTone`). [description] adapts
+  /// the copy to whichever surface is consuming it.
+  Widget _oneTapToneCard(SettingsService settings, String description) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('One-tap tone',
+                style: TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 4),
+            Text(
+              description,
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              value: settings.bubblePresetTone,
+              decoration: const InputDecoration(border: OutlineInputBorder()),
+              items: _bubbleRewriteTones
+                  .map((t) => DropdownMenuItem(
+                        value: t.apiValue,
+                        child: Row(children: [
+                          Icon(t.icon, size: 18),
+                          const SizedBox(width: 8),
+                          Text(t.displayName),
+                        ]),
+                      ))
+                  .toList(),
+              onChanged: (v) {
+                if (v != null) settings.setBubblePresetTone(v);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<bool?> _showInPlaceDisclosure() {
     return showDialog<bool>(
       context: context,
@@ -449,52 +490,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const SizedBox(height: 8),
               Card(child: _DownloadableLanguages(baseUrl: settings.backendUrl)),
 
-              const SizedBox(height: 24),
-              const Text('Floating Bubble',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              const SizedBox(height: 8),
-              _FloatingBubbleTile(
-                enabled: settings.floatingBubbleEnabled,
-                onChanged: (value) => _setBubble(settings, value),
-              ),
-              if (settings.floatingBubbleEnabled) ...[
+              // Android: floating bubble (draw-over-apps + AccessibilityService).
+              // iOS has no overlay (sandbox) — its keyboard ⚡ one-tap uses the
+              // same preset tone, so iOS gets just the tone selector instead.
+              if (ShareService.supportsFloatingBubble) ...[
+                const SizedBox(height: 24),
+                const Text('Floating Bubble',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                 const SizedBox(height: 8),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('One-tap tone',
-                            style: TextStyle(fontWeight: FontWeight.w600)),
-                        const SizedBox(height: 4),
-                        const Text(
-                          'The bubble rewrites your text in place using this tone — like '
-                          'One-Click mode on Mac/Windows.',
-                          style: TextStyle(fontSize: 12, color: Colors.grey),
-                        ),
-                        const SizedBox(height: 12),
-                        DropdownButtonFormField<String>(
-                          value: settings.bubblePresetTone,
-                          decoration: const InputDecoration(border: OutlineInputBorder()),
-                          items: _bubbleRewriteTones
-                              .map((t) => DropdownMenuItem(
-                                    value: t.apiValue,
-                                    child: Row(children: [
-                                      Icon(t.icon, size: 18),
-                                      const SizedBox(width: 8),
-                                      Text(t.displayName),
-                                    ]),
-                                  ))
-                              .toList(),
-                          onChanged: (v) {
-                            if (v != null) settings.setBubblePresetTone(v);
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
+                _FloatingBubbleTile(
+                  enabled: settings.floatingBubbleEnabled,
+                  onChanged: (value) => _setBubble(settings, value),
                 ),
+                if (settings.floatingBubbleEnabled) ...[
+                  const SizedBox(height: 8),
+                  _oneTapToneCard(settings,
+                      'The bubble rewrites your text in place using this tone — '
+                      'like One-Click mode on Mac/Windows.'),
+                ],
+              ] else if (ShareService.supportsKeyboardOneTap) ...[
+                const SizedBox(height: 24),
+                const Text('One-Tap Rewrite',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                const SizedBox(height: 8),
+                _oneTapToneCard(settings,
+                    'Tap the ⚡ button on the DraftRight keyboard to rewrite the '
+                    'current text field in place with this tone.'),
               ],
 
               const SizedBox(height: 24),
