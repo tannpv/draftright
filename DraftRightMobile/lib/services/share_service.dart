@@ -13,11 +13,10 @@ class ShareService {
   /// must never surface there. UI gates on this, never on `Platform` directly.
   static bool get supportsFloatingBubble => !kIsWeb && Platform.isAndroid;
 
-  /// iOS has no bubble, but its custom keyboard exposes a one-tap ⚡ rewrite
-  /// that applies the same preset tone (read from the App Group). So the
-  /// one-tap tone selector is still worth showing on iOS — without the
-  /// Android-only overlay toggle.
-  static bool get supportsKeyboardOneTap => !kIsWeb && Platform.isIOS;
+  /// iOS has no bubble, but its custom keyboard has hold-to-talk voice
+  /// dictation whose AI-polish tone is user-configurable (read from the App
+  /// Group). Gates the iOS "Voice dictation" settings section.
+  static bool get supportsKeyboardVoice => !kIsWeb && Platform.isIOS;
 
   // ── Floating bubble (Tier 1) ───────────────────────────────────────────
 

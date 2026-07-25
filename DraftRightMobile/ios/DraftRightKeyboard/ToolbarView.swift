@@ -3,9 +3,6 @@ import DraftRightKeyboardCore
 
 protocol ToolbarViewDelegate: AnyObject {
     func toolbarDidSelectTone(_ tone: Tone)
-    /// One-tap primary action: rewrite the whole field with the user's
-    /// preset tone and apply directly (no tone pick, no diff confirm).
-    func toolbarDidTapOneTap()
     func toolbarDidTapUndo()
 
     // Hold-to-talk voice input (mirrors Android's VoiceHoldListener).
@@ -27,7 +24,6 @@ final class ToolbarView: UIView {
     private let scrollView = UIScrollView()
     private let stackView = UIStackView()
     private var undoButton: UIButton?
-    private var oneTapButton: UIButton?
     private var micButton: UIButton?
     // Hold-to-talk gesture state (see micLongPress).
     private var micHoldStarted = false
@@ -70,13 +66,6 @@ final class ToolbarView: UIView {
         stackView.alignment = .center
         stackView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.addSubview(stackView)
-
-        // Leading primary action: one tap → rewrite the whole field with the
-        // user's preset tone and apply directly. The closest iOS-legal
-        // equivalent of the Android floating bubble's one-tap rewrite.
-        let oneTap = createOneTapButton()
-        stackView.addArrangedSubview(oneTap)
-        oneTapButton = oneTap
 
         // Hold-to-talk mic — hidden until the host confirms the recognizer is
         // available + authorized (setVoiceAvailable). iOS equivalent of the
@@ -134,30 +123,9 @@ final class ToolbarView: UIView {
         return button
     }
 
-    /// Filled-bolt primary button, brand-tinted so it reads as the quick
-    /// action distinct from the outline tone icons.
-    private func createOneTapButton() -> UIButton {
-        let button = UIButton(type: .system)
-        let config = UIImage.SymbolConfiguration(pointSize: 16, weight: .semibold)
-        button.setImage(UIImage(systemName: "bolt.fill", withConfiguration: config), for: .normal)
-        button.tintColor = .white
-        button.backgroundColor = .draftRightBrand
-        button.addTarget(self, action: #selector(oneTapTapped), for: .touchUpInside)
-        button.widthAnchor.constraint(equalToConstant: 40).isActive = true
-        button.heightAnchor.constraint(equalToConstant: 36).isActive = true
-        button.layer.cornerRadius = 6
-        button.accessibilityLabel = "One-tap rewrite"
-        button.accessibilityIdentifier = "dr_onetap"
-        return button
-    }
-
     @objc private func toneTapped(_ sender: UIButton) {
         guard Tone.allCases.indices.contains(sender.tag) else { return }
         delegate?.toolbarDidSelectTone(Tone.allCases[sender.tag])
-    }
-
-    @objc private func oneTapTapped() {
-        delegate?.toolbarDidTapOneTap()
     }
 
     // MARK: - Hold-to-talk mic
@@ -253,7 +221,6 @@ final class ToolbarView: UIView {
     }
 
     private func setActionsEnabled(_ enabled: Bool) {
-        oneTapButton?.isEnabled = enabled
         toneButtons.forEach { $0.isEnabled = enabled }
     }
 
@@ -266,12 +233,6 @@ final class ToolbarView: UIView {
         guard let index = Tone.allCases.firstIndex(of: tone),
               toneButtons.indices.contains(index) else { return }
         startSpinner(on: toneButtons[index])
-    }
-
-    /// Show a spinner on the one-tap button while its rewrite runs.
-    func setOneTapLoading() {
-        guard let button = oneTapButton else { return }
-        startSpinner(on: button)
     }
 
     private func startSpinner(on button: UIButton) {

@@ -13,11 +13,10 @@ class KeyboardViewController: UIInputViewController {
 
     // Hold-to-talk voice input. `voiceInput` is the SFSpeechRecognizer adapter;
     // `voiceSession` is the shared Core state machine driving dictate → polish →
-    // commit. `currentVoiceTone` mirrors Android: the last tone the user tapped
-    // (default natural) is the tone dictation is polished in.
+    // commit. Dictation is polished in the user's chosen tone
+    // (`settings.oneTapTone`, set under Settings → Voice dictation).
     private let voiceInput = SpeechVoiceInput()
     private var voiceSession: VoiceSessionController!
-    private var currentVoiceTone: Tone = .natural
     private var voicePreviewLabel: UILabel?
 
     // Tier β: language registry + per-language composer routing.
@@ -299,22 +298,8 @@ class KeyboardViewController: UIInputViewController {
 // MARK: - ToolbarViewDelegate
 
 extension KeyboardViewController: ToolbarViewDelegate {
-    /// Tone icon tapped → rewrite, then let the user confirm via the diff sheet.
+    /// Tone icon tapped → rewrite the field, then preview it in the diff sheet.
     func toolbarDidSelectTone(_ tone: Tone) {
-        currentVoiceTone = tone // dictation is polished in the last-picked tone
-        performRewrite(tone: tone, autoApply: false)
-    }
-
-    /// One-tap button → rewrite with the preset tone and apply directly
-    /// (no diff confirm). Undo stays available as the safety net.
-    func toolbarDidTapOneTap() {
-        performRewrite(tone: settings.oneTapTone, autoApply: true)
-    }
-
-    /// Shared rewrite flow for both entry points. `autoApply` picks the
-    /// one-tap fast path (replace in place immediately) over the tone
-    /// path (preview in the diff sheet first).
-    private func performRewrite(tone: Tone, autoApply: Bool) {
         let text = readFullText().trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
 
@@ -324,19 +309,14 @@ extension KeyboardViewController: ToolbarViewDelegate {
         }
 
         originalText = text
-        if autoApply { toolbar.setOneTapLoading() } else { toolbar.setLoading(tone) }
+        toolbar.setLoading(tone)
 
         aiClient.rewrite(text: text, tone: tone, settings: settings) { [weak self] result in
             DispatchQueue.main.async {
                 self?.toolbar.clearLoading()
                 switch result {
                 case .success(let rewritten):
-                    if autoApply {
-                        self?.replaceAllText(with: rewritten)
-                        self?.toolbar.showUndo()
-                    } else {
-                        self?.showDiffSheet(original: text, rewritten: rewritten)
-                    }
+                    self?.showDiffSheet(original: text, rewritten: rewritten)
                 case .failure(let error):
                     self?.showBanner(error.localizedDescription, color: .systemRed)
                 }
@@ -357,10 +337,11 @@ extension KeyboardViewController: ToolbarViewDelegate {
     }
 
     /// Polish a dictated transcript via /rewrite with input_kind=speech, in the
-    /// last-picked tone. Delivered back on the main thread so the controller's
-    /// outcome + UI stay single-threaded (URLSession completes off-main).
+    /// user's chosen dictation tone (Settings → Voice dictation). Delivered back
+    /// on the main thread so the controller's outcome + UI stay single-threaded
+    /// (URLSession completes off-main).
     private func polishVoice(_ text: String, _ cb: @escaping (Result<String, Error>) -> Void) {
-        aiClient.rewrite(text: text, tone: currentVoiceTone, settings: settings, inputKind: .speech) { result in
+        aiClient.rewrite(text: text, tone: settings.oneTapTone, settings: settings, inputKind: .speech) { result in
             DispatchQueue.main.async { cb(result) }
         }
     }

@@ -217,15 +217,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// Preset one-tap tone selector, shared by the Android bubble and the iOS
   /// keyboard ⚡ (both read the same `bubblePresetTone`). [description] adapts
   /// the copy to whichever surface is consuming it.
-  Widget _oneTapToneCard(SettingsService settings, String description) {
+  Widget _oneTapToneCard(SettingsService settings, String title, String description) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('One-tap tone',
-                style: TextStyle(fontWeight: FontWeight.w600)),
+            Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
             const SizedBox(height: 4),
             Text(
               description,
@@ -504,18 +503,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 if (settings.floatingBubbleEnabled) ...[
                   const SizedBox(height: 8),
-                  _oneTapToneCard(settings,
+                  _oneTapToneCard(settings, 'One-tap tone',
                       'The bubble rewrites your text in place using this tone — '
                       'like One-Click mode on Mac/Windows.'),
                 ],
-              ] else if (ShareService.supportsKeyboardOneTap) ...[
+              ] else if (ShareService.supportsKeyboardVoice) ...[
                 const SizedBox(height: 24),
-                const Text('One-Tap Rewrite',
+                const Text('Voice dictation',
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                 const SizedBox(height: 8),
-                _oneTapToneCard(settings,
-                    'Tap the ⚡ button on the DraftRight keyboard to rewrite the '
-                    'current text field in place with this tone.'),
+                _oneTapToneCard(settings, 'Dictation tone',
+                    'Hold the mic on the DraftRight keyboard to dictate; your '
+                    'speech is cleaned up and inserted in this tone.'),
               ],
 
               const SizedBox(height: 24),
