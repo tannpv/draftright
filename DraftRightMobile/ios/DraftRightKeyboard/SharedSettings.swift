@@ -60,4 +60,15 @@ struct SharedSettings {
     var activeLanguageId: String {
         defaults?.string(forKey: "draftright.activeLanguageId") ?? "en"
     }
+
+    /// Preset tone applied by the toolbar's one-tap rewrite button. This is
+    /// the same "one-tap tone" the Android bubble uses — the main app syncs
+    /// the shared value into the App Group (key `draftright.oneTapTone`) so
+    /// both surfaces stay in step. Defaults to `.polished` (matches the
+    /// Flutter default). The Settings UI only offers plain rewrite tones,
+    /// so this never resolves to grammarCheck / translate.
+    var oneTapTone: Tone {
+        let raw = defaults?.string(forKey: "draftright.oneTapTone") ?? Tone.polished.apiValue
+        return Tone(rawValue: raw) ?? .polished
+    }
 }

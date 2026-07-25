@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Floating-bubble in-place rewrite (user-facing; VN copy in values-vi). -->
+    <string name="bubble_clip_label">DraftRight rewrite</string>
+    <string name="bubble_rewrite_no_field">Tap into a text field first, then tap the bubble.</string>
+    <string name="bubble_rewrite_password_blocked">Can\'t rewrite password fields.</string>
+    <string name="bubble_rewrite_empty">Nothing to rewrite — the field is empty.</string>
+    <string name="bubble_rewrite_login_required">Sign in to DraftRight to use rewrite.</string>
+    <string name="bubble_rewrite_working">Rewriting…</string>
+    <string name="bubble_rewrite_done">Rewritten.</string>
+    <string name="bubble_rewrite_copied_fallback">Rewrite copied — paste to replace.</string>
+    <string name="bubble_rewrite_failed">Rewrite failed. Please try again.</string>
+    <string name="bubble_a11y_description">Lets the DraftRight bubble read the text field you\'re typing in and replace it with an AI-rewritten version, in place. Text is sent only to your configured DraftRight rewrite service; nothing else is collected.</string>
+    <string name="bubble_enable_accessibility">Enable DraftRight in Accessibility to rewrite text with the bubble.</string>
+</resources>

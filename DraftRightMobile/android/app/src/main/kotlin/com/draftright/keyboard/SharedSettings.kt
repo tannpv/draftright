@@ -37,6 +37,12 @@ class SharedSettings(context: Context) {
     val translateLanguage: String
         get() = prefs.getString("flutter.draftright.translateLanguage", "Vietnamese") ?: "Vietnamese"
 
+    /** One-Click preset tone the in-place bubble applies. Persisted as the
+     *  stable [Tone.apiValue] (not an ordinal). Defaults to [Tone.POLISHED]. */
+    val bubblePresetTone: Tone
+        get() = Tone.fromApiValue(prefs.getString("flutter.draftright.bubblePresetTone", null))
+            ?: Tone.POLISHED
+
     /** IDs of enabled keyboard languages, in user-chosen order.
      *  Stored as a JSON array string from the Flutter side, parsed by
      *  removing brackets and splitting on commas — Flutter's

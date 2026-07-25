@@ -34,4 +34,11 @@ enum class Tone(
         GRAMMAR_CHECK -> "Analyze the given text for grammar, spelling, and style issues. Return a JSON object with a \"score\" (0-100) and an \"issues\" array. Each issue has \"type\", \"offset\", \"length\", \"original\", \"suggestion\", and \"reason\". Return ONLY JSON."
         TRANSLATE -> "Translate the following text into $targetLanguage. If the text is already in $targetLanguage, translate it into English instead. Preserve the original meaning and tone. Return only the translated text, no explanations."
     }
+
+    companion object {
+        /** Resolve a persisted [apiValue] back to its Tone, or null if unknown.
+         *  Lets settings store the stable api string instead of an ordinal. */
+        fun fromApiValue(value: String?): Tone? =
+            value?.let { v -> entries.firstOrNull { it.apiValue == v } }
+    }
 }

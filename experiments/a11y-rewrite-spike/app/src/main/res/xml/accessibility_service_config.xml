@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Feasibility-spike accessibility config. canRetrieveWindowContent is the
+  load-bearing flag: without it, rootInActiveWindow / findFocus return nothing.
+  flagRetrieveInteractiveWindows lets us reach the focused window even when the
+  overlay bubble is showing.
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeAllMask"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagRetrieveInteractiveWindows|flagReportViewIds|flagIncludeNotImportantViews"
+    android:canRetrieveWindowContent="true"
+    android:description="@string/a11y_description"
+    android:notificationTimeout="100" />

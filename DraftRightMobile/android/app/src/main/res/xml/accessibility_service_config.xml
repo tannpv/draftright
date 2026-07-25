@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Config for RewriteAccessibilityService. canRetrieveWindowContent is required
+  to read the focused field; flagRetrieveInteractiveWindows lets us reach it
+  while the overlay bubble is shown. The service acts only on an explicit bubble
+  tap — it does not react to accessibility events.
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeAllMask"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagRetrieveInteractiveWindows|flagReportViewIds"
+    android:canRetrieveWindowContent="true"
+    android:description="@string/bubble_a11y_description"
+    android:notificationTimeout="100" />

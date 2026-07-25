@@ -32,7 +32,7 @@ class SettingsService extends ChangeNotifier {
   List<String> _enabledTones = Tone.values.map((t) => t.apiValue).toList();
   String _defaultTone = '';
   bool _floatingBubbleEnabled = false;
-  bool _autoCloseAfterRewrite = true;
+  String _bubblePresetTone = 'polished';
   List<String> _enabledLanguageIds = const ['en'];
   String _activeLanguageId = 'en';
   String _lastSeenVersion = '';
@@ -44,7 +44,7 @@ class SettingsService extends ChangeNotifier {
   List<String> get enabledTones => List.unmodifiable(_enabledTones);
   String get defaultTone => _defaultTone;
   bool get floatingBubbleEnabled => _floatingBubbleEnabled;
-  bool get autoCloseAfterRewrite => _autoCloseAfterRewrite;
+  String get bubblePresetTone => _bubblePresetTone;
   List<String> get enabledLanguageIds => List.unmodifiable(_enabledLanguageIds);
   String get activeLanguageId => _activeLanguageId;
 
@@ -64,7 +64,7 @@ class SettingsService extends ChangeNotifier {
         ?? Tone.values.map((t) => t.apiValue).toList();
     _defaultTone = _prefs.getString('draftright.defaultTone') ?? '';
     _floatingBubbleEnabled = _prefs.getBool('draftright.floatingBubbleEnabled') ?? false;
-    _autoCloseAfterRewrite = _prefs.getBool('draftright.autoCloseAfterRewrite') ?? true;
+    _bubblePresetTone = _prefs.getString('draftright.bubblePresetTone') ?? 'polished';
     _enabledLanguageIds = _prefs.getStringList('draftright.enabledLanguageIds')
         ?? const ['en'];
     if (_enabledLanguageIds.isEmpty) _enabledLanguageIds = const ['en'];
@@ -82,6 +82,8 @@ class SettingsService extends ChangeNotifier {
     // app's standard UserDefaults, which the extension can't read).
     await AuthService.syncEnabledLanguageIdsToAppGroup(_enabledLanguageIds);
     await AuthService.syncActiveLanguageIdToAppGroup(_activeLanguageId);
+    // The iOS keyboard's one-tap rewrite reads this from the App Group.
+    await AuthService.syncOneTapToneToAppGroup(_bubblePresetTone);
   }
 
   Future<void> setLastSeenVersion(String version) async {
@@ -122,9 +124,17 @@ class SettingsService extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> setAutoCloseAfterRewrite(bool value) async {
-    _autoCloseAfterRewrite = value;
-    await _prefs.setBool('draftright.autoCloseAfterRewrite', value);
+  /// Preset tone applied to each one-tap rewrite — the "simple mode" default.
+  /// One setting, two surfaces: the Android bubble coordinator reads it from
+  /// SharedPreferences (flutter.draftright.bubblePresetTone); the iOS keyboard's
+  /// one-tap button reads it from the App Group (draftright.oneTapTone, synced
+  /// via [AuthService.syncOneTapToneToAppGroup]). Stored as the stable
+  /// Tone.apiValue.
+  Future<void> setBubblePresetTone(String apiValue) async {
+    _bubblePresetTone = apiValue;
+    await _prefs.setString('draftright.bubblePresetTone', apiValue);
+    // Keep the iOS keyboard's one-tap tone in step with the picker.
+    await AuthService.syncOneTapToneToAppGroup(apiValue);
     notifyListeners();
   }
 

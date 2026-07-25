@@ -2,6 +2,9 @@ import UIKit
 
 protocol ToolbarViewDelegate: AnyObject {
     func toolbarDidSelectTone(_ tone: Tone)
+    /// One-tap primary action: rewrite the whole field with the user's
+    /// preset tone and apply directly (no tone pick, no diff confirm).
+    func toolbarDidTapOneTap()
     func toolbarDidTapUndo()
 }
 
@@ -11,8 +14,17 @@ final class ToolbarView: UIView {
     private let scrollView = UIScrollView()
     private let stackView = UIStackView()
     private var undoButton: UIButton?
-    private var loadingTone: Tone?
+    private var oneTapButton: UIButton?
+    // Tone buttons in `Tone.allCases` order. Kept as an explicit array so the
+    // loading-spinner lookup stays correct regardless of the leading one-tap
+    // button or trailing undo button, which would otherwise shift the
+    // `stackView.arrangedSubviews` indices out of tone order.
+    private var toneButtons: [UIButton] = []
     private var spinner: UIActivityIndicatorView?
+    // The button currently showing a spinner + the image to restore when
+    // loading clears — lets any button (tone or one-tap) drive the spinner.
+    private weak var loadingButton: UIButton?
+    private var loadingButtonImage: UIImage?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -41,8 +53,16 @@ final class ToolbarView: UIView {
         stackView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.addSubview(stackView)
 
+        // Leading primary action: one tap → rewrite the whole field with the
+        // user's preset tone and apply directly. The closest iOS-legal
+        // equivalent of the Android floating bubble's one-tap rewrite.
+        let oneTap = createOneTapButton()
+        stackView.addArrangedSubview(oneTap)
+        oneTapButton = oneTap
+
         for (index, tone) in Tone.allCases.enumerated() {
             let button = createToneButton(tone, index: index)
+            toneButtons.append(button)
             stackView.addArrangedSubview(button)
         }
 
@@ -88,41 +108,72 @@ final class ToolbarView: UIView {
         return button
     }
 
+    /// Filled-bolt primary button, brand-tinted so it reads as the quick
+    /// action distinct from the outline tone icons.
+    private func createOneTapButton() -> UIButton {
+        let button = UIButton(type: .system)
+        let config = UIImage.SymbolConfiguration(pointSize: 16, weight: .semibold)
+        button.setImage(UIImage(systemName: "bolt.fill", withConfiguration: config), for: .normal)
+        button.tintColor = .white
+        button.backgroundColor = .draftRightBrand
+        button.addTarget(self, action: #selector(oneTapTapped), for: .touchUpInside)
+        button.widthAnchor.constraint(equalToConstant: 40).isActive = true
+        button.heightAnchor.constraint(equalToConstant: 36).isActive = true
+        button.layer.cornerRadius = 6
+        button.accessibilityLabel = "One-tap rewrite"
+        button.accessibilityIdentifier = "dr_onetap"
+        return button
+    }
+
     @objc private func toneTapped(_ sender: UIButton) {
         guard Tone.allCases.indices.contains(sender.tag) else { return }
         delegate?.toolbarDidSelectTone(Tone.allCases[sender.tag])
+    }
+
+    @objc private func oneTapTapped() {
+        delegate?.toolbarDidTapOneTap()
     }
 
     @objc private func undoTapped() {
         delegate?.toolbarDidTapUndo()
     }
 
+    /// Show a spinner on the tapped tone button while its rewrite runs.
     func setLoading(_ tone: Tone) {
-        loadingTone = tone
-        isUserInteractionEnabled = false
-        if let index = Tone.allCases.firstIndex(of: tone),
-           let button = stackView.arrangedSubviews[index] as? UIButton {
-            button.setImage(nil, for: .normal)
-            let spinner = UIActivityIndicatorView(style: .medium)
-            spinner.startAnimating()
-            spinner.translatesAutoresizingMaskIntoConstraints = false
-            button.addSubview(spinner)
-            spinner.centerXAnchor.constraint(equalTo: button.centerXAnchor).isActive = true
-            spinner.centerYAnchor.constraint(equalTo: button.centerYAnchor).isActive = true
-            self.spinner = spinner
-        }
+        guard let index = Tone.allCases.firstIndex(of: tone),
+              toneButtons.indices.contains(index) else { return }
+        startSpinner(on: toneButtons[index])
     }
 
+    /// Show a spinner on the one-tap button while its rewrite runs.
+    func setOneTapLoading() {
+        guard let button = oneTapButton else { return }
+        startSpinner(on: button)
+    }
+
+    private func startSpinner(on button: UIButton) {
+        loadingButton = button
+        loadingButtonImage = button.image(for: .normal)
+        isUserInteractionEnabled = false
+        button.setImage(nil, for: .normal)
+        let spinner = UIActivityIndicatorView(style: .medium)
+        spinner.color = button.tintColor
+        spinner.startAnimating()
+        spinner.translatesAutoresizingMaskIntoConstraints = false
+        button.addSubview(spinner)
+        spinner.centerXAnchor.constraint(equalTo: button.centerXAnchor).isActive = true
+        spinner.centerYAnchor.constraint(equalTo: button.centerYAnchor).isActive = true
+        self.spinner = spinner
+    }
+
+    /// Remove the spinner and restore whichever button was loading.
     func clearLoading() {
         isUserInteractionEnabled = true
         spinner?.removeFromSuperview()
         spinner = nil
-        if let tone = loadingTone, let index = Tone.allCases.firstIndex(of: tone),
-           let button = stackView.arrangedSubviews[index] as? UIButton {
-            let config = UIImage.SymbolConfiguration(pointSize: 16, weight: .medium)
-            button.setImage(UIImage(systemName: tone.iconName, withConfiguration: config), for: .normal)
-        }
-        loadingTone = nil
+        loadingButton?.setImage(loadingButtonImage, for: .normal)
+        loadingButton = nil
+        loadingButtonImage = nil
     }
 
     func showUndo() {
