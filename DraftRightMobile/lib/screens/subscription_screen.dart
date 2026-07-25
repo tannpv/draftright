@@ -231,22 +231,39 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
         ),
         if (info.isFree) ...[
           const SizedBox(height: 32),
-          Text(
-            'Upgrade to Pro',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Pick a billing cadence, then a payment method. Your plan activates automatically once payment completes.',
-            style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
-          ),
-          const SizedBox(height: 16),
-          BillingPeriodSelector(
-            value: _billingPeriod,
-            onChanged: (p) => setState(() => _billingPeriod = p),
-          ),
-          const SizedBox(height: 16),
-          ..._buildPaymentMethodTiles(),
+          if (PaymentService.inAppCheckoutAllowed) ...[
+            Text(
+              'Upgrade to Pro',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Pick a billing cadence, then a payment method. Your plan activates automatically once payment completes.',
+              style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            BillingPeriodSelector(
+              value: _billingPeriod,
+              onChanged: (p) => setState(() => _billingPeriod = p),
+            ),
+            const SizedBox(height: 16),
+            ..._buildPaymentMethodTiles(),
+          ] else ...[
+            // iOS: App Store Guideline 3.1.1 bans in-app external-payment
+            // checkout for digital subscriptions (no billing selector, no
+            // payment tiles, no buy button/link). Status-only — Pro is
+            // purchased on the web and synced here.
+            Text(
+              'DraftRight Pro',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Manage your DraftRight plan from your account on the web. '
+              'Your Pro status syncs here automatically.',
+              style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+            ),
+          ],
         ] else ...[
           // Paid plan: two actions.  90% of users coming here just
           // want to cancel — that's an in-app POST now (no portal

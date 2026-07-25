@@ -74,10 +74,21 @@ class PaymentService {
     return true;
   }
 
-  bool get _isIos {
+  /// Whether this platform may present an in-app checkout for a digital
+  /// subscription. iOS is excluded: App Store Guideline 3.1.1 forbids
+  /// selling digital subscriptions via non-IAP payment and forbids buy
+  /// buttons or links to external checkout. iOS therefore shows plan
+  /// status only; Android / desktop / web use our web-billing model,
+  /// which those stores allow. Any UI that offers checkout must gate on
+  /// this — never branch on `Platform.isIOS` directly.
+  static bool get inAppCheckoutAllowed => kIsWeb || !_platformIsIos;
+
+  static bool get _platformIsIos {
     if (kIsWeb) return false;
     try { return Platform.isIOS; } catch (_) { return false; }
   }
+
+  bool get _isIos => _platformIsIos;
 
   bool get _isAndroid {
     if (kIsWeb) return false;
