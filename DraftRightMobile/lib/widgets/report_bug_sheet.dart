@@ -82,6 +82,29 @@ class _ReportBugSheetState extends State<_ReportBugSheet> {
 
   static final _emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
 
+  // Pre-fill the email field once, from the signed-in user's cached address,
+  // so logged-in users don't retype it (and can still edit before sending).
+  bool _prefilledEmail = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_prefilledEmail) return;
+    _prefilledEmail = true;
+    // Provider may be out of scope when the sheet is opened from the
+    // error-notice overlay (above MultiProvider) — same fallback as _submit.
+    try {
+      final auth = context.read<AuthService>();
+      final email = auth.userEmail;
+      if (auth.isLoggedIn &&
+          email != null &&
+          email.isNotEmpty &&
+          _emailController.text.isEmpty) {
+        _emailController.text = email;
+      }
+    } catch (_) {/* no AuthService in scope — leave the field empty */}
+  }
+
   @override
   void dispose() {
     _descriptionController.dispose();
@@ -148,10 +171,13 @@ class _ReportBugSheetState extends State<_ReportBugSheet> {
     }
     final isLoggedIn = auth?.isLoggedIn ?? false;
 
+    final email = _emailController.text.trim();
     final result = await BugReportService.submitBugReport(
       description: _descriptionController.text.trim(),
       screenshot: _screenshot,
-      userEmail: isLoggedIn ? null : _emailController.text.trim(),
+      // Always send the (now always-shown) contact email; the backend still
+      // stamps user_id from the token when logged in.
+      userEmail: email.isEmpty ? null : email,
       authToken: isLoggedIn ? auth!.accessToken : null,
       context: {
         if (widget.currentRoute != null) 'route': widget.currentRoute,
@@ -180,17 +206,9 @@ class _ReportBugSheetState extends State<_ReportBugSheet> {
 
   @override
   Widget build(BuildContext context) {
-    // Same Provider fallback as _submit — when the sheet is launched from
-    // an error-notice snackbar above MultiProvider, AuthService isn't in
-    // scope. Render the anonymous (email-required) variant rather than
-    // crashing the dialog.
-    AuthService? auth;
-    try {
-      auth = context.watch<AuthService>();
-    } catch (_) {
-      auth = null;
-    }
-    final isLoggedIn = auth?.isLoggedIn ?? false;
+    // The email field is now always shown (pre-filled for logged-in users via
+    // [didChangeDependencies]), so build no longer branches on auth state —
+    // login-awareness lives only in _submit (token) and the prefill hook.
     final viewInsets = MediaQuery.of(context).viewInsets;
     final isIOS = Platform.isIOS;
 
@@ -249,27 +267,28 @@ class _ReportBugSheetState extends State<_ReportBugSheet> {
                   return null;
                 },
               ),
-              if (!isLoggedIn) ...[
-                const SizedBox(height: 8),
-                TextFormField(
-                  controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  autocorrect: false,
-                  decoration: const InputDecoration(
-                    labelText: 'Your email',
-                    hintText: 'so we can follow up',
-                    border: OutlineInputBorder(),
-                  ),
-                  validator: (value) {
-                    final trimmed = value?.trim() ?? '';
-                    if (trimmed.isEmpty) return 'Email is required.';
-                    if (!_emailRegex.hasMatch(trimmed)) {
-                      return 'Enter a valid email address.';
-                    }
-                    return null;
-                  },
+              // Shown for everyone: logged-out users must supply a contact
+              // address; logged-in users see theirs pre-filled (from
+              // [didChangeDependencies]) and can confirm or change it.
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _emailController,
+                keyboardType: TextInputType.emailAddress,
+                autocorrect: false,
+                decoration: const InputDecoration(
+                  labelText: 'Your email',
+                  hintText: 'so we can follow up',
+                  border: OutlineInputBorder(),
                 ),
-              ],
+                validator: (value) {
+                  final trimmed = value?.trim() ?? '';
+                  if (trimmed.isEmpty) return 'Email is required.';
+                  if (!_emailRegex.hasMatch(trimmed)) {
+                    return 'Enter a valid email address.';
+                  }
+                  return null;
+                },
+              ),
               const SizedBox(height: 16),
               const Text('Attach screenshot (optional)',
                   style: TextStyle(fontWeight: FontWeight.w600)),

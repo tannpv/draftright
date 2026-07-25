@@ -33,12 +33,17 @@ class AuthService extends ChangeNotifier {
   // Storing as 'draftright.accessToken' actually persists as 'flutter.draftright.accessToken'
   // which is exactly what the Android keyboard's SharedSettings reads.
   static const _sharedKeyAccess = 'draftright.accessToken';
+  // The signed-in user's email, cached so UIs (e.g. the bug-report sheet) can
+  // pre-fill a "follow-up" field without an extra /auth/me round-trip. Not a
+  // secret → SharedPreferences, not secure storage.
+  static const _prefsKeyEmail = 'draftright.userEmail';
   static const _appGroupChannel = MethodChannel('com.draftright.v2/app_group');
 
   final FlutterSecureStorage _secure = const FlutterSecureStorage();
 
   String? _accessToken;
   String? _refreshToken;
+  String? _userEmail;
   String _baseUrl = 'http://localhost:3000';
   final ApiClient _api = ApiClient(baseUrl: 'http://localhost:3000');
   late final ExtensionTokenService _extension =
@@ -46,6 +51,11 @@ class AuthService extends ChangeNotifier {
 
   bool get isLoggedIn => _accessToken != null && _accessToken!.isNotEmpty;
   String? get accessToken => _accessToken;
+
+  /// The signed-in user's email (lower-cased), or null when signed out or
+  /// unknown (e.g. an Apple sign-in that withheld it on a repeat consent).
+  /// Captured at each sign-in path and persisted across launches.
+  String? get userEmail => _userEmail;
 
   /// One-shot flag: set when a request 401s and the refresh token is also
   /// invalid/expired (true session expiry). The login screen reads it to show
@@ -82,6 +92,12 @@ class AuthService extends ChangeNotifier {
       _accessToken = null;
       _refreshToken = null;
     }
+    try {
+      _userEmail = (await SharedPreferences.getInstance())
+          .getString(_prefsKeyEmail);
+    } catch (_) {
+      _userEmail = null;
+    }
     // Sync to SharedPreferences for keyboard extension
     if (_accessToken != null && _accessToken!.isNotEmpty) {
       final prefs = await SharedPreferences.getInstance();
@@ -102,6 +118,7 @@ class AuthService extends ChangeNotifier {
     try {
       final data = await _api.postJson('/auth/login', body: {'email': normalizedEmail, 'password': password});
       await _storeTokens(data['access_token'] as String, data['refresh_token'] as String);
+      await _persistEmail(normalizedEmail);
       DRLogger.log('Login success: $email', category: 'AUTH');
     } catch (e) {
       DRLogger.error('Login failed: $e', category: 'AUTH');
@@ -113,6 +130,7 @@ class AuthService extends ChangeNotifier {
     try {
       final data = await _api.postJson('/auth/register', body: {'name': name, 'email': email, 'password': password});
       await _storeTokens(data['access_token'] as String, data['refresh_token'] as String);
+      await _persistEmail(email.trim().toLowerCase());
       DRLogger.log('Register success: $email', category: 'AUTH');
     } catch (e) {
       DRLogger.error('Register failed: $e', category: 'AUTH');
@@ -205,15 +223,34 @@ class AuthService extends ChangeNotifier {
       'avatar_url': avatarUrl,
     });
     await _storeTokens(data['access_token'] as String, data['refresh_token'] as String);
+    // email may be null (Apple withholds it on repeat consents) → _persistEmail
+    // no-ops so we keep whatever a prior sign-in captured.
+    await _persistEmail(email);
+  }
+
+  /// Cache + persist the signed-in user's email. No-ops on null/empty so a
+  /// provider that withholds it (Apple on repeat consent) never clobbers a
+  /// previously known address. Stored lower-cased to match backend
+  /// normalization.
+  Future<void> _persistEmail(String? email) async {
+    final normalized = email?.trim().toLowerCase();
+    if (normalized == null || normalized.isEmpty) return;
+    _userEmail = normalized;
+    try {
+      await (await SharedPreferences.getInstance())
+          .setString(_prefsKeyEmail, normalized);
+    } catch (_) {/* best-effort cache — never block sign-in */}
   }
 
   Future<void> logout() async {
     _accessToken = null;
     _refreshToken = null;
+    _userEmail = null;
     await _secure.delete(key: _keyAccess);
     await _secure.delete(key: _keyRefresh);
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_sharedKeyAccess);
+    await prefs.remove(_prefsKeyEmail);
     await _syncToAppGroup('draftright.accessToken', null);
     // Clear the extension token from SharedPreferences and (on iOS) App
     // Group keychain so the extensions can no longer authenticate.
