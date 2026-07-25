@@ -11,6 +11,15 @@ class KeyboardViewController: UIInputViewController {
     private var originalText: String?
     private var heightConstraint: NSLayoutConstraint!
 
+    // Hold-to-talk voice input. `voiceInput` is the SFSpeechRecognizer adapter;
+    // `voiceSession` is the shared Core state machine driving dictate → polish →
+    // commit. `currentVoiceTone` mirrors Android: the last tone the user tapped
+    // (default natural) is the tone dictation is polished in.
+    private let voiceInput = SpeechVoiceInput()
+    private var voiceSession: VoiceSessionController!
+    private var currentVoiceTone: Tone = .natural
+    private var voicePreviewLabel: UILabel?
+
     // Tier β: language registry + per-language composer routing.
     private let registry = LanguageRegistry.production
     private var controller: KeyboardController!
@@ -127,6 +136,11 @@ class KeyboardViewController: UIInputViewController {
         toolbar.delegate = self
         toolbar.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(toolbar)
+
+        // Voice: build the session state machine and reveal the mic only when
+        // the device has a usable speech recognizer.
+        setupVoiceSession()
+        toolbar.setVoiceAvailable(SpeechVoiceInput.isAvailable)
 
         // Keyboard
         keyboard.delegate = self
@@ -287,6 +301,7 @@ class KeyboardViewController: UIInputViewController {
 extension KeyboardViewController: ToolbarViewDelegate {
     /// Tone icon tapped → rewrite, then let the user confirm via the diff sheet.
     func toolbarDidSelectTone(_ tone: Tone) {
+        currentVoiceTone = tone // dictation is polished in the last-picked tone
         performRewrite(tone: tone, autoApply: false)
     }
 
@@ -327,6 +342,104 @@ extension KeyboardViewController: ToolbarViewDelegate {
                 }
             }
         }
+    }
+
+    // MARK: Hold-to-talk voice
+
+    private func setupVoiceSession() {
+        voiceSession = VoiceSessionController(
+            voice: voiceInput,
+            polish: { [weak self] text, cb in self?.polishVoice(text, cb) },
+            onState: { [weak self] state in self?.toolbar.setVoiceState(state) },
+            onOutcome: { [weak self] outcome in self?.commitVoiceOutcome(outcome) }
+        )
+        voiceSession.onPartialText { [weak self] partial in self?.showVoicePreview(partial) }
+    }
+
+    /// Polish a dictated transcript via /rewrite with input_kind=speech, in the
+    /// last-picked tone. Delivered back on the main thread so the controller's
+    /// outcome + UI stay single-threaded (URLSession completes off-main).
+    private func polishVoice(_ text: String, _ cb: @escaping (Result<String, Error>) -> Void) {
+        aiClient.rewrite(text: text, tone: currentVoiceTone, settings: settings, inputKind: .speech) { result in
+            DispatchQueue.main.async { cb(result) }
+        }
+    }
+
+    /// Single commit path for every voice outcome. Golden rule: polished and
+    /// raw both insert; only a cancel / no-speech inserts nothing.
+    private func commitVoiceOutcome(_ outcome: VoiceOutcome) {
+        showVoicePreview(nil)
+        switch outcome {
+        case .polished(let text):
+            textDocumentProxy.insertText(text)
+        case .raw(let text, let hint):
+            textDocumentProxy.insertText(text)
+            if let hint { showBanner(hint, color: .systemOrange) }
+        case .nothing:
+            break
+        }
+    }
+
+    func toolbarVoiceHoldStart() -> Bool {
+        guard SpeechVoiceInput.isAvailable else { return false }
+        if settings.bearerToken.isEmpty {
+            showBanner("Please login in DraftRight app", color: .systemOrange)
+            return false
+        }
+        guard SpeechVoiceInput.isAuthorized else {
+            // First hold: prime the permission, then the next hold records.
+            SpeechVoiceInput.requestAuthorization { [weak self] granted in
+                self?.showBanner(
+                    granted ? "Mic ready — hold again to talk."
+                            : "Allow microphone + speech access in Settings to dictate.",
+                    color: granted ? .systemBlue : .systemOrange)
+            }
+            return false
+        }
+        let locale = controller?.current.locale.identifier ?? "en"
+        voiceSession.startSession(localeTag: locale, rawMode: VoiceConfig.holdToTalkRawMode)
+        return true
+    }
+
+    func toolbarVoiceCancelArmedChanged(_ armed: Bool) {
+        showVoicePreview(armed ? "◀ release to cancel" : nil)
+    }
+
+    func toolbarVoiceHoldEnd(cancelled: Bool) {
+        if cancelled { voiceSession.cancelSession() } else { voiceSession.finishSession() }
+    }
+
+    func toolbarVoiceTooShortTap() {
+        showBanner("Hold to talk", color: .systemBlue)
+    }
+
+    /// Live dictation preview / cancel hint shown just above the toolbar.
+    /// Passing nil removes it. Reuses one label so partials update in place.
+    private func showVoicePreview(_ text: String?) {
+        guard let text, !text.isEmpty else {
+            voicePreviewLabel?.removeFromSuperview()
+            voicePreviewLabel = nil
+            return
+        }
+        if voicePreviewLabel == nil {
+            let label = UILabel()
+            label.font = .systemFont(ofSize: 13)
+            label.textColor = .label
+            label.backgroundColor = UIColor.systemBackground.withAlphaComponent(0.95)
+            label.textAlignment = .center
+            label.numberOfLines = 1
+            label.lineBreakMode = .byTruncatingHead
+            label.translatesAutoresizingMaskIntoConstraints = false
+            view.addSubview(label)
+            NSLayoutConstraint.activate([
+                label.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 8),
+                label.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -8),
+                label.bottomAnchor.constraint(equalTo: toolbar.topAnchor),
+                label.heightAnchor.constraint(equalToConstant: 24),
+            ])
+            voicePreviewLabel = label
+        }
+        voicePreviewLabel?.text = text
     }
 
     func toolbarDidTapUndo() {
