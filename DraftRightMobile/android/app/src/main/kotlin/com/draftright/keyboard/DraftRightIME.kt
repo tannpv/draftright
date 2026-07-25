@@ -22,6 +22,7 @@ import com.draftright.keyboard.ime.CandidateBarView
 import com.draftright.keyboard.ime.ImeContext
 import com.draftright.keyboard.lang.EnglishLanguagePack
 import com.draftright.keyboard.voice.SpeechRecognizerVoiceInput
+import com.draftright.keyboard.voice.VoiceConfig
 import com.draftright.keyboard.voice.VoiceOutcome
 import com.draftright.keyboard.voice.VoiceSessionController
 
@@ -512,14 +513,15 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
         if (voiceState != VoiceSessionController.State.IDLE) return false
         val locale = controller?.current?.sttLocale ?: return false
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            // Hold-to-talk always records raw; persist for the permission
-            // trampoline's resume path (kept for parity with the prior flow).
-            settings.pendingVoiceRawMode = true
+            // Persist the same mode for the permission trampoline's resume path
+            // so a first-grant session behaves identically (VoiceConfig owns
+            // the raw-vs-polish policy).
+            settings.pendingVoiceRawMode = VoiceConfig.HOLD_TO_TALK_RAW_MODE
             settings.voicePermissionRequested = true
             RequestPermissionActivity.launch(this, Manifest.permission.RECORD_AUDIO)
             return false
         }
-        voiceSession.startSession(locale, rawMode = true)
+        voiceSession.startSession(locale, rawMode = VoiceConfig.HOLD_TO_TALK_RAW_MODE)
         return true
     }
 
