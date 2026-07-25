@@ -3,6 +3,7 @@ package aiprovider
 import (
 	"context"
 	"errors"
+	"log/slog"
 
 	"github.com/tannpv/draftright-rewrite/internal/shared/listquery"
 )
@@ -151,22 +152,64 @@ func (s *Service) DefaultComplete(ctx context.Context, system, user string) (tex
 // rewrite parity path can record provenance without widening the common
 // DefaultComplete signature used by Propose and extraction.
 func (s *Service) DefaultCompleteFull(ctx context.Context, system, user string) (text, name, model, providerType string, ms int64, err error) {
-	p, err := s.repo.GetDefault(ctx)
+	providers, err := s.failoverOrder(ctx)
+	if err != nil {
+		return "", "", "", "", 0, err
+	}
+	var lastErr error
+	for i, p := range providers {
+		c, ferr := s.factory.For(p)
+		if ferr != nil {
+			lastErr = ferr
+			continue
+		}
+		t, took, cerr := c.Complete(ctx, system, user)
+		if cerr == nil {
+			return t, p.Name, p.Model, p.Type, took, nil
+		}
+		lastErr = cerr
+		// Failover diverges from Node ONLY when the default fails: fall
+		// through to the next active provider so one upstream outage
+		// degrades quality instead of taking rewrite down entirely. The
+		// happy path (default succeeds first try) is byte-identical to Node,
+		// so the shadow gate stays green.
+		if i < len(providers)-1 {
+			slog.Default().Warn("ai provider failed; failing over to next active provider",
+				"failed_provider", p.Name,
+				"failed_type", p.Type,
+				"next_provider", providers[i+1].Name,
+				"err", cerr.Error())
+		}
+	}
+	return "", "", "", "", 0, lastErr
+}
+
+// failoverOrder returns the providers to try in order: the active default
+// first (Node's findDefault() slot), then any other active providers in List
+// order (created_at ASC) as fallbacks. Returns ErrNoDefaultProvider when there
+// is no active default — same 400 mapping as Node. The fallbacks are the only
+// behavioral addition over Node, and they only ever run when the default fails.
+func (s *Service) failoverOrder(ctx context.Context) ([]AiProvider, error) {
+	def, err := s.repo.GetDefault(ctx)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
-			return "", "", "", "", 0, ErrNoDefaultProvider
+			return nil, ErrNoDefaultProvider
 		}
-		return "", "", "", "", 0, err
+		return nil, err
 	}
-	c, err := s.factory.For(p)
+	all, err := s.repo.List(ctx)
 	if err != nil {
-		return "", "", "", "", 0, err
+		// Can't enumerate fallbacks — degrade to just the default (exactly
+		// Node's behavior).
+		return []AiProvider{def}, nil
 	}
-	text, ms, err = c.Complete(ctx, system, user)
-	if err != nil {
-		return "", "", "", "", 0, err
+	order := []AiProvider{def}
+	for _, p := range all {
+		if p.IsActive && p.ID != def.ID {
+			order = append(order, p)
+		}
 	}
-	return text, p.Name, p.Model, p.Type, ms, nil
+	return order, nil
 }
 
 // Propose resolves the active default provider and runs one blocking

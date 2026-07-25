@@ -154,3 +154,92 @@ func TestPropose_CompleterError(t *testing.T) {
 		t.Fatalf("completer error must not be reported as ErrNoDefaultProvider: %v", err)
 	}
 }
+
+// --- Failover (multi-provider) ------------------------------------------
+
+type failoverRepo struct {
+	def AiProvider
+	all []AiProvider
+}
+
+func (r *failoverRepo) List(context.Context) ([]AiProvider, error) { return r.all, nil }
+func (r *failoverRepo) ListPaginated(context.Context, listquery.Built) ([]AiProvider, int, error) {
+	return nil, 0, nil
+}
+func (r *failoverRepo) GetByID(context.Context, string) (AiProvider, error) {
+	return AiProvider{}, ErrNotFound
+}
+func (r *failoverRepo) GetDefault(context.Context) (AiProvider, error) { return r.def, nil }
+func (r *failoverRepo) DemoteDefaults(context.Context) error           { return nil }
+func (r *failoverRepo) Insert(context.Context, NewProvider) (AiProvider, error) {
+	return AiProvider{}, nil
+}
+func (r *failoverRepo) Update(context.Context, string, ProviderPatch) (AiProvider, error) {
+	return AiProvider{}, nil
+}
+func (r *failoverRepo) SoftDelete(context.Context, string) error { return nil }
+
+type failoverFactory struct{ byID map[string]Completer }
+
+func (f failoverFactory) For(p AiProvider) (Completer, error) {
+	c, ok := f.byID[p.ID]
+	if !ok {
+		return nil, errors.New("no completer for " + p.ID)
+	}
+	return c, nil
+}
+
+func TestDefaultCompleteFull_FailsOverToNextActiveProvider(t *testing.T) {
+	primary := AiProvider{ID: "p1", Name: "OpenAI", Type: "openai", Model: "gpt-5-nano", IsDefault: true, IsActive: true}
+	fallback := AiProvider{ID: "p2", Name: "Ollama", Type: "ollama", Model: "gpt-oss", IsActive: true}
+	inactive := AiProvider{ID: "p3", Name: "Dead", IsActive: false}
+
+	repo := &failoverRepo{def: primary, all: []AiProvider{primary, fallback, inactive}}
+	factory := failoverFactory{byID: map[string]Completer{
+		"p1": fakeCompleter{err: errors.New("provider 500")},   // default fails
+		"p2": fakeCompleter{text: "polished by fallback"},      // fallback wins
+		"p3": fakeCompleter{text: "inactive - must never run"}, // skipped (inactive)
+	}}
+	svc := NewService(repo, factory)
+
+	text, name, model, ptype, _, err := svc.DefaultCompleteFull(context.Background(), "sys", "user")
+	if err != nil {
+		t.Fatalf("expected failover success, got err: %v", err)
+	}
+	if text != "polished by fallback" || name != "Ollama" || model != "gpt-oss" || ptype != "ollama" {
+		t.Fatalf("expected fallback provider result, got text=%q name=%q model=%q type=%q", text, name, model, ptype)
+	}
+}
+
+func TestDefaultCompleteFull_DefaultSucceeds_NoFailover(t *testing.T) {
+	primary := AiProvider{ID: "p1", Name: "OpenAI", Type: "openai", Model: "gpt-5-nano", IsDefault: true, IsActive: true}
+	fallback := AiProvider{ID: "p2", Name: "Ollama", Type: "ollama", IsActive: true}
+	repo := &failoverRepo{def: primary, all: []AiProvider{primary, fallback}}
+	factory := failoverFactory{byID: map[string]Completer{
+		"p1": fakeCompleter{text: "from default"},
+		"p2": fakeCompleter{text: "should not run"},
+	}}
+	svc := NewService(repo, factory)
+
+	text, name, _, _, _, err := svc.DefaultCompleteFull(context.Background(), "s", "u")
+	if err != nil || text != "from default" || name != "OpenAI" {
+		t.Fatalf("default must win with no failover: text=%q name=%q err=%v", text, name, err)
+	}
+}
+
+func TestDefaultCompleteFull_AllProvidersFail_ReturnsLastError(t *testing.T) {
+	primary := AiProvider{ID: "p1", IsDefault: true, IsActive: true}
+	fallback := AiProvider{ID: "p2", IsActive: true}
+	repo := &failoverRepo{def: primary, all: []AiProvider{primary, fallback}}
+	boom := errors.New("boom")
+	factory := failoverFactory{byID: map[string]Completer{
+		"p1": fakeCompleter{err: errors.New("first fail")},
+		"p2": fakeCompleter{err: boom},
+	}}
+	svc := NewService(repo, factory)
+
+	_, _, _, _, _, err := svc.DefaultCompleteFull(context.Background(), "s", "u")
+	if !errors.Is(err, boom) {
+		t.Fatalf("expected the last provider error, got: %v", err)
+	}
+}
