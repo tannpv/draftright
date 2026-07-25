@@ -1,9 +1,13 @@
 import Foundation
+import DraftRightKeyboardCore
 
 struct RewriteRequest: Codable {
     let text: String
     let tone: String
     let target_language: String?
+    // Omitted for typed input (Swift synthesizes encodeIfPresent for optionals);
+    // "speech" tells the backend to prepend its dictation-cleanup preamble.
+    let input_kind: String?
 }
 
 struct RewriteResponse: Codable {
@@ -39,6 +43,7 @@ final class BackendClient {
         text: String,
         tone: Tone,
         settings: SharedSettings,
+        inputKind: InputKind = .typed,
         completion: @escaping (Result<String, Error>) -> Void
     ) {
         // Prefer the long-lived dr_ext_* token; fall back to the access
@@ -69,7 +74,11 @@ final class BackendClient {
         }
         let inputText = String(text.prefix(Config.maxInputChars))
         let targetLanguage = tone == .translate ? settings.translateLanguage : nil
-        let body = RewriteRequest(text: inputText, tone: tone.apiValue, target_language: targetLanguage)
+        let body = RewriteRequest(
+            text: inputText,
+            tone: tone.apiValue,
+            target_language: targetLanguage,
+            input_kind: inputKind == .typed ? nil : inputKind.apiValue)
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"

@@ -38,6 +38,10 @@
             <true/>
         </dict>
     </dict>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>DraftRight uses the microphone for hold-to-talk dictation on the keyboard.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>DraftRight transcribes your dictation on-device so you can speak instead of type.</string>
     <key>NSAppTransportSecurity</key>
     <dict>
         <key>NSAllowsArbitraryLoads</key>
