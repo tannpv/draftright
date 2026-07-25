@@ -82,6 +82,8 @@ class SettingsService extends ChangeNotifier {
     // app's standard UserDefaults, which the extension can't read).
     await AuthService.syncEnabledLanguageIdsToAppGroup(_enabledLanguageIds);
     await AuthService.syncActiveLanguageIdToAppGroup(_activeLanguageId);
+    // The iOS keyboard's one-tap rewrite reads this from the App Group.
+    await AuthService.syncOneTapToneToAppGroup(_bubblePresetTone);
   }
 
   Future<void> setLastSeenVersion(String version) async {
@@ -122,12 +124,17 @@ class SettingsService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Preset tone the floating bubble applies to each one-tap rewrite (the
-  /// "simple mode" default tone). Stored as the stable Tone.apiValue; the
-  /// native coordinator reads the same key (flutter.draftright.bubblePresetTone).
+  /// Preset tone applied to each one-tap rewrite — the "simple mode" default.
+  /// One setting, two surfaces: the Android bubble coordinator reads it from
+  /// SharedPreferences (flutter.draftright.bubblePresetTone); the iOS keyboard's
+  /// one-tap button reads it from the App Group (draftright.oneTapTone, synced
+  /// via [AuthService.syncOneTapToneToAppGroup]). Stored as the stable
+  /// Tone.apiValue.
   Future<void> setBubblePresetTone(String apiValue) async {
     _bubblePresetTone = apiValue;
     await _prefs.setString('draftright.bubblePresetTone', apiValue);
+    // Keep the iOS keyboard's one-tap tone in step with the picker.
+    await AuthService.syncOneTapToneToAppGroup(apiValue);
     notifyListeners();
   }
 
