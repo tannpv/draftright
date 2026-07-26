@@ -8,17 +8,8 @@ gi.require_version("Gdk", "4.0")
 
 from gi.repository import Gdk, Gio, GLib, Gtk, Pango
 
-# Tone definitions: (id, emoji, label)
-TONES = [
-    ("simple", "\u270e", "Simple"),
-    ("natural", "\U0001F4AC", "Natural"),
-    ("polished", "\u2728", "Polished"),
-    ("concise", "\u2296", "Concise"),
-    ("technical", "\U0001F527", "Technical"),
-    ("claude", "\U0001F916", "Claude Style"),
-    ("grammar_check", "\u2713", "Grammar Check"),
-    ("translate", "\U0001F30D", "Translate"),
-]
+from draftright import config
+from draftright.models.tone import Tone
 
 # CSS for the rewrite panel
 PANEL_CSS = """
@@ -192,15 +183,16 @@ class RewritePanel(Gtk.Window):
         tone_grid.set_column_homogeneous(True)
         self._tone_buttons = {}
 
-        for i, (tone_id, emoji, label) in enumerate(TONES):
-            row = i // 3
-            col = i % 3
-            btn = Gtk.Button(label=f"{emoji} {label}")
+        cols = config.PANEL_TONE_GRID_COLUMNS
+        for i, tone in enumerate(Tone):
+            row = i // cols
+            col = i % cols
+            btn = Gtk.Button(label=f"{tone.icon} {tone.display_name}")
             btn.add_css_class("tone-button")
             btn.set_hexpand(True)
-            btn.connect("clicked", self._on_tone_clicked, tone_id)
+            btn.connect("clicked", self._on_tone_clicked, tone.api_value)
             tone_grid.attach(btn, col, row, 1, 1)
-            self._tone_buttons[tone_id] = btn
+            self._tone_buttons[tone.api_value] = btn
 
         main_box.append(tone_grid)
 

@@ -12,20 +12,21 @@ import os
 from pathlib import Path
 from typing import List
 
+from draftright import config
+from draftright.models.tone import Tone
+
 log = logging.getLogger(__name__)
 
-# All tone API values (must match models/tone.py Tone enum)
-_ALL_TONE_VALUES = [
-    "simple", "natural", "polished", "concise",
-    "technical", "claude", "grammar_check", "translate",
-]
+# Single source of truth: derive from the Tone enum so adding a tone needs no
+# edit here (Rule #1).
+_ALL_TONE_VALUES = [t.api_value for t in Tone]
 
 # ---------------------------------------------------------------------------
 # Defaults
 # ---------------------------------------------------------------------------
 _DEFAULTS: dict[str, object] = {
-    "backend_url": "https://api.draftright.info",
-    "hotkey": "Ctrl+Shift+R",
+    "backend_url": config.DEFAULT_BACKEND_URL,
+    "hotkey": config.DEFAULT_HOTKEY,
     "translate_language": "Vietnamese",
     "auto_start": False,
     "enabled_tones": list(_ALL_TONE_VALUES),  # all tones enabled by default
@@ -86,13 +87,13 @@ class SettingsService:
 
     @property
     def backend_url(self) -> str:
-        # Dev/self-host override: DRAFTRIGHT_BACKEND_URL env var wins over the
-        # persisted file value. UI no longer exposes this field, so this is
-        # the only way to point a release build at a non-prod backend.
-        env = os.environ.get("DRAFTRIGHT_BACKEND_URL", "").strip()
-        if env:
-            return env
-        return str(self._data.get("backend_url", _DEFAULTS["backend_url"]))
+        # Dev/self-host override: the DRAFTRIGHT_BACKEND env var (same name the
+        # macOS/Windows apps use) wins over the persisted file value. UI no
+        # longer exposes this field, so this is the only way to point a release
+        # build at a non-prod backend.
+        return config.backend_url_override() or str(
+            self._data.get("backend_url", _DEFAULTS["backend_url"])
+        )
 
     @backend_url.setter
     def backend_url(self, value: str) -> None:

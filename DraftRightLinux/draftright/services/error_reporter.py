@@ -23,9 +23,11 @@ from typing import Callable, Optional
 from urllib import request as urllib_request
 from urllib.error import URLError
 
+from draftright import config
+
 logger = logging.getLogger(__name__)
 
-_BACKEND_URL: str = "https://api.draftright.info"
+_BACKEND_URL: str = config.default_backend_url()
 _BEARER_TOKEN_PROVIDER: Optional[Callable[[], Optional[str]]] = None
 _QUEUE_PATH = Path(os.path.expanduser("~/.config/draftright/error_queue.jsonl"))
 _APP_VERSION = "linux"
@@ -113,7 +115,7 @@ class _AsyncioPolicy:
 
 def _build(exc: BaseException, *, source: str, severity: str) -> dict:
     tb_lines = traceback.format_exception(type(exc), exc, exc.__traceback__)
-    stack = "".join(tb_lines)[-20000:]  # tail-truncate
+    stack = "".join(tb_lines)[-config.ERROR_STACK_TAIL_LIMIT:]  # tail-truncate
     return {
         "platform": "linux",
         "app_version": _APP_VERSION,
@@ -158,9 +160,9 @@ def _persist_to_queue(body: bytes) -> None:
         existing = (
             _QUEUE_PATH.read_text().splitlines() if _QUEUE_PATH.exists() else []
         )
-        # Trim oldest entries beyond 100
-        if len(existing) > 100:
-            existing = existing[-100:]
+        # Trim oldest entries beyond the queue cap.
+        if len(existing) > config.ERROR_QUEUE_MAX:
+            existing = existing[-config.ERROR_QUEUE_MAX:]
         existing.append(body.decode("utf-8"))
         _QUEUE_PATH.write_text("\n".join(existing) + "\n")
     except Exception:
