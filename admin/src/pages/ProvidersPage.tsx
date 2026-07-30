@@ -20,6 +20,7 @@ interface Provider {
 const PROVIDER_PRESETS: Record<string, { endpoint: string; model: string; needsKey: boolean }> = {
   openai: { endpoint: 'https://api.openai.com/v1/chat/completions', model: 'gpt-4o', needsKey: true },
   anthropic: { endpoint: 'https://api.anthropic.com/v1/messages', model: 'claude-sonnet-5', needsKey: true },
+  google: { endpoint: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', model: 'gemini-2.5-flash', needsKey: true },
   ollama: { endpoint: 'http://localhost:11434/v1/chat/completions', model: 'llama3.2:latest', needsKey: false },
   custom: { endpoint: '', model: '', needsKey: true },
 };
@@ -31,6 +32,7 @@ const PROVIDER_PRESETS: Record<string, { endpoint: string; model: string; needsK
 const MODEL_OPTIONS: Record<string, string[]> = {
   openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-5', 'gpt-5-mini', 'gpt-5-nano'],
   anthropic: ['claude-sonnet-5', 'claude-opus-4-8', 'claude-haiku-4-5-20251001', 'claude-sonnet-4-20250514'],
+  google: ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash'],
   ollama: ['llama3.2:latest', 'llama3.1:latest', 'qwen2.5:latest', 'mistral:latest'],
   custom: [],
 };
@@ -390,6 +392,7 @@ export default function ProvidersPage() {
               >
                 <option value="openai">OpenAI</option>
                 <option value="anthropic">Anthropic (Claude)</option>
+                <option value="google">Google (Gemini)</option>
                 <option value="ollama">Ollama (Local)</option>
                 <option value="custom">Custom</option>
               </select>
@@ -448,7 +451,7 @@ export default function ProvidersPage() {
                 type="password"
                 value={form.api_key}
                 onChange={(e) => setForm({ ...form, api_key: e.target.value })}
-                placeholder={form.type === 'anthropic' ? 'sk-ant-...' : form.type === 'ollama' ? '(optional)' : 'sk-...'}
+                placeholder={form.type === 'anthropic' ? 'sk-ant-...' : form.type === 'google' ? 'AIza...' : form.type === 'ollama' ? '(optional)' : 'sk-...'}
                 className="dark-input"
               />
             </div>

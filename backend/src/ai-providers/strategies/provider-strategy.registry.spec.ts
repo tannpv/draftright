@@ -4,6 +4,7 @@ import {
 } from './provider-strategy.registry';
 import { AiProvider, AiProviderType } from '../entities/ai-provider.entity';
 import { ProviderStrategy } from './provider-strategy.interface';
+import { OpenAiStrategy } from './openai.strategy';
 
 function makeProvider(type: AiProviderType, overrides: Partial<AiProvider> = {}): AiProvider {
   return {
@@ -58,5 +59,22 @@ describe('ProviderStrategyRegistry', () => {
     const anthropic = new FakeStrategy(AiProviderType.ANTHROPIC, 'a');
     const bundled = buildProviderStrategies(openai as any, anthropic as any);
     expect(bundled).toEqual([openai, anthropic]);
+  });
+});
+
+describe('OpenAiStrategy.matches — provider-type routing (#115 Gemini)', () => {
+  const strategy = new OpenAiStrategy();
+
+  it.each([
+    AiProviderType.OPENAI,
+    AiProviderType.OLLAMA,
+    AiProviderType.CUSTOM,
+    AiProviderType.GOOGLE, // Gemini rides the OpenAI-compatible wire
+  ])('claims %s', (type) => {
+    expect(strategy.matches(makeProvider(type))).toBe(true);
+  });
+
+  it('does not claim anthropic (AnthropicStrategy owns it)', () => {
+    expect(strategy.matches(makeProvider(AiProviderType.ANTHROPIC))).toBe(false);
   });
 });

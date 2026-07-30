@@ -7,6 +7,10 @@ export enum AiProviderType {
   ANTHROPIC = 'anthropic',
   OLLAMA = 'ollama',
   CUSTOM = 'custom',
+  // Google Gemini via its OpenAI-compatible endpoint — handled by
+  // OpenAiStrategy (identical wire). Requires the DB enum migration
+  // backend/sql/2026-07-30-add-google-provider-type.sql in prod.
+  GOOGLE = 'google',
 }
 
 @Entity('ai_providers')
