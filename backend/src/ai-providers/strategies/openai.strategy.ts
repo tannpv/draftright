@@ -7,9 +7,10 @@ import { ProviderStrategy } from './provider-strategy.interface';
  * messages and either a temperature OR — for gpt-5 reasoning models —
  * a `reasoning_effort` knob plus the omission of temperature.
  *
- * Covers four real-world server families:
+ * Covers five real-world server families:
  *   - OpenAI proper          (gpt-4o-mini, gpt-5-nano, …)
  *   - OpenAI-compat servers  (Ollama Cloud, vLLM, Together, …)
+ *   - Google Gemini          (its /v1beta/openai/… OpenAI-compat endpoint)
  *   - Local Ollama           (when AiProviderType.OLLAMA flips on)
  *   - Custom (`type=custom`) self-hosted OpenAI-shape endpoints
  *
@@ -27,7 +28,8 @@ export class OpenAiStrategy implements ProviderStrategy {
     return (
       provider.type === AiProviderType.OPENAI ||
       provider.type === AiProviderType.OLLAMA ||
-      provider.type === AiProviderType.CUSTOM
+      provider.type === AiProviderType.CUSTOM ||
+      provider.type === AiProviderType.GOOGLE
     );
   }
 
