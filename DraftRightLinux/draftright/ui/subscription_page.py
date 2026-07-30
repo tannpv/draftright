@@ -18,7 +18,6 @@ gi.require_version("Adw", "1")
 gi.require_version("Gtk", "4.0")
 from gi.repository import Adw, GLib, Gtk
 
-from draftright import config
 from draftright.models.payment import (
     BankTransferCheckout,
     BillingPeriod,
@@ -103,14 +102,23 @@ class SubscriptionPage(Adw.PreferencesPage, PaymentSheetPresenter):
         is_free = billing is None
         status = SubscriptionStatus.from_wire(str(sub.get("status", "")))
         usage = sub.get("usage_today", 0)
-        daily_limit = plan.get("daily_limit", config.DEFAULT_DAILY_LIMIT)
+        # The daily limit is admin-controlled (Admin > Plans → plan.daily_limit);
+        # never fabricate a client-side default that would shadow it. Show the
+        # value the backend sends, unlimited for -1, or usage-only if absent.
+        daily_limit = plan.get("daily_limit")
+        if daily_limit is None:
+            usage_line = f"Usage today: {usage}"
+        elif daily_limit == -1:
+            usage_line = f"Usage today: {usage} (unlimited)"
+        else:
+            usage_line = f"Usage today: {usage} / {daily_limit}"
 
         billing_label = billing.display_name if billing is not None else "Free"
         text = (
             f"Plan: {plan_name}\n"
             f"Billing: {billing_label}\n"
             f"Status: {status.display_name}\n"
-            f"Usage today: {usage} / {daily_limit}"
+            f"{usage_line}"
         )
         self._set_info_text(text)
 

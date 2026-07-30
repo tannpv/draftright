@@ -352,6 +352,15 @@ class RewritePanel(Gtk.Window):
         Args:
             tone: The tone to apply to the rewrite.
         """
+        # Serve an identical (text, tone) instantly from the client cache —
+        # no spinner, no backend round-trip. Mirrors macOS.
+        cache = getattr(self.app, "rewrite_cache", None)
+        if cache is not None:
+            cached = cache.get(self._input_text, tone)
+            if cached is not None:
+                self._on_api_success(cached)
+                return
+
         self._spinner.set_visible(True)
         self._spinner.start()
         self._error_box.set_visible(False)
@@ -365,6 +374,8 @@ class RewritePanel(Gtk.Window):
                     raise RuntimeError("API client not initialized. Please sign in first.")
 
                 result = self.app.api_client.rewrite(self._input_text, tone)
+                if cache is not None:
+                    cache.set(self._input_text, tone, result)
                 GLib.idle_add(self._on_api_success, result)
             except Exception as exc:
                 GLib.idle_add(self._on_api_error, str(exc))
