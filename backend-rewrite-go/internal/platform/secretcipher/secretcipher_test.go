@@ -77,6 +77,27 @@ func TestBadKeyLength_Errors(t *testing.T) {
 	}
 }
 
+func TestInPlace_RoundTrip(t *testing.T) {
+	t.Setenv(keyEnv, testKeyB64)
+	a, b, c := "sk-stripe", "", "whsec-abc"
+	var nilp *string
+	if err := EncryptInPlace(&a, &b, &c, nilp); err != nil {
+		t.Fatal(err)
+	}
+	if !IsEncrypted(a) || !IsEncrypted(c) {
+		t.Fatalf("non-empty secrets should be encrypted: %q %q", a, c)
+	}
+	if b != "" {
+		t.Fatalf("empty stays empty, got %q", b)
+	}
+	if err := DecryptInPlace(&a, &b, &c, nilp); err != nil {
+		t.Fatal(err)
+	}
+	if a != "sk-stripe" || c != "whsec-abc" || b != "" {
+		t.Fatalf("round trip mismatch: %q %q %q", a, b, c)
+	}
+}
+
 // TestGoCiphertext_ForNode prints a Go-produced ciphertext for "s3cret-value"
 // under testKeyB64. Run with `-run TestGoCiphertext_ForNode -v` to regenerate
 // the frozen vector used by the Node interop test. Kept as a helper, not an
