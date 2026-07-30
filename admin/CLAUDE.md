@@ -17,7 +17,7 @@ React SPA with Modernize dark theme for managing the DraftRight platform.
 | Users | `/users` | Searchable, paginated user table |
 | User Detail | `/users/:id` | Info, subscription, usage, transactions, actions |
 | Plans | `/plans` | CRUD for subscription plans |
-| AI Providers | `/providers` | CRUD + test connection |
+| AI Providers | `/providers` | CRUD + test connection. Model field = dropdown from `MODEL_OPTIONS` (per type) + "Other" free-text escape hatch; types incl. Google (Gemini). Add a new provider/model by extending `MODEL_OPTIONS`/`PROVIDER_PRESETS`/Type `<option>`. |
 | Analytics | `/analytics` | Revenue charts, subscriber trends, churn |
 | Transactions | `/transactions` | All subscriptions with store type, status |
 | Profile | `/profile` | Change password |

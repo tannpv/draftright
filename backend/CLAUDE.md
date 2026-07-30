@@ -72,3 +72,7 @@ npx ts-node src/seed.ts  # Alternative seed command
 ## Tone System Prompts
 
 Defined in `src/rewrite/rewrite.service.ts` — 7 tones: simple, natural, polished, concise, technical, claude, translate.
+
+## AI Providers
+
+`AiProviderType`: openai, anthropic, ollama, custom, **google**. All except anthropic share `OpenAiStrategy` (one OpenAI-compatible wire) — Gemini (`google`) uses its `/v1beta/openai/chat/completions` endpoint. `type` is a **pg native enum** → new values need a `sql/…ALTER TYPE ai_providers_type_enum ADD VALUE…` migration (synchronize OFF in prod). Strategy dispatch: `ProviderStrategyRegistry.pick()`. **The Go backend (`backend-rewrite-go`) has a parallel `completer_factory.go` switch — add new provider types THERE too**, or prod `/rewrite` (Go) errors. Rewrite quality is a function of the provider's `model`; prod Go pins one provider via `OPENAI_PROVIDER_ID` env, so the model that matters is that pinned row's, not the admin "default".
