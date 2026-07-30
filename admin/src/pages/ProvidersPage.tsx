@@ -18,11 +18,30 @@ interface Provider {
 }
 
 const PROVIDER_PRESETS: Record<string, { endpoint: string; model: string; needsKey: boolean }> = {
-  openai: { endpoint: 'https://api.openai.com/v1/chat/completions', model: 'gpt-4o-mini', needsKey: true },
-  anthropic: { endpoint: 'https://api.anthropic.com/v1/messages', model: 'claude-sonnet-4-20250514', needsKey: true },
+  openai: { endpoint: 'https://api.openai.com/v1/chat/completions', model: 'gpt-4o', needsKey: true },
+  anthropic: { endpoint: 'https://api.anthropic.com/v1/messages', model: 'claude-sonnet-5', needsKey: true },
   ollama: { endpoint: 'http://localhost:11434/v1/chat/completions', model: 'llama3.2:latest', needsKey: false },
   custom: { endpoint: '', model: '', needsKey: true },
 };
+
+// Known models per provider type, newest/best first — the Model field is a
+// dropdown of these. Extend here as new models ship; to add Gemini later,
+// add a 'google' key here + a Type option + backend AiProviderType.GOOGLE
+// + strategy. Single source: presets above pick their default from this list.
+const MODEL_OPTIONS: Record<string, string[]> = {
+  openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-5', 'gpt-5-mini', 'gpt-5-nano'],
+  anthropic: ['claude-sonnet-5', 'claude-opus-4-8', 'claude-haiku-4-5-20251001', 'claude-sonnet-4-20250514'],
+  ollama: ['llama3.2:latest', 'llama3.1:latest', 'qwen2.5:latest', 'mistral:latest'],
+  custom: [],
+};
+
+// Sentinel <option> that reveals the free-text box, so a brand-new model
+// not yet in MODEL_OPTIONS is never blocked.
+const CUSTOM_MODEL = '__custom__';
+
+function isKnownModel(type: string, model: string): boolean {
+  return (MODEL_OPTIONS[type] ?? []).includes(model);
+}
 
 interface ToastState {
   message: string;
@@ -32,8 +51,9 @@ interface ToastState {
 const emptyForm = {
   name: '',
   type: 'openai',
-  endpoint_url: 'https://api.openai.com/v1/chat/completions',
-  model: 'gpt-4o-mini',
+  // Derived from the preset so the default endpoint/model live in one place.
+  endpoint_url: PROVIDER_PRESETS.openai.endpoint,
+  model: PROVIDER_PRESETS.openai.model,
   api_key: '',
   is_default: false,
   is_active: true,
@@ -49,6 +69,8 @@ export default function ProvidersPage() {
   const [showModal, setShowModal] = useState(false);
   const [editingProvider, setEditingProvider] = useState<Provider | null>(null);
   const [form, setForm] = useState(emptyForm);
+  // True when the admin is entering a model not in MODEL_OPTIONS (free text).
+  const [modelCustom, setModelCustom] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const [search, setSearch] = useState('');
@@ -91,6 +113,7 @@ export default function ProvidersPage() {
   function openCreate() {
     setEditingProvider(null);
     setForm(emptyForm);
+    setModelCustom(!isKnownModel(emptyForm.type, emptyForm.model));
     setShowModal(true);
   }
 
@@ -105,17 +128,21 @@ export default function ProvidersPage() {
       is_default: provider.is_default,
       is_active: provider.is_active,
     });
+    // An existing provider may hold a model not in the catalogue → free text.
+    setModelCustom(!isKnownModel(provider.type, provider.model));
     setShowModal(true);
   }
 
   function handleTypeChange(newType: string) {
     const preset = PROVIDER_PRESETS[newType];
+    const model = preset?.model || form.model;
     setForm({
       ...form,
       type: newType,
       endpoint_url: preset?.endpoint || form.endpoint_url,
-      model: preset?.model || form.model,
+      model,
     });
+    setModelCustom(!isKnownModel(newType, model));
   }
 
   async function saveProvider() {
@@ -379,13 +406,38 @@ export default function ProvidersPage() {
             </div>
             <div>
               <label style={{ display: 'block', color: 'var(--text)', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Model</label>
-              <input
-                type="text"
-                value={form.model}
-                onChange={(e) => setForm({ ...form, model: e.target.value })}
-                placeholder="e.g. gpt-4o"
-                className="dark-input"
-              />
+              {(MODEL_OPTIONS[form.type] ?? []).length > 0 && (
+                <select
+                  value={modelCustom ? CUSTOM_MODEL : form.model}
+                  onChange={(e) => {
+                    if (e.target.value === CUSTOM_MODEL) {
+                      setModelCustom(true);
+                      setForm({ ...form, model: '' });
+                    } else {
+                      setModelCustom(false);
+                      setForm({ ...form, model: e.target.value });
+                    }
+                  }}
+                  className="dark-input"
+                >
+                  {(MODEL_OPTIONS[form.type] ?? []).map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                  <option value={CUSTOM_MODEL}>Other (enter manually)…</option>
+                </select>
+              )}
+              {/* Free text when the type has no catalogue (custom) or the
+                  admin picked "Other" — never blocks a brand-new model. */}
+              {((MODEL_OPTIONS[form.type] ?? []).length === 0 || modelCustom) && (
+                <input
+                  type="text"
+                  value={form.model}
+                  onChange={(e) => setForm({ ...form, model: e.target.value })}
+                  placeholder="e.g. gpt-4o"
+                  className="dark-input"
+                  style={{ marginTop: (MODEL_OPTIONS[form.type] ?? []).length > 0 ? 8 : 0 }}
+                />
+              )}
             </div>
             <div>
               <label style={{ display: 'block', color: 'var(--text)', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>
