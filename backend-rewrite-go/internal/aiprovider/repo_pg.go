@@ -29,6 +29,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/tannpv/draftright-rewrite/internal/platform/secretcipher"
 	"github.com/tannpv/draftright-rewrite/internal/shared/listquery"
 	"github.com/tannpv/draftright-rewrite/internal/shared/pg/sqlc"
 )
@@ -179,9 +180,14 @@ func (r *PgRepo) Insert(ctx context.Context, in NewProvider) (AiProvider, error)
 	if err != nil {
 		return AiProvider{}, err
 	}
+	// Encrypt api_key at rest (#50). No-op without SECRETS_ENCRYPTION_KEY.
+	apiKey, err := secretcipher.Encrypt(in.APIKey)
+	if err != nil {
+		return AiProvider{}, err
+	}
 	row, err := r.q.InsertAiProvider(ctx, sqlc.InsertAiProviderParams{
 		Name: in.Name, Type: sqlc.AiProvidersTypeEnum(in.Type), EndpointUrl: in.EndpointURL,
-		ApiKey: in.APIKey, Model: in.Model, Temperature: temp,
+		ApiKey: apiKey, Model: in.Model, Temperature: temp,
 		IsDefault: in.IsDefault, IsActive: in.IsActive,
 	})
 	if err != nil {
@@ -221,7 +227,11 @@ func (r *PgRepo) Update(ctx context.Context, id string, p ProviderPatch) (AiProv
 		add("endpoint_url", *p.EndpointURL)
 	}
 	if p.APIKey != nil {
-		add("api_key", *p.APIKey)
+		enc, err := secretcipher.Encrypt(*p.APIKey)
+		if err != nil {
+			return AiProvider{}, err
+		}
+		add("api_key", enc)
 	}
 	if p.Model != nil {
 		add("model", *p.Model)

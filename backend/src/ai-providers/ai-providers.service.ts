@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { AiProvider } from './entities/ai-provider.entity';
 import { ListQuery, ListResult, applyListQuery } from '../common/list-query';
 import { ProviderStrategyRegistry } from './strategies/provider-strategy.registry';
+import { encryptSecret } from '../common/crypto/secret-cipher';
 
 @Injectable()
 export class AiProvidersService {
@@ -59,7 +60,7 @@ export class AiProvidersService {
         .where('is_default = :val', { val: true })
         .execute();
     }
-    const provider = this.providersRepo.create(data);
+    const provider = this.providersRepo.create(this.withEncryptedKey(data));
     return this.providersRepo.save(provider);
   }
 
@@ -72,8 +73,18 @@ export class AiProvidersService {
         .where('is_default = :val', { val: true })
         .execute();
     }
-    await this.providersRepo.update(id, data);
+    await this.providersRepo.update(id, this.withEncryptedKey(data));
     return this.providersRepo.findOneOrFail({ where: { id } });
+  }
+
+  /**
+   * Encrypt `api_key` at rest before persisting (#50). Only rewrites the field
+   * when it's present in the patch, so an update that omits api_key leaves the
+   * stored value untouched. Idempotent + a no-op without SECRETS_ENCRYPTION_KEY.
+   */
+  private withEncryptedKey(data: Partial<AiProvider>): Partial<AiProvider> {
+    if (data.api_key === undefined) return data;
+    return { ...data, api_key: encryptSecret(data.api_key) };
   }
 
   async softDelete(id: string): Promise<void> {

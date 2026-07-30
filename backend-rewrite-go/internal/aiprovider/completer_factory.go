@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/tannpv/draftright-rewrite/internal/platform/secretcipher"
 	"github.com/tannpv/draftright-rewrite/internal/rewrite/adapter/anthropic"
 	"github.com/tannpv/draftright-rewrite/internal/rewrite/adapter/openai"
 )
@@ -36,6 +37,13 @@ func (Factory) For(p AiProvider) (Completer, error) {
 		id = uuid.New()
 	}
 
+	// Decrypt the stored api_key at the point of use (#50). No-op for legacy
+	// plaintext rows and when SECRETS_ENCRYPTION_KEY is unset.
+	apiKey, err := secretcipher.Decrypt(p.APIKey)
+	if err != nil {
+		return nil, err
+	}
+
 	switch p.Type {
 	case "openai", "ollama", "custom", "google":
 		// Node's OpenAiStrategy.matches = openai || ollama || custom: ONE
@@ -50,13 +58,13 @@ func (Factory) For(p AiProvider) (Completer, error) {
 		}
 		opts = append(opts, openai.WithTemperature(p.Temperature))
 		opts = append(opts, openai.WithLocalLayout(p.Type == "ollama"))
-		return openai.New(id, p.APIKey, opts...), nil
+		return openai.New(id, apiKey, opts...), nil
 	case "anthropic":
 		opts := []anthropic.Option{anthropic.WithModel(p.Model)}
 		if p.EndpointURL != "" {
 			opts = append(opts, anthropic.WithEndpoint(p.EndpointURL))
 		}
-		return anthropic.New(id, p.APIKey, opts...), nil
+		return anthropic.New(id, apiKey, opts...), nil
 	default:
 		return nil, fmt.Errorf("No provider strategy registered for type %q (provider id=%s, name=%s)", p.Type, p.ID, p.Name)
 	}
