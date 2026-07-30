@@ -69,9 +69,6 @@ PANEL_MARGIN = 16
 PANEL_PREVIEW_CHARS = 200
 FEEDBACK_FLASH_MS = 1500
 
-# ── Plans ────────────────────────────────────────────────────────────────────
-DEFAULT_DAILY_LIMIT = 10   # fallback when /subscription omits plan.daily_limit
-
 # ── Client-side rewrite cache ────────────────────────────────────────────────
 # Mirrors the macOS RewriteCache: avoid re-hitting the backend when the user
 # retries the same (text, tone). Bounded; evicts the oldest slice when full.
