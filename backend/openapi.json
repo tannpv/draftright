@@ -2154,6 +2154,20 @@
         ]
       }
     },
+    "/payment/webhook/paypal": {
+      "post": {
+        "operationId": "PaymentController_paypalWebhook",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "payment"
+        ]
+      }
+    },
     "/payment/webhook/sepay": {
       "post": {
         "operationId": "PaymentController_sepayWebhook",
@@ -2529,6 +2543,15 @@
             "type": "string",
             "example": "English",
             "description": "Source language hint (auto-detected if not provided)"
+          },
+          "input_kind": {
+            "type": "string",
+            "example": "speech",
+            "enum": [
+              "typed",
+              "speech"
+            ],
+            "description": "Marks dictated input; speech adds a cleanup preamble to the prompt"
           }
         },
         "required": [

@@ -16,6 +16,7 @@ from draftright.models.subscription import SubscriptionStatus
 from draftright.models.health import HealthStatus
 from draftright.services.settings_service import SettingsService
 from draftright.services.clipboard_service import ClipboardService
+from draftright.services.rewrite_cache import RewriteCache
 
 
 class ConfigBackendUrl(unittest.TestCase):
@@ -92,6 +93,34 @@ class EnumDispatch(unittest.TestCase):
         self.assertEqual(HealthStatus.CONNECTED.display_name, "Connected")
         # Unknown → OFFLINE (safe default)
         self.assertIs(HealthStatus.from_wire("garbage"), HealthStatus.OFFLINE)
+
+
+class RewriteCacheTest(unittest.TestCase):
+    """#108: client-side rewrite cache (pure logic, mirrors macOS)."""
+
+    def test_hit_and_miss_keyed_by_text_and_tone(self):
+        c = RewriteCache(max_entries=10)
+        self.assertIsNone(c.get("hello", "polished"))
+        c.set("hello", "polished", "Hello.")
+        self.assertEqual(c.get("hello", "polished"), "Hello.")
+        # Same text, different tone → separate entry (miss).
+        self.assertIsNone(c.get("hello", "concise"))
+
+    def test_bounded_eviction_drops_oldest(self):
+        c = RewriteCache(max_entries=4, evict_fraction=4)  # evict 1 when full
+        for i in range(4):
+            c.set(f"t{i}", "polished", f"r{i}")
+        self.assertEqual(len(c), 4)
+        c.set("t4", "polished", "r4")  # over cap → evict oldest (t0)
+        self.assertIsNone(c.get("t0", "polished"))
+        self.assertEqual(c.get("t4", "polished"), "r4")
+        self.assertLessEqual(len(c), 4)
+
+    def test_clear(self):
+        c = RewriteCache()
+        c.set("a", "natural", "A")
+        c.clear()
+        self.assertIsNone(c.get("a", "natural"))
 
 
 if __name__ == "__main__":

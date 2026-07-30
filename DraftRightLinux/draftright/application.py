@@ -23,6 +23,7 @@ from draftright.services.api_client import APIClient
 from draftright.services.auth_service import AuthService
 from draftright.services.clipboard_service import ClipboardService
 from draftright.services.hotkey_service import HotkeyService
+from draftright.services.rewrite_cache import RewriteCache
 from draftright.services.settings_service import SettingsService
 
 # Wire crash reporting as early as possible — sys.excepthook covers
@@ -49,6 +50,9 @@ class DraftRightApplication(Adw.Application):
         self.settings_service = None
         self.hotkey_service = None
         self.clipboard_service = None
+        # Client-side rewrite cache, shared across panel instances (a fresh
+        # RewritePanel is built per hotkey press). Mirrors macOS.
+        self.rewrite_cache = RewriteCache()
 
         self._backend_status = HealthStatus.OFFLINE
         self._is_rewriting = False
@@ -214,6 +218,9 @@ class DraftRightApplication(Adw.Application):
         """Clear auth session and notify the user."""
         if self.auth_service:
             self.auth_service.logout()
+        # Drop cached rewrites so a different user can't read the prior
+        # user's results from memory.
+        self.rewrite_cache.clear()
 
         notification = Gio.Notification.new("DraftRight")
         notification.set_body("You have been signed out.")

@@ -33,6 +33,7 @@ func TestFactory_BuildsKnownTypes(t *testing.T) {
 		{"anthropic", "anthropic"},
 		{"ollama", "ollama"},
 		{"custom", "custom"},
+		{"google", "google"}, // Gemini rides the OpenAI-compatible wire (#115)
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
