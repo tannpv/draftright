@@ -72,6 +72,12 @@ FEEDBACK_FLASH_MS = 1500
 # ── Plans ────────────────────────────────────────────────────────────────────
 DEFAULT_DAILY_LIMIT = 10   # fallback when /subscription omits plan.daily_limit
 
+# ── Client-side rewrite cache ────────────────────────────────────────────────
+# Mirrors the macOS RewriteCache: avoid re-hitting the backend when the user
+# retries the same (text, tone). Bounded; evicts the oldest slice when full.
+REWRITE_CACHE_MAX_ENTRIES = 200
+REWRITE_CACHE_EVICT_FRACTION = 4   # evict ~1/N of entries when full (N=4 → 25%)
+
 # ── Design tokens (mirror resources/style.css + CLAUDE.md) ───────────────────
 COLOR_BACKGROUND = "#0f172a"
 COLOR_CARD = "#1e293b"
