@@ -101,8 +101,10 @@ PANEL_CSS = f"""
 class RewritePanel(Gtk.Window):
     """Floating panel for tone selection and text rewriting.
 
-    Appears near the mouse cursor when invoked, shows tone buttons,
-    calls the backend API, and displays the rewritten result.
+    Shows tone buttons, calls the backend API, and displays the rewritten
+    result.  Placement is the compositor's decision: GTK4 dropped client-side
+    window positioning and Wayland does not let a client place its own
+    surface, so the panel cannot follow the mouse cursor (#103).
     """
 
     def __init__(self, app):
@@ -297,9 +299,9 @@ class RewritePanel(Gtk.Window):
             btn.remove_css_class("tone-button-selected")
             btn.add_css_class("tone-button")
 
-        # Position near cursor (best effort -- Wayland may not expose pointer)
-        self._position_near_cursor()
-
+        # No cursor-relative placement: GTK4 removed client-side window
+        # positioning, and Wayland forbids a client from placing its own
+        # surface at all.  The compositor decides where this lands (#103).
         self.set_visible(True)
         self.present()
 
@@ -420,21 +422,6 @@ class RewritePanel(Gtk.Window):
         if error_text:
             clipboard = Gdk.Display.get_default().get_clipboard()
             clipboard.set(error_text)
-
-    def _position_near_cursor(self):
-        """Position the window near the current mouse cursor."""
-        # On X11 we can query pointer position; on Wayland this may not work
-        # and the window manager decides placement.
-        try:
-            seat = Gdk.Display.get_default().get_default_seat()
-            if seat:
-                pointer = seat.get_pointer()
-                if pointer:
-                    # GTK4 does not expose pointer coords directly on the window.
-                    # We rely on the window manager for placement in most cases.
-                    pass
-        except Exception:
-            pass
 
     def _close(self):
         """Hide the panel."""

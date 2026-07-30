@@ -105,14 +105,17 @@ sudo checkinstall --pkgname=draftright --pkgversion=1.0.0 \
 
 **First runtime verification done (2026-07-30).** The app has now been smoke-run on a real Linux host (GNOME 49 / Wayland + XWayland). That first run exposed seven crash-level defects that compiled and passed unit tests — see "Fixed by runtime verification" below. **X11 is still unverified**: the dev host is Wayland, so `_X11Listener` has never been exercised.
 
-**Done + verified (closed):** Phase B Rule#1 cleanup #95 · sign-out crash #16 · **#99 Wayland global hotkey** · **#101 blank main window**.
+**Done + verified (closed):** Phase B Rule#1 cleanup #95 · sign-out crash #16 · **#99 Wayland global hotkey** · **#101 blank main window** · **#103 cursor placement** (won't-fix: GTK4 removed client-side positioning and Wayland forbids self-placement — the dead no-op is gone) · **#104 PANEL_CSS tokens** (already done) · **#105 `Gdk.Clipboard.set(str)`** (verified working: set + read-back round-trip on GTK4).
 
 **Fixed by runtime verification (2026-07-30):** Settings could not open at all (`SubscriptionPage` inherited a `Protocol` → metaclass conflict at import) · `auth_service.is_authenticated`/`get_user` missing · `settings_service.get`/`set` missing · `register()` args transposed (name sent as email) · `feedback_service` imported a nonexistent singleton · `SettingsService` never `load()`ed · tray dead on every GTK4 system.
 
-**Open (7 under #93):**
+**Open (4 under #93):**
 - Features/parity: #96 One-Click mode · #97 Google login · #98 Report-a-Bug · #100 KeepAlive agent (all present on Mac+Win)
-- Runtime bugs: #103 cursor-position no-op · #105 verify `Gdk.Clipboard.set(str)`
-- Rule#1: #104 PANEL_CSS hardcoded hex → tokens
+
+**Known gaps (not yet issues):**
+- **X11 is unverified.** The dev host is Wayland, so `_X11Listener` has never run. Its key parsing was refactored onto `models/hotkey.py` without being exercised.
+- **Tray is disabled under Flatpak.** `org.gnome.Platform` ships GTK3 but not libayatana-appindicator; it must be built as a manifest module.
+- `RewritePanel` is a bare `Gtk.Window` (no `application=`), so it never appears in `app.get_windows()`.
 
 ### Wayland global shortcut (#99) — operational requirement
 
