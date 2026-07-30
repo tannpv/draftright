@@ -5,8 +5,11 @@ Covers the invariants the refactor introduced — enum single-source, env
 override, and the clipboard inject_text delegation.
 """
 
+import inspect
 import os
+import tempfile
 import unittest
+from pathlib import Path
 from unittest import mock
 
 from draftright import config
@@ -14,6 +17,8 @@ from draftright.models.tone import Tone
 from draftright.models.payment import BillingPeriod
 from draftright.models.subscription import SubscriptionStatus
 from draftright.models.health import HealthStatus
+from draftright.services import settings_service as settings_service_mod
+from draftright.services.auth_service import AuthService
 from draftright.services.settings_service import SettingsService
 from draftright.services.clipboard_service import ClipboardService
 from draftright.services.rewrite_cache import RewriteCache
@@ -121,6 +126,83 @@ class RewriteCacheTest(unittest.TestCase):
         c.set("a", "natural", "A")
         c.clear()
         self.assertIsNone(c.get("a", "natural"))
+
+
+class RuntimeContractTest(unittest.TestCase):
+    """Guards the service-side contracts the GTK UI calls into.
+
+    Every one of these shipped broken: the code imports and the rest of the
+    suite passes, because the mismatch only fires when a window is actually
+    opened.  Assert the contracts directly so a display-less CI catches them.
+    """
+
+    def test_auth_service_exposes_methods_settings_window_calls(self):
+        # settings_window._refresh_account_ui() calls both as methods.
+        for name in ("is_authenticated", "get_user"):
+            self.assertTrue(
+                callable(getattr(AuthService, name, None)),
+                f"AuthService.{name}() is called by settings_window",
+            )
+
+    def test_get_user_always_returns_a_mapping(self):
+        auth = AuthService(mock.Mock())
+        # Signed out: callers still do user.get("email", "") — must not be None.
+        self.assertEqual(auth.get_user(), {})
+        self.assertFalse(auth.is_authenticated())
+
+    def test_register_signature_matches_settings_window_call_order(self):
+        # The call site passes (email, password, name) positionally; a
+        # transposition here silently registers the name as the email.
+        params = list(inspect.signature(AuthService.register).parameters)
+        self.assertEqual(params, ["self", "email", "password", "name"])
+
+    def test_settings_service_key_access_round_trips(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.object(
+                settings_service_mod, "_settings_file",
+                return_value=Path(tmp) / "settings.json",
+            ):
+                s = SettingsService()
+                s.load()
+                s.set("translate_language", "Japanese")
+                # A second instance must see the persisted value.
+                other = SettingsService()
+                other.load()
+                self.assertEqual(other.get("translate_language"), "Japanese")
+                # Unknown key falls back to the caller's default.
+                self.assertEqual(other.get("nope", "fallback"), "fallback")
+                # Known key with no default falls back to _DEFAULTS.
+                self.assertEqual(other.get("hotkey"), "Ctrl+Shift+R")
+
+    def test_set_does_not_clobber_unrelated_settings(self):
+        # SettingsService.__init__ only seeds defaults; if a caller sets a key
+        # without load()ing first, save() would persist defaults over the
+        # user's file.  Writing one key must preserve the others.
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.object(
+                settings_service_mod, "_settings_file",
+                return_value=Path(tmp) / "settings.json",
+            ):
+                seed = SettingsService()
+                seed.load()
+                seed.set("backend_url", "https://example.test")
+                seed.set("translate_language", "Japanese")
+
+                reloaded = SettingsService()
+                reloaded.load()
+                self.assertEqual(reloaded.get("backend_url"), "https://example.test")
+                self.assertEqual(reloaded.get("translate_language"), "Japanese")
+
+    def test_feedback_service_imports_without_a_singleton(self):
+        # feedback_service previously imported a module-level `settings_service`
+        # that does not exist → ImportError killed "Suggest a feature".
+        self.assertFalse(
+            hasattr(settings_service_mod, "settings_service"),
+            "no module-level singleton should exist; feedback_service must "
+            "construct SettingsService itself",
+        )
+        import draftright.services.feedback_service as feedback
+        self.assertTrue(callable(feedback.submit_feature_request))
 
 
 if __name__ == "__main__":

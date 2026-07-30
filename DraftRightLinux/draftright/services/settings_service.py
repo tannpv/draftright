@@ -152,6 +152,23 @@ class SettingsService:
     def last_seen_version(self, value: str) -> None:
         self._data["last_seen_version"] = value
 
+    # -- key-addressed access ----------------------------------------------
+
+    def get(self, key: str, default=None):
+        """Return a setting by key, for UI code that addresses settings generically.
+
+        Falls back to the built-in default for *key* before *default*, so a
+        caller that passes no default still gets the documented value.
+        """
+        if key in self._data:
+            return self._data[key]
+        return _DEFAULTS.get(key, default)
+
+    def set(self, key: str, value) -> None:
+        """Set a setting by key and persist immediately."""
+        self._data[key] = value
+        self.save()
+
     # -- persistence -------------------------------------------------------
 
     def load(self) -> None:

@@ -14,6 +14,7 @@ import logging
 from pathlib import Path
 
 from draftright import config
+from draftright.helpers.display_server import is_wayland
 from draftright.models.health import HealthStatus
 from draftright.__version__ import __version__
 from draftright.services.logger import setup_logging
@@ -58,6 +59,7 @@ class DraftRightApplication(Adw.Application):
         self._is_rewriting = False
         self._tray_icon = None
         self._settings_window = None
+        self._status_label = None
         self._last_auto_recovery = 0.0
         self._update_service = None
 
@@ -76,6 +78,10 @@ class DraftRightApplication(Adw.Application):
         # doesn't churn instances.
         if self.settings_service is None:
             self.settings_service = SettingsService()
+            # __init__ only seeds defaults — without this the app ignores the
+            # user's saved backend_url / hotkey / tones, and the first
+            # settings write would persist defaults over their file.
+            self.settings_service.load()
         if self.api_client is None:
             self.api_client = APIClient(self.settings_service.backend_url)
         if self.auth_service is None:
@@ -108,6 +114,7 @@ class DraftRightApplication(Adw.Application):
             win = Adw.ApplicationWindow(application=self)
             win.set_default_size(400, 500)
             win.set_title("DraftRight")
+            win.set_content(self._build_main_content())
         win.present()
 
         # Start health check — immediate first check, then on a fixed interval.
@@ -125,6 +132,75 @@ class DraftRightApplication(Adw.Application):
 
         # Post-update "What's New" — shortly after the window is up.
         GLib.timeout_add_seconds(2, self._trigger_whats_new_check)
+
+    def _build_main_content(self):
+        """Build the main window body (#101 — the window was presented empty).
+
+        The app is hotkey-driven, so this screen's job is to report state:
+        whether the backend is reachable, what the capture shortcut is, and
+        whether that shortcut actually works on this display server.
+        """
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        box.set_margin_top(36)
+        box.set_margin_bottom(36)
+        box.set_margin_start(32)
+        box.set_margin_end(32)
+
+        title = Gtk.Label(label="DraftRight")
+        title.add_css_class("title-1")
+        box.append(title)
+
+        subtitle = Gtk.Label(label="AI-powered text rewriting")
+        subtitle.add_css_class("dim-label")
+        box.append(subtitle)
+
+        self._status_label = Gtk.Label(label="Checking connection…")
+        self._status_label.set_margin_top(16)
+        box.append(self._status_label)
+
+        keystring = self.settings_service.hotkey if self.settings_service else ""
+        hotkey_label = Gtk.Label(label=f"Select text anywhere, then press {keystring}")
+        hotkey_label.add_css_class("dim-label")
+        hotkey_label.set_wrap(True)
+        hotkey_label.set_justify(Gtk.Justification.CENTER)
+        box.append(hotkey_label)
+
+        # Be honest rather than let the user press a shortcut that cannot
+        # fire: the Wayland listener is not implemented yet (#99).
+        if is_wayland():
+            warning = Gtk.Label(
+                label="Global shortcuts aren't supported on Wayland yet — "
+                      "use the button below instead."
+            )
+            warning.add_css_class("dim-label")
+            warning.add_css_class("warning")
+            warning.set_wrap(True)
+            warning.set_justify(Gtk.Justification.CENTER)
+            box.append(warning)
+
+        rewrite_btn = Gtk.Button(label="Rewrite clipboard text")
+        rewrite_btn.add_css_class("suggested-action")
+        rewrite_btn.add_css_class("pill")
+        rewrite_btn.set_margin_top(16)
+        rewrite_btn.connect("clicked", self._on_rewrite_clipboard_clicked)
+        box.append(rewrite_btn)
+
+        settings_btn = Gtk.Button(label="Settings")
+        settings_btn.add_css_class("pill")
+        settings_btn.connect("clicked", lambda _b: self.show_settings())
+        box.append(settings_btn)
+
+        return box
+
+    def _on_rewrite_clipboard_clicked(self, _button):
+        """Rewrite whatever is on the clipboard — the Wayland-safe entry point."""
+        text = ""
+        if self.clipboard_service:
+            text = self.clipboard_service.get_clipboard()
+        if text:
+            self.show_rewrite_panel(text)
+        elif self._status_label is not None:
+            self._status_label.set_text("Clipboard is empty — copy some text first.")
 
     def _load_css(self):
         """Load custom CSS from resources."""
@@ -255,6 +331,8 @@ class DraftRightApplication(Adw.Application):
         self._backend_status = status
         if self._tray_icon is not None:
             self._tray_icon.set_status(status)
+        if self._status_label is not None:
+            self._status_label.set_text(status.display_name)
 
         # Auto-recovery: if offline and targeting localhost, try to start the backend
         backend_url = ""

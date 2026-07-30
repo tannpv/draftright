@@ -350,7 +350,7 @@ class SettingsWindow(Adw.PreferencesWindow):
                     raise RuntimeError("Auth service not available.")
 
                 if self._register_mode:
-                    self.app.auth_service.register(name, email, password)
+                    self.app.auth_service.register(email, password, name)
                 else:
                     self.app.auth_service.login(email, password)
 

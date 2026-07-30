@@ -29,14 +29,20 @@ from draftright.models.subscription import SubscriptionStatus
 from draftright.services.api_client import APIError
 from draftright.services.payment_service import (
     PaymentService,
-    PaymentSheetPresenter,
     PaymentStatusStream,
 )
 from draftright.ui.checkout_dialogs import BankTransferDialog, QrCheckoutDialog
 
 
-class SubscriptionPage(Adw.PreferencesPage, PaymentSheetPresenter):
-    """The Subscription preferences page."""
+class SubscriptionPage(Adw.PreferencesPage):
+    """The Subscription preferences page.
+
+    Structurally satisfies ``payment_service.PaymentSheetPresenter`` (see the
+    ``present_*_dialog`` methods below).  The Protocol is deliberately *not*
+    inherited: its ``_ProtocolMeta`` metaclass conflicts with GObject's, which
+    raised ``TypeError: metaclass conflict`` on import and made the whole
+    Settings window unopenable.
+    """
 
     def __init__(self, app, api_client):
         super().__init__(title="Subscription", icon_name="credit-card-symbolic")
