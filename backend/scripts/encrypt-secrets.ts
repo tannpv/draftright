@@ -44,6 +44,35 @@ async function main(): Promise<void> {
     console.log(
       `ai_providers.api_key: encrypted ${encrypted}, skipped ${skipped} (already encrypted).`,
     );
+
+    // app_settings singleton — 12 secret columns.
+    const SECRET_COLUMNS = [
+      'stripe_secret_key', 'stripe_webhook_secret', 'paypal_client_secret',
+      'paypal_webhook_id', 'momo_access_key', 'momo_secret_key', 'casso_api_key',
+      'sepay_api_key', 'resend_api_key', 'google_client_secret',
+      'lemonsqueezy_api_key', 'lemonsqueezy_webhook_secret',
+    ];
+    const settings = await client.query(
+      `SELECT id, ${SECRET_COLUMNS.join(', ')} FROM app_settings`,
+    );
+    for (const row of settings.rows) {
+      const updates: string[] = [];
+      const values: string[] = [];
+      for (const col of SECRET_COLUMNS) {
+        const val = row[col];
+        if (typeof val === 'string' && val !== '' && !isEncrypted(val)) {
+          values.push(encryptSecret(val));
+          updates.push(`${col} = $${values.length}`);
+        }
+      }
+      if (updates.length === 0) continue;
+      values.push(row.id);
+      await client.query(
+        `UPDATE app_settings SET ${updates.join(', ')} WHERE id = $${values.length}`,
+        values,
+      );
+      console.log(`app_settings ${row.id}: encrypted ${updates.length} secret column(s).`);
+    }
   } finally {
     await client.end();
   }

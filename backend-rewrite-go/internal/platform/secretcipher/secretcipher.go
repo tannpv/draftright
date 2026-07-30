@@ -106,6 +106,38 @@ func Decrypt(stored string) (string, error) {
 	return string(pt), nil
 }
 
+// EncryptInPlace encrypts each non-nil target in place, stopping on the first
+// error. Convenience for wiring the many secret fields of a settings struct.
+func EncryptInPlace(targets ...*string) error {
+	for _, t := range targets {
+		if t == nil {
+			continue
+		}
+		v, err := Encrypt(*t)
+		if err != nil {
+			return err
+		}
+		*t = v
+	}
+	return nil
+}
+
+// DecryptInPlace decrypts each non-nil target in place, stopping on the first
+// error.
+func DecryptInPlace(targets ...*string) error {
+	for _, t := range targets {
+		if t == nil {
+			continue
+		}
+		v, err := Decrypt(*t)
+		if err != nil {
+			return err
+		}
+		*t = v
+	}
+	return nil
+}
+
 func newGCM(key []byte) (cipher.AEAD, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
