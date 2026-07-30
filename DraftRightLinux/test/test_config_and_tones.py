@@ -17,6 +17,7 @@ from draftright.models.tone import Tone
 from draftright.models.payment import BillingPeriod
 from draftright.models.subscription import SubscriptionStatus
 from draftright.models.health import HealthStatus
+from draftright.models.tray import TrayAction, TrayCommand
 from draftright.services import settings_service as settings_service_mod
 from draftright.services.auth_service import AuthService
 from draftright.services.settings_service import SettingsService
@@ -203,6 +204,61 @@ class RuntimeContractTest(unittest.TestCase):
         )
         import draftright.services.feedback_service as feedback
         self.assertTrue(callable(feedback.submit_feature_request))
+
+
+class TrayContractTest(unittest.TestCase):
+    """The tray runs in a second process, so its contract must be single-sourced.
+
+    A drifted action name fails silently — the menu click is just dropped —
+    so assert the two halves agree here rather than discovering it by hand.
+    """
+
+    def test_object_path_derives_from_app_id(self):
+        self.assertEqual(config.APP_OBJECT_PATH, "/com/draftright/app")
+        self.assertEqual(
+            config.APP_OBJECT_PATH, "/" + config.APP_ID.replace(".", "/")
+        )
+
+    def test_every_action_has_a_label_and_parses_back(self):
+        for action in TrayAction:
+            self.assertTrue(action.display_name.strip(), f"{action} has no label")
+            self.assertIs(TrayAction.from_wire(action.value), action)
+        self.assertIsNone(TrayAction.from_wire("no-such-action"))
+
+    def test_action_names_are_valid_gaction_names(self):
+        # Gio.SimpleAction rejects names outside [a-z0-9-]; an invalid member
+        # would raise at construction and take the whole app down.
+        for action in TrayAction:
+            self.assertRegex(action.value, r"^[a-z][a-z0-9-]*$")
+
+    def test_command_encode_parse_round_trip(self):
+        line = TrayCommand.STATUS.encode(HealthStatus.CONNECTED.value)
+        self.assertTrue(line.endswith("\n"))
+        command, payload = TrayCommand.parse(line)
+        self.assertIs(command, TrayCommand.STATUS)
+        self.assertIs(HealthStatus.from_wire(payload), HealthStatus.CONNECTED)
+
+        command, _ = TrayCommand.parse(TrayCommand.QUIT.encode())
+        self.assertIs(command, TrayCommand.QUIT)
+
+    def test_malformed_command_is_ignored_not_fatal(self):
+        for junk in ("", "garbage", "status", ":", "status:not-a-status"):
+            command, payload = TrayCommand.parse(junk)
+            self.assertIn(command, (None, TrayCommand.STATUS))
+            if command is TrayCommand.STATUS:
+                # Unknown wire value must degrade to OFFLINE, never raise.
+                self.assertIs(HealthStatus.from_wire(payload), HealthStatus.OFFLINE)
+
+    def test_application_registers_a_handler_for_every_action(self):
+        # application.py raises if a TrayAction has no handler; assert the
+        # mapping is exhaustive without importing GTK by reading the source.
+        source = Path(__file__).resolve().parent.parent / "draftright" / "application.py"
+        text = source.read_text(encoding="utf-8")
+        for action in TrayAction:
+            self.assertIn(
+                f"TrayAction.{action.name}:", text,
+                f"application.py has no handler entry for TrayAction.{action.name}",
+            )
 
 
 if __name__ == "__main__":

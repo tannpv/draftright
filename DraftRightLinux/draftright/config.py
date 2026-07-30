@@ -38,6 +38,19 @@ def default_backend_url() -> str:
     return backend_url_override() or DEFAULT_BACKEND_URL
 
 
+# ── Application identity ─────────────────────────────────────────────────────
+# The GApplication id, and the object path GApplication derives from it. The
+# tray helper needs both to reach the app's exported actions over the session
+# bus, so they cannot live as literals inside application.py alone.
+APP_ID = "com.draftright.app"
+APP_OBJECT_PATH = "/" + APP_ID.replace(".", "/")
+
+# ── Tray ─────────────────────────────────────────────────────────────────────
+TRAY_ICON_DEFAULT = "edit-paste-symbolic"
+TRAY_ICON_ATTENTION = "dialog-warning-symbolic"   # shown while the backend is unreachable
+TRAY_HELPER_MODULE = "draftright.tray_helper"
+TRAY_SHUTDOWN_TIMEOUT = 2    # seconds to wait for the helper at each escalation step
+
 # ── Input / hotkey ───────────────────────────────────────────────────────────
 DEFAULT_HOTKEY = "Ctrl+Shift+R"
 

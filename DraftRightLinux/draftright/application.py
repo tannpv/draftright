@@ -16,6 +16,7 @@ from pathlib import Path
 from draftright import config
 from draftright.helpers.display_server import is_wayland
 from draftright.models.health import HealthStatus
+from draftright.models.tray import TrayAction
 from draftright.__version__ import __version__
 from draftright.services.logger import setup_logging
 from draftright.services.update_service import UpdateService
@@ -41,7 +42,7 @@ class DraftRightApplication(Adw.Application):
         setup_logging()
 
         super().__init__(
-            application_id="com.draftright.app",
+            application_id=config.APP_ID,
             flags=Gio.ApplicationFlags.FLAGS_NONE,
         )
 
@@ -54,6 +55,25 @@ class DraftRightApplication(Adw.Application):
         # Client-side rewrite cache, shared across panel instances (a fresh
         # RewritePanel is built per hotkey press). Mirrors macOS.
         self.rewrite_cache = RewriteCache()
+
+        # Actions the GTK3 tray helper activates over the session bus.  The
+        # names come from TrayAction so the two processes cannot drift apart;
+        # registering here (not in do_activate) means they exist as soon as
+        # the app owns its bus name.
+        handlers = {
+            TrayAction.SHOW: self._on_show_action,
+            TrayAction.SETTINGS: self._on_settings_action,
+            TrayAction.SUGGEST_FEATURE: self._on_suggest_feature_action,
+            TrayAction.SIGN_OUT: self._on_sign_out_action,
+            TrayAction.QUIT: self._on_quit_action,
+        }
+        missing = [a.value for a in TrayAction if a not in handlers]
+        if missing:  # a new TrayAction member without a handler here
+            raise RuntimeError(f"TrayAction(s) with no handler: {missing}")
+        for tray_action, handler in handlers.items():
+            action = Gio.SimpleAction.new(tray_action.value, None)
+            action.connect("activate", handler)
+            self.add_action(action)
 
         self._backend_status = HealthStatus.OFFLINE
         self._is_rewriting = False
@@ -219,7 +239,14 @@ class DraftRightApplication(Adw.Application):
         )
 
     def _setup_tray(self):
-        """Set up system tray icon."""
+        """Set up the system tray icon (idempotent).
+
+        do_activate() runs again whenever the app is re-activated — including
+        from the tray's own "Show" action — so without this guard each
+        re-activation would spawn another helper process.
+        """
+        if self._tray_icon is not None:
+            return
         from draftright.ui.tray_icon import TrayIcon
         self._tray_icon = TrayIcon(self)
 
@@ -290,6 +317,35 @@ class DraftRightApplication(Adw.Application):
         self._settings_window = None
         return False  # allow the default close
 
+    # ------------------------------------------------------------------
+    # Tray actions (activated over D-Bus by the GTK3 helper)
+    # ------------------------------------------------------------------
+
+    def _on_show_action(self, _action, _param):
+        """Bring the main window back, recreating it if it was closed."""
+        window = self.props.active_window
+        if window is None:
+            self.activate()  # rebuilds and presents the main window
+        else:
+            window.present()
+
+    def _on_settings_action(self, _action, _param):
+        if self.props.active_window is None:
+            self.activate()  # services must exist before Settings can build
+        self.show_settings()
+
+    def _on_suggest_feature_action(self, _action, _param):
+        from draftright.ui.suggest_feature_dialog import open_suggest_feature_dialog
+
+        token = self.auth_service.access_token if self.auth_service else None
+        open_suggest_feature_dialog(self.props.active_window, bearer_token=token)
+
+    def _on_sign_out_action(self, _action, _param):
+        self.sign_out()
+
+    def _on_quit_action(self, _action, _param):
+        self.quit_app()
+
     def sign_out(self):
         """Clear auth session and notify the user."""
         if self.auth_service:
@@ -306,6 +362,11 @@ class DraftRightApplication(Adw.Application):
         """Clean up resources and quit the application."""
         if self.hotkey_service:
             self.hotkey_service.stop()
+        if self._tray_icon is not None:
+            # Reap the helper explicitly; it also self-exits on stdin EOF, but
+            # that only fires once this process is gone.
+            self._tray_icon.stop()
+            self._tray_icon = None
         self.quit()
 
     def _trigger_health_check(self) -> bool:
