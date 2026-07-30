@@ -14,6 +14,7 @@ import logging
 from pathlib import Path
 
 from draftright import config
+from draftright.models.health import HealthStatus
 from draftright.__version__ import __version__
 from draftright.services.logger import setup_logging
 from draftright.services.update_service import UpdateService
@@ -49,7 +50,7 @@ class DraftRightApplication(Adw.Application):
         self.hotkey_service = None
         self.clipboard_service = None
 
-        self._backend_status = "offline"
+        self._backend_status = HealthStatus.OFFLINE
         self._is_rewriting = False
         self._tray_icon = None
         self._settings_window = None
@@ -238,10 +239,11 @@ class DraftRightApplication(Adw.Application):
             return
         status = self.api_client.check_health()
         if status != self._backend_status:
-            logger.info("Health status: %s → %s", self._backend_status, status)
+            logger.info("Health status: %s → %s",
+                        self._backend_status.value, status.value)
         GLib.idle_add(self._update_health_status, status)
 
-    def _update_health_status(self, status: str) -> bool:
+    def _update_health_status(self, status: HealthStatus) -> bool:
         """Update health status on the GTK main thread."""
         self._backend_status = status
         if self._tray_icon is not None:
@@ -251,7 +253,7 @@ class DraftRightApplication(Adw.Application):
         backend_url = ""
         if self.settings_service:
             backend_url = self.settings_service.backend_url
-        if status == "offline" and "localhost" in backend_url:
+        if status is HealthStatus.OFFLINE and "localhost" in backend_url:
             self._attempt_auto_recovery()
 
         return False  # Don't repeat GLib.idle_add

@@ -235,9 +235,11 @@ class PaymentService:
         want_currency = self.currency_for(method) if method is not None else None
 
         def matches(p: dict) -> bool:
-            bp = str(p.get("billing_period", "")).lower()
+            # A paid plan has a real billing cadence; Free plans carry
+            # "none"/""/absent → BillingPeriod.from_wire returns None.
+            paid_cadence = BillingPeriod.from_wire(p.get("billing_period"))
             active = p.get("is_active") if "is_active" in p else True
-            if not bp or bp == "none" or not active:
+            if paid_cadence is None or not active:
                 return False
             if want_currency is not None:
                 cur = str(p.get("currency", "")).upper()

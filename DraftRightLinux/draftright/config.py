@@ -43,6 +43,7 @@ DEFAULT_HOTKEY = "Ctrl+Shift+R"
 
 # ── HTTP timeouts (seconds) ──────────────────────────────────────────────────
 API_TIMEOUT = 30          # /rewrite, /auth, health
+HEALTH_TIMEOUT = 5        # /health + /auth/me probe (kept short so the tray stays responsive)
 SUBPROCESS_TIMEOUT = 3    # xsel/wl-copy/xdotool one-shot calls
 UPDATE_METADATA_TIMEOUT = 10   # version-check fetch
 UPDATE_DOWNLOAD_TIMEOUT = 60   # binary download
@@ -68,6 +69,9 @@ PANEL_MARGIN = 16
 PANEL_PREVIEW_CHARS = 200
 FEEDBACK_FLASH_MS = 1500
 
+# ── Plans ────────────────────────────────────────────────────────────────────
+DEFAULT_DAILY_LIMIT = 10   # fallback when /subscription omits plan.daily_limit
+
 # ── Design tokens (mirror resources/style.css + CLAUDE.md) ───────────────────
 COLOR_BACKGROUND = "#0f172a"
 COLOR_CARD = "#1e293b"
@@ -76,3 +80,6 @@ COLOR_BRAND_BLUE = "#5d87ff"
 COLOR_TEXT = "#e2e8f0"
 COLOR_MUTED = "#94a3b8"
 COLOR_SUCCESS = "#10b981"
+COLOR_BRAND_BLUE_HOVER = "#4a6fe0"   # darker brand blue for :hover states
+COLOR_ERROR = "#ef4444"              # error / destructive text
+COLOR_WHITE = "#ffffff"
