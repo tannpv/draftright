@@ -141,14 +141,15 @@ func main() {
 				continue
 			}
 			// The reset terminated both backends' pool connections; warm each
-			// until it serves a non-5xx so the fixture lands on a live conn
-			// (not a just-killed one that would spuriously 5xx). See warmup.go.
-			if err := warmup(client, *nodeBase, *warmupPath, 40, 50*time.Millisecond); err != nil {
+			// until it serves warmupConsecutive back-to-back non-5xx responses,
+			// so the fixture lands on a drained pool (not a just-killed conn
+			// that would spuriously 5xx). See warmup.go / issue #66.
+			if err := warmup(client, *nodeBase, *warmupPath, 40, 50*time.Millisecond, warmupConsecutive); err != nil {
 				fmt.Printf("FAIL %s: warmup node: %v\n", f.Name, err)
 				failed++
 				continue
 			}
-			if err := warmup(client, *goBase, *warmupPath, 40, 50*time.Millisecond); err != nil {
+			if err := warmup(client, *goBase, *warmupPath, 40, 50*time.Millisecond, warmupConsecutive); err != nil {
 				fmt.Printf("FAIL %s: warmup go: %v\n", f.Name, err)
 				failed++
 				continue
