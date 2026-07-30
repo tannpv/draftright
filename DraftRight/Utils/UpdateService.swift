@@ -1,5 +1,6 @@
 import Foundation
 import AppKit
+import CryptoKit
 
 /// One platform's entry in the `platforms` map of `/updates/latest`.
 struct PlatformRelease: Codable {
@@ -7,6 +8,9 @@ struct PlatformRelease: Codable {
     let url: String
     let notes: String?
     let required: Bool?
+    /// Hex SHA-256 the backend published for this platform's artifact.
+    /// Absent on releases predating hash publishing → installed unverified.
+    let sha256: String?
 }
 
 struct UpdateInfo: Codable {
@@ -29,7 +33,8 @@ struct UpdateInfo: Codable {
         if let p = platforms?[platform] {
             return ResolvedUpdate(version: p.version, url: p.url,
                                   notes: p.notes ?? release_notes,
-                                  required: p.required ?? required)
+                                  required: p.required ?? required,
+                                  sha256: p.sha256)
         }
         let legacyURL: String
         switch platform {
@@ -37,8 +42,10 @@ struct UpdateInfo: Codable {
         case "linux": legacyURL = linux_url
         default: legacyURL = mac_url
         }
+        // Legacy top-level fields carry no hash → unverified install.
         return ResolvedUpdate(version: version, url: legacyURL,
-                              notes: release_notes, required: required)
+                              notes: release_notes, required: required,
+                              sha256: nil)
     }
 }
 
@@ -48,6 +55,9 @@ struct ResolvedUpdate: Equatable {
     let url: String
     let notes: String
     let required: Bool
+    /// Hex SHA-256 to verify the downloaded DMG against, or nil when the
+    /// backend published none (older release → installed unverified).
+    let sha256: String?
 }
 
 @MainActor
@@ -164,6 +174,8 @@ final class UpdateService: ObservableObject {
                     try? FileManager.default.removeItem(at: dmgURL)
                     return
                 }
+                // Reject a corrupt/tampered DMG before it's ever offered for install.
+                try verifyIntegrity(at: dmgPath, expected: update.sha256)
                 stagedDMGPath = dmgPath
                 stagedVersion = update.version
                 updateStaged = true
@@ -192,17 +204,19 @@ final class UpdateService: ObservableObject {
         guard !update.url.isEmpty else { return }
         if updateStaged, stagedVersion == update.version, let path = stagedDMGPath,
            FileManager.default.fileExists(atPath: path) {
-            Task { await installStagedDMG(at: path, version: update.version) }
+            Task { await installStagedDMG(at: path, version: update.version, sha256: update.sha256) }
         } else {
-            Task { await downloadAndInstall(url: update.url, version: update.version) }
+            Task { await downloadAndInstall(url: update.url, version: update.version, sha256: update.sha256) }
         }
     }
 
     /// Install from a DMG that's already on disk. Silent: no progress UI —
     /// the staged DMG sits on local disk so mount + copy is sub-second. Only
     /// the user-visible restart event matters; everything else is plumbing.
-    private func installStagedDMG(at dmgPath: String, version: String) async {
+    private func installStagedDMG(at dmgPath: String, version: String, sha256: String?) async {
         do {
+            // Re-verify at install time in case the staged file changed on disk.
+            try verifyIntegrity(at: dmgPath, expected: sha256)
             try installDMG(at: dmgPath)
             DRLogger.log("Update \(version) installed silently; relaunching", category: .app)
             relaunch()
@@ -284,7 +298,7 @@ final class UpdateService: ObservableObject {
     /// is staring at the dialog from a previous tick).
     private var isPrompting = false
 
-    private func downloadAndInstall(url: String, version: String) async {
+    private func downloadAndInstall(url: String, version: String, sha256: String?) async {
         guard let downloadURL = URL(string: url) else { return }
 
         DRLogger.log("Downloading update from \(url)", category: .app)
@@ -304,8 +318,11 @@ final class UpdateService: ObservableObject {
             }
             try FileManager.default.moveItem(at: tempURL, to: dmgURL)
 
-            progressWindow.updateStatus("Installing...")
+            progressWindow.updateStatus("Verifying...")
             progressWindow.setIndeterminate()
+            try verifyIntegrity(at: dmgPath, expected: sha256)
+
+            progressWindow.updateStatus("Installing...")
 
             try installDMG(at: dmgPath)
 
@@ -320,6 +337,29 @@ final class UpdateService: ObservableObject {
             alert.alertStyle = .critical
             alert.runModal()
         }
+    }
+
+    /// Verify a downloaded DMG against the backend-published SHA-256 before
+    /// installing it. No-op (with a warning) when the release published no
+    /// hash — older releases install unverified, mirroring the Linux/Windows
+    /// clients. Throws on mismatch so a corrupt or tampered download is never
+    /// mounted or copied into /Applications.
+    private func verifyIntegrity(at path: String, expected: String?) throws {
+        guard let expected = expected?
+                .trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+              !expected.isEmpty else {
+            DRLogger.warn("Update integrity: no sha256 published for this release — installing unverified", category: .app)
+            return
+        }
+        let data = try Data(contentsOf: URL(fileURLWithPath: path), options: .mappedIfSafe)
+        let actual = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        guard actual == expected else {
+            DRLogger.error("Update integrity check FAILED: expected \(expected), got \(actual). Aborting.", category: .app)
+            throw NSError(domain: "UpdateService", code: 5, userInfo: [
+                NSLocalizedDescriptionKey: "Update integrity check failed — the download was corrupt or tampered with. Aborting install.",
+            ])
+        }
+        DRLogger.log("Update integrity check passed (sha256 match)", category: .app)
     }
 
     /// Mount the DMG at `dmgPath`, copy the .app inside it to /Applications
