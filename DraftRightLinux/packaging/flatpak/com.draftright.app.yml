@@ -12,12 +12,15 @@ finish-args:
   - --socket=x11
   # Wayland display
   - --socket=wayland
-  # D-Bus access for global hotkeys and system tray
-  - --talk-name=org.freedesktop.portal.GlobalShortcuts
+  # System tray (StatusNotifierItem, served by the GTK3 tray helper).
   - --talk-name=org.kde.StatusNotifierWatcher
   - --talk-name=org.freedesktop.Notifications
-  # Access to GSettings
-  - --metadata=X-DConf=migrate-path=/com/draftright/app/
+  # NOTE: the Wayland global shortcut (#99) needs no talk-name — portals are
+  # always reachable from inside the sandbox, and org.freedesktop.portal.
+  # GlobalShortcuts is an *interface* on org.freedesktop.portal.Desktop, not a
+  # bus name, so the previous --talk-name for it never granted anything.
+  # A sandboxed app gets its app id for free, so the portal will not reject it
+  # the way an unsandboxed launch does.
 
 modules:
   - name: python3-requests
@@ -65,14 +68,19 @@ modules:
         url: https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz
         sha256: 9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca
 
+  # The tray indicator runs as a separate GTK3 process (draftright.tray_helper)
+  # because Ayatana AppIndicator cannot be loaded beside GTK4.  org.gnome.
+  # Platform ships GTK3, but NOT libayatana-appindicator, so the tray stays
+  # disabled in Flatpak until this library is built here as a module.  The app
+  # degrades cleanly without it — only the tray icon is missing.
+  # TODO(#93): add a libayatana-appindicator module to restore the tray.
+
   - name: draftright
     buildsystem: simple
     build-commands:
       - pip3 install --no-build-isolation --prefix=/app --no-deps .
       - install -Dm644 data/com.draftright.app.desktop /app/share/applications/com.draftright.app.desktop
       - install -Dm644 data/com.draftright.app.metainfo.xml /app/share/metainfo/com.draftright.app.metainfo.xml
-      - install -Dm644 data/com.draftright.app.gschema.xml /app/share/glib-2.0/schemas/com.draftright.app.gschema.xml
-      - glib-compile-schemas /app/share/glib-2.0/schemas/
     sources:
       - type: dir
         path: ../..

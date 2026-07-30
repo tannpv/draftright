@@ -6,7 +6,8 @@ Rule #1: no scattered literals — import from here.
 
 The backend URL resolves with this precedence:
   1. ``DRAFTRIGHT_BACKEND`` environment variable (dev/test/prod swap, no rebuild)
-  2. the persisted GSettings value (see :class:`SettingsService`)
+  2. the persisted value in ``~/.config/draftright/settings.json``
+     (see :class:`SettingsService` — the app uses JSON, not GSettings)
   3. :data:`DEFAULT_BACKEND_URL`
 Modules that have a SettingsService should prefer its ``backend_url``; those
 that run before settings exist (e.g. the early crash reporter) use
