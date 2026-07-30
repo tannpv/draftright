@@ -18,6 +18,8 @@ gi.require_version("Gdk", "4.0")
 gi.require_version("GdkPixbuf", "2.0")
 from gi.repository import Gdk, GdkPixbuf, GLib, Gtk
 
+from draftright import config
+
 from draftright.models.payment import BankInfo, BankTransferCheckout, QrCheckout
 from draftright.services.payment_service import PaymentStatusStream
 from draftright.ui.payment_status_banner import PaymentStatusBanner
@@ -67,7 +69,7 @@ class QrCheckoutDialog(Gtk.Window):
 
     def _load_qr_async(self, url: str) -> None:
         try:
-            data = requests.get(url, timeout=15).content
+            data = requests.get(url, timeout=config.QR_FETCH_TIMEOUT).content
             loader = GdkPixbuf.PixbufLoader.new()
             loader.write(data)
             loader.close()

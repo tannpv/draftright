@@ -453,10 +453,14 @@ class DraftRightApplication(Adw.Application):
 
         def _run():
             try:
-                env = dict(os.environ, PATH="/usr/local/bin:/usr/bin:/bin:" + os.environ.get("PATH", ""))
+                env = dict(
+                    os.environ,
+                    PATH=config.SUBPROCESS_PATH_PREFIX + ":" + os.environ.get("PATH", ""),
+                )
                 result = subprocess.run(
                     [str(script)],
-                    capture_output=True, text=True, timeout=60, env=env,
+                    capture_output=True, text=True,
+                    timeout=config.AUTO_RECOVERY_TIMEOUT, env=env,
                 )
                 logger.info("Auto-recovery: exit code %d", result.returncode)
             except Exception as exc:

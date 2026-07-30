@@ -72,11 +72,20 @@ SUBPROCESS_TIMEOUT = 3    # xsel/wl-copy/xdotool one-shot calls
 UPDATE_METADATA_TIMEOUT = 10   # version-check fetch
 UPDATE_DOWNLOAD_TIMEOUT = 60   # binary download
 QR_FETCH_TIMEOUT = 15     # payment QR image fetch
+ERROR_REPORT_TIMEOUT = 10      # crash/error upload
+AUTO_RECOVERY_TIMEOUT = 60     # start-server.sh run when the backend is down
+
+# PATH prepended when shelling out to the auto-recovery script: a GUI app
+# launched from a desktop entry inherits a minimal PATH.
+SUBPROCESS_PATH_PREFIX = "/usr/local/bin:/usr/bin:/bin"
 
 # ── Intervals (seconds) ──────────────────────────────────────────────────────
 HEALTH_CHECK_INTERVAL = 30
 UPDATE_CHECK_INTERVAL = 86400    # once per day
 AUTO_RECOVERY_COOLDOWN = 120
+
+# ── External links ───────────────────────────────────────────────────────────
+FEEDBACK_BOARD_URL = "https://draftright.info/feedback"
 
 # ── Error reporter ───────────────────────────────────────────────────────────
 ERROR_QUEUE_MAX = 100

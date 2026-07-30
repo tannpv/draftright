@@ -9,6 +9,8 @@ gi.require_version("Adw", "1")
 
 from gi.repository import Adw, GLib, Gtk
 
+from draftright import config
+from draftright.__version__ import __version__
 from draftright.models.tone import Tone
 from draftright.ui.subscription_page import SubscriptionPage
 from draftright.ui.suggest_feature_dialog import open_suggest_feature_dialog
@@ -432,10 +434,12 @@ class SettingsWindow(Adw.PreferencesWindow):
         if svc is None:
             # Fallback: create one if the app hasn't initialised it yet
             from draftright.services.update_service import UpdateService
-            backend_url = "http://localhost:3000"
+            backend_url = config.LOCALHOST_BACKEND_URL
             if app.settings_service:
                 backend_url = app.settings_service.backend_url
-            svc = UpdateService("1.0.0", backend_url)
+            # Must be the real version: a hardcoded one made this fallback
+            # path compare the wrong version against the update manifest.
+            svc = UpdateService(__version__, backend_url)
 
         has_update, result = svc.check_now()
 
