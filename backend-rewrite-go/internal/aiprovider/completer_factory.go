@@ -14,7 +14,8 @@ import (
 //
 //   - AnthropicStrategy.matches = type === 'anthropic'.
 //   - OpenAiStrategy.matches    = type === 'openai' || 'ollama' || 'custom'
-//     (one OpenAI-compatible wire serves openai, ollama, AND custom).
+//     || 'google' (one OpenAI-compatible wire serves openai, ollama, custom,
+//     AND Google Gemini via its /v1beta/openai/ endpoint).
 //   - pick with no match throws the registered-strategy error, surfaced
 //     verbatim as the test route's `error` field.
 //
@@ -36,7 +37,7 @@ func (Factory) For(p AiProvider) (Completer, error) {
 	}
 
 	switch p.Type {
-	case "openai", "ollama", "custom":
+	case "openai", "ollama", "custom", "google":
 		// Node's OpenAiStrategy.matches = openai || ollama || custom: ONE
 		// OpenAI-compatible wire (POST endpoint_url, choices[0].message.content)
 		// serves all three. An ollama-type provider MUST carry an
