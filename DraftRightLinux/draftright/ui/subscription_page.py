@@ -18,6 +18,7 @@ gi.require_version("Adw", "1")
 gi.require_version("Gtk", "4.0")
 from gi.repository import Adw, GLib, Gtk
 
+from draftright import config
 from draftright.models.payment import (
     BankTransferCheckout,
     BillingPeriod,
@@ -25,6 +26,7 @@ from draftright.models.payment import (
     PaymentMethodKind,
     QrCheckout,
 )
+from draftright.models.subscription import SubscriptionStatus
 from draftright.services.api_client import APIError
 from draftright.services.payment_service import (
     PaymentService,
@@ -97,16 +99,17 @@ class SubscriptionPage(Adw.PreferencesPage, PaymentSheetPresenter):
     def _apply(self, sub: dict, methods: list[PaymentMethodKind]) -> bool:
         plan = sub.get("plan") if isinstance(sub.get("plan"), dict) else {}
         plan_name = plan.get("name", "Free")
-        billing = (plan.get("billing_period") or "none").lower()
-        is_free = billing in ("", "none")
-        status = sub.get("status", "active")
+        billing = BillingPeriod.from_wire(plan.get("billing_period"))
+        is_free = billing is None
+        status = SubscriptionStatus.from_wire(str(sub.get("status", "")))
         usage = sub.get("usage_today", 0)
-        daily_limit = plan.get("daily_limit", 10)
+        daily_limit = plan.get("daily_limit", config.DEFAULT_DAILY_LIMIT)
 
+        billing_label = billing.display_name if billing is not None else "Free"
         text = (
             f"Plan: {plan_name}\n"
-            f"Billing: {_billing_label(billing)}\n"
-            f"Status: {_status_label(status)}\n"
+            f"Billing: {billing_label}\n"
+            f"Status: {status.display_name}\n"
             f"Usage today: {usage} / {daily_limit}"
         )
         self._set_info_text(text)
@@ -285,23 +288,3 @@ class SubscriptionPage(Adw.PreferencesPage, PaymentSheetPresenter):
         # Re-use the info label since we don't have a Toast container here.
         self._set_info_text(f"Error: {message}")
         return False
-
-
-def _billing_label(b: str) -> str:
-    if b in ("", "none"):
-        return "Free"
-    if b == "monthly":
-        return "Monthly"
-    if b == "yearly":
-        return "Yearly"
-    return b
-
-
-def _status_label(s: str) -> str:
-    if s == "active":
-        return "Active"
-    if s == "expired":
-        return "Expired"
-    if s == "cancelled":
-        return "Cancelled"
-    return s

@@ -9,6 +9,9 @@ import threading
 from typing import Callable, Optional
 import requests
 
+from draftright import config
+from draftright.models.health import HealthStatus
+
 
 class APIError(Exception):
     """Raised when an API call fails."""
@@ -21,9 +24,9 @@ class APIError(Exception):
 class APIClient:
     """Thin wrapper around the DraftRight REST API."""
 
-    TIMEOUT = 30  # seconds
+    TIMEOUT = config.API_TIMEOUT  # seconds
 
-    def __init__(self, backend_url: str = "https://api.draftright.info"):
+    def __init__(self, backend_url: str = config.DEFAULT_BACKEND_URL):
         self._base_url = backend_url.rstrip("/")
         self._token: str | None = None
         self._lock = threading.Lock()
@@ -232,39 +235,39 @@ class APIClient:
             raise APIError("Backend did not return a portal URL")
         return str(url)
 
-    def check_health(self) -> str:
-        """GET /health then /auth/me — returns 'connected', 'not_logged_in', 'offline', or 'wrong_server'."""
+    def check_health(self) -> HealthStatus:
+        """GET /health then /auth/me — returns a :class:`HealthStatus`."""
         # Step 1: Check /health for app identity
         try:
             resp = requests.get(
                 self._url("/health"),
                 headers={"Accept": "application/json"},
-                timeout=5,
+                timeout=config.HEALTH_TIMEOUT,
             )
             if resp.status_code != 200:
-                return "offline"
+                return HealthStatus.OFFLINE
             body = resp.json()
             if body.get("app") != "draftright":
-                return "wrong_server"
+                return HealthStatus.WRONG_SERVER
             # Apply admin-controlled log verbosity once we've confirmed this is
             # really a DraftRight backend. Older backends omit the field.
             from draftright.services.logger import set_min_level_from_server
             set_min_level_from_server(body.get("client_log_level"))
         except Exception:
-            return "offline"
+            return HealthStatus.OFFLINE
 
         # Step 2: Check /auth/me for login state
         try:
             resp = requests.get(
                 self._url("/auth/me"),
                 headers=self._headers(auth=True),
-                timeout=5,
+                timeout=config.HEALTH_TIMEOUT,
             )
             if resp.status_code == 200:
-                return "connected"
+                return HealthStatus.CONNECTED
             elif resp.status_code == 401:
-                return "not_logged_in"
+                return HealthStatus.NOT_LOGGED_IN
             else:
-                return "offline"
+                return HealthStatus.OFFLINE
         except Exception:
-            return "offline"
+            return HealthStatus.OFFLINE

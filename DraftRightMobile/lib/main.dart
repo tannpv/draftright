@@ -18,6 +18,7 @@ import 'package:draftright_mobile/services/deep_link_service.dart';
 import 'package:draftright_mobile/services/share_service.dart';
 import 'package:draftright_mobile/services/error_reporter.dart';
 import 'package:draftright_mobile/widgets/error_notice_overlay.dart';
+import 'package:draftright_mobile/widgets/floating_report_bug_button.dart';
 
 // Desktop imports — only compiled on desktop platforms
 import 'package:draftright_mobile/desktop/desktop_app.dart'
@@ -284,8 +285,13 @@ class DraftRightApp extends StatelessWidget {
               seedColor: Colors.blue, brightness: Brightness.dark),
           useMaterial3: true,
         ),
-        builder: (ctx, child) =>
-            ErrorNoticeOverlay(child: child ?? const SizedBox()),
+        // Both overlays ride above every route from here (under MultiProvider,
+        // so the report sheet can read AuthService). ErrorNoticeOverlay owns
+        // the ScaffoldMessenger; the floating report button nests inside it so
+        // a tap opens the same report sheet from anywhere in the app.
+        builder: (ctx, child) => ErrorNoticeOverlay(
+          child: FloatingReportBugButton(child: child ?? const SizedBox()),
+        ),
         home: const HomeScreen(),
       ),
     );

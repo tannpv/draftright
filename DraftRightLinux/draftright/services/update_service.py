@@ -12,9 +12,11 @@ import time
 from urllib.request import urlopen, urlretrieve, Request
 from urllib.error import URLError
 
+from draftright import config
+
 logger = logging.getLogger(__name__)
 
-CHECK_INTERVAL = 86400  # 24 hours
+CHECK_INTERVAL = config.UPDATE_CHECK_INTERVAL
 
 
 def _sha256_of(path: str) -> str:
@@ -60,7 +62,7 @@ class UpdateService:
         try:
             url = f"{self._backend_url}/updates/latest?platform=linux"
             req = Request(url, headers={"Accept": "application/json"})
-            with urlopen(req, timeout=10) as resp:
+            with urlopen(req, timeout=config.UPDATE_METADATA_TIMEOUT) as resp:
                 data = json.loads(resp.read().decode())
         except (URLError, json.JSONDecodeError, OSError) as exc:
             logger.debug("What's New fetch failed: %s", exc)
@@ -118,10 +120,10 @@ class UpdateService:
 
             # Download with progress
             req = Request(info.linux_url)
-            with urlopen(req, timeout=60) as resp:
+            with urlopen(req, timeout=config.UPDATE_DOWNLOAD_TIMEOUT) as resp:
                 total = int(resp.headers.get("Content-Length", 0))
                 downloaded = 0
-                block_size = 8192
+                block_size = config.DOWNLOAD_BLOCK_SIZE
                 with open(temp_path, "wb") as f:
                     while True:
                         chunk = resp.read(block_size)
@@ -187,7 +189,7 @@ class UpdateService:
         try:
             url = f"{self._backend_url}/updates/latest"
             req = Request(url, headers={"Accept": "application/json"})
-            with urlopen(req, timeout=10) as resp:
+            with urlopen(req, timeout=config.UPDATE_METADATA_TIMEOUT) as resp:
                 data = json.loads(resp.read().decode())
                 return UpdateInfo(data)
         except (URLError, json.JSONDecodeError, OSError) as exc:

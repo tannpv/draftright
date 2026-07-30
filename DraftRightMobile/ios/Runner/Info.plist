@@ -8,6 +8,10 @@
 	<string>Used to attach a screenshot when reporting a bug.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Used to attach a screenshot when reporting a bug.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>DraftRight uses the microphone for hold-to-talk dictation on the keyboard.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>DraftRight transcribes your dictation so you can speak instead of type.</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>CFBundleDevelopmentRegion</key>

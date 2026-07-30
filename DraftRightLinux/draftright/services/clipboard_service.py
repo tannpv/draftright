@@ -9,34 +9,16 @@ typical Linux desktop already ships.
 from __future__ import annotations
 
 import logging
-import os
-import shutil
 import subprocess
 import time
 
+from draftright import config
+from draftright.helpers.display_server import is_wayland
+from draftright.helpers.system_input import TextInputSimulator, has_command
+
 log = logging.getLogger(__name__)
 
-_TIMEOUT = 3  # seconds for clipboard tool calls
-
-
-# ---------------------------------------------------------------------------
-# Display-server detection
-# ---------------------------------------------------------------------------
-
-def _is_wayland() -> bool:
-    if os.environ.get("GDK_BACKEND", "").lower() == "wayland":
-        return True
-    if os.environ.get("WAYLAND_DISPLAY"):
-        return True
-    return False
-
-
-# ---------------------------------------------------------------------------
-# Tool resolution
-# ---------------------------------------------------------------------------
-
-def _has(cmd: str) -> bool:
-    return shutil.which(cmd) is not None
+_TIMEOUT = config.SUBPROCESS_TIMEOUT
 
 
 # ---------------------------------------------------------------------------
@@ -47,7 +29,8 @@ class ClipboardService:
     """Read and write the X11/Wayland clipboard and primary selection."""
 
     def __init__(self) -> None:
-        self._wayland = _is_wayland()
+        self._wayland = is_wayland()
+        self._sim = TextInputSimulator()
 
     # ------------------------------------------------------------------
     # Public API
@@ -78,9 +61,9 @@ class ClipboardService:
         """Read the CLIPBOARD selection."""
         if self._wayland:
             return self._run_read(["wl-paste", "--no-newline"])
-        if _has("xsel"):
+        if has_command("xsel"):
             return self._run_read(["xsel", "--clipboard", "--output"])
-        if _has("xclip"):
+        if has_command("xclip"):
             return self._run_read(["xclip", "-selection", "clipboard", "-o"])
         log.warning("No clipboard tool found (need xsel, xclip, or wl-paste).")
         return ""
@@ -89,12 +72,25 @@ class ClipboardService:
         """Write *text* to the CLIPBOARD selection."""
         if self._wayland:
             self._run_write(["wl-copy"], text)
-        elif _has("xsel"):
+        elif has_command("xsel"):
             self._run_write(["xsel", "--clipboard", "--input"], text)
-        elif _has("xclip"):
+        elif has_command("xclip"):
             self._run_write(["xclip", "-selection", "clipboard"], text)
         else:
             log.warning("No clipboard tool found (need xsel, xclip, or wl-copy).")
+
+    def inject_text(self, text: str) -> None:
+        """Replace the current selection in the source app with *text*.
+
+        Copies *text* to the clipboard, lets it settle, then simulates a
+        Ctrl+V paste (falling back to typing for short strings). This is what
+        the rewrite panel's "Replace" action calls.
+        """
+        self.set_clipboard(text)
+        time.sleep(0.1)  # 100 ms for the clipboard to settle before paste
+        if not self._sim.paste():
+            # No paste tool → last-resort type (short strings only).
+            self._sim.type_text(text)
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -104,29 +100,15 @@ class ClipboardService:
         """Read the PRIMARY selection (highlighted text)."""
         if self._wayland:
             return self._run_read(["wl-paste", "-p", "--no-newline"])
-        if _has("xsel"):
+        if has_command("xsel"):
             return self._run_read(["xsel", "--primary", "--output"])
-        if _has("xclip"):
+        if has_command("xclip"):
             return self._run_read(["xclip", "-selection", "primary", "-o"])
         return ""
 
     def _simulate_copy(self) -> None:
         """Simulate Ctrl+C to copy the current selection to CLIPBOARD."""
-        if self._wayland:
-            if _has("wtype"):
-                subprocess.run(
-                    ["wtype", "-M", "ctrl", "-P", "c", "-m", "ctrl"],
-                    timeout=_TIMEOUT,
-                    check=False,
-                )
-                return
-        # X11 or Wayland fallback via xdotool
-        if _has("xdotool"):
-            subprocess.run(
-                ["xdotool", "key", "--clearmodifiers", "ctrl+c"],
-                timeout=_TIMEOUT,
-                check=False,
-            )
+        self._sim.copy()
 
     @staticmethod
     def _run_read(cmd: list[str]) -> str:

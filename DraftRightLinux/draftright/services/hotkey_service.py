@@ -9,25 +9,15 @@ Wayland — xdg-desktop-portal GlobalShortcuts via ``gi.repository.Xdp``
 from __future__ import annotations
 
 import logging
-import os
 import subprocess
 import threading
 from typing import Callable
 
 from gi.repository import GLib  # type: ignore[attr-defined]
 
+from draftright.helpers.display_server import is_wayland
+
 log = logging.getLogger(__name__)
-
-# ---------------------------------------------------------------------------
-# Display-server detection
-# ---------------------------------------------------------------------------
-
-def _is_wayland() -> bool:
-    if os.environ.get("GDK_BACKEND", "").lower() == "wayland":
-        return True
-    if os.environ.get("WAYLAND_DISPLAY"):
-        return True
-    return False
 
 
 # ---------------------------------------------------------------------------
@@ -252,7 +242,7 @@ class HotkeyService:
         """
         self.stop()
 
-        if _is_wayland():
+        if is_wayland():
             log.info("Wayland detected — using Wayland hotkey listener.")
             self._listener = _WaylandListener()
         else:
