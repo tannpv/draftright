@@ -4,7 +4,14 @@ import os
 
 
 def is_wayland():
-    """Return True if running under Wayland."""
+    """Return True if running under Wayland.
+
+    Honours an explicit ``GDK_BACKEND=wayland`` override in addition to the
+    ``WAYLAND_DISPLAY`` socket, so the clipboard/hotkey/injection paths all
+    agree on the display server from this one place (Rule #1: single source).
+    """
+    if os.environ.get('GDK_BACKEND', '').lower() == 'wayland':
+        return True
     return bool(os.environ.get('WAYLAND_DISPLAY'))
 
 

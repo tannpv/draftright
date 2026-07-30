@@ -9,6 +9,8 @@ import threading
 from typing import Callable, Optional
 import requests
 
+from draftright import config
+
 
 class APIError(Exception):
     """Raised when an API call fails."""
@@ -21,9 +23,9 @@ class APIError(Exception):
 class APIClient:
     """Thin wrapper around the DraftRight REST API."""
 
-    TIMEOUT = 30  # seconds
+    TIMEOUT = config.API_TIMEOUT  # seconds
 
-    def __init__(self, backend_url: str = "https://api.draftright.info"):
+    def __init__(self, backend_url: str = config.DEFAULT_BACKEND_URL):
         self._base_url = backend_url.rstrip("/")
         self._token: str | None = None
         self._lock = threading.Lock()

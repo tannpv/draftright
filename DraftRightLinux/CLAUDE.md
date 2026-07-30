@@ -101,6 +101,22 @@ sudo checkinstall --pkgname=draftright --pkgversion=1.0.0 \
 | Muted | #94a3b8 |
 | Success green | #10b981 |
 
+## Status & Backlog (as of 2026-07-26 — EPIC #93)
+
+**⚠️ ZERO runtime verification.** Phase A+B code merged (`2d8aba4b`) and compiles + 7 unit tests pass, but the rewrite loop has NEVER executed — no X11/GTK host (dev host = macOS). Get a Linux host and smoke `python -m draftright` before closing #94.
+
+**Done + verified (closed):** Phase B Rule#1 cleanup #95 · sign-out crash #16.
+
+**Open (11 under #93):**
+- Features/parity: #96 One-Click mode · #97 Google login · #98 Report-a-Bug · #100 KeepAlive agent (all present on Mac+Win)
+- Blocker: #99 Wayland global hotkey — currently DEAD (not "best-effort"): `_WaylandListener` never fires the callback; X11-only in practice. Ubuntu22+/Fedora default Wayland.
+- Runtime bugs: #101 blank main window · #102 CSS provider leak (RewritePanel re-adds per open) · #103 cursor-position no-op · #105 verify `Gdk.Clipboard.set(str)`
+- Rule#1: #104 PANEL_CSS hardcoded hex → tokens · #106 enum dispatch for billing/status/health raw strings
+
+**Cross-platform (Win+Linux, not under #93):** #107 Grammar-check + Diff view (macOS-only) · #108 Rewrite cache (macOS-only). `models/payment.py` is the Rule#1 reference (enum + `from_wire` + `display_name`) — bring UI/services up to it.
+
+**Partial:** #22 desktop updater — Linux DONE (version 2.4.1, 401 refresh wired, sha256 integrity in `update_service.py`); macOS `UpdateService.swift` still has NO integrity check → stays open.
+
 ## Key Patterns
 
 - All UI is built programmatically in Python -- no .ui XML files

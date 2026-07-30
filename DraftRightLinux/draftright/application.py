@@ -13,17 +13,20 @@ import time
 import logging
 from pathlib import Path
 
+from draftright import config
 from draftright.__version__ import __version__
 from draftright.services.logger import setup_logging
 from draftright.services.update_service import UpdateService
 from draftright.services import error_reporter
 from draftright.services.api_client import APIClient
 from draftright.services.auth_service import AuthService
+from draftright.services.clipboard_service import ClipboardService
+from draftright.services.hotkey_service import HotkeyService
 from draftright.services.settings_service import SettingsService
 
 # Wire crash reporting as early as possible — sys.excepthook covers
 # anything that throws after this point.
-error_reporter.configure(backend_url="https://api.draftright.info")
+error_reporter.configure(backend_url=config.default_backend_url())
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +52,7 @@ class DraftRightApplication(Adw.Application):
         self._backend_status = "offline"
         self._is_rewriting = False
         self._tray_icon = None
+        self._settings_window = None
         self._last_auto_recovery = 0.0
         self._update_service = None
 
@@ -71,6 +75,12 @@ class DraftRightApplication(Adw.Application):
             self.api_client = APIClient(self.settings_service.backend_url)
         if self.auth_service is None:
             self.auth_service = AuthService(self.api_client)
+        # Input services back the core rewrite loop: grab the selection on
+        # hotkey, inject the result back. Idempotent on re-activate.
+        if self.clipboard_service is None:
+            self.clipboard_service = ClipboardService()
+        if self.hotkey_service is None:
+            self.hotkey_service = HotkeyService()
         # Let the API client recover from a 401 by refreshing the session,
         # mirroring the macOS / Windows / mobile behaviour (issue #22).
         self.api_client.on_unauthorized = self.auth_service.refresh_session
@@ -95,12 +105,16 @@ class DraftRightApplication(Adw.Application):
             win.set_title("DraftRight")
         win.present()
 
-        # Start health check — immediate first check, then every 30 seconds
+        # Start health check — immediate first check, then on a fixed interval.
         GLib.timeout_add_seconds(0, self._trigger_health_check)
-        GLib.timeout_add_seconds(30, self._trigger_health_check)
+        GLib.timeout_add_seconds(config.HEALTH_CHECK_INTERVAL, self._trigger_health_check)
 
-        # Start update check — 10 seconds after launch
-        backend_url = self.settings_service.backend_url if self.settings_service else "http://localhost:3000"
+        # Start update check — shortly after launch
+        backend_url = (
+            self.settings_service.backend_url
+            if self.settings_service
+            else config.LOCALHOST_BACKEND_URL
+        )
         self._update_service = UpdateService(__version__, backend_url)
         GLib.timeout_add_seconds(10, self._trigger_update_check)
 
@@ -129,10 +143,20 @@ class DraftRightApplication(Adw.Application):
         self._tray_icon = TrayIcon(self)
 
     def _register_hotkey(self):
-        """Register global hotkey for text capture."""
-        # Will be implemented by HotkeyService using
-        # X11 (python-xlib) or Wayland (portal) bindings.
-        pass
+        """Register the global hotkey for text capture.
+
+        Fully wired on X11 (python-xlib XGrabKey); Wayland uses HotkeyService's
+        best-effort fallback until the portal path lands (#99). The callback is
+        marshalled onto the GTK main thread by HotkeyService.
+        """
+        if self.hotkey_service is None or self.settings_service is None:
+            return
+        keystring = self.settings_service.hotkey
+        try:
+            self.hotkey_service.start(keystring, self.on_hotkey_pressed)
+            logger.info("Global hotkey registered: %s", keystring)
+        except Exception as exc:
+            logger.warning("Failed to register hotkey %s: %s", keystring, exc)
 
     def _restore_session(self):
         """Restore saved authentication session."""
@@ -157,13 +181,33 @@ class DraftRightApplication(Adw.Application):
         Args:
             text: The selected text to rewrite.
         """
-        # Will instantiate and present RewritePanel UI
-        print(f"[DraftRight] Rewrite panel requested for {len(text)} chars")
+        from draftright.ui.rewrite_panel import RewritePanel
+
+        if not text:
+            return
+        panel = RewritePanel(self)
+        panel.show_with_text(text)
 
     def show_settings(self):
         """Open the settings window."""
-        # Will instantiate and present SettingsWindow UI
-        print("[DraftRight] Settings window requested")
+        from draftright.ui.settings_window import SettingsWindow
+
+        # Reuse an already-open settings window instead of stacking duplicates.
+        if getattr(self, "_settings_window", None) is not None:
+            try:
+                self._settings_window.present()
+                return
+            except Exception:
+                self._settings_window = None
+        window = SettingsWindow(self)
+        window.connect("close-request", self._on_settings_closed)
+        self._settings_window = window
+        window.present()
+
+    def _on_settings_closed(self, _window) -> bool:
+        """Drop the cached settings window so the next open builds fresh."""
+        self._settings_window = None
+        return False  # allow the default close
 
     def sign_out(self):
         """Clear auth session and notify the user."""
@@ -177,7 +221,7 @@ class DraftRightApplication(Adw.Application):
     def quit_app(self):
         """Clean up resources and quit the application."""
         if self.hotkey_service:
-            self.hotkey_service.unregister_all()
+            self.hotkey_service.stop()
         self.quit()
 
     def _trigger_health_check(self) -> bool:
@@ -215,7 +259,7 @@ class DraftRightApplication(Adw.Application):
     def _attempt_auto_recovery(self) -> None:
         """Run start-server.sh to bring up Docker services. Throttled to once per 2 minutes."""
         now = time.monotonic()
-        if now - self._last_auto_recovery < 120:
+        if now - self._last_auto_recovery < config.AUTO_RECOVERY_COOLDOWN:
             return
         self._last_auto_recovery = now
 
