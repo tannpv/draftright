@@ -17,7 +17,9 @@ from draftright.models.tone import Tone
 from draftright.models.payment import BillingPeriod
 from draftright.models.subscription import SubscriptionStatus
 from draftright.models.health import HealthStatus
+from draftright.models.hotkey import Hotkey, Modifier
 from draftright.models.tray import TrayAction, TrayCommand
+from draftright.services.hotkey_service import PortalResponse
 from draftright.services import settings_service as settings_service_mod
 from draftright.services.auth_service import AuthService
 from draftright.services.settings_service import SettingsService
@@ -259,6 +261,71 @@ class TrayContractTest(unittest.TestCase):
                 f"TrayAction.{action.name}:", text,
                 f"application.py has no handler entry for TrayAction.{action.name}",
             )
+
+
+class HotkeyModelTest(unittest.TestCase):
+    """#99: one parser, two renderings (X11 mask names vs portal trigger)."""
+
+    def test_parses_and_renders_for_both_backends(self):
+        hotkey = Hotkey.parse("Ctrl+Shift+R")
+        self.assertEqual(hotkey.modifiers, (Modifier.CTRL, Modifier.SHIFT))
+        self.assertEqual(hotkey.key, "R")
+        # X11 wants mask attribute names; the portal wants its own spelling
+        # and a lower-case key.
+        self.assertEqual(hotkey.x11_modifiers, ["control", "shift"])
+        self.assertEqual(hotkey.to_portal_trigger(), "CTRL+SHIFT+r")
+        self.assertEqual(hotkey.display_name, "Ctrl+Shift+R")
+
+    def test_modifier_aliases_from_stored_settings(self):
+        # Settings and portal triggers use several spellings for the same key.
+        for alias in ("super", "mod4", "logo", "meta", "win", "cmd"):
+            self.assertIs(Modifier.from_wire(alias), Modifier.SUPER)
+        self.assertIs(Modifier.from_wire("control"), Modifier.CTRL)
+        self.assertIs(Modifier.from_wire("mod1"), Modifier.ALT)
+        self.assertIsNone(Modifier.from_wire("hyper"))
+
+    def test_every_modifier_renders_for_every_backend(self):
+        for modifier in Modifier:
+            self.assertTrue(modifier.x11_name)
+            self.assertTrue(modifier.portal_name)
+            self.assertTrue(modifier.display_name)
+            self.assertIs(Modifier.from_wire(modifier.value), modifier)
+
+    def test_unknown_modifier_is_dropped_not_fatal(self):
+        # A malformed stored hotkey must not stop the app from starting.
+        hotkey = Hotkey.parse("Ctrl+Bogus+K")
+        self.assertEqual(hotkey.modifiers, (Modifier.CTRL,))
+        self.assertEqual(hotkey.key, "K")
+
+    def test_duplicate_modifiers_collapse(self):
+        self.assertEqual(
+            Hotkey.parse("Ctrl+Control+R").modifiers, (Modifier.CTRL,)
+        )
+
+    def test_empty_keystring_raises(self):
+        with self.assertRaises(ValueError):
+            Hotkey.parse("   ")
+
+    def test_multichar_key_keeps_its_case(self):
+        # Named keys (space, F5) are not single letters and must not be
+        # lower-cased into something XKB cannot resolve.
+        self.assertEqual(Hotkey.parse("Ctrl+F5").to_portal_trigger(), "CTRL+F5")
+        self.assertEqual(
+            Hotkey.parse("Super+Alt+space").to_portal_trigger(), "LOGO+ALT+space"
+        )
+
+    def test_default_hotkey_is_parseable(self):
+        hotkey = Hotkey.parse(config.DEFAULT_HOTKEY)
+        self.assertTrue(hotkey.to_portal_trigger())
+        self.assertTrue(hotkey.x11_modifiers)
+
+    def test_portal_response_from_wire(self):
+        self.assertIs(PortalResponse.from_wire(0), PortalResponse.SUCCESS)
+        self.assertIs(PortalResponse.from_wire(1), PortalResponse.CANCELLED)
+        # Unknown codes must not raise — degrade to ENDED.
+        self.assertIs(PortalResponse.from_wire(99), PortalResponse.ENDED)
+        for response in PortalResponse:
+            self.assertTrue(response.display_name)
 
 
 if __name__ == "__main__":

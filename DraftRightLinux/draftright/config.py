@@ -54,6 +54,17 @@ TRAY_SHUTDOWN_TIMEOUT = 2    # seconds to wait for the helper at each escalation
 # ── Input / hotkey ───────────────────────────────────────────────────────────
 DEFAULT_HOTKEY = "Ctrl+Shift+R"
 
+# ── xdg-desktop-portal (Wayland global shortcuts, #99) ───────────────────────
+PORTAL_BUS_NAME = "org.freedesktop.portal.Desktop"
+PORTAL_OBJECT_PATH = "/org/freedesktop/portal/desktop"
+PORTAL_GLOBAL_SHORTCUTS_IFACE = "org.freedesktop.portal.GlobalShortcuts"
+PORTAL_REQUEST_IFACE = "org.freedesktop.portal.Request"
+PORTAL_SESSION_IFACE = "org.freedesktop.portal.Session"
+# Stable id for our one shortcut; the compositor keys its saved binding on it.
+PORTAL_SHORTCUT_ID = "rewrite-selection"
+PORTAL_SHORTCUT_DESCRIPTION = "Rewrite the selected text with DraftRight"
+PORTAL_CALL_TIMEOUT_MS = 30000   # portal prompts are user-interactive; allow time
+
 # ── HTTP timeouts (seconds) ──────────────────────────────────────────────────
 API_TIMEOUT = 30          # /rewrite, /auth, health
 HEALTH_TIMEOUT = 5        # /health + /auth/me probe (kept short so the tray stays responsive)

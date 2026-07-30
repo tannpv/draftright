@@ -80,6 +80,12 @@ class DraftRightApplication(Adw.Application):
         self._tray_icon = None
         self._settings_window = None
         self._status_label = None
+        self._hotkey_label = None
+        # None + not resolved = still asking the portal; None + resolved =
+        # the compositor refused.  Distinguishing the two keeps the UI from
+        # saying "declined" while the request is still in flight.
+        self._active_trigger = None
+        self._hotkey_resolved = False
         self._last_auto_recovery = 0.0
         self._update_service = None
 
@@ -178,25 +184,11 @@ class DraftRightApplication(Adw.Application):
         self._status_label.set_margin_top(16)
         box.append(self._status_label)
 
-        keystring = self.settings_service.hotkey if self.settings_service else ""
-        hotkey_label = Gtk.Label(label=f"Select text anywhere, then press {keystring}")
-        hotkey_label.add_css_class("dim-label")
-        hotkey_label.set_wrap(True)
-        hotkey_label.set_justify(Gtk.Justification.CENTER)
-        box.append(hotkey_label)
-
-        # Be honest rather than let the user press a shortcut that cannot
-        # fire: the Wayland listener is not implemented yet (#99).
-        if is_wayland():
-            warning = Gtk.Label(
-                label="Global shortcuts aren't supported on Wayland yet — "
-                      "use the button below instead."
-            )
-            warning.add_css_class("dim-label")
-            warning.add_css_class("warning")
-            warning.set_wrap(True)
-            warning.set_justify(Gtk.Justification.CENTER)
-            box.append(warning)
+        self._hotkey_label = Gtk.Label(label=self._hotkey_hint())
+        self._hotkey_label.add_css_class("dim-label")
+        self._hotkey_label.set_wrap(True)
+        self._hotkey_label.set_justify(Gtk.Justification.CENTER)
+        box.append(self._hotkey_label)
 
         rewrite_btn = Gtk.Button(label="Rewrite clipboard text")
         rewrite_btn.add_css_class("suggested-action")
@@ -211,6 +203,28 @@ class DraftRightApplication(Adw.Application):
         box.append(settings_btn)
 
         return box
+
+    def _hotkey_hint(self) -> str:
+        """Describe the capture shortcut honestly for the current session.
+
+        On Wayland the compositor owns the binding: it may prompt, refuse, or
+        substitute a different trigger, so report what it granted rather than
+        what was requested (#99).
+        """
+        keystring = self.settings_service.hotkey if self.settings_service else ""
+        if not is_wayland():
+            return f"Select text anywhere, then press {keystring}"
+        if self._active_trigger:
+            # The portal hands back a localised, human-readable description
+            # (GNOME: "Press <Shift><Control>r"), so lead in neutrally rather
+            # than prefixing another "press".
+            return f"Select text anywhere — {self._active_trigger}"
+        if self._hotkey_resolved:
+            return (
+                "Your desktop declined the global shortcut — "
+                "use the button below, or grant it in system settings."
+            )
+        return f"Requesting the global shortcut ({keystring}) from your desktop…"
 
     def _on_rewrite_clipboard_clicked(self, _button):
         """Rewrite whatever is on the clipboard — the Wayland-safe entry point."""
@@ -261,10 +275,28 @@ class DraftRightApplication(Adw.Application):
             return
         keystring = self.settings_service.hotkey
         try:
+            # Wayland binding is asynchronous and the compositor may refuse or
+            # remap it, so success is reported by the callback — not here.
+            # Logging "registered" at this point was how the old build claimed
+            # a working hotkey while the listener could never fire (#99).
+            self.hotkey_service.on_trigger_changed = self._on_hotkey_trigger_changed
             self.hotkey_service.start(keystring, self.on_hotkey_pressed)
-            logger.info("Global hotkey registered: %s", keystring)
+            logger.info("Requested global hotkey: %s", keystring)
         except Exception as exc:
             logger.warning("Failed to register hotkey %s: %s", keystring, exc)
+
+    def _on_hotkey_trigger_changed(self, trigger):
+        """Reflect the trigger the compositor actually bound (Wayland, #99)."""
+        if trigger:
+            logger.info("Global hotkey is live: %s", trigger)
+        else:
+            logger.warning(
+                "No global shortcut is bound — the tray and window still work."
+            )
+        self._active_trigger = trigger
+        self._hotkey_resolved = True
+        if self._hotkey_label is not None:
+            self._hotkey_label.set_text(self._hotkey_hint())
 
     def _restore_session(self):
         """Restore saved authentication session."""

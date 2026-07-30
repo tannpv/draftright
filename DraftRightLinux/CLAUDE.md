@@ -101,17 +101,27 @@ sudo checkinstall --pkgname=draftright --pkgversion=1.0.0 \
 | Muted | #94a3b8 |
 | Success green | #10b981 |
 
-## Status & Backlog (as of 2026-07-26 — EPIC #93)
+## Status & Backlog (as of 2026-07-30 — EPIC #93)
 
-**⚠️ ZERO runtime verification.** Phase A+B code merged (`2d8aba4b`) and compiles + 7 unit tests pass, but the rewrite loop has NEVER executed — no X11/GTK host (dev host = macOS). Get a Linux host and smoke `python -m draftright` before closing #94.
+**First runtime verification done (2026-07-30).** The app has now been smoke-run on a real Linux host (GNOME 49 / Wayland + XWayland). That first run exposed seven crash-level defects that compiled and passed unit tests — see "Fixed by runtime verification" below. **X11 is still unverified**: the dev host is Wayland, so `_X11Listener` has never been exercised.
 
-**Done + verified (closed):** Phase B Rule#1 cleanup #95 · sign-out crash #16.
+**Done + verified (closed):** Phase B Rule#1 cleanup #95 · sign-out crash #16 · **#99 Wayland global hotkey** · **#101 blank main window**.
 
-**Open (11 under #93):**
+**Fixed by runtime verification (2026-07-30):** Settings could not open at all (`SubscriptionPage` inherited a `Protocol` → metaclass conflict at import) · `auth_service.is_authenticated`/`get_user` missing · `settings_service.get`/`set` missing · `register()` args transposed (name sent as email) · `feedback_service` imported a nonexistent singleton · `SettingsService` never `load()`ed · tray dead on every GTK4 system.
+
+**Open (7 under #93):**
 - Features/parity: #96 One-Click mode · #97 Google login · #98 Report-a-Bug · #100 KeepAlive agent (all present on Mac+Win)
-- Blocker: #99 Wayland global hotkey — currently DEAD (not "best-effort"): `_WaylandListener` never fires the callback; X11-only in practice. Ubuntu22+/Fedora default Wayland.
-- Runtime bugs: #101 blank main window · #102 CSS provider leak (RewritePanel re-adds per open) · #103 cursor-position no-op · #105 verify `Gdk.Clipboard.set(str)`
-- Rule#1: #104 PANEL_CSS hardcoded hex → tokens · #106 enum dispatch for billing/status/health raw strings
+- Runtime bugs: #103 cursor-position no-op · #105 verify `Gdk.Clipboard.set(str)`
+- Rule#1: #104 PANEL_CSS hardcoded hex → tokens
+
+### Wayland global shortcut (#99) — operational requirement
+
+The hotkey uses `org.freedesktop.portal.GlobalShortcuts`. The portal **refuses any caller it cannot identify** (`NotAllowed: An app id is required`), and for an unsandboxed app it derives that id from the systemd scope. Consequences:
+
+- A bare `python3 -m draftright` from a terminal gets **no hotkey**. Use `./draftright-launch.sh`, which wraps the app in an `app-gnome-com.draftright.app-<pid>.scope`.
+- `data/com.draftright.app.desktop` must be installed to `~/.local/share/applications/` (the launcher does this). Without it the app id will not resolve.
+- The compositor owns the final binding and may substitute a different trigger, so the app displays what `BindShortcuts`/`ListShortcuts` report back — never the requested combination.
+- Under a nested `dbus-run-session` the GNOME portal backend cannot reach Mutter, so the handshake stalls. Test the hotkey on the **real** session bus.
 
 **Cross-platform (Win+Linux, not under #93):** #107 Grammar-check + Diff view (macOS-only) · #108 Rewrite cache (macOS-only). `models/payment.py` is the Rule#1 reference (enum + `from_wire` + `display_name`) — bring UI/services up to it.
 
