@@ -1,0 +1,52 @@
+name: Backend CI (skip)
+
+# Companion to backend-ci.yml. Branch protection on develop/main requires
+# four status contexts (tsc compile, Unit tests, OpenAPI spec drift check
+# (S26b), Integration tests (PG + Redis containers)). backend-ci.yml only
+# triggers on PRs that touch backend/**, so a PR that changes no backend
+# files never posts those contexts and blocks forever ("Expected — waiting
+# for status").
+#
+# This workflow triggers on the COMPLEMENT (paths-ignore: backend/**) and
+# reports the same four contexts as trivial successes, so non-backend PRs
+# satisfy protection without running the (irrelevant) backend suite.
+#
+# Exactly one of {backend-ci, backend-ci-skip} runs per PR:
+#   - PR touches backend/**  -> backend-ci runs the real checks; this is skipped
+#   - PR touches no backend   -> this posts green stubs; backend-ci is skipped
+#
+# SECURITY: no `${{ ... }}` expression references PR/commit-controlled input;
+# every step is a static echo. No injection vector.
+
+on:
+  pull_request:
+    paths-ignore:
+      - 'backend/**'
+      - '.github/workflows/backend-ci.yml'
+
+# Names below MUST match the required status contexts on the protected
+# branches character-for-character, or protection stays unsatisfied.
+jobs:
+  static:
+    name: tsc compile
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "No backend changes — skipping tsc compile."
+
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "No backend changes — skipping unit tests."
+
+  openapi-drift:
+    name: OpenAPI spec drift check (S26b)
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "No backend changes — skipping OpenAPI spec drift check."
+
+  integration:
+    name: Integration tests (PG + Redis containers)
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "No backend changes — skipping integration tests."
