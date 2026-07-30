@@ -11,89 +11,90 @@ from gi.repository import Gdk, Gio, GLib, Gtk, Pango
 from draftright import config
 from draftright.models.tone import Tone
 
-# CSS for the rewrite panel
-PANEL_CSS = """
-.rewrite-panel {
-    background-color: #0f172a;
-    border: 1px solid #334155;
+# CSS for the rewrite panel, built from the shared design tokens in
+# ``config`` (Rule #1: single source — no duplicated hex literals).
+PANEL_CSS = f"""
+.rewrite-panel {{
+    background-color: {config.COLOR_BACKGROUND};
+    border: 1px solid {config.COLOR_BORDER};
     border-radius: 12px;
-}
-.rewrite-header {
-    color: #5d87ff;
+}}
+.rewrite-header {{
+    color: {config.COLOR_BRAND_BLUE};
     font-size: 16px;
     font-weight: bold;
-}
-.input-preview {
-    color: #94a3b8;
+}}
+.input-preview {{
+    color: {config.COLOR_MUTED};
     font-size: 13px;
-}
-.tone-button {
-    background-color: #1e293b;
-    color: #e2e8f0;
-    border: 1px solid #334155;
+}}
+.tone-button {{
+    background-color: {config.COLOR_CARD};
+    color: {config.COLOR_TEXT};
+    border: 1px solid {config.COLOR_BORDER};
     border-radius: 8px;
     padding: 8px 12px;
     font-size: 13px;
     min-height: 40px;
-}
-.tone-button:hover {
-    background-color: #334155;
-}
-.tone-button-selected {
-    background-color: #5d87ff;
-    color: #ffffff;
-    border: 1px solid #5d87ff;
+}}
+.tone-button:hover {{
+    background-color: {config.COLOR_BORDER};
+}}
+.tone-button-selected {{
+    background-color: {config.COLOR_BRAND_BLUE};
+    color: {config.COLOR_WHITE};
+    border: 1px solid {config.COLOR_BRAND_BLUE};
     border-radius: 8px;
     padding: 8px 12px;
     font-size: 13px;
     min-height: 40px;
-}
-.result-area {
-    background-color: #1e293b;
-    color: #e2e8f0;
-    border: 1px solid #334155;
+}}
+.result-area {{
+    background-color: {config.COLOR_CARD};
+    color: {config.COLOR_TEXT};
+    border: 1px solid {config.COLOR_BORDER};
     border-radius: 8px;
     padding: 8px;
     font-size: 14px;
-}
-.btn-primary {
-    background-color: #5d87ff;
-    color: #ffffff;
+}}
+.btn-primary {{
+    background-color: {config.COLOR_BRAND_BLUE};
+    color: {config.COLOR_WHITE};
     border-radius: 8px;
     padding: 8px 16px;
     font-weight: bold;
-}
-.btn-primary:hover {
-    background-color: #4a6fe0;
-}
-.btn-outlined {
+}}
+.btn-primary:hover {{
+    background-color: {config.COLOR_BRAND_BLUE_HOVER};
+}}
+.btn-outlined {{
     background-color: transparent;
-    color: #5d87ff;
-    border: 1px solid #5d87ff;
+    color: {config.COLOR_BRAND_BLUE};
+    border: 1px solid {config.COLOR_BRAND_BLUE};
     border-radius: 8px;
     padding: 8px 16px;
-}
-.btn-outlined:hover {
-    background-color: #1e293b;
-}
-.btn-ghost {
+}}
+.btn-outlined:hover {{
+    background-color: {config.COLOR_CARD};
+}}
+.btn-ghost {{
     background-color: transparent;
-    color: #94a3b8;
+    color: {config.COLOR_MUTED};
     border: none;
     border-radius: 8px;
     padding: 8px 16px;
-}
-.btn-ghost:hover {
-    background-color: #1e293b;
-}
-.error-label {
-    color: #ef4444;
+}}
+.btn-ghost:hover {{
+    background-color: {config.COLOR_CARD};
+}}
+.error-label {{
+    color: {config.COLOR_ERROR};
     font-size: 13px;
-}
-.copied-label {
-    color: #10b981;
+}}
+.copied-label {{
+    color: {config.COLOR_SUCCESS};
     font-size: 13px;
-}
+}}
 """
 
 
@@ -130,15 +131,25 @@ class RewritePanel(Gtk.Window):
         # Build UI
         self._build_ui()
 
+    # A panel is created fresh on every hotkey press; register the CSS
+    # provider on the display only once, or providers accumulate for the
+    # life of the process (one leak per rewrite).  Keyed by display so a
+    # multi-seat / multi-display session still gets styled.
+    _css_loaded_displays: "set" = set()
+
     def _load_css(self):
-        """Load panel-specific CSS."""
+        """Load panel-specific CSS once per display."""
+        display = Gdk.Display.get_default()
+        if display is None or display in RewritePanel._css_loaded_displays:
+            return
         css_provider = Gtk.CssProvider()
         css_provider.load_from_string(PANEL_CSS)
         Gtk.StyleContext.add_provider_for_display(
-            Gdk.Display.get_default(),
+            display,
             css_provider,
             Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
         )
+        RewritePanel._css_loaded_displays.add(display)
 
     def _build_ui(self):
         """Build the panel layout."""

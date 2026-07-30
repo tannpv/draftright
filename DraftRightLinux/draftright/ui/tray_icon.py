@@ -6,6 +6,8 @@ import gi
 gi.require_version("Gtk", "4.0")
 from gi.repository import Gtk
 
+from draftright.models.health import HealthStatus
+
 try:
     gi.require_version('AyatanaAppIndicator3', '0.1')
     from gi.repository import AyatanaAppIndicator3 as AppIndicator3
@@ -145,18 +147,12 @@ class TrayIcon:
         if self.indicator:
             self.indicator.set_icon(icon_name)
 
-    def set_status(self, status: str):
+    def set_status(self, status: HealthStatus):
         """Update the status menu item label.
 
         Args:
-            status: One of 'connected', 'not_logged_in', 'offline', 'wrong_server'.
+            status: The current :class:`HealthStatus`.
         """
         if self._status_item is None:
             return
-        labels = {
-            "connected": "Connected",
-            "not_logged_in": "Not Logged In",
-            "offline": "Offline",
-            "wrong_server": "Wrong Server",
-        }
-        self._status_item.set_label(labels.get(status, "Offline"))
+        self._status_item.set_label(status.display_name)
