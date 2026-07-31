@@ -579,6 +579,55 @@ class GoogleOAuthTest(unittest.TestCase):
             self.assertIn("google", url)
 
 
+class TranslateLanguageTest(unittest.TestCase):
+    """The Translate tone must honour the user's chosen language.
+
+    Windows sends Settings.TranslateLanguage on every rewrite; Linux sent
+    nothing, so Translate ignored the setting entirely.
+    """
+
+    def test_only_translate_depends_on_the_language(self):
+        self.assertTrue(Tone.TRANSLATE.uses_target_language)
+        for tone in Tone:
+            if tone is not Tone.TRANSLATE:
+                self.assertFalse(tone.uses_target_language, tone)
+
+    def test_from_api_value_round_trips(self):
+        for tone in Tone:
+            self.assertIs(Tone.from_api_value(tone.api_value), tone)
+        self.assertIsNone(Tone.from_api_value("no_such_tone"))
+
+    def test_cache_separates_languages_for_translate(self):
+        # Without this, switching language serves the previous language's
+        # translation from cache.
+        cache = RewriteCache()
+        cache.set("hello", "translate", "Xin chào", language="Vietnamese")
+        self.assertEqual(cache.get("hello", "translate", "Vietnamese"), "Xin chào")
+        self.assertIsNone(cache.get("hello", "translate", "Japanese"))
+
+    def test_cache_key_unchanged_when_no_language_applies(self):
+        # Non-translate tones must keep the macOS key shape so behaviour and
+        # hit rates are unchanged.
+        cache = RewriteCache()
+        self.assertEqual(cache._key("hi", "polished"), "polished::hi")
+        self.assertEqual(cache._key("hi", "polished", None), "polished::hi")
+
+    def test_language_participates_in_the_key_when_given(self):
+        cache = RewriteCache()
+        self.assertNotEqual(
+            cache._key("hi", "translate", "Vietnamese"),
+            cache._key("hi", "translate", "Japanese"),
+        )
+
+    def test_both_rewrite_call_sites_pass_a_language(self):
+        # The parameter existed and was simply never used at either site.
+        root = Path(__file__).resolve().parent.parent / "draftright"
+        for rel in ("application.py", "ui/rewrite_panel.py"):
+            src = (root / rel).read_text(encoding="utf-8")
+            call = src.split("api_client.rewrite(")[1].split(")")[0]
+            self.assertIn("language", call, f"{rel} must send a target language")
+
+
 class TrayIconStateTest(unittest.TestCase):
     """Tray conveys backend status by tint and an update by a red dot (#22).
 

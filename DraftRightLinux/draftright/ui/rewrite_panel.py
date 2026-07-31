@@ -386,9 +386,19 @@ class RewritePanel(Gtk.Window):
         """
         # Serve an identical (text, tone) instantly from the client cache —
         # no spinner, no backend round-trip. Mirrors macOS.
+        selected = Tone.from_api_value(tone)
+        settings = self.app.settings_service
+        language = (
+            settings.translate_language
+            if settings is not None
+            and selected is not None
+            and selected.uses_target_language
+            else None
+        )
+
         cache = getattr(self.app, "rewrite_cache", None)
         if cache is not None:
-            cached = cache.get(self._input_text, tone)
+            cached = cache.get(self._input_text, tone, language)
             if cached is not None:
                 self._on_api_success(cached)
                 return
@@ -405,7 +415,11 @@ class RewritePanel(Gtk.Window):
                 if self.app.api_client is None:
                     raise RuntimeError("API client not initialized. Please sign in first.")
 
-                payload = self.app.api_client.rewrite(self._input_text, tone)
+                settings = self.app.settings_service
+                language = settings.translate_language if settings else None
+                payload = self.app.api_client.rewrite(
+                    self._input_text, tone, language
+                )
                 # /rewrite returns a dict; the buffer needs the text out of it.
                 result = RewriteResult.from_wire(payload).text
                 if cache is not None:
