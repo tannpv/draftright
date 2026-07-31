@@ -9,10 +9,11 @@ import 'package:draftright_mobile/widgets/report_bug_sheet.dart';
 /// [ErrorNoticeOverlay] — so it rides on top of every route with no per-screen
 /// wiring. iOS + Android identical.
 ///
-/// Scope note: this floats only above DraftRight's OWN UI (an in-app overlay).
-/// A system-wide bubble that hovers over *other* apps is a different, Android-
-/// only mechanism (`SYSTEM_ALERT_WINDOW` + accessibility) and lives in
-/// [ShareService.supportsFloatingBubble]; iOS forbids it at the OS level.
+/// Scope note: this floats only above DraftRight's OWN UI (an in-app overlay) —
+/// it needs no system permission. (The old system-wide rewrite bubble that drew
+/// over *other* apps via SYSTEM_ALERT_WINDOW + an AccessibilityService was
+/// removed: banking/security apps block overlays + accessibility, and it gated
+/// Play submission.)
 ///
 /// Extend, don't fork: tune via constructor params (enabled, icon, tooltip,
 /// size, margin, starting corner) rather than editing the body.

@@ -14,10 +14,10 @@ import 'package:draftright_mobile/services/ime_pack_service.dart';
 import 'package:draftright_mobile/widgets/language_packs_section.dart';
 import 'package:draftright_mobile/models/tone.dart';
 
-/// Tones the floating bubble can apply as its one-tap preset. Excludes
-/// Grammar Check (returns structured issues, not a rewrite) and Translate
-/// (needs a target language) — those aren't "rewrite in place" tones.
-const List<Tone> _bubbleRewriteTones = [
+/// Rewrite tones offered by the one-tap tone picker (keyboard ⚡ / voice
+/// dictation). Excludes Grammar Check (structured issues, not a rewrite) and
+/// Translate (needs a target language).
+const List<Tone> _oneTapRewriteTones = [
   Tone.simple,
   Tone.natural,
   Tone.polished,
@@ -25,22 +25,6 @@ const List<Tone> _bubbleRewriteTones = [
   Tone.technical,
   Tone.claude,
 ];
-
-/// Prominent-disclosure copy shown before the user opts in to in-place rewrite
-/// (Play "Prominent Disclosure & Consent"). Kept in one place, not inlined.
-/// VN copy + Play Console declaration:
-/// docs/superpowers/plans/2026-07-23-android-bubble-a11y-play-declaration.md
-const String _kInPlaceRewriteDisclosure =
-    'To rewrite text right where you type it, DraftRight uses Android\'s '
-    'Accessibility service. When — and only when — you tap the DraftRight '
-    'bubble, it reads the text in the field you\'re editing and replaces it '
-    'with your chosen rewrite.\n\n'
-    '• It runs only on your tap — never in the background.\n'
-    '• Your text is sent only to the DraftRight rewrite service you '
-    'configured, to produce the rewrite. It is not sold, shared, or used '
-    'for ads.\n'
-    '• Password fields are always skipped.\n'
-    '• You can turn this off anytime in Settings.';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -117,38 +101,6 @@ class _DownloadableLanguagesState extends State<_DownloadableLanguages> {
   }
 }
 
-class _FloatingBubbleTile extends StatelessWidget {
-  final bool enabled;
-  final ValueChanged<bool> onChanged;
-  const _FloatingBubbleTile({required this.enabled, required this.onChanged});
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Column(
-        children: [
-          SwitchListTile(
-            secondary: const Icon(Icons.bubble_chart_outlined),
-            title: const Text('Floating rewrite bubble'),
-            subtitle: const Text(
-              'A draggable button stays on screen. Type in any app, tap the bubble — your text is rewritten in place with your chosen tone. No copy-paste.',
-            ),
-            value: enabled,
-            onChanged: onChanged,
-          ),
-          if (!enabled) const Padding(
-            padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
-            child: Text(
-              'Asks once for "Display over other apps" and Accessibility, so the bubble can read the field you\'re typing in and replace it. Text is sent only to your DraftRight rewrite service, only when you tap the bubble.',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _SettingsScreenState extends State<SettingsScreen> {
   late TextEditingController _backendUrlController;
 
@@ -177,46 +129,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Future<void> _setBubble(SettingsService settings, bool enable) async {
-    final messenger = ScaffoldMessenger.of(context);
-    if (!enable) {
-      await ShareService.stopBubble();
-      await settings.setFloatingBubbleEnabled(false);
-      return;
-    }
-    final canDraw = await ShareService.canDrawOverlays();
-    if (!canDraw) {
-      // Send user to the system page to grant permission. We don't auto-toggle
-      // back on after they return — the next time they tap the toggle, the
-      // permission will be there.
-      messenger.showSnackBar(const SnackBar(
-        content: Text('Grant "Display over other apps", then enable again.'),
-      ));
-      await ShareService.openOverlaySettings();
-      return;
-    }
-    // The bubble rewrites in place via the AccessibilityService — show the
-    // prominent disclosure and get affirmative consent before enabling (Play policy).
-    final consented = await _showInPlaceDisclosure();
-    if (consented != true) return;
-    final ok = await ShareService.startBubble();
-    await settings.setFloatingBubbleEnabled(ok);
-    if (!ok) {
-      messenger.showSnackBar(const SnackBar(
-        content: Text('Could not start the bubble. Try again.'),
-      ));
-      return;
-    }
-    // Guide the user to enable the AccessibilityService the bubble needs.
-    messenger.showSnackBar(const SnackBar(
-      content: Text('Enable "DraftRight" in Accessibility, then tap the bubble over a text field.'),
-    ));
-    await ShareService.openAccessibilitySettings();
-  }
-
-  /// Preset one-tap tone selector, shared by the Android bubble and the iOS
-  /// keyboard ⚡ (both read the same `bubblePresetTone`). [description] adapts
-  /// the copy to whichever surface is consuming it.
+  /// Preset one-tap tone selector for the iOS keyboard ⚡ / voice dictation
+  /// (reads the same `bubblePresetTone`). [description] adapts the copy to the
+  /// consuming surface.
   Widget _oneTapToneCard(SettingsService settings, String title, String description) {
     return Card(
       child: Padding(
@@ -234,7 +149,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             DropdownButtonFormField<String>(
               value: settings.bubblePresetTone,
               decoration: const InputDecoration(border: OutlineInputBorder()),
-              items: _bubbleRewriteTones
+              items: _oneTapRewriteTones
                   .map((t) => DropdownMenuItem(
                         value: t.apiValue,
                         child: Row(children: [
@@ -250,28 +165,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Future<bool?> _showInPlaceDisclosure() {
-    return showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Turn on one-tap rewrite in any app'),
-        content: const SingleChildScrollView(
-          child: Text(_kInPlaceRewriteDisclosure),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Not now'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Turn on'),
-          ),
-        ],
       ),
     );
   }
@@ -489,25 +382,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const SizedBox(height: 8),
               Card(child: _DownloadableLanguages(baseUrl: settings.backendUrl)),
 
-              // Android: floating bubble (draw-over-apps + AccessibilityService).
-              // iOS has no overlay (sandbox) — its keyboard ⚡ one-tap uses the
-              // same preset tone, so iOS gets just the tone selector instead.
-              if (ShareService.supportsFloatingBubble) ...[
-                const SizedBox(height: 24),
-                const Text('Floating Bubble',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                const SizedBox(height: 8),
-                _FloatingBubbleTile(
-                  enabled: settings.floatingBubbleEnabled,
-                  onChanged: (value) => _setBubble(settings, value),
-                ),
-                if (settings.floatingBubbleEnabled) ...[
-                  const SizedBox(height: 8),
-                  _oneTapToneCard(settings, 'One-tap tone',
-                      'The bubble rewrites your text in place using this tone — '
-                      'like One-Click mode on Mac/Windows.'),
-                ],
-              ] else if (ShareService.supportsKeyboardVoice) ...[
+              // iOS keyboard hold-to-talk voice dictation: the AI-polish tone is
+              // user-configurable (same one-tap preset, synced to the App Group).
+              // (The Android floating bubble was removed — overlays/accessibility
+              // are blocked by banking apps and gated Play submission.)
+              if (ShareService.supportsKeyboardVoice) ...[
                 const SizedBox(height: 24),
                 const Text('Voice dictation',
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
