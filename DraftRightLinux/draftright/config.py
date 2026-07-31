@@ -75,6 +75,34 @@ PORTAL_SHORTCUT_ID = "rewrite-selection"
 PORTAL_SHORTCUT_DESCRIPTION = "Rewrite the selected text with DraftRight"
 PORTAL_CALL_TIMEOUT_MS = 30000   # portal prompts are user-interactive; allow time
 
+# ── Google sign-in (#97) ─────────────────────────────────────────────────────
+GOOGLE_AUTH_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth"
+GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
+GOOGLE_OAUTH_SCOPES = "openid email profile"
+GOOGLE_OAUTH_TIMEOUT = 300   # the user has to sign in over in a browser
+GOOGLE_PROVIDER = "google"   # wire value for POST /auth/social
+
+# Linux uses a loopback redirect (RFC 8252), which Google only accepts from a
+# **Desktop app** client — the macOS client is iOS-type and takes a reversed
+# custom scheme instead, so it cannot be reused here.  Override with
+# DRAFTRIGHT_GOOGLE_CLIENT_ID until a Linux desktop client is provisioned.
+GOOGLE_CLIENT_ID_ENV_VAR = "DRAFTRIGHT_GOOGLE_CLIENT_ID"
+DEFAULT_GOOGLE_CLIENT_ID = ""
+
+
+def google_client_id() -> str:
+    """Resolve the OAuth client id, env var winning over the built-in default."""
+    return (
+        os.environ.get(GOOGLE_CLIENT_ID_ENV_VAR, "").strip()
+        or DEFAULT_GOOGLE_CLIENT_ID
+    )
+
+
+def google_sign_in_available() -> bool:
+    """False when no client id is configured, so the UI can hide the button."""
+    return bool(google_client_id())
+
+
 # ── HTTP timeouts (seconds) ──────────────────────────────────────────────────
 API_TIMEOUT = 30          # /rewrite, /auth, health
 HEALTH_TIMEOUT = 5        # /health + /auth/me probe (kept short so the tray stays responsive)

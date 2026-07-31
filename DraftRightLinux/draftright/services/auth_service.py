@@ -183,6 +183,12 @@ class AuthService:
         self._save(data)
         return data
 
+    def social_login(self, provider: str, id_token: str) -> dict:
+        """Sign in with a provider id_token and persist the session."""
+        data = self._api.social_login(provider, id_token)
+        self._save(data)
+        return data
+
     def refresh_session(self) -> bool:
         """Exchange the stored refresh token for a fresh access token.
 

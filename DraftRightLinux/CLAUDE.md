@@ -109,13 +109,38 @@ sudo checkinstall --pkgname=draftright --pkgversion=1.0.0 \
 
 **Fixed by runtime verification (2026-07-30):** Settings could not open at all (`SubscriptionPage` inherited a `Protocol` → metaclass conflict at import) · `auth_service.is_authenticated`/`get_user` missing · `settings_service.get`/`set` missing · `register()` args transposed (name sent as email) · `feedback_service` imported a nonexistent singleton · `SettingsService` never `load()`ed · tray dead on every GTK4 system.
 
-**Open (4 under #93):**
-- Features/parity: #96 One-Click mode · #97 Google login · #98 Report-a-Bug · #100 KeepAlive agent (all present on Mac+Win)
+**Open (1 under #93):**
+- #100 KeepAlive agent (present on Mac+Win)
+
+**Landed, pending config/verification:** #96 One-Click · #97 Google login (needs a Desktop OAuth client id) · #98 Report-a-Bug
 
 **Known gaps (not yet issues):**
 - **X11 is unverified.** The dev host is Wayland, so `_X11Listener` has never run. Its key parsing was refactored onto `models/hotkey.py` without being exercised.
 - **Tray is disabled under Flatpak.** `org.gnome.Platform` ships GTK3 but not libayatana-appindicator; it must be built as a manifest module.
 - `RewritePanel` is a bare `Gtk.Window` (no `application=`), so it never appears in `app.get_windows()`.
+
+### Google sign-in (#97) — needs a Desktop-type OAuth client
+
+The flow is implemented (PKCE + loopback redirect, RFC 8252) but **inert until
+a client id is configured** — `config.DEFAULT_GOOGLE_CLIENT_ID` is empty, and
+`google_sign_in_available()` hides the Settings button while it is.
+
+- macOS uses an **iOS-type** client (`...-dvkn61dhibse9fu83ohh51mlovd7269a`)
+  with a reversed-scheme redirect. Google only accepts custom schemes from
+  iOS-type clients and only accepts `http://127.0.0.1:<port>` from
+  **Desktop app** clients, so the macOS id **cannot be reused** on Linux.
+- Create a "Desktop app" OAuth client in the Google Cloud console, then either
+  set `DEFAULT_GOOGLE_CLIENT_ID` or export `DRAFTRIGHT_GOOGLE_CLIENT_ID`.
+- No client secret is used or needed: a native app is a public client and PKCE
+  is the proof-of-possession.
+
+> ⚠️ **Backend security gap (not fixed here).** `verifyGoogleToken()` in
+> `backend/src/auth/auth.service.ts` calls Google's tokeninfo endpoint and
+> never checks the `aud` claim, so it accepts an id_token minted for **any**
+> Google OAuth client — a token obtained by an unrelated app can be replayed
+> against `POST /auth/social` to sign in as that user. The Apple path already
+> validates audiences (`APPLE_AUDIENCES`); Google needs the same against
+> `google_client_id` plus every per-platform client id.
 
 ### Wayland global shortcut (#99) — operational requirement
 

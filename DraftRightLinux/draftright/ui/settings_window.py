@@ -96,6 +96,14 @@ class SettingsWindow(Adw.PreferencesWindow):
         self._auth_btn.connect("clicked", self._on_auth_clicked)
         self._signin_group.add(self._auth_btn)
 
+        # Google sign-in (#97) — hidden unless a client id is configured, so
+        # the UI never shows a button that is guaranteed to fail.
+        self._google_btn = Gtk.Button(label="Sign in with Google")
+        self._google_btn.set_margin_top(4)
+        self._google_btn.connect("clicked", self._on_google_sign_in)
+        self._google_btn.set_visible(config.google_sign_in_available())
+        self._signin_group.add(self._google_btn)
+
         # Toggle link
         self._toggle_btn = Gtk.Button(label="Don't have an account? Register")
         self._toggle_btn.add_css_class("flat")
@@ -366,6 +374,48 @@ class SettingsWindow(Adw.PreferencesWindow):
     # ------------------------------------------------------------------
     # Callbacks
     # ------------------------------------------------------------------
+
+    def _on_google_sign_in(self, _button):
+        """Run the Google flow in a browser, then exchange the token (#97).
+
+        The browser round-trip blocks, so it runs off the GTK main thread; the
+        button reflects progress because the user's attention is elsewhere and
+        they need to know the app is still waiting on them.
+        """
+        from draftright.services.google_oauth import GoogleOAuthError, sign_in
+
+        self._google_btn.set_sensitive(False)
+        self._google_btn.set_label("Waiting for your browser…")
+        self._auth_error.set_visible(False)
+
+        def worker():
+            try:
+                id_token = sign_in()
+                if self.app.auth_service is None:
+                    raise RuntimeError("Auth service not available.")
+                self.app.auth_service.social_login(config.GOOGLE_PROVIDER, id_token)
+                GLib.idle_add(self._on_google_success)
+            except GoogleOAuthError as exc:
+                GLib.idle_add(self._on_google_failure, str(exc))
+            except Exception as exc:  # noqa: BLE001 — surface backend errors too
+                GLib.idle_add(self._on_google_failure, str(exc))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_google_success(self) -> bool:
+        self._reset_google_button()
+        self._refresh_account_ui()
+        return False
+
+    def _on_google_failure(self, message: str) -> bool:
+        self._reset_google_button()
+        self._auth_error.set_text(message)
+        self._auth_error.set_visible(True)
+        return False
+
+    def _reset_google_button(self) -> None:
+        self._google_btn.set_label("Sign in with Google")
+        self._google_btn.set_sensitive(True)
 
     def _on_toggle_mode(self, _button):
         """Toggle between sign-in and register mode."""

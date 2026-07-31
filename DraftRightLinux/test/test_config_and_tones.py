@@ -5,6 +5,8 @@ Covers the invariants the refactor introduced — enum single-source, env
 override, and the clipboard inject_text delegation.
 """
 
+import base64
+import hashlib
 import inspect
 import json
 import re
@@ -26,6 +28,7 @@ from draftright.models.tray import TrayAction, TrayCommand
 from draftright.services.hotkey_service import PortalResponse
 from draftright.services.input_portal import InjectorState, RemoteDesktopInjector
 from draftright.services.portal import PortalClient
+from draftright.services import google_oauth
 from draftright.services import settings_service as settings_service_mod
 from draftright.services.auth_service import AuthService
 from draftright.services.settings_service import SettingsService
@@ -515,6 +518,63 @@ class AppModeTest(unittest.TestCase):
         service._data["one_click_tone"] = "a_tone_that_was_removed"
         # Must not hand the hotkey a tone the backend will reject.
         self.assertIn(service.one_click_tone, {t.api_value for t in Tone})
+
+
+class GoogleOAuthTest(unittest.TestCase):
+    """#97 — PKCE + loopback redirect (RFC 8252) for a native app."""
+
+    def test_pkce_challenge_is_s256_of_the_verifier(self):
+        verifier, challenge = google_oauth._pkce_pair()
+        expected = (
+            base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest())
+            .rstrip(b"=")
+            .decode()
+        )
+        self.assertEqual(challenge, expected)
+
+    def test_pkce_values_are_base64url_without_padding(self):
+        # Padding or '+'/'/' would be rejected by Google's parameter parsing.
+        for value in google_oauth._pkce_pair():
+            self.assertNotIn("=", value)
+            self.assertNotIn("+", value)
+            self.assertNotIn("/", value)
+
+    def test_pkce_verifier_length_is_within_the_spec(self):
+        # RFC 7636 requires 43-128 characters.
+        verifier, _ = google_oauth._pkce_pair()
+        self.assertGreaterEqual(len(verifier), 43)
+        self.assertLessEqual(len(verifier), 128)
+
+    def test_each_run_is_unique(self):
+        # Reusing a verifier across sign-ins would defeat PKCE.
+        pairs = {google_oauth._pkce_pair()[0] for _ in range(5)}
+        self.assertEqual(len(pairs), 5)
+
+    def test_sign_in_is_hidden_until_a_client_id_is_configured(self):
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop(config.GOOGLE_CLIENT_ID_ENV_VAR, None)
+            with mock.patch.object(config, "DEFAULT_GOOGLE_CLIENT_ID", ""):
+                self.assertFalse(config.google_sign_in_available())
+            with mock.patch.object(config, "DEFAULT_GOOGLE_CLIENT_ID", "x.apps"):
+                self.assertTrue(config.google_sign_in_available())
+
+    def test_env_var_overrides_the_built_in_client_id(self):
+        with mock.patch.dict(
+            os.environ, {config.GOOGLE_CLIENT_ID_ENV_VAR: "env-client"}
+        ):
+            self.assertEqual(config.google_client_id(), "env-client")
+
+    def test_scopes_request_identity_only(self):
+        # An id_token needs openid; email/profile fill in the account. Nothing
+        # broader should be requested.
+        self.assertEqual(
+            set(config.GOOGLE_OAUTH_SCOPES.split()), {"openid", "email", "profile"}
+        )
+
+    def test_endpoints_are_google_https(self):
+        for url in (config.GOOGLE_AUTH_ENDPOINT, config.GOOGLE_TOKEN_ENDPOINT):
+            self.assertTrue(url.startswith("https://"))
+            self.assertIn("google", url)
 
 
 class PortalClientTest(unittest.TestCase):
