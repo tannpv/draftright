@@ -10,9 +10,11 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, GLib, Gtk  # noqa: E402
 
+from draftright import config
+
 from ..services.feedback_service import submit_feature_request
 
-_FEEDBACK_BOARD_URL = "https://draftright.info/feedback"
+_FEEDBACK_BOARD_URL = config.FEEDBACK_BOARD_URL
 
 # (label, value) — value is what the backend expects.
 _PLATFORMS: list[tuple[str, str]] = [

@@ -122,6 +122,20 @@ class APIClient:
         )
         return self._handle_response(resp)
 
+    def social_login(self, provider: str, id_token: str) -> dict:
+        """POST /auth/social — exchange a provider id_token for our session.
+
+        The backend verifies the token with the provider, so nothing here
+        needs the client secret.
+        """
+        resp = requests.post(
+            self._url("/auth/social"),
+            json={"provider": provider, "id_token": id_token},
+            headers=self._headers(),
+            timeout=self.TIMEOUT,
+        )
+        return self._handle_response(resp)
+
     def register(self, email: str, password: str, name: str) -> dict:
         """POST /auth/register — returns {access_token, refresh_token, user}."""
         resp = requests.post(

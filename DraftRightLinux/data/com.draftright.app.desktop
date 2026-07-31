@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=DraftRight
+GenericName=AI Text Rewriter
+Comment=Select text anywhere, pick a tone, get a polished rewrite
+Exec=draftright
+Icon=com.draftright.app
+Terminal=false
+Categories=Utility;TextTools;
+Keywords=rewrite;grammar;text;AI;writing;tone;
+StartupNotify=true
+StartupWMClass=com.draftright.app
+X-GNOME-UsesNotifications=true

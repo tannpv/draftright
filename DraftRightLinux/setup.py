@@ -1,8 +1,21 @@
+import re
+from pathlib import Path
+
 from setuptools import setup, find_packages
+
+# Read the version from draftright/__version__.py rather than duplicating it:
+# the two had already drifted (setup.py said 1.0.0, the app said 2.4.1), so a
+# built package advertised the wrong version.  Parsed, not imported, because
+# importing the package here would pull in PyGObject before it is installed.
+_VERSION = re.search(
+    r'^__version__\s*=\s*["\']([^"\']+)["\']',
+    Path(__file__).parent.joinpath("draftright", "__version__.py").read_text(),
+    re.MULTILINE,
+).group(1)
 
 setup(
     name="draftright",
-    version="1.0.0",
+    version=_VERSION,
     description="DraftRight — AI-powered text rewriting for Linux",
     author="Tan Nguyen",
     packages=find_packages(),

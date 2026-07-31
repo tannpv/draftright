@@ -9,8 +9,12 @@ gi.require_version("Adw", "1")
 
 from gi.repository import Adw, GLib, Gtk
 
+from draftright import config
+from draftright.__version__ import __version__
+from draftright.models.app_mode import AppMode
 from draftright.models.tone import Tone
 from draftright.ui.subscription_page import SubscriptionPage
+from draftright.ui.report_bug_dialog import open_report_bug_dialog
 from draftright.ui.suggest_feature_dialog import open_suggest_feature_dialog
 
 # Languages available for translation
@@ -92,6 +96,14 @@ class SettingsWindow(Adw.PreferencesWindow):
         self._auth_btn.connect("clicked", self._on_auth_clicked)
         self._signin_group.add(self._auth_btn)
 
+        # Google sign-in (#97) — hidden unless a client id is configured, so
+        # the UI never shows a button that is guaranteed to fail.
+        self._google_btn = Gtk.Button(label="Sign in with Google")
+        self._google_btn.set_margin_top(4)
+        self._google_btn.connect("clicked", self._on_google_sign_in)
+        self._google_btn.set_visible(config.google_sign_in_available())
+        self._signin_group.add(self._google_btn)
+
         # Toggle link
         self._toggle_btn = Gtk.Button(label="Don't have an account? Register")
         self._toggle_btn.add_css_class("flat")
@@ -147,10 +159,49 @@ class SettingsWindow(Adw.PreferencesWindow):
         # Hotkey display
         hotkey_row = Adw.ActionRow(
             title="Hotkey",
-            subtitle=self._get_setting("hotkey", "Ctrl+Shift+R"),
+            subtitle=self._get_setting("hotkey", config.DEFAULT_HOTKEY),
         )
         hotkey_row.set_activatable(False)
         behavior_group.add(hotkey_row)
+
+        # --- Mode (#96) ---
+        # Order follows the enum so the dropdown index maps to a member.
+        self._app_modes = list(AppMode)
+        self._mode_row = Adw.ComboRow(
+            title="Hotkey mode",
+            model=Gtk.StringList.new([m.display_name for m in self._app_modes]),
+        )
+        current_mode = (
+            self.app.settings_service.app_mode
+            if self.app.settings_service
+            else AppMode.ADVANCED
+        )
+        self._mode_row.set_selected(self._app_modes.index(current_mode))
+        self._mode_row.set_subtitle(current_mode.description)
+        self._mode_row.connect("notify::selected", self._on_mode_changed)
+        behavior_group.add(self._mode_row)
+
+        # One-Click preset tone — only meaningful in that mode.
+        self._one_click_tones = list(Tone)
+        self._one_click_row = Adw.ComboRow(
+            title="One-Click tone",
+            subtitle="Used when the hotkey rewrites instantly",
+            model=Gtk.StringList.new(
+                [f"{t.icon}  {t.display_name}" for t in self._one_click_tones]
+            ),
+        )
+        current_tone = (
+            self.app.settings_service.one_click_tone
+            if self.app.settings_service
+            else Tone.POLISHED.api_value
+        )
+        for i, tone in enumerate(self._one_click_tones):
+            if tone.api_value == current_tone:
+                self._one_click_row.set_selected(i)
+                break
+        self._one_click_row.connect("notify::selected", self._on_one_click_tone_changed)
+        self._one_click_row.set_visible(current_mode is AppMode.ONE_CLICK)
+        behavior_group.add(self._one_click_row)
 
         # Translate language
         self._lang_model = Gtk.StringList.new(TRANSLATE_LANGUAGES)
@@ -159,7 +210,7 @@ class SettingsWindow(Adw.PreferencesWindow):
             model=self._lang_model,
         )
         # Set current selection
-        current_lang = self._get_setting("translate-language", "Spanish")
+        current_lang = self._get_setting("translate_language", "Spanish")
         for i, lang in enumerate(TRANSLATE_LANGUAGES):
             if lang == current_lang:
                 self._lang_row.set_selected(i)
@@ -170,7 +221,7 @@ class SettingsWindow(Adw.PreferencesWindow):
         # Auto-start
         self._autostart_row = Adw.SwitchRow(title="Auto-start on login")
         self._autostart_row.set_active(
-            self._get_setting("auto-start", False)
+            self._get_setting("auto_start", False)
         )
         self._autostart_row.connect("notify::active", self._on_autostart_changed)
         behavior_group.add(self._autostart_row)
@@ -267,6 +318,16 @@ class SettingsWindow(Adw.PreferencesWindow):
         suggest_row.add_suffix(suggest_btn)
         feedback_group.add(suggest_row)
 
+        report_row = Adw.ActionRow(
+            title="Report a bug",
+            subtitle="Something broken? Send us the details",
+        )
+        report_btn = Gtk.Button(label="Open…", valign=Gtk.Align.CENTER)
+        report_btn.add_css_class("flat")
+        report_btn.connect("clicked", self._on_report_bug)
+        report_row.add_suffix(report_btn)
+        feedback_group.add(report_row)
+
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
@@ -314,6 +375,48 @@ class SettingsWindow(Adw.PreferencesWindow):
     # Callbacks
     # ------------------------------------------------------------------
 
+    def _on_google_sign_in(self, _button):
+        """Run the Google flow in a browser, then exchange the token (#97).
+
+        The browser round-trip blocks, so it runs off the GTK main thread; the
+        button reflects progress because the user's attention is elsewhere and
+        they need to know the app is still waiting on them.
+        """
+        from draftright.services.google_oauth import GoogleOAuthError, sign_in
+
+        self._google_btn.set_sensitive(False)
+        self._google_btn.set_label("Waiting for your browser…")
+        self._auth_error.set_visible(False)
+
+        def worker():
+            try:
+                id_token = sign_in()
+                if self.app.auth_service is None:
+                    raise RuntimeError("Auth service not available.")
+                self.app.auth_service.social_login(config.GOOGLE_PROVIDER, id_token)
+                GLib.idle_add(self._on_google_success)
+            except GoogleOAuthError as exc:
+                GLib.idle_add(self._on_google_failure, str(exc))
+            except Exception as exc:  # noqa: BLE001 — surface backend errors too
+                GLib.idle_add(self._on_google_failure, str(exc))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_google_success(self) -> bool:
+        self._reset_google_button()
+        self._refresh_account_ui()
+        return False
+
+    def _on_google_failure(self, message: str) -> bool:
+        self._reset_google_button()
+        self._auth_error.set_text(message)
+        self._auth_error.set_visible(True)
+        return False
+
+    def _reset_google_button(self) -> None:
+        self._google_btn.set_label("Sign in with Google")
+        self._google_btn.set_sensitive(True)
+
     def _on_toggle_mode(self, _button):
         """Toggle between sign-in and register mode."""
         self._register_mode = not self._register_mode
@@ -350,7 +453,7 @@ class SettingsWindow(Adw.PreferencesWindow):
                     raise RuntimeError("Auth service not available.")
 
                 if self._register_mode:
-                    self.app.auth_service.register(name, email, password)
+                    self.app.auth_service.register(email, password, name)
                 else:
                     self.app.auth_service.login(email, password)
 
@@ -396,11 +499,11 @@ class SettingsWindow(Adw.PreferencesWindow):
         """Persist the translate language change."""
         idx = row.get_selected()
         if 0 <= idx < len(TRANSLATE_LANGUAGES):
-            self._save_setting("translate-language", TRANSLATE_LANGUAGES[idx])
+            self._save_setting("translate_language", TRANSLATE_LANGUAGES[idx])
 
     def _on_autostart_changed(self, row, _pspec):
         """Persist the auto-start preference."""
-        self._save_setting("auto-start", row.get_active())
+        self._save_setting("auto_start", row.get_active())
 
     def _on_tone_toggled(self, row, _pspec, tone_api_value: str):
         """Persist the enabled/disabled state of a tone."""
@@ -432,10 +535,12 @@ class SettingsWindow(Adw.PreferencesWindow):
         if svc is None:
             # Fallback: create one if the app hasn't initialised it yet
             from draftright.services.update_service import UpdateService
-            backend_url = "http://localhost:3000"
+            backend_url = config.LOCALHOST_BACKEND_URL
             if app.settings_service:
                 backend_url = app.settings_service.backend_url
-            svc = UpdateService("1.0.0", backend_url)
+            # Must be the real version: a hardcoded one made this fallback
+            # path compare the wrong version against the update manifest.
+            svc = UpdateService(__version__, backend_url)
 
         has_update, result = svc.check_now()
 
@@ -468,3 +573,30 @@ class SettingsWindow(Adw.PreferencesWindow):
             else None
         )
         open_suggest_feature_dialog(self, bearer_token=token)
+
+    def _on_mode_changed(self, row, _param):
+        """Persist the hotkey mode and reveal the preset-tone row for it (#96)."""
+        mode = self._app_modes[row.get_selected()]
+        if self.app.settings_service:
+            self.app.settings_service.app_mode = mode
+            self.app.settings_service.save()
+        row.set_subtitle(mode.description)
+        self._one_click_row.set_visible(mode is AppMode.ONE_CLICK)
+
+    def _on_one_click_tone_changed(self, row, _param):
+        """Persist the tone One-Click rewrites with."""
+        if self.app.settings_service:
+            self.app.settings_service.one_click_tone = self._one_click_tones[
+                row.get_selected()
+            ].api_value
+            self.app.settings_service.save()
+
+    def _on_report_bug(self, _button):
+        """Open the Report a Bug dialog (#98)."""
+        auth = self.app.auth_service
+        open_report_bug_dialog(
+            self,
+            bearer_token=auth.access_token if auth is not None else None,
+            # Pre-fill so a signed-in user doesn't retype it, matching mobile.
+            user_email=auth.get_user().get("email") if auth is not None else None,
+        )

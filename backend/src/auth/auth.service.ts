@@ -363,11 +363,74 @@ export class AuthService {
     }
   }
 
+  /**
+   * Accepted `aud` values for a Google ID token.
+   *
+   * Every client app — web, iOS/macOS, Android, Linux desktop — has its own
+   * OAuth client id, and all of them post to the same `/auth/social`.  The
+   * list is the admin-configured `google_client_id` plus anything in
+   * GOOGLE_AUDIENCES (comma-separated), mirroring APPLE_AUDIENCES.
+   */
+  private async googleAudiences(): Promise<string[]> {
+    // Setting GOOGLE_AUDIENCES replaces this list (same semantics as
+    // APPLE_AUDIENCES) so an operator can lock the backend down to their own
+    // clients. These are the ids the shipped apps actually use; they are
+    // public values, embedded in the clients themselves.
+    const DEFAULTS = [
+      // Web + Flutter mobile (also the app_settings default).
+      '22951518033-gf853ftmf4emivffk0su2bik42j7cmai.apps.googleusercontent.com',
+      // macOS — an iOS-type client, distinct from the one above. Omitting it
+      // would break Google sign-in on macOS the moment this check went live.
+      '22951518033-dvkn61dhibse9fu83ohh51mlovd7269a.apps.googleusercontent.com',
+    ];
+    const envRaw = (this.cfg.get('GOOGLE_AUDIENCES', { infer: true }) || '').trim();
+    const fromEnv = envRaw
+      ? envRaw.split(',').map(s => s.trim()).filter(Boolean)
+      : DEFAULTS;
+
+    const settings = await this.settingsRepo.findOne({ where: {} });
+    const fromSettings = (settings?.google_client_id || '').trim();
+
+    return [...new Set([...fromEnv, ...(fromSettings ? [fromSettings] : [])])];
+  }
+
   private async verifyGoogleToken(idToken: string): Promise<SocialProfile> {
     // Verify with Google's tokeninfo endpoint
     const response = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
     if (!response.ok) throw new UnauthorizedException('Invalid Google token');
     const data = await response.json();
+
+    // tokeninfo only proves Google minted the token — NOT that it was minted
+    // for us.  Without this check, an id_token issued to any other OAuth
+    // client (i.e. any app the user has ever signed into with Google) could
+    // be replayed here to take over that user's account.  Same guarantee the
+    // Apple path gets from its `audience` option.
+    const audiences = await this.googleAudiences();
+    if (audiences.length === 0) {
+      // Fail closed: an empty allow-list must not mean "allow everything".
+      this.logger.error(
+        'Google sign-in rejected: no accepted audiences configured. Set ' +
+        'GOOGLE_AUDIENCES or app_settings.google_client_id.',
+      );
+      throw new UnauthorizedException('Google sign-in is not configured');
+    }
+    if (!data.aud || !audiences.includes(data.aud)) {
+      this.logger.warn(
+        `Google token rejected: aud "${data.aud}" is not an accepted client id`,
+      );
+      throw new UnauthorizedException('Invalid Google token');
+    }
+
+    // Guard the issuer too; tokeninfo echoes it and both spellings are valid.
+    if (data.iss && !['accounts.google.com', 'https://accounts.google.com'].includes(data.iss)) {
+      this.logger.warn(`Google token rejected: unexpected iss "${data.iss}"`);
+      throw new UnauthorizedException('Invalid Google token');
+    }
+
+    if (!data.sub) {
+      throw new UnauthorizedException('Google token missing sub claim');
+    }
+
     return {
       socialId: data.sub,
       email: data.email,
