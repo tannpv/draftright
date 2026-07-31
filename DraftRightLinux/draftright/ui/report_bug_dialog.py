@@ -8,14 +8,17 @@ dialog has no use for.
 
 from __future__ import annotations
 
+import os
+import tempfile
 import threading
+import time
 from typing import Optional
 
 import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, GLib, Gtk, Pango
+from gi.repository import Adw, Gdk, GLib, Gtk, Pango
 
 from draftright import config
 from pathlib import Path
@@ -107,6 +110,13 @@ class ReportBugDialog(Adw.Window):
         self._capture_btn.connect("clicked", self._on_capture)
         shot_row.append(self._capture_btn)
 
+        self._paste_btn = Gtk.Button(label="Paste")
+        self._paste_btn.set_tooltip_text(
+            "Attach an image from the clipboard (Ctrl+V) — e.g. after Print Screen"
+        )
+        self._paste_btn.connect("clicked", lambda _b: self._paste_from_clipboard())
+        shot_row.append(self._paste_btn)
+
         attach_btn = Gtk.Button(label="Attach…")
         attach_btn.connect("clicked", self._on_attach)
         shot_row.append(attach_btn)
@@ -141,6 +151,13 @@ class ReportBugDialog(Adw.Window):
         cancel_btn.connect("clicked", lambda *_: self.close())
         bottom.append(cancel_btn)
 
+        # Ctrl+V attaches a clipboard image. Print Screen on GNOME puts the
+        # shot straight on the clipboard, so this is the path most people
+        # already have muscle memory for.
+        paste_keys = Gtk.EventControllerKey()
+        paste_keys.connect("key-pressed", self._on_key_pressed)
+        self.add_controller(paste_keys)
+
         self._submit_btn = Gtk.Button(label="Send report", sensitive=False)
         self._submit_btn.add_css_class("suggested-action")
         self._submit_btn.connect("clicked", self._on_submit)
@@ -166,6 +183,50 @@ class ReportBugDialog(Adw.Window):
         )
 
     # -- screenshot --------------------------------------------------------
+
+    def _on_key_pressed(self, _controller, keyval, _keycode, state) -> bool:
+        """Ctrl+V pastes a clipboard image as the attachment."""
+        ctrl = bool(state & Gdk.ModifierType.CONTROL_MASK)
+        if ctrl and keyval in (Gdk.KEY_v, Gdk.KEY_V):
+            # Only claim the keystroke if the clipboard actually holds an
+            # image; otherwise let Ctrl+V paste text into the description.
+            if self._clipboard_has_image():
+                self._paste_from_clipboard()
+                return True
+        return False
+
+    def _clipboard_has_image(self) -> bool:
+        clipboard = Gdk.Display.get_default().get_clipboard()
+        formats = clipboard.get_formats()
+        return any(formats.contain_mime_type(m) for m in _IMAGE_MIME_TYPES)
+
+    def _paste_from_clipboard(self) -> None:
+        """Read an image off the clipboard and attach it."""
+        clipboard = Gdk.Display.get_default().get_clipboard()
+
+        def on_read(cb, result):
+            try:
+                texture = cb.read_texture_finish(result)
+            except GLib.Error as exc:
+                self._show_error(f"No image on the clipboard ({exc.message}).")
+                return
+            if texture is None:
+                self._show_error("No image on the clipboard.")
+                return
+            try:
+                path = Path(tempfile.gettempdir()) / (
+                    f"draftright-pasted-{os.getpid()}-{int(time.time())}.png"
+                )
+                texture.save_to_png(str(path))
+                if path.stat().st_size > MAX_SCREENSHOT_BYTES:
+                    self._show_error("Pasted image is larger than 5 MB.")
+                    return
+            except (OSError, GLib.Error) as exc:
+                self._show_error(f"Couldn't save the pasted image: {exc}")
+                return
+            self._set_screenshot(str(path))
+
+        clipboard.read_texture_async(None, on_read)
 
     def _on_capture(self, _btn: Gtk.Button) -> None:
         """Screenshot via the desktop portal, hiding this dialog first."""
