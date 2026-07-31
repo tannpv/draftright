@@ -51,6 +51,10 @@ class SettingsWindow(Adw.PreferencesWindow):
         self.set_transient_for(app.props.active_window)
         self.set_modal(True)
 
+        # Order mirrors the Windows tab order (rewrite settings before
+        # Account) and decides the landing page: Adw.PreferencesWindow shows
+        # whichever page is added first.
+        self._build_rewrite_page()
         self._build_account_page()
         self._build_subscription_page()
         self._build_preferences_page()
@@ -62,6 +66,131 @@ class SettingsWindow(Adw.PreferencesWindow):
             self.app, self.app.api_client
         )
         self.add(self._subscription_page)
+
+    # ------------------------------------------------------------------
+    # Rewrite page (#96) — mirrors the Windows "Rewrite" tab
+    # ------------------------------------------------------------------
+
+    def _build_rewrite_page(self):
+        """Mode switch plus whichever block applies to the chosen mode.
+
+        Windows shows exactly one of the two blocks so the choice visibly
+        changes something; showing Panel Tones in Simple mode (where the
+        panel never opens) made the switch look inert.
+        """
+        page = Adw.PreferencesPage(
+            title="Rewrite",
+            icon_name="document-edit-symbolic",
+        )
+        self.add(page)
+
+        mode_group = Adw.PreferencesGroup(
+            title="Mode",
+            description="How the hotkey behaves when you press it",
+        )
+        page.add(mode_group)
+
+        # Order follows the enum so the dropdown index maps to a member.
+        self._app_modes = list(AppMode)
+        self._mode_row = Adw.ComboRow(
+            title="Interaction Mode",
+            model=Gtk.StringList.new([m.display_name for m in self._app_modes]),
+        )
+        current_mode = (
+            self.app.settings_service.app_mode
+            if self.app.settings_service
+            else AppMode.ADVANCED
+        )
+        self._mode_row.set_selected(self._app_modes.index(current_mode))
+        self._mode_row.set_subtitle(current_mode.description)
+        self._mode_row.connect("notify::selected", self._on_mode_changed)
+        mode_group.add(self._mode_row)
+
+        # --- Simple block: the preset tone the hotkey uses ---
+        self._simple_group = Adw.PreferencesGroup(
+            title=f"{AppMode.ONE_CLICK.display_name} Mode",
+            description="The hotkey rewrites with this tone and replaces the text",
+        )
+        page.add(self._simple_group)
+
+        self._one_click_tones = list(Tone)
+        self._one_click_row = Adw.ComboRow(
+            title="One-Click tone",
+            model=Gtk.StringList.new(
+                [f"{t.icon}  {t.display_name}" for t in self._one_click_tones]
+            ),
+        )
+        current_tone = (
+            self.app.settings_service.one_click_tone
+            if self.app.settings_service
+            else Tone.POLISHED.api_value
+        )
+        for i, tone in enumerate(self._one_click_tones):
+            if tone.api_value == current_tone:
+                self._one_click_row.set_selected(i)
+                break
+        self._one_click_row.connect("notify::selected", self._on_one_click_tone_changed)
+        self._simple_group.add(self._one_click_row)
+
+        # --- Advanced block: which tones the review panel offers ---
+        # --- Panel Tones group ---
+        tones_group = Adw.PreferencesGroup(
+            title="Panel Tones",
+            description="Choose which tones appear in the rewrite panel",
+        )
+        page.add(tones_group)
+
+        enabled_tones = (
+            self.app.settings_service.enabled_tones
+            if self.app.settings_service
+            else [t.api_value for t in Tone]
+        )
+        self._tone_switches: dict[str, Adw.SwitchRow] = {}
+
+        for tone in Tone:
+            row = Adw.SwitchRow(
+                title=f"{tone.icon}  {tone.display_name}",
+                subtitle=tone.description,
+            )
+            row.set_active(tone.api_value in enabled_tones)
+            row.connect("notify::active", self._on_tone_toggled, tone.api_value)
+            tones_group.add(row)
+            self._tone_switches[tone.api_value] = row
+
+        # Default tone dropdown
+        default_tone_values = [""] + [t.api_value for t in Tone]
+        default_tone_labels = ["None (manual)"] + [
+            f"{t.icon}  {t.display_name}" for t in Tone
+        ]
+        self._default_tone_model = Gtk.StringList.new(default_tone_labels)
+        self._default_tone_values = default_tone_values
+
+        self._default_tone_row = Adw.ComboRow(
+            title="Default Tone",
+            subtitle="Auto-run this tone when the panel opens",
+            model=self._default_tone_model,
+        )
+        current_default = (
+            self.app.settings_service.default_tone
+            if self.app.settings_service
+            else ""
+        )
+        for i, val in enumerate(default_tone_values):
+            if val == current_default:
+                self._default_tone_row.set_selected(i)
+                break
+        self._default_tone_row.connect(
+            "notify::selected", self._on_default_tone_changed
+        )
+        tones_group.add(self._default_tone_row)
+        self._advanced_group = tones_group
+
+        self._apply_mode_visibility(current_mode)
+
+    def _apply_mode_visibility(self, mode) -> None:
+        """Show only the block that applies to *mode*."""
+        self._simple_group.set_visible(mode is AppMode.ONE_CLICK)
+        self._advanced_group.set_visible(mode is AppMode.ADVANCED)
 
     # ------------------------------------------------------------------
     # Account page
@@ -164,45 +293,6 @@ class SettingsWindow(Adw.PreferencesWindow):
         hotkey_row.set_activatable(False)
         behavior_group.add(hotkey_row)
 
-        # --- Mode (#96) ---
-        # Order follows the enum so the dropdown index maps to a member.
-        self._app_modes = list(AppMode)
-        self._mode_row = Adw.ComboRow(
-            title="Hotkey mode",
-            model=Gtk.StringList.new([m.display_name for m in self._app_modes]),
-        )
-        current_mode = (
-            self.app.settings_service.app_mode
-            if self.app.settings_service
-            else AppMode.ADVANCED
-        )
-        self._mode_row.set_selected(self._app_modes.index(current_mode))
-        self._mode_row.set_subtitle(current_mode.description)
-        self._mode_row.connect("notify::selected", self._on_mode_changed)
-        behavior_group.add(self._mode_row)
-
-        # One-Click preset tone — only meaningful in that mode.
-        self._one_click_tones = list(Tone)
-        self._one_click_row = Adw.ComboRow(
-            title="One-Click tone",
-            subtitle="Used when the hotkey rewrites instantly",
-            model=Gtk.StringList.new(
-                [f"{t.icon}  {t.display_name}" for t in self._one_click_tones]
-            ),
-        )
-        current_tone = (
-            self.app.settings_service.one_click_tone
-            if self.app.settings_service
-            else Tone.POLISHED.api_value
-        )
-        for i, tone in enumerate(self._one_click_tones):
-            if tone.api_value == current_tone:
-                self._one_click_row.set_selected(i)
-                break
-        self._one_click_row.connect("notify::selected", self._on_one_click_tone_changed)
-        self._one_click_row.set_visible(current_mode is AppMode.ONE_CLICK)
-        behavior_group.add(self._one_click_row)
-
         # Translate language
         self._lang_model = Gtk.StringList.new(TRANSLATE_LANGUAGES)
         self._lang_row = Adw.ComboRow(
@@ -225,57 +315,6 @@ class SettingsWindow(Adw.PreferencesWindow):
         )
         self._autostart_row.connect("notify::active", self._on_autostart_changed)
         behavior_group.add(self._autostart_row)
-
-        # --- Panel Tones group ---
-        tones_group = Adw.PreferencesGroup(
-            title="Panel Tones",
-            description="Choose which tones appear in the rewrite panel",
-        )
-        prefs_page.add(tones_group)
-
-        enabled_tones = (
-            self.app.settings_service.enabled_tones
-            if self.app.settings_service
-            else [t.api_value for t in Tone]
-        )
-        self._tone_switches: dict[str, Adw.SwitchRow] = {}
-
-        for tone in Tone:
-            row = Adw.SwitchRow(
-                title=f"{tone.icon}  {tone.display_name}",
-                subtitle=tone.description,
-            )
-            row.set_active(tone.api_value in enabled_tones)
-            row.connect("notify::active", self._on_tone_toggled, tone.api_value)
-            tones_group.add(row)
-            self._tone_switches[tone.api_value] = row
-
-        # Default tone dropdown
-        default_tone_values = [""] + [t.api_value for t in Tone]
-        default_tone_labels = ["None (manual)"] + [
-            f"{t.icon}  {t.display_name}" for t in Tone
-        ]
-        self._default_tone_model = Gtk.StringList.new(default_tone_labels)
-        self._default_tone_values = default_tone_values
-
-        self._default_tone_row = Adw.ComboRow(
-            title="Default Tone",
-            subtitle="Auto-run this tone when the panel opens",
-            model=self._default_tone_model,
-        )
-        current_default = (
-            self.app.settings_service.default_tone
-            if self.app.settings_service
-            else ""
-        )
-        for i, val in enumerate(default_tone_values):
-            if val == current_default:
-                self._default_tone_row.set_selected(i)
-                break
-        self._default_tone_row.connect(
-            "notify::selected", self._on_default_tone_changed
-        )
-        tones_group.add(self._default_tone_row)
 
         # --- Updates group ---
         updates_group = Adw.PreferencesGroup(title="Updates")
@@ -581,7 +620,7 @@ class SettingsWindow(Adw.PreferencesWindow):
             self.app.settings_service.app_mode = mode
             self.app.settings_service.save()
         row.set_subtitle(mode.description)
-        self._one_click_row.set_visible(mode is AppMode.ONE_CLICK)
+        self._apply_mode_visibility(mode)
 
     def _on_one_click_tone_changed(self, row, _param):
         """Persist the tone One-Click rewrites with."""
