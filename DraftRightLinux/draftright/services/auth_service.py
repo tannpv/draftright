@@ -157,6 +157,18 @@ class AuthService:
     def user(self) -> dict | None:
         return self._user
 
+    def is_authenticated(self) -> bool:
+        """Method form of :attr:`is_logged_in`, used by the settings UI."""
+        return self.is_logged_in
+
+    def get_user(self) -> dict:
+        """Return a copy of the current user, or an empty dict when signed out.
+
+        Always returns a mapping so callers can use ``.get()`` without a
+        ``None`` check.
+        """
+        return dict(self._user or {})
+
     # -- public API --------------------------------------------------------
 
     def login(self, email: str, password: str) -> dict:
@@ -168,6 +180,12 @@ class AuthService:
     def register(self, email: str, password: str, name: str) -> dict:
         """Register a new account and persist tokens."""
         data = self._api.register(email, password, name)
+        self._save(data)
+        return data
+
+    def social_login(self, provider: str, id_token: str) -> dict:
+        """Sign in with a provider id_token and persist the session."""
+        data = self._api.social_login(provider, id_token)
         self._save(data)
         return data
 

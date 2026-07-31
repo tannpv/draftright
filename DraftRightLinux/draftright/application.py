@@ -14,7 +14,11 @@ import logging
 from pathlib import Path
 
 from draftright import config
+from draftright.helpers.display_server import is_wayland
+from draftright.models.app_mode import AppMode
 from draftright.models.health import HealthStatus
+from draftright.models.rewrite import RewriteResult
+from draftright.models.tray import TrayAction
 from draftright.__version__ import __version__
 from draftright.services.logger import setup_logging
 from draftright.services.update_service import UpdateService
@@ -23,6 +27,7 @@ from draftright.services.api_client import APIClient
 from draftright.services.auth_service import AuthService
 from draftright.services.clipboard_service import ClipboardService
 from draftright.services.hotkey_service import HotkeyService
+from draftright.services.input_portal import RemoteDesktopInjector
 from draftright.services.rewrite_cache import RewriteCache
 from draftright.services.settings_service import SettingsService
 
@@ -40,7 +45,7 @@ class DraftRightApplication(Adw.Application):
         setup_logging()
 
         super().__init__(
-            application_id="com.draftright.app",
+            application_id=config.APP_ID,
             flags=Gio.ApplicationFlags.FLAGS_NONE,
         )
 
@@ -50,19 +55,51 @@ class DraftRightApplication(Adw.Application):
         self.settings_service = None
         self.hotkey_service = None
         self.clipboard_service = None
+        self.input_injector = None
         # Client-side rewrite cache, shared across panel instances (a fresh
         # RewritePanel is built per hotkey press). Mirrors macOS.
         self.rewrite_cache = RewriteCache()
+
+        # Actions the GTK3 tray helper activates over the session bus.  The
+        # names come from TrayAction so the two processes cannot drift apart;
+        # registering here (not in do_activate) means they exist as soon as
+        # the app owns its bus name.
+        handlers = {
+            TrayAction.SHOW: self._on_show_action,
+            TrayAction.SETTINGS: self._on_settings_action,
+            TrayAction.SUGGEST_FEATURE: self._on_suggest_feature_action,
+            TrayAction.REPORT_BUG: self._on_report_bug_action,
+            TrayAction.SIGN_OUT: self._on_sign_out_action,
+            TrayAction.QUIT: self._on_quit_action,
+        }
+        missing = [a.value for a in TrayAction if a not in handlers]
+        if missing:  # a new TrayAction member without a handler here
+            raise RuntimeError(f"TrayAction(s) with no handler: {missing}")
+        for tray_action, handler in handlers.items():
+            action = Gio.SimpleAction.new(tray_action.value, None)
+            action.connect("activate", handler)
+            self.add_action(action)
 
         self._backend_status = HealthStatus.OFFLINE
         self._is_rewriting = False
         self._tray_icon = None
         self._settings_window = None
+        self._status_label = None
+        self._hotkey_label = None
+        # None + not resolved = still asking the portal; None + resolved =
+        # the compositor refused.  Distinguishing the two keeps the UI from
+        # saying "declined" while the request is still in flight.
+        self._active_trigger = None
+        self._hotkey_resolved = False
         self._last_auto_recovery = 0.0
         self._update_service = None
 
     def do_activate(self):
         """Called when the application is activated."""
+        # Name the window icon so the shell shows the DraftRight icon rather
+        # than a generic fallback; resolves against the installed hicolor set.
+        Gtk.Window.set_default_icon_name(config.APP_ID)
+
         # Force dark color scheme
         style_manager = Adw.StyleManager.get_default()
         style_manager.set_color_scheme(Adw.ColorScheme.FORCE_DARK)
@@ -76,6 +113,10 @@ class DraftRightApplication(Adw.Application):
         # doesn't churn instances.
         if self.settings_service is None:
             self.settings_service = SettingsService()
+            # __init__ only seeds defaults — without this the app ignores the
+            # user's saved backend_url / hotkey / tones, and the first
+            # settings write would persist defaults over their file.
+            self.settings_service.load()
         if self.api_client is None:
             self.api_client = APIClient(self.settings_service.backend_url)
         if self.auth_service is None:
@@ -83,7 +124,11 @@ class DraftRightApplication(Adw.Application):
         # Input services back the core rewrite loop: grab the selection on
         # hotkey, inject the result back. Idempotent on re-activate.
         if self.clipboard_service is None:
-            self.clipboard_service = ClipboardService()
+            # On Wayland, Replace has to synthesise Ctrl+V through the
+            # RemoteDesktop portal; xdotool only reaches XWayland clients.
+            if is_wayland() and self.input_injector is None:
+                self.input_injector = RemoteDesktopInjector(self.settings_service)
+            self.clipboard_service = ClipboardService(injector=self.input_injector)
         if self.hotkey_service is None:
             self.hotkey_service = HotkeyService()
         # Let the API client recover from a 401 by refreshing the session,
@@ -108,6 +153,7 @@ class DraftRightApplication(Adw.Application):
             win = Adw.ApplicationWindow(application=self)
             win.set_default_size(400, 500)
             win.set_title("DraftRight")
+            win.set_content(self._build_main_content())
         win.present()
 
         # Start health check — immediate first check, then on a fixed interval.
@@ -126,6 +172,83 @@ class DraftRightApplication(Adw.Application):
         # Post-update "What's New" — shortly after the window is up.
         GLib.timeout_add_seconds(2, self._trigger_whats_new_check)
 
+    def _build_main_content(self):
+        """Build the main window body (#101 — the window was presented empty).
+
+        The app is hotkey-driven, so this screen's job is to report state:
+        whether the backend is reachable, what the capture shortcut is, and
+        whether that shortcut actually works on this display server.
+        """
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        box.set_margin_top(36)
+        box.set_margin_bottom(36)
+        box.set_margin_start(32)
+        box.set_margin_end(32)
+
+        title = Gtk.Label(label="DraftRight")
+        title.add_css_class("title-1")
+        box.append(title)
+
+        subtitle = Gtk.Label(label="AI-powered text rewriting")
+        subtitle.add_css_class("dim-label")
+        box.append(subtitle)
+
+        self._status_label = Gtk.Label(label="Checking connection…")
+        self._status_label.set_margin_top(16)
+        box.append(self._status_label)
+
+        self._hotkey_label = Gtk.Label(label=self._hotkey_hint())
+        self._hotkey_label.add_css_class("dim-label")
+        self._hotkey_label.set_wrap(True)
+        self._hotkey_label.set_justify(Gtk.Justification.CENTER)
+        box.append(self._hotkey_label)
+
+        rewrite_btn = Gtk.Button(label="Rewrite clipboard text")
+        rewrite_btn.add_css_class("suggested-action")
+        rewrite_btn.add_css_class("pill")
+        rewrite_btn.set_margin_top(16)
+        rewrite_btn.connect("clicked", self._on_rewrite_clipboard_clicked)
+        box.append(rewrite_btn)
+
+        settings_btn = Gtk.Button(label="Settings")
+        settings_btn.add_css_class("pill")
+        settings_btn.connect("clicked", lambda _b: self.show_settings())
+        box.append(settings_btn)
+
+        return box
+
+    def _hotkey_hint(self) -> str:
+        """Describe the capture shortcut honestly for the current session.
+
+        On Wayland the compositor owns the binding: it may prompt, refuse, or
+        substitute a different trigger, so report what it granted rather than
+        what was requested (#99).
+        """
+        keystring = self.settings_service.hotkey if self.settings_service else ""
+        if not is_wayland():
+            return f"Select text anywhere, then press {keystring}"
+        if self._active_trigger:
+            # The portal hands back a localised, human-readable description
+            # (GNOME: "Press <Shift><Control>r"), so lead in neutrally rather
+            # than prefixing another "press".
+            return f"Select text anywhere — {self._active_trigger}"
+        if self._hotkey_resolved:
+            return (
+                "Your desktop declined the global shortcut — "
+                "use the button below, or grant it in system settings."
+            )
+        return f"Requesting the global shortcut ({keystring}) from your desktop…"
+
+    def _on_rewrite_clipboard_clicked(self, _button):
+        """Rewrite whatever is on the clipboard — the Wayland-safe entry point."""
+        text = ""
+        if self.clipboard_service:
+            text = self.clipboard_service.get_clipboard()
+        if text:
+            self.show_rewrite_panel(text)
+        elif self._status_label is not None:
+            self._status_label.set_text("Clipboard is empty — copy some text first.")
+
     def _load_css(self):
         """Load custom CSS from resources."""
         css_provider = Gtk.CssProvider()
@@ -143,7 +266,14 @@ class DraftRightApplication(Adw.Application):
         )
 
     def _setup_tray(self):
-        """Set up system tray icon."""
+        """Set up the system tray icon (idempotent).
+
+        do_activate() runs again whenever the app is re-activated — including
+        from the tray's own "Show" action — so without this guard each
+        re-activation would spawn another helper process.
+        """
+        if self._tray_icon is not None:
+            return
         from draftright.ui.tray_icon import TrayIcon
         self._tray_icon = TrayIcon(self)
 
@@ -158,10 +288,28 @@ class DraftRightApplication(Adw.Application):
             return
         keystring = self.settings_service.hotkey
         try:
+            # Wayland binding is asynchronous and the compositor may refuse or
+            # remap it, so success is reported by the callback — not here.
+            # Logging "registered" at this point was how the old build claimed
+            # a working hotkey while the listener could never fire (#99).
+            self.hotkey_service.on_trigger_changed = self._on_hotkey_trigger_changed
             self.hotkey_service.start(keystring, self.on_hotkey_pressed)
-            logger.info("Global hotkey registered: %s", keystring)
+            logger.info("Requested global hotkey: %s", keystring)
         except Exception as exc:
             logger.warning("Failed to register hotkey %s: %s", keystring, exc)
+
+    def _on_hotkey_trigger_changed(self, trigger):
+        """Reflect the trigger the compositor actually bound (Wayland, #99)."""
+        if trigger:
+            logger.info("Global hotkey is live: %s", trigger)
+        else:
+            logger.warning(
+                "No global shortcut is bound — the tray and window still work."
+            )
+        self._active_trigger = trigger
+        self._hotkey_resolved = True
+        if self._hotkey_label is not None:
+            self._hotkey_label.set_text(self._hotkey_hint())
 
     def _restore_session(self):
         """Restore saved authentication session."""
@@ -173,12 +321,75 @@ class DraftRightApplication(Adw.Application):
     # ------------------------------------------------------------------
 
     def on_hotkey_pressed(self):
-        """Handle global hotkey press — capture selected text and show rewrite panel."""
+        """Handle a global hotkey press.
+
+        Advanced mode opens the panel so the user picks a tone; One-Click
+        (#96) rewrites immediately with the preset tone and replaces the
+        selection, matching macOS and Windows.
+        """
         text = ""
         if self.clipboard_service:
             text = self.clipboard_service.get_selected_text()
-        if text:
+        if not text:
+            return
+
+        mode = self.settings_service.app_mode if self.settings_service else AppMode.ADVANCED
+        if mode is AppMode.ONE_CLICK:
+            self.run_one_click_rewrite(text)
+        else:
             self.show_rewrite_panel(text)
+
+    def run_one_click_rewrite(self, text: str):
+        """Rewrite *text* with the preset tone and replace the selection (#96).
+
+        Runs without any window, so failures have nowhere to render — they go
+        to a desktop notification instead of being swallowed.
+        """
+        if self.api_client is None or self._is_rewriting:
+            return
+        tone = self.settings_service.one_click_tone
+        self._is_rewriting = True
+
+        def worker():
+            try:
+                cached = self.rewrite_cache.get(text, tone)
+                if cached is not None:
+                    GLib.idle_add(self._finish_one_click, cached, None)
+                    return
+                payload = self.api_client.rewrite(text, tone)
+                result = RewriteResult.from_wire(payload).text
+                self.rewrite_cache.set(text, tone, result)
+                GLib.idle_add(self._finish_one_click, result, None)
+            except Exception as exc:  # noqa: BLE001 — surface any failure
+                GLib.idle_add(self._finish_one_click, None, str(exc))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _finish_one_click(self, result, error) -> bool:
+        """Inject the rewrite, or tell the user why it didn't happen."""
+        self._is_rewriting = False
+        if error is not None:
+            logger.warning("One-Click rewrite failed: %s", error)
+            self._notify("Rewrite failed", error)
+            return False
+
+        def on_injected(delivered: bool):
+            if not delivered:
+                # The text is on the clipboard either way — say so, since
+                # there is no panel to show a fallback button.
+                self._notify(
+                    "Rewrite ready",
+                    "Couldn't paste automatically — press Ctrl+V to insert it.",
+                )
+
+        self.clipboard_service.inject_text(result, on_done=on_injected)
+        return False
+
+    def _notify(self, title: str, body: str) -> None:
+        """Send a desktop notification (One-Click has no window to write to)."""
+        notification = Gio.Notification.new(title)
+        notification.set_body(body)
+        self.send_notification("one-click", notification)
 
     def show_rewrite_panel(self, text: str):
         """Open the rewrite panel with the captured text.
@@ -214,6 +425,44 @@ class DraftRightApplication(Adw.Application):
         self._settings_window = None
         return False  # allow the default close
 
+    # ------------------------------------------------------------------
+    # Tray actions (activated over D-Bus by the GTK3 helper)
+    # ------------------------------------------------------------------
+
+    def _on_show_action(self, _action, _param):
+        """Bring the main window back, recreating it if it was closed."""
+        window = self.props.active_window
+        if window is None:
+            self.activate()  # rebuilds and presents the main window
+        else:
+            window.present()
+
+    def _on_settings_action(self, _action, _param):
+        if self.props.active_window is None:
+            self.activate()  # services must exist before Settings can build
+        self.show_settings()
+
+    def _on_suggest_feature_action(self, _action, _param):
+        from draftright.ui.suggest_feature_dialog import open_suggest_feature_dialog
+
+        token = self.auth_service.access_token if self.auth_service else None
+        open_suggest_feature_dialog(self.props.active_window, bearer_token=token)
+
+    def _on_report_bug_action(self, _action, _param):
+        from draftright.ui.report_bug_dialog import open_report_bug_dialog
+
+        token = self.auth_service.access_token if self.auth_service else None
+        email = self.auth_service.get_user().get("email") if self.auth_service else None
+        open_report_bug_dialog(
+            self.props.active_window, bearer_token=token, user_email=email
+        )
+
+    def _on_sign_out_action(self, _action, _param):
+        self.sign_out()
+
+    def _on_quit_action(self, _action, _param):
+        self.quit_app()
+
     def sign_out(self):
         """Clear auth session and notify the user."""
         if self.auth_service:
@@ -230,6 +479,13 @@ class DraftRightApplication(Adw.Application):
         """Clean up resources and quit the application."""
         if self.hotkey_service:
             self.hotkey_service.stop()
+        if self.input_injector is not None:
+            self.input_injector.stop()
+        if self._tray_icon is not None:
+            # Reap the helper explicitly; it also self-exits on stdin EOF, but
+            # that only fires once this process is gone.
+            self._tray_icon.stop()
+            self._tray_icon = None
         self.quit()
 
     def _trigger_health_check(self) -> bool:
@@ -255,6 +511,8 @@ class DraftRightApplication(Adw.Application):
         self._backend_status = status
         if self._tray_icon is not None:
             self._tray_icon.set_status(status)
+        if self._status_label is not None:
+            self._status_label.set_text(status.display_name)
 
         # Auto-recovery: if offline and targeting localhost, try to start the backend
         backend_url = ""
@@ -282,10 +540,14 @@ class DraftRightApplication(Adw.Application):
 
         def _run():
             try:
-                env = dict(os.environ, PATH="/usr/local/bin:/usr/bin:/bin:" + os.environ.get("PATH", ""))
+                env = dict(
+                    os.environ,
+                    PATH=config.SUBPROCESS_PATH_PREFIX + ":" + os.environ.get("PATH", ""),
+                )
                 result = subprocess.run(
                     [str(script)],
-                    capture_output=True, text=True, timeout=60, env=env,
+                    capture_output=True, text=True,
+                    timeout=config.AUTO_RECOVERY_TIMEOUT, env=env,
                 )
                 logger.info("Auto-recovery: exit code %d", result.returncode)
             except Exception as exc:

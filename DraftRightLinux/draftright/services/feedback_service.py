@@ -12,7 +12,7 @@ import json
 import urllib.request
 import urllib.error
 
-from .settings_service import settings_service
+from .settings_service import SettingsService
 
 _TARGET_PLATFORMS = ("playground", "mobile", "windows", "mac", "linux")
 
@@ -45,7 +45,11 @@ def submit_feature_request(
     if target_platform not in _TARGET_PLATFORMS:
         raise ValueError(f"target_platform must be one of {_TARGET_PLATFORMS}")
 
-    base = settings_service.backend_url.rstrip("/")
+    # No module-level singleton exists (see module docstring) — read the
+    # persisted settings on demand.
+    settings = SettingsService()
+    settings.load()
+    base = settings.backend_url.rstrip("/")
 
     payload: dict[str, object] = {
         "kind": "feature",
