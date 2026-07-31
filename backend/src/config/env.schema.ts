@@ -87,6 +87,13 @@ export const envSchema = z.object({
   // the verifier falls back to the V2 bundle IDs (iOS + macOS).
   APPLE_AUDIENCES: z.string().optional(),
 
+  // Comma-separated list of accepted Google OAuth client ids (`aud`).
+  // Each client app — web, iOS/macOS, Android, Linux desktop — has its own
+  // client id and all of them post to the same /auth/social. Merged with
+  // app_settings.google_client_id. If BOTH are empty, Google sign-in is
+  // refused rather than accepting tokens minted for any other client.
+  GOOGLE_AUDIENCES: z.string().optional(),
+
   // --- Payment: Stripe ------------------------------------------------
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
