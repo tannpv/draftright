@@ -101,7 +101,7 @@ sudo checkinstall --pkgname=draftright --pkgversion=1.0.0 \
 | Muted | #94a3b8 |
 | Success green | #10b981 |
 
-## Status & Backlog (as of 2026-07-30 — EPIC #93)
+## Status & Backlog (as of 2026-07-31 — EPIC #93 CLOSED)
 
 **First runtime verification done (2026-07-30).** The app has now been smoke-run on a real Linux host (GNOME 49 / Wayland + XWayland). That first run exposed seven crash-level defects that compiled and passed unit tests — see "Fixed by runtime verification" below. **X11 is still unverified**: the dev host is Wayland, so `_X11Listener` has never been exercised.
 
@@ -109,7 +109,15 @@ sudo checkinstall --pkgname=draftright --pkgversion=1.0.0 \
 
 **Fixed by runtime verification (2026-07-30):** Settings could not open at all (`SubscriptionPage` inherited a `Protocol` → metaclass conflict at import) · `auth_service.is_authenticated`/`get_user` missing · `settings_service.get`/`set` missing · `register()` args transposed (name sent as email) · `feedback_service` imported a nonexistent singleton · `SettingsService` never `load()`ed · tray dead on every GTK4 system.
 
-**Open (0 under #93)** — every issue is implemented; see the verification gaps below.
+**EPIC #93 closed.** The app is working and user-verified. Test suite 7 → 119.
+
+**Still unverified — cannot be closed from this machine:**
+1. **No signed-in rewrite round-trip** has ever run against the live backend; the core loop is only exercised against stubs.
+2. **Wayland Replace** — the RemoteDesktop keystroke has never been confirmed to land in another app's field (needs a one-time permission grant).
+3. **X11 is unexercised** — this host is Wayland, and `_X11Listener`'s key parsing was refactored without being run.
+4. **Google sign-in completion** — the `client_secret` fix is verified against Google's token endpoint, but an actual sign-in has not been confirmed.
+
+**Known gaps:** Simple mode has no progress indicator (Windows shows one at the cursor; Wayland cannot position a window). The Flatpak tray needs a libayatana-appindicator module. `Adw.PreferencesWindow` is deprecated since libadwaita 1.5 (this host runs 1.9.1) in favour of `Adw.PreferencesDialog`. `setup.py develop` editable installs are removed in pip 25.3 — needs a `pyproject.toml`.
 
 **Landed, pending config/verification:** #96 One-Click · #97 Google login (needs a Desktop OAuth client id) · #98 Report-a-Bug · #100 KeepAlive
 
