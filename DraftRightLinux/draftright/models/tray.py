@@ -27,6 +27,7 @@ class TrayAction(Enum):
     SHOW = "show"
     SETTINGS = "settings"
     SUGGEST_FEATURE = "suggest-feature"
+    REPORT_BUG = "report-bug"
     SIGN_OUT = "sign-out"
     QUIT = "quit"
 
@@ -37,6 +38,7 @@ class TrayAction(Enum):
             TrayAction.SHOW: "Show DraftRight",
             TrayAction.SETTINGS: "Open Settings",
             TrayAction.SUGGEST_FEATURE: "Suggest a feature…",
+            TrayAction.REPORT_BUG: "Report a bug…",
             TrayAction.SIGN_OUT: "Sign Out",
             TrayAction.QUIT: "Quit",
         }[self]

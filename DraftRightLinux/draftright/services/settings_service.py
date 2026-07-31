@@ -46,6 +46,17 @@ X-GNOME-Autostart-enabled=true
 
 _AUTOSTART_NAME = "com.draftright.app.desktop"
 
+# The Settings UI addressed two keys with hyphens while the service (and every
+# property here) used underscores, so choices made in Settings were written to
+# keys nothing read — a user could pick a translate language and have the app
+# keep using the old one.  The UI now uses the canonical names; these aliases
+# fold any already-persisted hyphen keys back in on load so that choice is
+# honoured rather than silently discarded.
+_LEGACY_KEY_ALIASES = {
+    "translate-language": "translate_language",
+    "auto-start": "auto_start",
+}
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -179,6 +190,8 @@ class SettingsService:
                 stored = json.loads(path.read_text(encoding="utf-8"))
                 # Merge stored values over defaults so new keys get defaults.
                 self._data = {**_DEFAULTS, **stored}
+                if self._migrate_legacy_keys():
+                    self.save()
                 log.info("Settings loaded from %s", path)
                 return
             except Exception as exc:
@@ -187,6 +200,25 @@ class SettingsService:
         # First run or corrupt file — write defaults.
         self._data = dict(_DEFAULTS)
         self.save()
+
+    def _migrate_legacy_keys(self) -> bool:
+        """Fold hyphenated keys onto their canonical names.  True if changed.
+
+        The hyphenated value wins: it is what the user last chose in Settings,
+        even though nothing ever read it back.
+        """
+        changed = False
+        for legacy, canonical in _LEGACY_KEY_ALIASES.items():
+            if legacy not in self._data:
+                continue
+            value = self._data.pop(legacy)
+            if value != self._data.get(canonical):
+                log.info(
+                    "Migrating setting %r → %r (value %r)", legacy, canonical, value
+                )
+                self._data[canonical] = value
+            changed = True
+        return changed
 
     def save(self) -> None:
         """Persist current settings to disk."""

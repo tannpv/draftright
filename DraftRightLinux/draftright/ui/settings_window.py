@@ -13,6 +13,7 @@ from draftright import config
 from draftright.__version__ import __version__
 from draftright.models.tone import Tone
 from draftright.ui.subscription_page import SubscriptionPage
+from draftright.ui.report_bug_dialog import open_report_bug_dialog
 from draftright.ui.suggest_feature_dialog import open_suggest_feature_dialog
 
 # Languages available for translation
@@ -161,7 +162,7 @@ class SettingsWindow(Adw.PreferencesWindow):
             model=self._lang_model,
         )
         # Set current selection
-        current_lang = self._get_setting("translate-language", "Spanish")
+        current_lang = self._get_setting("translate_language", "Spanish")
         for i, lang in enumerate(TRANSLATE_LANGUAGES):
             if lang == current_lang:
                 self._lang_row.set_selected(i)
@@ -172,7 +173,7 @@ class SettingsWindow(Adw.PreferencesWindow):
         # Auto-start
         self._autostart_row = Adw.SwitchRow(title="Auto-start on login")
         self._autostart_row.set_active(
-            self._get_setting("auto-start", False)
+            self._get_setting("auto_start", False)
         )
         self._autostart_row.connect("notify::active", self._on_autostart_changed)
         behavior_group.add(self._autostart_row)
@@ -268,6 +269,16 @@ class SettingsWindow(Adw.PreferencesWindow):
         suggest_btn.connect("clicked", self._on_suggest_feature)
         suggest_row.add_suffix(suggest_btn)
         feedback_group.add(suggest_row)
+
+        report_row = Adw.ActionRow(
+            title="Report a bug",
+            subtitle="Something broken? Send us the details",
+        )
+        report_btn = Gtk.Button(label="Open…", valign=Gtk.Align.CENTER)
+        report_btn.add_css_class("flat")
+        report_btn.connect("clicked", self._on_report_bug)
+        report_row.add_suffix(report_btn)
+        feedback_group.add(report_row)
 
     # ------------------------------------------------------------------
     # Helpers
@@ -398,11 +409,11 @@ class SettingsWindow(Adw.PreferencesWindow):
         """Persist the translate language change."""
         idx = row.get_selected()
         if 0 <= idx < len(TRANSLATE_LANGUAGES):
-            self._save_setting("translate-language", TRANSLATE_LANGUAGES[idx])
+            self._save_setting("translate_language", TRANSLATE_LANGUAGES[idx])
 
     def _on_autostart_changed(self, row, _pspec):
         """Persist the auto-start preference."""
-        self._save_setting("auto-start", row.get_active())
+        self._save_setting("auto_start", row.get_active())
 
     def _on_tone_toggled(self, row, _pspec, tone_api_value: str):
         """Persist the enabled/disabled state of a tone."""
@@ -472,3 +483,13 @@ class SettingsWindow(Adw.PreferencesWindow):
             else None
         )
         open_suggest_feature_dialog(self, bearer_token=token)
+
+    def _on_report_bug(self, _button):
+        """Open the Report a Bug dialog (#98)."""
+        auth = self.app.auth_service
+        open_report_bug_dialog(
+            self,
+            bearer_token=auth.access_token if auth is not None else None,
+            # Pre-fill so a signed-in user doesn't retype it, matching mobile.
+            user_email=auth.get_user().get("email") if auth is not None else None,
+        )

@@ -66,6 +66,7 @@ class DraftRightApplication(Adw.Application):
             TrayAction.SHOW: self._on_show_action,
             TrayAction.SETTINGS: self._on_settings_action,
             TrayAction.SUGGEST_FEATURE: self._on_suggest_feature_action,
+            TrayAction.REPORT_BUG: self._on_report_bug_action,
             TrayAction.SIGN_OUT: self._on_sign_out_action,
             TrayAction.QUIT: self._on_quit_action,
         }
@@ -377,6 +378,15 @@ class DraftRightApplication(Adw.Application):
 
         token = self.auth_service.access_token if self.auth_service else None
         open_suggest_feature_dialog(self.props.active_window, bearer_token=token)
+
+    def _on_report_bug_action(self, _action, _param):
+        from draftright.ui.report_bug_dialog import open_report_bug_dialog
+
+        token = self.auth_service.access_token if self.auth_service else None
+        email = self.auth_service.get_user().get("email") if self.auth_service else None
+        open_report_bug_dialog(
+            self.props.active_window, bearer_token=token, user_email=email
+        )
 
     def _on_sign_out_action(self, _action, _param):
         self.sign_out()

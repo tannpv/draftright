@@ -6,6 +6,8 @@ override, and the clipboard inject_text delegation.
 """
 
 import inspect
+import json
+import re
 import os
 import tempfile
 import unittest
@@ -379,6 +381,62 @@ class InjectorStateTest(unittest.TestCase):
         # X11 path, and the safety net if the injector was not wired up.
         service = ClipboardService(injector=None)
         self.assertIsNone(service._injector)
+
+
+class LegacySettingsKeyTest(unittest.TestCase):
+    """The Settings UI wrote hyphenated keys nothing read back.
+
+    A user could pick a translate language and have the app keep using the old
+    one — both spellings coexisted in settings.json.
+    """
+
+    def _service(self, tmp, stored):
+        path = Path(tmp) / "settings.json"
+        path.write_text(json.dumps(stored), encoding="utf-8")
+        with mock.patch.object(
+            settings_service_mod, "_settings_file", return_value=path
+        ):
+            service = SettingsService()
+            service.load()
+            return service, path
+
+    def test_hyphen_key_wins_and_is_removed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service, path = self._service(
+                tmp,
+                {"translate_language": "Vietnamese", "translate-language": "English"},
+            )
+            # The hyphenated value is the user's most recent explicit choice.
+            self.assertEqual(service.translate_language, "English")
+            self.assertNotIn("translate-language", service._data)
+            # And it must be persisted, not just fixed in memory.
+            self.assertNotIn("translate-language", json.loads(path.read_text()))
+
+    def test_all_aliases_migrate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            stored = {legacy: "x" for legacy in settings_service_mod._LEGACY_KEY_ALIASES}
+            service, _ = self._service(tmp, stored)
+            for legacy, canonical in settings_service_mod._LEGACY_KEY_ALIASES.items():
+                self.assertNotIn(legacy, service._data)
+                self.assertEqual(service.get(canonical), "x")
+
+    def test_no_legacy_keys_leaves_data_untouched(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            service, _ = self._service(tmp, {"translate_language": "Vietnamese"})
+            self.assertEqual(service.translate_language, "Vietnamese")
+
+    def test_settings_ui_uses_canonical_keys_only(self):
+        # Guards the regression directly: any hyphenated key in the Settings
+        # window is a key the service will never read.
+        source = (
+            Path(__file__).resolve().parent.parent
+            / "draftright" / "ui" / "settings_window.py"
+        )
+        used = set(re.findall(r'_(?:get|save)_setting\("([^"]+)"', source.read_text()))
+        self.assertTrue(used, "expected the Settings window to address settings by key")
+        for key in used:
+            self.assertNotIn("-", key, f"{key!r} uses a hyphen; defaults use underscores")
+            self.assertIn(key, settings_service_mod._DEFAULTS, f"{key!r} has no default")
 
 
 class PortalClientTest(unittest.TestCase):
