@@ -1,8 +1,10 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 
 import 'package:draftright_mobile/services/auth_service.dart';
@@ -19,11 +21,16 @@ import 'package:draftright_mobile/services/screenshot_compressor.dart';
 /// [initialDescription] pre-fills the description field — used when the
 /// sheet is opened from an auto-captured error notice so the user doesn't
 /// have to retype what just happened.
+/// [initialScreenshotBytes] are PNG bytes of the screen the user was on,
+/// captured by the launcher (the floating report button) BEFORE this sheet
+/// was shown. They're compressed + pre-attached so a report ships with a
+/// screenshot by default; the user can reselect, retake, or remove it (#135).
 Future<void> showReportBugSheet(
   BuildContext context, {
   String? currentRoute,
   String? endpointOverride,
   String? initialDescription,
+  Uint8List? initialScreenshotBytes,
 }) async {
   if (Platform.isIOS) {
     await showCupertinoModalPopup<void>(
@@ -32,6 +39,7 @@ Future<void> showReportBugSheet(
         currentRoute: currentRoute,
         endpointOverride: endpointOverride,
         initialDescription: initialDescription,
+        initialScreenshotBytes: initialScreenshotBytes,
       ),
     );
   } else {
@@ -46,6 +54,7 @@ Future<void> showReportBugSheet(
         currentRoute: currentRoute,
         endpointOverride: endpointOverride,
         initialDescription: initialDescription,
+        initialScreenshotBytes: initialScreenshotBytes,
       ),
     );
   }
@@ -55,10 +64,12 @@ class _ReportBugSheet extends StatefulWidget {
   final String? currentRoute;
   final String? endpointOverride;
   final String? initialDescription;
+  final Uint8List? initialScreenshotBytes;
   const _ReportBugSheet({
     this.currentRoute,
     this.endpointOverride,
     this.initialDescription,
+    this.initialScreenshotBytes,
   });
 
   @override
@@ -85,6 +96,35 @@ class _ReportBugSheetState extends State<_ReportBugSheet> {
   // Pre-fill the email field once, from the signed-in user's cached address,
   // so logged-in users don't retype it (and can still edit before sending).
   bool _prefilledEmail = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final bytes = widget.initialScreenshotBytes;
+    if (bytes != null && bytes.isNotEmpty) {
+      // Adopt after the first frame so setState is safe.
+      WidgetsBinding.instance.addPostFrameCallback((_) => _adoptCapturedBytes(bytes));
+    }
+  }
+
+  /// Compress + attach the auto-captured screen (#135). Best-effort: any
+  /// failure or an oversized shot just leaves the slot empty — the user can
+  /// still attach manually.
+  Future<void> _adoptCapturedBytes(Uint8List bytes) async {
+    try {
+      final dir = await getTemporaryDirectory();
+      final raw = File(
+          '${dir.path}/report_capture_${DateTime.now().millisecondsSinceEpoch}.png');
+      await raw.writeAsBytes(bytes);
+      final file = await ScreenshotCompressor.compressForUpload(raw);
+      if (await file.length() > BugReportService.maxScreenshotBytes) return;
+      if (!mounted) return;
+      setState(() {
+        _screenshot = file;
+        _errorText = null;
+      });
+    } catch (_) {/* auto-capture is optional — silently skip */}
+  }
 
   @override
   void didChangeDependencies() {
