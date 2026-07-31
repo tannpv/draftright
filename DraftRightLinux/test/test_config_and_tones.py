@@ -579,6 +579,53 @@ class GoogleOAuthTest(unittest.TestCase):
             self.assertIn("google", url)
 
 
+class BugReportAttachTest(unittest.TestCase):
+    """Three ways to attach, one adoption path (#85).
+
+    Capture and paste must land the image in the form directly — the point is
+    that the user never browses for a file they just created.
+    """
+
+    def _source(self) -> str:
+        return (
+            Path(__file__).resolve().parent.parent
+            / "draftright" / "ui" / "report_bug_dialog.py"
+        ).read_text(encoding="utf-8")
+
+    def test_all_three_paths_exist(self):
+        src = self._source()
+        for probe in ("_on_capture", "_paste_from_clipboard", "_on_attach"):
+            self.assertIn(f"def {probe}", src)
+
+    def test_capture_and_paste_attach_without_browsing(self):
+        # Both must call _set_screenshot themselves; anything else means the
+        # user is sent back to the file picker for an image they just made.
+        src = self._source()
+        for method in ("_on_capture_done", "_paste_from_clipboard"):
+            body = src.split(f"def {method}")[1].split("\n    def ")[0]
+            self.assertIn("_set_screenshot", body, f"{method} must attach directly")
+
+    def test_one_adoption_path(self):
+        # Label, Remove button and stored path cannot drift if they are set
+        # in exactly one place.
+        src = self._source()
+        self.assertEqual(src.count("def _set_screenshot"), 1)
+        body = src.split("def _set_screenshot")[1].split("\n    def ")[0]
+        for effect in ("_screenshot_path", "_shot_label", "_clear_shot_btn"):
+            self.assertIn(effect, body)
+
+    def test_paste_respects_the_size_limit(self):
+        body = self._source().split("def _paste_from_clipboard")[1].split("\n    def ")[0]
+        self.assertIn("MAX_SCREENSHOT_BYTES", body)
+
+    def test_ctrl_v_yields_to_text_paste(self):
+        # Ctrl+V must only be claimed when the clipboard holds an image,
+        # otherwise it would stop the user pasting text into the description.
+        body = self._source().split("def _on_key_pressed")[1].split("\n    def ")[0]
+        self.assertIn("_clipboard_has_image", body)
+        self.assertIn("return False", body)
+
+
 class MainWindowChromeTest(unittest.TestCase):
     """The main window must carry its own header bar.
 
