@@ -104,7 +104,7 @@ GOOGLE_PROVIDER = "google"   # wire value for POST /auth/social
 # custom scheme instead, so it cannot be reused here.  Override with
 # DRAFTRIGHT_GOOGLE_CLIENT_ID until a Linux desktop client is provisioned.
 GOOGLE_CLIENT_ID_ENV_VAR = "DRAFTRIGHT_GOOGLE_CLIENT_ID"
-DEFAULT_GOOGLE_CLIENT_ID = ""
+DEFAULT_GOOGLE_CLIENT_ID = "22951518033-oaf0ptahsjrsnu2v2qr0kpul5tslpgf6.apps.googleusercontent.com"
 
 
 def google_client_id() -> str:
