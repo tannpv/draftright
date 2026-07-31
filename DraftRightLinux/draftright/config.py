@@ -104,6 +104,16 @@ GOOGLE_PROVIDER = "google"   # wire value for POST /auth/social
 # custom scheme instead, so it cannot be reused here.  Override with
 # DRAFTRIGHT_GOOGLE_CLIENT_ID until a Linux desktop client is provisioned.
 GOOGLE_CLIENT_ID_ENV_VAR = "DRAFTRIGHT_GOOGLE_CLIENT_ID"
+# Google's Desktop-type clients REQUIRE client_secret at the token endpoint,
+# even with PKCE — omitting it fails with "client_secret is missing". That is
+# a Google-specific departure from RFC 8252, which treats a native app as a
+# public client. The secret ships with every installed copy and is not
+# security-critical (Google's own docs say so); PKCE remains the real
+# proof-of-possession. Same env var name Windows uses, and like Windows it
+# stays out of git — hygiene and secret-scanning, not confidentiality.
+GOOGLE_CLIENT_SECRET_ENV_VAR = "GOOGLE_OAUTH_CLIENT_SECRET"
+# Optional local file for dev, gitignored: one line containing the secret.
+GOOGLE_CLIENT_SECRET_FILE = "~/.config/draftright/google_client_secret"
 DEFAULT_GOOGLE_CLIENT_ID = "22951518033-oaf0ptahsjrsnu2v2qr0kpul5tslpgf6.apps.googleusercontent.com"
 
 
@@ -115,9 +125,28 @@ def google_client_id() -> str:
     )
 
 
+def google_client_secret() -> str:
+    """Resolve the OAuth client secret: env var first, then the local file."""
+    from pathlib import Path as _Path
+
+    value = os.environ.get(GOOGLE_CLIENT_SECRET_ENV_VAR, "").strip()
+    if value:
+        return value
+    path = _Path(GOOGLE_CLIENT_SECRET_FILE).expanduser()
+    try:
+        return path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+
 def google_sign_in_available() -> bool:
-    """False when no client id is configured, so the UI can hide the button."""
-    return bool(google_client_id())
+    """False unless BOTH the client id and secret are configured.
+
+    Google's Desktop clients reject the token exchange without the secret, so
+    offering the button with only an id would fail after the user had already
+    signed in in the browser — the worst point to fail.
+    """
+    return bool(google_client_id()) and bool(google_client_secret())
 
 
 # ── HTTP timeouts (seconds) ──────────────────────────────────────────────────
