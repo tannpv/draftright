@@ -579,6 +579,37 @@ class GoogleOAuthTest(unittest.TestCase):
             self.assertIn("google", url)
 
 
+class MainWindowChromeTest(unittest.TestCase):
+    """The main window must carry its own header bar.
+
+    Adw.ApplicationWindow draws no titlebar; the header has to be part of the
+    content. Building it as a bare Gtk.Box left the window with no close
+    button at all — the only way out of the app was the tray.
+    """
+
+    def _content_builder(self) -> str:
+        src = (
+            Path(__file__).resolve().parent.parent / "draftright" / "application.py"
+        ).read_text(encoding="utf-8")
+        return src.split("def _build_main_content")[1].split("\n    def ")[0]
+
+    def test_main_window_has_a_header_bar(self):
+        body = self._content_builder()
+        self.assertIn("Adw.HeaderBar()", body,
+                      "Adw.ApplicationWindow has no titlebar of its own")
+
+    def test_header_is_the_first_child_of_the_returned_root(self):
+        # It has to be in the returned widget, not built and dropped.
+        body = self._content_builder()
+        self.assertIn("root.append(header)", body)
+        self.assertIn("return root", body)
+
+    def test_window_offers_an_explicit_hide_to_tray(self):
+        # Closing keeps the app alive in the tray; without a labelled action
+        # the close button reads as Quit.
+        self.assertIn("Hide to tray", self._content_builder())
+
+
 class SettingsWindowLifecycleTest(unittest.TestCase):
     """Settings must stay closable when opened from the tray.
 
