@@ -578,6 +578,52 @@ class GoogleOAuthTest(unittest.TestCase):
             self.assertIn("google", url)
 
 
+class TimerContractTest(unittest.TestCase):
+    """GLib timers whose callback returns True must not use a 0 interval.
+
+    `timeout_add_seconds(0, cb)` with `cb` returning True re-arms instantly:
+    measured at ~1.3 million calls in 10 seconds. In the app that meant a
+    network thread per call, a hammered backend, and a tray icon flickering
+    between the app mark and the offline warning as results flapped.
+    """
+
+    def _application_source(self) -> str:
+        path = (
+            Path(__file__).resolve().parent.parent / "draftright" / "application.py"
+        )
+        return path.read_text(encoding="utf-8")
+
+    def test_no_zero_interval_timers(self):
+        source = self._application_source()
+        # Ignore the comment that documents the old bug.
+        code = "\n".join(
+            line for line in source.splitlines()
+            if not line.lstrip().startswith("#")
+        )
+        for bad in ("timeout_add_seconds(0,", "timeout_add(0,"):
+            self.assertNotIn(
+                bad, code,
+                f"{bad} re-arms instantly when the callback returns True; "
+                "call the function directly for an immediate run",
+            )
+
+    def test_repeating_health_timer_uses_the_configured_interval(self):
+        source = self._application_source()
+        self.assertIn(
+            "timeout_add_seconds(config.HEALTH_CHECK_INTERVAL, self._trigger_health_check)",
+            source,
+        )
+        self.assertGreaterEqual(config.HEALTH_CHECK_INTERVAL, 5)
+
+    def test_one_shot_timers_do_not_repeat(self):
+        # A callback returning True on a short timer is the same trap with a
+        # bigger constant — the update check would run every 10 seconds.
+        source = self._application_source()
+        for name in ("_trigger_update_check", "_trigger_whats_new_check"):
+            body = source.split(f"def {name}")[1].split("def ")[0]
+            self.assertIn("return False", body, f"{name} must not repeat")
+
+
 class KeepAliveServiceTest(unittest.TestCase):
     """#100 — systemd user unit that respawns the app after a crash."""
 
