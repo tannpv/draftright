@@ -31,7 +31,6 @@ class SettingsService extends ChangeNotifier {
   String _translateLanguage = 'Vietnamese';
   List<String> _enabledTones = Tone.values.map((t) => t.apiValue).toList();
   String _defaultTone = '';
-  bool _floatingBubbleEnabled = false;
   String _bubblePresetTone = 'polished';
   List<String> _enabledLanguageIds = const ['en'];
   String _activeLanguageId = 'en';
@@ -43,7 +42,6 @@ class SettingsService extends ChangeNotifier {
   String get translateLanguage => _translateLanguage;
   List<String> get enabledTones => List.unmodifiable(_enabledTones);
   String get defaultTone => _defaultTone;
-  bool get floatingBubbleEnabled => _floatingBubbleEnabled;
   String get bubblePresetTone => _bubblePresetTone;
   List<String> get enabledLanguageIds => List.unmodifiable(_enabledLanguageIds);
   String get activeLanguageId => _activeLanguageId;
@@ -63,8 +61,10 @@ class SettingsService extends ChangeNotifier {
     _enabledTones = _prefs.getStringList('draftright.enabledTones')
         ?? Tone.values.map((t) => t.apiValue).toList();
     _defaultTone = _prefs.getString('draftright.defaultTone') ?? '';
-    _floatingBubbleEnabled = _prefs.getBool('draftright.floatingBubbleEnabled') ?? false;
     _bubblePresetTone = _prefs.getString('draftright.bubblePresetTone') ?? 'polished';
+    // The floating bubble was removed; purge its orphaned pref so it doesn't
+    // linger in storage on upgraded installs.
+    await _prefs.remove('draftright.floatingBubbleEnabled');
     _enabledLanguageIds = _prefs.getStringList('draftright.enabledLanguageIds')
         ?? const ['en'];
     if (_enabledLanguageIds.isEmpty) _enabledLanguageIds = const ['en'];
@@ -118,18 +118,12 @@ class SettingsService extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> setFloatingBubbleEnabled(bool value) async {
-    _floatingBubbleEnabled = value;
-    await _prefs.setBool('draftright.floatingBubbleEnabled', value);
-    notifyListeners();
-  }
-
-  /// Preset tone applied to each one-tap rewrite — the "simple mode" default.
-  /// One setting, two surfaces: the Android bubble coordinator reads it from
+  /// Preset tone applied to each one-tap keyboard rewrite — the "simple mode"
+  /// default. One setting, two surfaces: the Android keyboard reads it from
   /// SharedPreferences (flutter.draftright.bubblePresetTone); the iOS keyboard's
   /// one-tap button reads it from the App Group (draftright.oneTapTone, synced
   /// via [AuthService.syncOneTapToneToAppGroup]). Stored as the stable
-  /// Tone.apiValue.
+  /// Tone.apiValue. (Key name is legacy — kept to avoid an install migration.)
   Future<void> setBubblePresetTone(String apiValue) async {
     _bubblePresetTone = apiValue;
     await _prefs.setString('draftright.bubblePresetTone', apiValue);

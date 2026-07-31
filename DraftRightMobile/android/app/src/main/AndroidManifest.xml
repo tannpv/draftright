@@ -2,17 +2,6 @@
     xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET" />
 
-    <!-- Floating bubble (Tier 1, no Accessibility Service):
-         SYSTEM_ALERT_WINDOW = draw the bubble over other apps.
-         FOREGROUND_SERVICE + FOREGROUND_SERVICE_SPECIAL_USE = keep the
-         service alive when the app is backgrounded so the bubble stays.
-         POST_NOTIFICATIONS = Android 13+ requires runtime grant for the
-         foreground-service notification. -->
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-
     <!-- Keyboard voice input (dictate → AI polish). -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
@@ -121,33 +110,6 @@
             android:taskAffinity=""
             android:exported="false" />
 
-        <!-- Floating bubble service. Runs as foreground service with a
-             low-priority persistent notification while the user has the
-             bubble enabled. Tier 1 — overlay only, no Accessibility. -->
-        <service
-            android:name="com.draftright.draftright_mobile.FloatingBubbleService"
-            android:exported="false"
-            android:foregroundServiceType="specialUse">
-            <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Floating overlay button that rewrites the focused text field in place in any app, similar to chat-head bubbles." />
-        </service>
-
-        <!-- Reads the focused text field and replaces it with an AI rewrite via
-             ACTION_SET_TEXT, on a bubble tap. Gated behind an in-app disclosure +
-             the user enabling it in Accessibility settings. Requires a Play Console
-             permissions declaration before release. -->
-        <service
-            android:name="com.draftright.draftright_mobile.bubble.RewriteAccessibilityService"
-            android:exported="true"
-            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
-            <intent-filter>
-                <action android:name="android.accessibilityservice.AccessibilityService" />
-            </intent-filter>
-            <meta-data
-                android:name="android.accessibilityservice"
-                android:resource="@xml/accessibility_service_config" />
-        </service>
     </application>
     <!-- Android 11+ package visibility (https://developer.android.com/training/package-visibility).
          Without these <queries> declarations, url_launcher's canLaunchUrl()
