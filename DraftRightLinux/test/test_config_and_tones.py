@@ -579,6 +579,47 @@ class GoogleOAuthTest(unittest.TestCase):
             self.assertIn("google", url)
 
 
+class SettingsWindowLifecycleTest(unittest.TestCase):
+    """Settings must stay closable when opened from the tray.
+
+    It was modal and transient-for app.props.active_window unconditionally.
+    Opening it from the tray while the main window is hidden produced a modal
+    window attached to an unmapped parent, which the compositor could not
+    decorate around — it could not be closed.
+    """
+
+    def _source(self) -> str:
+        return (
+            Path(__file__).resolve().parent.parent
+            / "draftright" / "ui" / "settings_window.py"
+        ).read_text(encoding="utf-8")
+
+    def test_settings_is_not_modal(self):
+        # Preferences have no reason to block the app, and modality is what
+        # made the hidden-parent case unrecoverable.
+        src = self._source()
+        self.assertIn("set_modal(False)", src)
+        self.assertNotIn("set_modal(True)", src)
+
+    def test_parent_is_only_adopted_when_visible(self):
+        src = self._source()
+        init = src.split("def __init__")[1].split("\n    def ")[0]
+        self.assertIn("get_visible()", init,
+                      "must not parent onto a hidden window")
+        # The transient_for call has to sit behind that check.
+        before = init.split("set_transient_for")[0]
+        self.assertIn("get_visible()", before)
+
+    def test_close_clears_the_cached_window(self):
+        # Otherwise reopening would present a destroyed window.
+        src = (
+            Path(__file__).resolve().parent.parent / "draftright" / "application.py"
+        ).read_text(encoding="utf-8")
+        handler = src.split("def _on_settings_closed")[1].split("\n    def ")[0]
+        self.assertIn("self._settings_window = None", handler)
+        self.assertIn("return False", handler)  # allow the default close
+
+
 class RewritePanelLifecycleTest(unittest.TestCase):
     """One panel, reused — and a way out of it.
 
