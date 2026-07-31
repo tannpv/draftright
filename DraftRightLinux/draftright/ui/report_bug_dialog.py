@@ -18,6 +18,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, GLib, Gtk, Pango
 
 from draftright import config
+from pathlib import Path
 from draftright.services.bug_report_service import (
     MAX_SCREENSHOT_BYTES,
     MIN_DESCRIPTION_CHARS,
@@ -98,6 +99,14 @@ class ReportBugDialog(Adw.Window):
         self._shot_label.set_ellipsize(Pango.EllipsizeMode.END)
         shot_row.append(self._shot_label)
 
+        # Capture without leaving the app — no external screenshot tool.
+        self._capture_btn = Gtk.Button(label="Take screenshot")
+        self._capture_btn.set_tooltip_text(
+            "Pick an area, window or the whole screen; DraftRight hides itself first"
+        )
+        self._capture_btn.connect("clicked", self._on_capture)
+        shot_row.append(self._capture_btn)
+
         attach_btn = Gtk.Button(label="Attach…")
         attach_btn.connect("clicked", self._on_attach)
         shot_row.append(attach_btn)
@@ -158,6 +167,61 @@ class ReportBugDialog(Adw.Window):
 
     # -- screenshot --------------------------------------------------------
 
+    def _on_capture(self, _btn: Gtk.Button) -> None:
+        """Screenshot via the desktop portal, hiding this dialog first."""
+        from draftright.services.screenshot_service import ScreenshotService
+
+        self._capture_btn.set_sensitive(False)
+        self._capture_btn.set_label("Choose an area…")
+        self._status_label.set_visible(False)
+
+        # Otherwise this window sits in the middle of the user's own bug.
+        self.set_visible(False)
+
+        def finish(path, error):
+            # Portal replies arrive on the main loop already, but idle_add
+            # keeps this correct regardless of where it is dispatched from.
+            GLib.idle_add(self._on_capture_done, path, error)
+
+        # Give the compositor a moment to actually unmap us before the
+        # portal starts capturing.
+        GLib.timeout_add(
+            config.SCREENSHOT_HIDE_DELAY_MS,
+            lambda: (ScreenshotService().capture(finish), False)[1],
+        )
+
+    def _on_capture_done(self, path, error) -> bool:
+        self.set_visible(True)
+        self.present()
+        self._capture_btn.set_sensitive(True)
+        self._capture_btn.set_label("Take screenshot")
+
+        if error:
+            self._show_error(error)
+            return False
+        if not path:
+            return False  # user cancelled — nothing to say
+
+        try:
+            size = Path(path).stat().st_size
+        except OSError as exc:
+            self._show_error(f"Couldn't read the screenshot: {exc}")
+            return False
+        if size > MAX_SCREENSHOT_BYTES:
+            self._show_error("Screenshot is larger than 5 MB.")
+            return False
+
+        self._set_screenshot(path)
+        return False
+
+    def _set_screenshot(self, path: str) -> None:
+        """Adopt *path* as the attachment and reflect it in the UI."""
+        self._screenshot_path = path
+        self._shot_label.set_text(Path(path).name)
+        self._shot_label.remove_css_class("dim-label")
+        self._clear_shot_btn.set_sensitive(True)
+        self._status_label.set_visible(False)
+
     def _on_attach(self, _btn: Gtk.Button) -> None:
         image_filter = Gtk.FileFilter()
         image_filter.set_name("Images")
@@ -186,11 +250,7 @@ class ReportBugDialog(Adw.Window):
         if size > MAX_SCREENSHOT_BYTES:
             self._show_error("Screenshot is larger than 5 MB.")
             return
-        self._screenshot_path = path
-        self._shot_label.set_text(gfile.get_basename() or path)
-        self._shot_label.remove_css_class("dim-label")
-        self._clear_shot_btn.set_sensitive(True)
-        self._status_label.set_visible(False)
+        self._set_screenshot(path)
 
     def _on_clear_screenshot(self, _btn: Gtk.Button) -> None:
         self._screenshot_path = None

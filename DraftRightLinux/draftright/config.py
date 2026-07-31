@@ -82,6 +82,13 @@ PORTAL_GLOBAL_SHORTCUTS_IFACE = "org.freedesktop.portal.GlobalShortcuts"
 # Sanctioned keystroke injection on Wayland — xdotool reaches only XWayland
 # clients, and wtype needs a virtual-keyboard protocol Mutter does not provide.
 PORTAL_REMOTE_DESKTOP_IFACE = "org.freedesktop.portal.RemoteDesktop"
+# Screen capture for the bug report (#85). Wayland forbids a client grabbing
+# the screen itself; the compositor runs its own picker and the user consents
+# to exactly what is captured.
+PORTAL_SCREENSHOT_IFACE = "org.freedesktop.portal.Screenshot"
+# Time for the compositor to unmap the dialog before capture starts, so the
+# bug-report window is not itself in the screenshot.
+SCREENSHOT_HIDE_DELAY_MS = 300
 # Settings key holding the portal's restore token, so the permission prompt
 # appears once rather than on every launch.
 SETTING_INPUT_RESTORE_TOKEN = "input_restore_token"
