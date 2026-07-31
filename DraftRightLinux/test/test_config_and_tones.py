@@ -618,6 +618,27 @@ class BugReportAttachTest(unittest.TestCase):
         body = self._source().split("def _paste_from_clipboard")[1].split("\n    def ")[0]
         self.assertIn("MAX_SCREENSHOT_BYTES", body)
 
+    def test_attachment_is_previewed(self):
+        # A filename alone does not tell the user whether they captured the
+        # right thing — which is the entire point of attaching an image.
+        src = self._source()
+        body = src.split("def _set_screenshot")[1].split("\n    def ")[0]
+        self.assertIn("_preview.set_filename", body)
+        self.assertIn("_preview_frame.set_visible(True)", body)
+
+    def test_removing_clears_the_preview(self):
+        body = self._source().split("def _on_clear_screenshot")[1].split("\n    def ")[0]
+        self.assertIn("_preview_frame.set_visible(False)", body)
+        self.assertIn("_screenshot_path = None", body)
+
+    def test_attachment_is_described(self):
+        # Dimensions and size, so an accidental 3-pixel capture is obvious.
+        src = self._source()
+        self.assertIn("def _describe", src)
+        body = src.split("def _describe")[1].split("\n    def ")[0]
+        self.assertIn("get_width", body)
+        self.assertIn("KB", body)
+
     def test_ctrl_v_yields_to_text_paste(self):
         # Ctrl+V must only be claimed when the clipboard holds an image,
         # otherwise it would stop the user pasting text into the description.

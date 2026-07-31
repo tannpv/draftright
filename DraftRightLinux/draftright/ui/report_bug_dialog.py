@@ -126,6 +126,18 @@ class ReportBugDialog(Adw.Window):
         shot_row.append(self._clear_shot_btn)
         outer.append(shot_row)
 
+        # Preview — the whole point of attaching is knowing what you attached.
+        # Windows and macOS both show one; a filename alone tells the user
+        # nothing about whether they captured the right thing.
+        self._preview_frame = Gtk.Frame()
+        self._preview_frame.set_visible(False)
+        self._preview = Gtk.Picture()
+        self._preview.set_can_shrink(True)
+        self._preview.set_content_fit(Gtk.ContentFit.CONTAIN)
+        self._preview.set_size_request(-1, config.BUG_REPORT_PREVIEW_HEIGHT)
+        self._preview_frame.set_child(self._preview)
+        outer.append(self._preview_frame)
+
         # Email — always shown; signed-in users can leave it blank.
         outer.append(self._field_label("Email (optional — to follow up)"))
         self._email_entry = Gtk.Entry(placeholder_text="you@example.com")
@@ -278,10 +290,28 @@ class ReportBugDialog(Adw.Window):
     def _set_screenshot(self, path: str) -> None:
         """Adopt *path* as the attachment and reflect it in the UI."""
         self._screenshot_path = path
-        self._shot_label.set_text(Path(path).name)
+        self._shot_label.set_text(self._describe(path))
         self._shot_label.remove_css_class("dim-label")
         self._clear_shot_btn.set_sensitive(True)
         self._status_label.set_visible(False)
+
+        self._preview.set_filename(path)
+        self._preview_frame.set_visible(True)
+
+    @staticmethod
+    def _describe(path: str) -> str:
+        """"name.png — 1920x1080, 240 KB", falling back to just the name."""
+        name = Path(path).name
+        try:
+            size_kb = max(1, Path(path).stat().st_size // 1024)
+        except OSError:
+            return name
+        try:
+            texture = Gdk.Texture.new_from_filename(path)
+            return f"{name} — {texture.get_width()}x{texture.get_height()}, {size_kb} KB"
+        except GLib.Error:
+            # Not decodable as an image; the size is still worth showing.
+            return f"{name} — {size_kb} KB"
 
     def _on_attach(self, _btn: Gtk.Button) -> None:
         image_filter = Gtk.FileFilter()
@@ -318,6 +348,8 @@ class ReportBugDialog(Adw.Window):
         self._shot_label.set_text("No file selected")
         self._shot_label.add_css_class("dim-label")
         self._clear_shot_btn.set_sensitive(False)
+        self._preview.set_filename(None)
+        self._preview_frame.set_visible(False)
 
     # -- submit ------------------------------------------------------------
 
