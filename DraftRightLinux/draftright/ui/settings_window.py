@@ -47,7 +47,11 @@ class SettingsWindow(Adw.PreferencesWindow):
         self._register_mode = False
 
         self.set_title("DraftRight Settings")
-        self.set_default_size(500, 600)
+        # The content's natural width is ~900px with four pages; forcing 500
+        # left the header cramped, where the visible control acted as
+        # back-navigation (clicking it jumped to the first page) rather than
+        # closing the window.
+        self.set_default_size(920, 700)
 
         # Settings is a tray-app window: it is routinely opened from the tray
         # while the main window is hidden. Attaching a *modal* window to a
