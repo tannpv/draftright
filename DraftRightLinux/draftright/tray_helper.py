@@ -20,6 +20,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
+import tempfile
 
 import gi
 
@@ -28,6 +29,7 @@ gi.require_version("AyatanaAppIndicator3", "0.1")
 from gi.repository import AyatanaAppIndicator3, GLib, Gio, Gtk
 
 from draftright import config
+from draftright.helpers import tray_icon_render
 from draftright.models.health import HealthStatus
 from draftright.models.tray import TrayAction, TrayCommand
 
@@ -40,10 +42,19 @@ class TrayHelper:
     def __init__(self) -> None:
         self._actions = self._connect_actions()
         self._status = HealthStatus.OFFLINE
+        self._update_available = False
         self._icon = self._resolve_default_icon()
+        # Composited state icons are written here and the indicator is pointed
+        # at it as an extra icon-theme directory.
+        self._icon_dir = tempfile.mkdtemp(prefix="draftright-tray-")
 
         self._status_item = Gtk.MenuItem(label=self._status.display_name)
         self._status_item.set_sensitive(False)
+        self._update_item = Gtk.MenuItem(label="Update available — restart to install")
+        self._update_item.set_sensitive(False)
+        # show_all() below would otherwise force this visible again.
+        self._update_item.set_no_show_all(True)
+        self._update_item.set_visible(False)
 
         self._indicator = AyatanaAppIndicator3.Indicator.new(
             config.APP_ID,
@@ -52,6 +63,7 @@ class TrayHelper:
         )
         self._indicator.set_status(AyatanaAppIndicator3.IndicatorStatus.ACTIVE)
         self._indicator.set_title("DraftRight")
+        self._indicator.set_icon_theme_path(self._icon_dir)
         self._indicator.set_menu(self._build_menu())
 
     @staticmethod
@@ -95,6 +107,7 @@ class TrayHelper:
         """Build the menu from :class:`TrayAction` — declaration order is menu order."""
         menu = Gtk.Menu()
         menu.append(self._status_item)
+        menu.append(self._update_item)
         for action in TrayAction:
             if action.starts_group:
                 menu.append(Gtk.SeparatorMenuItem())
@@ -117,19 +130,36 @@ class TrayHelper:
             return
         self._status = status
         self._status_item.set_label(status.display_name)
+        self._refresh_icon()
 
-        icon = (
-            config.TRAY_ICON_ATTENTION
-            if status is HealthStatus.OFFLINE
-            else self._resolve_default_icon()
+    def set_update_available(self, available: bool) -> None:
+        """Flag that an app update is ready — shown as a red dot (#22)."""
+        if available == self._update_available:
+            return
+        self._update_available = available
+        self._update_item.set_visible(available)
+        self._refresh_icon()
+
+    def _refresh_icon(self) -> None:
+        """Pick the icon for the current (status, update) pair.
+
+        A plain connected state with no update uses the *named* symbolic so
+        the shell recolours it for light/dark panels; anything else needs our
+        own colours composited, which the shell must not repaint.
+        """
+        rendered = tray_icon_render.build(
+            self._status, self._update_available, directory=self._icon_dir
         )
-        if icon != self._icon:
-            # Only repaint on a real change: each call is a round trip to the
-            # tray host, and the health probe pushes on a timer.
-            self._icon = icon
-            # set_icon() is deprecated; set_icon_full() also carries the label
-            # screen readers announce.
-            self._indicator.set_icon_full(icon, f"DraftRight — {status.display_name}")
+        icon = rendered[1] if rendered else self._resolve_default_icon()
+        if icon == self._icon:
+            return
+        self._icon = icon
+        description = f"DraftRight — {self._status.display_name}"
+        if self._update_available:
+            description += ", update available"
+        # set_icon() is deprecated; set_icon_full() also carries the label
+        # screen readers announce.
+        self._indicator.set_icon_full(icon, description)
 
     def handle_line(self, line: str) -> bool:
         """Apply one protocol line.  Returns False when asked to quit."""
@@ -138,6 +168,8 @@ class TrayHelper:
             return False
         if command is TrayCommand.STATUS:
             self.set_status(HealthStatus.from_wire(payload))
+        elif command is TrayCommand.UPDATE:
+            self.set_update_available(payload == "1")
         else:
             log.debug("Ignoring unknown tray command: %r", line)
         return True

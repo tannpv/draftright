@@ -61,6 +61,8 @@ class TrayCommand(Enum):
     """Verb in a parent → helper pipe message (``<verb>:<payload>``)."""
 
     STATUS = "status"
+    # "1"/"0" — an app update is ready to install (#22).
+    UPDATE = "update"
     QUIT = "quit"
 
     def encode(self, payload: str = "") -> str:

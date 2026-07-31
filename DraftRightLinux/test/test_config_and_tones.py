@@ -29,6 +29,7 @@ from draftright.services.hotkey_service import PortalResponse
 from draftright.services.input_portal import InjectorState, RemoteDesktopInjector
 from draftright.services.portal import PortalClient
 from draftright.services import google_oauth
+from draftright.helpers import tray_icon_render
 from draftright.services import keepalive_service
 from draftright.services import settings_service as settings_service_mod
 from draftright.services.auth_service import AuthService
@@ -576,6 +577,65 @@ class GoogleOAuthTest(unittest.TestCase):
         for url in (config.GOOGLE_AUTH_ENDPOINT, config.GOOGLE_TOKEN_ENDPOINT):
             self.assertTrue(url.startswith("https://"))
             self.assertIn("google", url)
+
+
+class TrayIconStateTest(unittest.TestCase):
+    """Tray conveys backend status by tint and an update by a red dot (#22).
+
+    Parity with Windows' TrayIconBadge and macOS' MenuBarIcon.
+    """
+
+    def test_every_status_has_a_defined_tint(self):
+        for status in HealthStatus:
+            # None is a valid answer (leave it theme-coloured) — the point is
+            # that the mapping is exhaustive and cannot KeyError at runtime.
+            tint = status.tint_color
+            self.assertTrue(tint is None or tint.startswith("#"), status)
+
+    def test_connected_stays_theme_coloured(self):
+        # The normal state should be recoloured by the shell so it sits well
+        # in both light and dark panels.
+        self.assertIsNone(HealthStatus.CONNECTED.tint_color)
+
+    def test_offline_is_red(self):
+        self.assertEqual(HealthStatus.OFFLINE.tint_color, "#ef4444")
+
+    def test_badge_colour_matches_the_other_platforms(self):
+        # Windows uses Color.FromArgb(239, 68, 68); macOS the same red-500.
+        self.assertEqual(config.TRAY_BADGE_COLOR.lower(), "#ef4444")
+        self.assertEqual(tuple(int("ef4444"[i:i+2], 16) for i in (0, 2, 4)),
+                         (239, 68, 68))
+
+    def test_plain_connected_needs_no_composited_file(self):
+        # Returning None tells the caller to use the named symbolic.
+        self.assertIsNone(
+            tray_icon_render.build(HealthStatus.CONNECTED, False, directory=None)
+        )
+
+    def test_states_needing_paint_produce_distinct_icon_names(self):
+        # AppIndicator caches by name; a shared name means the icon would not
+        # visibly change between states.
+        with tempfile.TemporaryDirectory() as tmp:
+            names = set()
+            for status in HealthStatus:
+                for update in (False, True):
+                    built = tray_icon_render.build(status, update, directory=tmp)
+                    if built is not None:
+                        names.add(built[1])
+            # 4 statuses x 2, minus the one plain state that renders nothing.
+            self.assertEqual(len(names), len(HealthStatus) * 2 - 1)
+
+    def test_update_badge_renders_even_when_connected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            built = tray_icon_render.build(HealthStatus.CONNECTED, True, directory=tmp)
+            self.assertIsNotNone(built, "an update must be visible when connected")
+            self.assertTrue((Path(built[0]) / f"{built[1]}.png").exists())
+
+    def test_update_command_round_trips(self):
+        line = TrayCommand.UPDATE.encode("1")
+        command, payload = TrayCommand.parse(line)
+        self.assertIs(command, TrayCommand.UPDATE)
+        self.assertEqual(payload, "1")
 
 
 class TimerContractTest(unittest.TestCase):

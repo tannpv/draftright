@@ -91,6 +91,10 @@ class TrayIcon:
         """
         self._send(TrayCommand.STATUS, status.value)
 
+    def set_update_available(self, available: bool):
+        """Flag an available app update, drawn as a red dot on the tray icon."""
+        self._send(TrayCommand.UPDATE, "1" if available else "0")
+
     def stop(self):
         """Shut the helper down.
 
