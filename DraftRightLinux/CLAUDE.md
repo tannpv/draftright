@@ -109,10 +109,18 @@ sudo checkinstall --pkgname=draftright --pkgversion=1.0.0 \
 
 **Fixed by runtime verification (2026-07-30):** Settings could not open at all (`SubscriptionPage` inherited a `Protocol` → metaclass conflict at import) · `auth_service.is_authenticated`/`get_user` missing · `settings_service.get`/`set` missing · `register()` args transposed (name sent as email) · `feedback_service` imported a nonexistent singleton · `SettingsService` never `load()`ed · tray dead on every GTK4 system.
 
-**Open (1 under #93):**
-- #100 KeepAlive agent (present on Mac+Win)
+**Open (0 under #93)** — every issue is implemented; see the verification gaps below.
 
-**Landed, pending config/verification:** #96 One-Click · #97 Google login (needs a Desktop OAuth client id) · #98 Report-a-Bug
+**Landed, pending config/verification:** #96 One-Click · #97 Google login (needs a Desktop OAuth client id) · #98 Report-a-Bug · #100 KeepAlive
+
+### Keep-alive (#100)
+
+A systemd **user service** with `Restart=on-failure`, installed by the
+"Auto-start on login" switch. Two things are load-bearing:
+
+- The unit is named `app-com.draftright.app@autostart.service`. xdg-desktop-portal identifies an unsandboxed app by its systemd unit, so a name like `draftright.service` would cost the Wayland global shortcut (#99). Verified: the hotkey binds when launched under this unit.
+- `on-failure`, never `always` — a clean Quit exits 0 and must stay quit. Verified empirically: exit 0 → 1 start, exit 1 → respawned.
+- Enabling it **removes** the XDG autostart entry; both would launch at login and the loser dies silently against the single-instance lock. Without systemd it falls back to the XDG entry.
 
 **Known gaps (not yet issues):**
 - **X11 is unverified.** The dev host is Wayland, so `_X11Listener` has never run. Its key parsing was refactored onto `models/hotkey.py` without being exercised.

@@ -256,11 +256,36 @@ class SettingsService:
     # -- auto-start --------------------------------------------------------
 
     def set_auto_start(self, enabled: bool) -> None:
-        """Create or remove the XDG autostart desktop entry."""
+        """Start DraftRight at login, and keep it alive during the session.
+
+        Prefers a systemd user service (#100): it starts the app at login
+        *and* respawns it if it crashes or is OOM-killed, which an autostart
+        desktop entry cannot do.  The XDG entry stays as the fallback for
+        sessions without systemd.
+
+        Exactly one mechanism is ever active — both would launch the app at
+        login, and the loser exits silently against the single-instance lock.
+        """
+        # Imported here: keepalive imports config, and settings is imported
+        # very early, so a module-level import risks a cycle.
+        from draftright.services import keepalive_service
+
         self.auto_start = enabled
         self.save()
 
         desktop_file = _autostart_file()
+
+        if enabled and keepalive_service.install():
+            # systemd owns startup now; drop the duplicate XDG entry.
+            if desktop_file.exists():
+                desktop_file.unlink()
+                log.info("Replaced the autostart entry with %s",
+                         keepalive_service.UNIT_NAME)
+            return
+
+        # Either disabling, or systemd is unavailable — fall back to XDG.
+        keepalive_service.uninstall()
+
         if enabled:
             desktop_file.write_text(_DESKTOP_ENTRY, encoding="utf-8")
             log.info("Autostart entry created: %s", desktop_file)

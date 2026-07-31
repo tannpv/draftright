@@ -29,6 +29,7 @@ from draftright.services.hotkey_service import PortalResponse
 from draftright.services.input_portal import InjectorState, RemoteDesktopInjector
 from draftright.services.portal import PortalClient
 from draftright.services import google_oauth
+from draftright.services import keepalive_service
 from draftright.services import settings_service as settings_service_mod
 from draftright.services.auth_service import AuthService
 from draftright.services.settings_service import SettingsService
@@ -575,6 +576,112 @@ class GoogleOAuthTest(unittest.TestCase):
         for url in (config.GOOGLE_AUTH_ENDPOINT, config.GOOGLE_TOKEN_ENDPOINT):
             self.assertTrue(url.startswith("https://"))
             self.assertIn("google", url)
+
+
+class KeepAliveServiceTest(unittest.TestCase):
+    """#100 — systemd user unit that respawns the app after a crash."""
+
+    def _unit_text(self) -> str:
+        return keepalive_service._UNIT_TEMPLATE.format(
+            exec_start="/usr/bin/draftright",
+            restart_sec=config.KEEPALIVE_RESTART_SEC,
+            burst=config.KEEPALIVE_START_LIMIT_BURST,
+            interval=config.KEEPALIVE_START_LIMIT_INTERVAL,
+        )
+
+    def test_unit_name_lets_the_portal_derive_the_app_id(self):
+        # xdg-desktop-portal refuses a global shortcut when it cannot identify
+        # the caller (#99), and it identifies unsandboxed apps by systemd unit.
+        self.assertTrue(keepalive_service.UNIT_NAME.startswith(f"app-{config.APP_ID}"))
+        self.assertTrue(keepalive_service.UNIT_NAME.endswith(".service"))
+
+    def test_restart_is_on_failure_not_always(self):
+        # Restart=always would respawn a deliberate Quit, trapping the user.
+        text = self._unit_text()
+        self.assertIn("Restart=on-failure", text)
+        self.assertNotIn("Restart=always", text)
+
+    def test_rate_limit_keys_are_in_the_unit_section(self):
+        # systemd silently ignores StartLimit* under [Service]; the rate limit
+        # would not apply and a crash-loop would hammer the session.
+        text = self._unit_text()
+        # Anchor on the section header at line start — the comments mention
+        # "[Service]" too.
+        unit_section = text.split("\n[Service]")[0]
+        self.assertIn("StartLimitBurst=", unit_section)
+        self.assertIn("StartLimitIntervalSec=", unit_section)
+
+    def test_unit_declares_an_install_target(self):
+        # Without [Install] `systemctl enable` fails and nothing runs at login.
+        self.assertIn("[Install]", self._unit_text())
+        self.assertIn("WantedBy=", self._unit_text())
+
+    def test_exec_start_is_absolute(self):
+        # systemd does not resolve PATH for ExecStart.
+        command = keepalive_service.executable_command()
+        self.assertTrue(command.startswith("/"), command)
+
+    def test_unit_path_is_under_the_user_unit_dir(self):
+        path = keepalive_service.unit_path()
+        self.assertEqual(path.name, keepalive_service.UNIT_NAME)
+        self.assertTrue(str(path).endswith(".config/systemd/user/" + path.name))
+
+    def test_install_is_a_noop_without_systemd(self):
+        with mock.patch.object(keepalive_service, "systemd_available", return_value=False):
+            self.assertFalse(keepalive_service.install())
+
+    def test_uninstall_tolerates_nothing_installed(self):
+        with mock.patch.object(keepalive_service, "unit_path") as unit_path:
+            unit_path.return_value = Path(tempfile.gettempdir()) / "definitely-absent.service"
+            with mock.patch.object(keepalive_service.shutil, "which", return_value=None):
+                self.assertTrue(keepalive_service.uninstall())
+
+    def test_auto_start_prefers_systemd_and_drops_the_xdg_entry(self):
+        # Both mechanisms launching at login means one instance loses the
+        # single-instance race and exits silently.
+        with tempfile.TemporaryDirectory() as tmp:
+            settings_path = Path(tmp) / "settings.json"
+            autostart = Path(tmp) / "autostart.desktop"
+            autostart.write_text("stale", encoding="utf-8")
+            with mock.patch.object(
+                settings_service_mod, "_settings_file", return_value=settings_path
+            ), mock.patch.object(
+                settings_service_mod, "_autostart_file", return_value=autostart
+            ), mock.patch.object(keepalive_service, "install", return_value=True):
+                service = SettingsService()
+                service.set_auto_start(True)
+            self.assertFalse(autostart.exists(), "XDG entry should have been removed")
+
+    def test_auto_start_falls_back_to_xdg_without_systemd(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            settings_path = Path(tmp) / "settings.json"
+            autostart = Path(tmp) / "autostart.desktop"
+            with mock.patch.object(
+                settings_service_mod, "_settings_file", return_value=settings_path
+            ), mock.patch.object(
+                settings_service_mod, "_autostart_file", return_value=autostart
+            ), mock.patch.object(
+                keepalive_service, "install", return_value=False
+            ), mock.patch.object(keepalive_service, "uninstall", return_value=True):
+                service = SettingsService()
+                service.set_auto_start(True)
+            self.assertTrue(autostart.exists(), "should fall back to the XDG entry")
+
+    def test_disabling_removes_both_mechanisms(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            settings_path = Path(tmp) / "settings.json"
+            autostart = Path(tmp) / "autostart.desktop"
+            autostart.write_text("stale", encoding="utf-8")
+            with mock.patch.object(
+                settings_service_mod, "_settings_file", return_value=settings_path
+            ), mock.patch.object(
+                settings_service_mod, "_autostart_file", return_value=autostart
+            ), mock.patch.object(keepalive_service, "uninstall") as uninstall:
+                service = SettingsService()
+                service.set_auto_start(False)
+                uninstall.assert_called_once()
+            self.assertFalse(autostart.exists())
+            self.assertFalse(SettingsService().auto_start)
 
 
 class PortalClientTest(unittest.TestCase):

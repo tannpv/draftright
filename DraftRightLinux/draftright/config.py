@@ -55,6 +55,11 @@ TRAY_ICON_ATTENTION = "dialog-warning-symbolic"   # shown while the backend is u
 TRAY_HELPER_MODULE = "draftright.tray_helper"
 TRAY_SHUTDOWN_TIMEOUT = 2    # seconds to wait for the helper at each escalation step
 
+# ── Keep-alive service (#100) ────────────────────────────────────────────────
+KEEPALIVE_RESTART_SEC = 3        # pause before systemd respawns after a crash
+KEEPALIVE_START_LIMIT_BURST = 5  # give up after this many failures...
+KEEPALIVE_START_LIMIT_INTERVAL = 60   # ...within this window, to avoid a loop
+
 # ── Input / hotkey ───────────────────────────────────────────────────────────
 DEFAULT_HOTKEY = "Ctrl+Shift+R"
 
