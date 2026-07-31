@@ -382,6 +382,10 @@ export class AuthService {
       // macOS — an iOS-type client, distinct from the one above. Omitting it
       // would break Google sign-in on macOS the moment this check went live.
       '22951518033-dvkn61dhibse9fu83ohh51mlovd7269a.apps.googleusercontent.com',
+      // Linux — a Desktop-app client. Google only accepts the loopback
+      // redirect (http://127.0.0.1:<port>) that RFC 8252 native apps use from
+      // this client type, so it cannot share the macOS or web ids.
+      '22951518033-oaf0ptahsjrsnu2v2qr0kpul5tslpgf6.apps.googleusercontent.com',
     ];
     const envRaw = (this.cfg.get('GOOGLE_AUDIENCES', { infer: true }) || '').trim();
     const fromEnv = envRaw
