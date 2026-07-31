@@ -171,6 +171,87 @@ The hotkey uses `org.freedesktop.portal.GlobalShortcuts`. The portal **refuses a
 
 **Partial:** #22 desktop updater — Linux DONE (version 2.4.1, 401 refresh wired, sha256 integrity in `update_service.py`); macOS `UpdateService.swift` still has NO integrity check → stays open.
 
+## Hard-won gotchas
+
+Things that cost real debugging time here. Each one makes correct code look
+broken, or broken code look fine.
+
+### The app must actually be run
+
+The Linux app had never been executed on a Linux host (dev host was macOS).
+That single fact produced seven crash-level defects that **compiled and passed
+the unit suite** — Settings could not open at all, the tray was dead on every
+GTK4 system, and every *successful* rewrite crashed on a dict/str mismatch
+(invisible because the app had never been signed in, so the success branch had
+never executed). A green suite says the units work, not that the app does.
+
+### Install / restart
+
+`draftright` is an **editable** install, so `~/.local/bin/draftright` always
+runs the working tree. **After a change, restart the app — do not reinstall.**
+Python loads modules at startup, so a running process keeps the code it began
+with. A real reinstall is only needed when `setup.py` changes.
+
+Restart via `./draftright-launch.sh`, or
+`systemd-run --user --scope -q --unit="app-gnome-com.draftright.app-<uniq>" ~/.local/bin/draftright`
+— the scope name is load-bearing (see below).
+
+### Wayland / portals
+
+- **The global shortcut needs an app id**, which xdg-desktop-portal derives
+  from the systemd unit. A bare `python -m draftright` from a terminal gets
+  `NotAllowed: An app id is required` and no hotkey. Same for the keep-alive
+  unit name (`app-com.draftright.app@autostart.service`).
+- **Clipboard reads need a focused surface.** A headless harness sees an empty
+  clipboard even when `wl-paste --list-types` shows `image/png`. Present a real
+  window first.
+- **A nested `dbus-run-session` cannot reach Mutter** — portal handshakes stall
+  there. Isolated buses are right for most tests, wrong for portal work.
+- **Non-interactive screenshots are refused** for unsandboxed apps
+  ("ended by the portal"). Use `interactive=True`; the compositor picks.
+- **`xdotool` only reaches XWayland clients**, which is why Replace goes
+  through the RemoteDesktop portal.
+
+### GTK4 / libadwaita window traps
+
+All four of these were reported as *"I cannot close it"*:
+
+1. **`Adw.ApplicationWindow` draws no titlebar** — the header must be inside
+   the content. A bare `Gtk.Box` yields a window with no close button at all.
+2. **One window per hotkey press stacks.** Cache and reuse the panel; closing
+   the top of a stack just reveals the next.
+3. **Modal + a hidden transient parent is unclosable.** This is a tray app, so
+   parents are often hidden. Only adopt a visible parent; preferences are not
+   modal.
+4. **Undecorated windows need an Escape binding** — the compositor gives them
+   no close button.
+
+Also: `timeout_add_seconds(0, cb)` where `cb` returns `True` re-arms instantly
+— measured at ~1.3M calls in 10s, each spawning a network thread. For an
+immediate run, just call the function.
+
+### Google sign-in
+
+Google's **Desktop-type** clients require `client_secret` at the token
+endpoint **even with PKCE**, contradicting RFC 8252. macOS avoids this by
+using an iOS-type client (reversed scheme, genuinely no secret); Linux and
+Windows use Desktop clients and must send it. Each platform has its **own**
+client id, and the backend validates `aud` — a new id must be added to
+`GOOGLE_AUDIENCES` or sign-in fails with "Invalid Google token".
+
+### Environment traps that fake a bug
+
+- **Single-instance:** a stale `com.draftright.app` bus name makes a launch
+  exit 0 instantly, looking exactly like a startup crash. Check with
+  `gdbus call ... NameHasOwner com.draftright.app`.
+- **An old build autostarts at login** from `~/.config/autostart/` and holds
+  that bus name. `pgrep -f "python3 -m draftright"` does **not** match it;
+  use `ps -eo pid,cmd | grep local/bin/draftright`.
+- **`DraftRightLinux/data/` was gitignored** as "runtime data" while actually
+  holding packaging assets, so `git add` silently no-op'd and two commits
+  claimed to add files that never landed. Fixed, but check `git status` after
+  adding new asset paths.
+
 ## Key Patterns
 
 - All UI is built programmatically in Python -- no .ui XML files
