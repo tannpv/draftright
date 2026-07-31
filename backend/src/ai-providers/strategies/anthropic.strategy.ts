@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { AiProvider, AiProviderType } from '../entities/ai-provider.entity';
 import { ProviderStrategy } from './provider-strategy.interface';
+import { decryptSecret } from '../../common/crypto/secret-cipher';
 
 /**
  * Anthropic Messages API — different wire from OpenAI:
@@ -39,7 +40,7 @@ export class AnthropicStrategy implements ProviderStrategy {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': provider.api_key,
+        'x-api-key': decryptSecret(provider.api_key),
         'anthropic-version': AnthropicStrategy.API_VERSION,
       },
       body: JSON.stringify(body),

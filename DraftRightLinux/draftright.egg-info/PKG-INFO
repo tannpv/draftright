@@ -1,0 +1,13 @@
+Metadata-Version: 2.4
+Name: draftright
+Version: 2.4.1
+Summary: DraftRight — AI-powered text rewriting for Linux
+Author: Tan Nguyen
+Requires-Python: >=3.10
+Requires-Dist: PyGObject>=3.44.0
+Requires-Dist: pycairo>=1.24.0
+Requires-Dist: requests>=2.31.0
+Dynamic: author
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary

@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { AiProvider, AiProviderType } from '../entities/ai-provider.entity';
 import { ProviderStrategy } from './provider-strategy.interface';
+import { decryptSecret } from '../../common/crypto/secret-cipher';
 
 /**
  * OpenAI-compatible wire: POST /v1/chat/completions with a list of
@@ -44,7 +45,9 @@ export class OpenAiStrategy implements ProviderStrategy {
 
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (provider.api_key) {
-      headers['Authorization'] = `Bearer ${provider.api_key}`;
+      // Decrypt the at-rest api_key at the point of use (#50). No-op for
+      // legacy plaintext and when SECRETS_ENCRYPTION_KEY is unset.
+      headers['Authorization'] = `Bearer ${decryptSecret(provider.api_key)}`;
     }
 
     const response = await fetch(provider.endpoint_url, {

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.draftright.app</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>LicenseRef-proprietary</project_license>
+
+  <name>DraftRight</name>
+  <summary>AI-powered text rewriting</summary>
+
+  <description>
+    <p>
+      DraftRight lets you select text anywhere on your desktop, pick a tone,
+      and get a polished rewrite in place.
+    </p>
+    <p>Features:</p>
+    <ul>
+      <li>Global shortcut to capture the current selection</li>
+      <li>Tones including simple, natural, polished, concise, and technical</li>
+      <li>Grammar check and translation</li>
+      <li>Replace the selection directly or copy the result</li>
+    </ul>
+  </description>
+
+  <launchable type="desktop-id">com.draftright.app.desktop</launchable>
+
+  <url type="homepage">https://draftright.info</url>
+  <url type="bugtracker">https://draftright.info/feedback</url>
+
+  <developer id="info.draftright">
+    <name>Tan Nguyen</name>
+  </developer>
+
+  <supports>
+    <control>keyboard</control>
+    <control>pointing</control>
+  </supports>
+
+  <content_rating type="oars-1.1"/>
+
+  <releases>
+    <release version="2.4.1" date="2026-07-30"/>
+  </releases>
+</component>

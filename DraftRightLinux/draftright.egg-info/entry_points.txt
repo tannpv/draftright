@@ -1,0 +1,2 @@
+[console_scripts]
+draftright = draftright.main:main

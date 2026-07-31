@@ -6,6 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/tannpv/draftright-rewrite/internal/platform/secretcipher"
 	sqlc "github.com/tannpv/draftright-rewrite/internal/shared/pg/sqlc"
 )
 
@@ -72,7 +73,7 @@ func (a *SettingsAdapter) Credentials(ctx context.Context) (Credentials, error) 
 	if err != nil {
 		return Credentials{}, err
 	}
-	return Credentials{
+	c := Credentials{
 		StripeSecretKey:            row.StripeSecretKey,
 		StripeWebhookSecret:        row.StripeWebhookSecret,
 		VietQRBankID:               row.VietqrBankID,
@@ -91,7 +92,19 @@ func (a *SettingsAdapter) Credentials(ctx context.Context) (Credentials, error) 
 		PayPalWebhookID:            row.PaypalWebhookID,
 		PayPalPlanMonthly:          row.PaypalPlanMonthly,
 		PayPalPlanYearly:           row.PaypalPlanYearly,
-	}, nil
+	}
+	// Decrypt secret credentials at rest (#50). No-op for legacy plaintext and
+	// when SECRETS_ENCRYPTION_KEY is unset. Only the true secrets are decrypted;
+	// ids / modes / bank details are not encrypted.
+	if err := secretcipher.DecryptInPlace(
+		&c.StripeSecretKey, &c.StripeWebhookSecret,
+		&c.CassoAPIKey, &c.SepayAPIKey,
+		&c.LemonSqueezyAPIKey, &c.LemonSqueezyWebhookSecret,
+		&c.PayPalClientSecret, &c.PayPalWebhookID,
+	); err != nil {
+		return Credentials{}, err
+	}
+	return c, nil
 }
 
 // LemonSqueezyVariants returns the configured (monthly, yearly) variant ids,

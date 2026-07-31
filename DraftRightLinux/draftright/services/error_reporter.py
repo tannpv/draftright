@@ -147,7 +147,7 @@ def _send_or_queue(payload: dict) -> None:
         token = _BEARER_TOKEN_PROVIDER() if _BEARER_TOKEN_PROVIDER else None
         if token:
             req.add_header("Authorization", f"Bearer {token}")
-        with urllib_request.urlopen(req, timeout=10) as resp:
+        with urllib_request.urlopen(req, timeout=config.ERROR_REPORT_TIMEOUT) as resp:
             if 200 <= resp.status < 300:
                 return
     except (URLError, OSError, TimeoutError):
@@ -190,7 +190,7 @@ def _flush_queue_async() -> None:
                 token = _BEARER_TOKEN_PROVIDER() if _BEARER_TOKEN_PROVIDER else None
                 if token:
                     req.add_header("Authorization", f"Bearer {token}")
-                with urllib_request.urlopen(req, timeout=10) as resp:
+                with urllib_request.urlopen(req, timeout=config.ERROR_REPORT_TIMEOUT) as resp:
                     if not (200 <= resp.status < 300):
                         remaining.append(line)
             except Exception:

@@ -1,158 +1,122 @@
-"""System tray icon using AppIndicator3 (libayatana-appindicator)."""
+"""System tray icon, hosted in a GTK3 helper process.
+
+The indicator itself lives in :mod:`draftright.tray_helper`, because Ayatana
+AppIndicator3 is GTK3-only and cannot be loaded into this GTK4 process (the
+import raises ``Requiring namespace 'Gtk' version '3.0', but '4.0' is already
+loaded``).  This class is only the supervisor: it spawns the helper, pushes
+status down its stdin, and shuts it down.
+
+Menu clicks come back as GApplication action activations over the session bus,
+not through this object — see the ``show`` / ``settings`` / ``suggest-feature``
+/ ``sign-out`` / ``quit`` actions in :mod:`draftright.application`.
+"""
 
 import logging
+import os
+import subprocess
+import sys
+from pathlib import Path
 
-import gi
-gi.require_version("Gtk", "4.0")
-from gi.repository import Gtk
-
+from draftright import config
 from draftright.models.health import HealthStatus
-
-try:
-    gi.require_version('AyatanaAppIndicator3', '0.1')
-    from gi.repository import AyatanaAppIndicator3 as AppIndicator3
-except (ImportError, ValueError):
-    try:
-        gi.require_version('AppIndicator3', '0.1')
-        from gi.repository import AppIndicator3
-    except (ImportError, ValueError):
-        AppIndicator3 = None
+from draftright.models.tray import TrayCommand
 
 logger = logging.getLogger(__name__)
 
 
 class TrayIcon:
-    """System tray icon for DraftRight.
-
-    Uses AyatanaAppIndicator3 or AppIndicator3 to display a persistent
-    tray icon with a context menu. Falls back gracefully if neither
-    library is available.
-    """
+    """Supervises the GTK3 tray helper process."""
 
     def __init__(self, app):
-        """Initialize the tray icon.
+        """Spawn the helper.
 
         Args:
-            app: The DraftRightApplication instance.
+            app: The DraftRightApplication instance.  Retained so callers can
+                still reach the app, though menu actions travel over D-Bus.
         """
         self.app = app
-        self.indicator = None
-        self._status_item = None
+        self._process = None
 
-        if AppIndicator3 is None:
-            logger.warning(
-                "AppIndicator3 not available -- system tray icon disabled. "
-                "Install gir1.2-ayatanaappindicator3-0.1 for tray support."
+        try:
+            self._process = subprocess.Popen(
+                [sys.executable, "-m", config.TRAY_HELPER_MODULE],
+                stdin=subprocess.PIPE,
+                env=self._child_env(),
             )
+        except OSError as exc:
+            logger.warning("Could not start the tray helper: %s", exc)
             return
 
-        self.indicator = AppIndicator3.Indicator.new(
-            "com.draftright.app",
-            "edit-paste-symbolic",
-            AppIndicator3.IndicatorCategory.APPLICATION_STATUS,
-        )
-        self.indicator.set_status(AppIndicator3.IndicatorStatus.ACTIVE)
-        self.indicator.set_title("DraftRight")
+        logger.info("Tray helper started (pid %s)", self._process.pid)
 
-        # Build context menu (GTK3-style menu required by AppIndicator)
-        self.indicator.set_menu(self._build_menu())
+    @staticmethod
+    def _child_env() -> dict:
+        """Environment for the helper, with our package made importable.
 
-    def _build_menu(self):
-        """Build the indicator context menu.
-
-        Note: AppIndicator3 requires a Gtk3-style Gtk.Menu.  On GTK4-only
-        systems this may need the gtk3 compatibility layer.  We import the
-        Gtk 3.0 Menu directly to satisfy the AppIndicator API.
+        The helper is launched as ``python -m draftright.tray_helper``, whose
+        sys.path[0] is its own cwd — not necessarily where this package lives.
+        Prepending the directory containing ``draftright/`` keeps the helper
+        working when the app is run from a source tree or via PYTHONPATH, not
+        just when it is installed.
         """
+        env = os.environ.copy()
+        package_root = str(Path(__file__).resolve().parent.parent.parent)
+        existing = env.get("PYTHONPATH", "")
+        env["PYTHONPATH"] = (
+            f"{package_root}{os.pathsep}{existing}" if existing else package_root
+        )
+        return env
+
+    @property
+    def _alive(self) -> bool:
+        return self._process is not None and self._process.poll() is None
+
+    def _send(self, command: TrayCommand, payload: str = "") -> None:
+        """Write one protocol line to the helper, tolerating its death."""
+        if not self._alive or self._process.stdin is None:
+            return
         try:
-            gi.require_version("Gtk", "3.0")
-            from gi.repository import Gtk as Gtk3
-        except ValueError:
-            # Already loaded GTK4; fall back to building menu with GTK4
-            # (will only work on systems where AppIndicator accepts it)
-            Gtk3 = Gtk
-
-        menu = Gtk3.Menu()
-
-        # Status label (disabled, shows connectivity)
-        self._status_item = Gtk3.MenuItem(label="Offline")
-        self._status_item.set_sensitive(False)
-        menu.append(self._status_item)
-        menu.append(Gtk3.SeparatorMenuItem())
-
-        # Open Settings
-        item_settings = Gtk3.MenuItem(label="Open Settings")
-        item_settings.connect("activate", self._on_open_settings)
-        menu.append(item_settings)
-
-        # Suggest a feature
-        item_suggest = Gtk3.MenuItem(label="Suggest a feature…")
-        item_suggest.connect("activate", self._on_suggest_feature)
-        menu.append(item_suggest)
-
-        # Separator
-        menu.append(Gtk3.SeparatorMenuItem())
-
-        # Sign Out
-        item_sign_out = Gtk3.MenuItem(label="Sign Out")
-        item_sign_out.connect("activate", self._on_sign_out)
-        menu.append(item_sign_out)
-
-        # Quit
-        item_quit = Gtk3.MenuItem(label="Quit")
-        item_quit.connect("activate", self._on_quit)
-        menu.append(item_quit)
-
-        menu.show_all()
-        return menu
-
-    # ------------------------------------------------------------------
-    # Callbacks
-    # ------------------------------------------------------------------
-
-    def _on_open_settings(self, _widget):
-        """Open the settings window."""
-        self.app.show_settings()
-
-    def _on_suggest_feature(self, _widget):
-        """Open the Suggest a Feature dialog."""
-        from draftright.ui.suggest_feature_dialog import open_suggest_feature_dialog
-        token = (
-            self.app.auth_service.access_token
-            if getattr(self.app, "auth_service", None) is not None
-            else None
-        )
-        parent = getattr(self.app, "props", None)
-        active_window = parent.active_window if parent is not None else None
-        open_suggest_feature_dialog(active_window, bearer_token=token)
-
-    def _on_sign_out(self, _widget):
-        """Sign the user out."""
-        self.app.sign_out()
-
-    def _on_quit(self, _widget):
-        """Quit the application."""
-        self.app.quit_app()
-
-    # ------------------------------------------------------------------
-    # Public helpers
-    # ------------------------------------------------------------------
-
-    def set_icon(self, icon_name: str):
-        """Change the tray icon.
-
-        Args:
-            icon_name: A freedesktop icon name or absolute path to an icon file.
-        """
-        if self.indicator:
-            self.indicator.set_icon(icon_name)
+            self._process.stdin.write(command.encode(payload).encode("utf-8"))
+            self._process.stdin.flush()
+        except (BrokenPipeError, ValueError, OSError) as exc:
+            # The helper exited (no tray host, user killed it, …).  The app
+            # must keep running regardless — the tray is optional.
+            logger.warning("Tray helper is gone, dropping update: %s", exc)
 
     def set_status(self, status: HealthStatus):
-        """Update the status menu item label.
+        """Update the status line shown in the tray menu.
 
         Args:
             status: The current :class:`HealthStatus`.
         """
-        if self._status_item is None:
+        self._send(TrayCommand.STATUS, status.value)
+
+    def set_update_available(self, available: bool):
+        """Flag an available app update, drawn as a red dot on the tray icon."""
+        self._send(TrayCommand.UPDATE, "1" if available else "0")
+
+    def stop(self):
+        """Shut the helper down.
+
+        Closing stdin is the normal path: the helper sees EOF and quits.  The
+        terminate/kill escalation only covers a wedged process.
+        """
+        if self._process is None:
             return
-        self._status_item.set_label(status.display_name)
+        try:
+            if self._process.stdin is not None:
+                self._process.stdin.close()
+        except (BrokenPipeError, OSError):
+            pass
+
+        try:
+            self._process.wait(timeout=config.TRAY_SHUTDOWN_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            logger.warning("Tray helper did not exit on EOF; terminating.")
+            self._process.terminate()
+            try:
+                self._process.wait(timeout=config.TRAY_SHUTDOWN_TIMEOUT)
+            except subprocess.TimeoutExpired:
+                self._process.kill()
+        finally:
+            self._process = None

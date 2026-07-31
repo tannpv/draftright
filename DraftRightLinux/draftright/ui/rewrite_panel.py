@@ -9,6 +9,7 @@ gi.require_version("Gdk", "4.0")
 from gi.repository import Gdk, Gio, GLib, Gtk, Pango
 
 from draftright import config
+from draftright.models.rewrite import RewriteResult
 from draftright.models.tone import Tone
 
 # CSS for the rewrite panel, built from the shared design tokens in
@@ -101,8 +102,10 @@ PANEL_CSS = f"""
 class RewritePanel(Gtk.Window):
     """Floating panel for tone selection and text rewriting.
 
-    Appears near the mouse cursor when invoked, shows tone buttons,
-    calls the backend API, and displays the rewritten result.
+    Shows tone buttons, calls the backend API, and displays the rewritten
+    result.  Placement is the compositor's decision: GTK4 dropped client-side
+    window positioning and Wayland does not let a client place its own
+    surface, so the panel cannot follow the mouse cursor (#103).
     """
 
     def __init__(self, app):
@@ -297,17 +300,46 @@ class RewritePanel(Gtk.Window):
             btn.remove_css_class("tone-button-selected")
             btn.add_css_class("tone-button")
 
-        # Position near cursor (best effort -- Wayland may not expose pointer)
-        self._position_near_cursor()
-
+        # No cursor-relative placement: GTK4 removed client-side window
+        # positioning, and Wayland forbids a client from placing its own
+        # surface at all.  The compositor decides where this lands (#103).
         self.set_visible(True)
         self.present()
 
     def on_replace(self):
-        """Replace the original text with the rewritten result."""
-        if self._result_text and self.app.clipboard_service:
-            self.app.clipboard_service.inject_text(self._result_text)
-        self._close()
+        """Replace the original text with the rewritten result.
+
+        On Wayland this may need permission via the RemoteDesktop portal, so
+        the panel stays open until the keystroke is delivered — closing early
+        would leave the user staring at unchanged text with no explanation.
+        The result is on the clipboard regardless, so a denial degrades to a
+        manual paste rather than losing the rewrite.
+        """
+        if not (self._result_text and self.app.clipboard_service):
+            self._close()
+            return
+
+        self._replace_btn.set_sensitive(False)
+        self.app.clipboard_service.inject_text(
+            self._result_text,
+            on_done=lambda ok: GLib.idle_add(self._on_replace_done, ok),
+        )
+
+    def _on_replace_done(self, delivered: bool) -> bool:
+        """Close on success; explain and fall back to Copy on failure."""
+        if delivered:
+            self._close()
+            return False
+
+        self._replace_btn.set_sensitive(True)
+        self._error_label.set_text(
+            "Couldn't paste automatically — the result is on your clipboard, "
+            "press Ctrl+V to insert it."
+        )
+        self._error_label.remove_css_class("copied-label")
+        self._error_label.add_css_class("error-label")
+        self._error_box.set_visible(True)
+        return False  # don't repeat this idle callback
 
     def on_copy(self):
         """Copy the rewritten result to the clipboard."""
@@ -354,9 +386,19 @@ class RewritePanel(Gtk.Window):
         """
         # Serve an identical (text, tone) instantly from the client cache —
         # no spinner, no backend round-trip. Mirrors macOS.
+        selected = Tone.from_api_value(tone)
+        settings = self.app.settings_service
+        language = (
+            settings.translate_language
+            if settings is not None
+            and selected is not None
+            and selected.uses_target_language
+            else None
+        )
+
         cache = getattr(self.app, "rewrite_cache", None)
         if cache is not None:
-            cached = cache.get(self._input_text, tone)
+            cached = cache.get(self._input_text, tone, language)
             if cached is not None:
                 self._on_api_success(cached)
                 return
@@ -373,7 +415,13 @@ class RewritePanel(Gtk.Window):
                 if self.app.api_client is None:
                     raise RuntimeError("API client not initialized. Please sign in first.")
 
-                result = self.app.api_client.rewrite(self._input_text, tone)
+                settings = self.app.settings_service
+                language = settings.translate_language if settings else None
+                payload = self.app.api_client.rewrite(
+                    self._input_text, tone, language
+                )
+                # /rewrite returns a dict; the buffer needs the text out of it.
+                result = RewriteResult.from_wire(payload).text
                 if cache is not None:
                     cache.set(self._input_text, tone, result)
                 GLib.idle_add(self._on_api_success, result)
@@ -420,21 +468,6 @@ class RewritePanel(Gtk.Window):
         if error_text:
             clipboard = Gdk.Display.get_default().get_clipboard()
             clipboard.set(error_text)
-
-    def _position_near_cursor(self):
-        """Position the window near the current mouse cursor."""
-        # On X11 we can query pointer position; on Wayland this may not work
-        # and the window manager decides placement.
-        try:
-            seat = Gdk.Display.get_default().get_default_seat()
-            if seat:
-                pointer = seat.get_pointer()
-                if pointer:
-                    # GTK4 does not expose pointer coords directly on the window.
-                    # We rely on the window manager for placement in most cases.
-                    pass
-        except Exception:
-            pass
 
     def _close(self):
         """Hide the panel."""

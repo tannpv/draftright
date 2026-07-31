@@ -136,6 +136,12 @@ struct BugReportSheet: View {
                     Label("Paste", systemImage: "doc.on.clipboard")
                 }
                 .help("Paste an image from the clipboard (Cmd+V)")
+                Button {
+                    captureScreen()
+                } label: {
+                    Label("Capture screen", systemImage: "camera.viewfinder")
+                }
+                .help("Capture the screen and attach it")
                 if screenshotImage != nil {
                     Button(role: .destructive) {
                         clearScreenshot()
@@ -333,6 +339,45 @@ struct BugReportSheet: View {
         screenshotImage = nil
         screenshotData = nil
         screenshotFilename = ""
+    }
+
+    // MARK: - Screen capture (#85)
+
+    /// Capture the main display and attach it. Hides the report window first so
+    /// it isn't in the shot, then restores it. Requires the Screen Recording
+    /// permission (macOS prompts on first use); denial degrades gracefully to a
+    /// hint pointing at System Settings — the file picker / paste still work.
+    private func captureScreen() {
+        let window = NSApp.keyWindow
+        window?.orderOut(nil)
+        // Give the compositor a beat to remove our window before grabbing.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            defer { window?.makeKeyAndOrderFront(nil) }
+            guard let cg = CGDisplayCreateImage(CGMainDisplayID()) else {
+                errorMessage = "Couldn't capture the screen. Grant Screen Recording permission in System Settings › Privacy & Security, then try again."
+                return
+            }
+            let full = NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
+            let scaled = Self.downscale(full, maxDimension: 2000)
+            let stamp = Int(Date().timeIntervalSince1970)
+            adoptImage(scaled, suggestedFilename: "screenshot-\(stamp).png")
+        }
+    }
+
+    /// Downscale so a retina full-screen PNG stays under the 5 MB upload cap.
+    /// Returns the original when it's already within bounds.
+    private static func downscale(_ image: NSImage, maxDimension: CGFloat) -> NSImage {
+        let w = image.size.width, h = image.size.height
+        let scale = min(1, maxDimension / max(w, h))
+        if scale >= 1 { return image }
+        let newSize = NSSize(width: (w * scale).rounded(), height: (h * scale).rounded())
+        let out = NSImage(size: newSize)
+        out.lockFocus()
+        image.draw(in: NSRect(origin: .zero, size: newSize),
+                   from: NSRect(origin: .zero, size: image.size),
+                   operation: .copy, fraction: 1.0)
+        out.unlockFocus()
+        return out
     }
 
     // MARK: - Paste monitor (Cmd+V while sheet is open)

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/tannpv/draftright-rewrite/internal/platform/secretcipher"
 	sqlc "github.com/tannpv/draftright-rewrite/internal/shared/pg/sqlc"
 )
 
@@ -42,7 +43,12 @@ func (r *PgRepo) GetEmailSettings(ctx context.Context) (string, string, error) {
 		return "", "", err
 	}
 	// resend_api_key + email_from are NOT NULL columns → plain string.
-	return row.ResendApiKey, row.EmailFrom, nil
+	// Decrypt the key at rest (#50); no-op for legacy plaintext / no key.
+	apiKey, err := secretcipher.Decrypt(row.ResendApiKey)
+	if err != nil {
+		return "", "", err
+	}
+	return apiKey, row.EmailFrom, nil
 }
 
 // MarkByProviderID reflects a Resend delivery event onto email_logs by

@@ -1,4 +1,17 @@
-import { Entity, PrimaryGeneratedColumn, Column, UpdateDateColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, UpdateDateColumn, ValueTransformer } from 'typeorm';
+import { encryptSecret, decryptSecret } from '../../common/crypto/secret-cipher';
+
+/**
+ * At-rest encryption for the secret columns (#50). `to` encrypts on write,
+ * `from` decrypts on read — transparent to every consumer of AppSettings.
+ * Null-safe and a no-op without SECRETS_ENCRYPTION_KEY, so legacy plaintext
+ * rows keep working. Columns are `text` because ciphertext is longer than the
+ * original secret and would overflow the old varchar(100/500) widths.
+ */
+const secretTransformer: ValueTransformer = {
+  to: (value?: string | null) => (value == null ? value : encryptSecret(value)),
+  from: (value?: string | null) => (value == null ? value : decryptSecret(value)),
+};
 
 @Entity('app_settings')
 export class AppSettings {
@@ -34,10 +47,10 @@ export class AppSettings {
   payment_methods_enabled: string;
 
   // --- Payment: Stripe ---
-  @Column({ type: 'varchar', length: 500, default: '' })
+  @Column({ type: 'text', default: '', transformer: secretTransformer })
   stripe_secret_key: string;
 
-  @Column({ type: 'varchar', length: 500, default: '' })
+  @Column({ type: 'text', default: '', transformer: secretTransformer })
   stripe_webhook_secret: string;
 
   @Column({ type: 'varchar', length: 20, default: 'test' })
@@ -47,7 +60,7 @@ export class AppSettings {
   @Column({ type: 'varchar', length: 500, default: '' })
   paypal_client_id: string;
 
-  @Column({ type: 'varchar', length: 500, default: '' })
+  @Column({ type: 'text', default: '', transformer: secretTransformer })
   paypal_client_secret: string;
 
   @Column({ type: 'varchar', length: 20, default: 'sandbox' })
@@ -55,7 +68,7 @@ export class AppSettings {
 
   // PayPal webhook ID — used to verify inbound webhook signatures via
   // PayPal's verify-webhook-signature API (PayPal does not sign with HMAC).
-  @Column({ type: 'varchar', length: 100, default: '' })
+  @Column({ type: 'text', default: '', transformer: secretTransformer })
   paypal_webhook_id: string;
 
   // PayPal billing-plan IDs (P-XXXX), one per DraftRight billing period.
@@ -70,10 +83,10 @@ export class AppSettings {
   @Column({ type: 'varchar', length: 500, default: '' })
   momo_partner_code: string;
 
-  @Column({ type: 'varchar', length: 500, default: '' })
+  @Column({ type: 'text', default: '', transformer: secretTransformer })
   momo_access_key: string;
 
-  @Column({ type: 'varchar', length: 500, default: '' })
+  @Column({ type: 'text', default: '', transformer: secretTransformer })
   momo_secret_key: string;
 
   @Column({ type: 'varchar', length: 20, default: 'sandbox' })
@@ -90,17 +103,17 @@ export class AppSettings {
   vietqr_account_name: string;
 
   // --- Payment: Casso / SePay ---
-  @Column({ type: 'varchar', length: 500, default: '' })
+  @Column({ type: 'text', default: '', transformer: secretTransformer })
   casso_api_key: string;
 
-  @Column({ type: 'varchar', length: 500, default: '' })
+  @Column({ type: 'text', default: '', transformer: secretTransformer })
   sepay_api_key: string;
 
   @Column({ type: 'varchar', length: 20, default: 'sandbox' })
   sepay_mode: string;
 
   // --- Email: Resend ---
-  @Column({ type: 'varchar', length: 500, default: '' })
+  @Column({ type: 'text', default: '', transformer: secretTransformer })
   resend_api_key: string;
 
   @Column({ type: 'varchar', length: 200, default: 'DraftRight <noreply@draftright.info>' })
@@ -110,7 +123,7 @@ export class AppSettings {
   @Column({ type: 'varchar', length: 500, default: '22951518033-gf853ftmf4emivffk0su2bik42j7cmai.apps.googleusercontent.com' })
   google_client_id: string;
 
-  @Column({ type: 'varchar', length: 500, default: '' })
+  @Column({ type: 'text', default: '', transformer: secretTransformer })
   google_client_secret: string;
 
   // --- Apple Sign In ---
@@ -124,13 +137,13 @@ export class AppSettings {
   apple_key_id: string;
 
   // --- Lemon Squeezy (MoR credit-card payments) ---
-  @Column({ type: 'varchar', length: 500, default: '' })
+  @Column({ type: 'text', default: '', transformer: secretTransformer })
   lemonsqueezy_api_key: string;
 
   @Column({ type: 'varchar', length: 100, default: '' })
   lemonsqueezy_store_id: string;
 
-  @Column({ type: 'varchar', length: 500, default: '' })
+  @Column({ type: 'text', default: '', transformer: secretTransformer })
   lemonsqueezy_webhook_secret: string;
 
   @Column({ type: 'varchar', length: 100, default: '' })

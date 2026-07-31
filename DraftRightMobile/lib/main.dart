@@ -15,7 +15,6 @@ import 'package:draftright_mobile/screens/settings_screen.dart';
 import 'package:draftright_mobile/screens/playground_screen.dart';
 import 'package:draftright_mobile/screens/subscription_screen.dart';
 import 'package:draftright_mobile/services/deep_link_service.dart';
-import 'package:draftright_mobile/services/share_service.dart';
 import 'package:draftright_mobile/services/error_reporter.dart';
 import 'package:draftright_mobile/widgets/error_notice_overlay.dart';
 import 'package:draftright_mobile/widgets/floating_report_bug_button.dart';
@@ -313,7 +312,6 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _checkOnboarding();
-    _restoreFloatingBubble();
     _wireDeepLinks();
     // Defer until the tree (and a Navigator) is mounted.
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkWhatsNew());
@@ -399,16 +397,6 @@ class _HomeScreenState extends State<HomeScreen> {
       await prefs.setBool('draftright.onboardingComplete', true);
     } catch (e) {
       DRLogger.warn('Failed to persist onboardingComplete: $e');
-    }
-  }
-
-  /// Restart the floating bubble if the user had it enabled last session.
-  /// No-op on iOS / desktop / web (channel returns false).
-  Future<void> _restoreFloatingBubble() async {
-    if (!mounted) return;
-    final settings = context.read<SettingsService>();
-    if (settings.floatingBubbleEnabled && await ShareService.canDrawOverlays()) {
-      await ShareService.startBubble();
     }
   }
 

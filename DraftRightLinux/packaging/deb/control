@@ -1,5 +1,5 @@
 Package: draftright
-Version: 1.0.0
+Version: 2.4.1
 Section: utils
 Priority: optional
 Architecture: all
@@ -8,10 +8,14 @@ Depends: python3 (>= 3.10),
          python3-requests,
          gir1.2-gtk-4.0,
          gir1.2-adw-1,
+         gir1.2-gtk-3.0,
          gir1.2-ayatanaappindicator3-0.1,
          xdotool,
          xsel
-Recommends: xclip
+Recommends: xclip,
+            python3-xlib,
+            wl-clipboard,
+            xdg-desktop-portal
 Maintainer: Tan Nguyen <tan@draftright.app>
 Homepage: https://draftright.app
 Description: AI-powered text rewriting tool
@@ -21,3 +25,10 @@ Description: AI-powered text rewriting tool
  .
  Press a global hotkey to capture your selection, choose a tone from
  the floating panel, and replace or copy the result.
+ .
+ Dependency notes: gir1.2-gtk-3.0 and gir1.2-ayatanaappindicator3-0.1 are
+ required by the tray helper, which runs as a separate GTK3 process because
+ AppIndicator cannot be loaded into the GTK4 app. python3-xlib is needed for
+ the X11 global hotkey, wl-clipboard for the Wayland clipboard, and
+ xdg-desktop-portal for the Wayland global shortcut; each degrades gracefully
+ when absent, which is why they are Recommends rather than Depends.

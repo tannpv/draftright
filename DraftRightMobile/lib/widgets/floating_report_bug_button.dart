@@ -1,4 +1,8 @@
+import 'dart:ui' as ui;
+
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 
 import 'package:draftright_mobile/widgets/report_bug_sheet.dart';
 
@@ -9,10 +13,11 @@ import 'package:draftright_mobile/widgets/report_bug_sheet.dart';
 /// [ErrorNoticeOverlay] — so it rides on top of every route with no per-screen
 /// wiring. iOS + Android identical.
 ///
-/// Scope note: this floats only above DraftRight's OWN UI (an in-app overlay).
-/// A system-wide bubble that hovers over *other* apps is a different, Android-
-/// only mechanism (`SYSTEM_ALERT_WINDOW` + accessibility) and lives in
-/// [ShareService.supportsFloatingBubble]; iOS forbids it at the OS level.
+/// Scope note: this floats only above DraftRight's OWN UI (an in-app overlay) —
+/// it needs no system permission. (The old system-wide rewrite bubble that drew
+/// over *other* apps via SYSTEM_ALERT_WINDOW + an AccessibilityService was
+/// removed: banking/security apps block overlays + accessibility, and it gated
+/// Play submission.)
 ///
 /// Extend, don't fork: tune via constructor params (enabled, icon, tooltip,
 /// size, margin, starting corner) rather than editing the body.
@@ -102,8 +107,36 @@ class _FloatingReportBugButtonState extends State<FloatingReportBugButton> {
     return Offset(x, p.dy);
   }
 
-  Future<void> _openReport() =>
-      showReportBugSheet(context, currentRoute: widget.routeLabel);
+  // Wraps the app content (NOT the button) so a capture excludes the FAB.
+  final GlobalKey _captureKey = GlobalKey();
+
+  /// PNG of the screen the user is on, captured from the app's own render tree
+  /// (in-app, no permission). Best-effort — returns null on any failure. (#135)
+  Future<Uint8List?> _captureScreen() async {
+    try {
+      final boundary =
+          _captureKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      if (boundary == null) return null;
+      final dpr = MediaQuery.of(context).devicePixelRatio.clamp(1.0, 2.0);
+      final image = await boundary.toImage(pixelRatio: dpr);
+      final data = await image.toByteData(format: ui.ImageByteFormat.png);
+      image.dispose();
+      return data?.buffer.asUint8List();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _openReport() async {
+    // Capture BEFORE the sheet is shown, so the shot is the buggy screen.
+    final shot = await _captureScreen();
+    if (!mounted) return;
+    await showReportBugSheet(
+      context,
+      currentRoute: widget.routeLabel,
+      initialScreenshotBytes: shot,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -117,7 +150,9 @@ class _FloatingReportBugButtonState extends State<FloatingReportBugButton> {
         final pos = _clamp(_pos ?? _cornerPosition(area, pad), area, pad);
         return Stack(
           children: [
-            widget.child,
+            // Capture target: the app content only (the FAB sits above this
+            // boundary, so it's never in the screenshot). #135
+            RepaintBoundary(key: _captureKey, child: widget.child),
             AnimatedPositioned(
               // Instant while the finger drives it; eased on the edge-snap.
               duration: _dragging ? Duration.zero : _snapDuration,

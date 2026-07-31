@@ -37,6 +37,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/tannpv/draftright-rewrite/internal/platform/secretcipher"
 	"github.com/tannpv/draftright-rewrite/internal/shared/pg/sqlc"
 )
 
@@ -80,7 +81,35 @@ func (r *PgRepo) GetOrCreate(ctx context.Context) (AppSettings, error) {
 	if err != nil {
 		return AppSettings{}, err
 	}
-	return fromRow(row), nil
+	s := fromRow(row)
+	if err := decryptSettingsSecrets(&s); err != nil {
+		return AppSettings{}, err
+	}
+	return s, nil
+}
+
+// The 12 encrypted-at-rest secret columns (#50). ids, modes, bank details,
+// variant ids and non-secret fields are stored plaintext.
+func decryptSettingsSecrets(s *AppSettings) error {
+	return secretcipher.DecryptInPlace(
+		&s.StripeSecretKey, &s.StripeWebhookSecret,
+		&s.PaypalClientSecret, &s.PaypalWebhookID,
+		&s.MomoAccessKey, &s.MomoSecretKey,
+		&s.CassoAPIKey, &s.SepayAPIKey,
+		&s.ResendAPIKey, &s.GoogleClientSecret,
+		&s.LemonsqueezyAPIKey, &s.LemonsqueezyWebhookSecret,
+	)
+}
+
+func encryptPatchSecrets(p *Patch) error {
+	return secretcipher.EncryptInPlace(
+		p.StripeSecretKey, p.StripeWebhookSecret,
+		p.PaypalClientSecret, p.PaypalWebhookID,
+		p.MomoAccessKey, p.MomoSecretKey,
+		p.CassoAPIKey, p.SepayAPIKey,
+		p.ResendAPIKey, p.GoogleClientSecret,
+		p.LemonsqueezyAPIKey, p.LemonsqueezyWebhookSecret,
+	)
 }
 
 // Patch applies the non-nil patch fields to the singleton via a dynamic
@@ -88,12 +117,25 @@ func (r *PgRepo) GetOrCreate(ctx context.Context) (AppSettings, error) {
 // provided keys written) followed by the re-read. updated_at = now() is
 // always set, so an all-nil patch still touches the row (Node parity).
 func (r *PgRepo) Patch(ctx context.Context, p Patch) (AppSettings, error) {
+	// Encrypt secret columns at rest before writing (#50).
+	if err := encryptPatchSecrets(&p); err != nil {
+		return AppSettings{}, err
+	}
 	set, args := patchSQL(p)
 	sql := fmt.Sprintf(
 		"UPDATE app_settings SET %s WHERE id = (SELECT id FROM app_settings ORDER BY updated_at ASC LIMIT 1) RETURNING %s",
 		set, selectCols,
 	)
-	return scanSettings(r.pool.QueryRow(ctx, sql, args...))
+	s, err := scanSettings(r.pool.QueryRow(ctx, sql, args...))
+	if err != nil {
+		return AppSettings{}, err
+	}
+	// The RETURNING row carries the just-written ciphertext; hand callers
+	// plaintext (the handler then re-masks for the admin response).
+	if err := decryptSettingsSecrets(&s); err != nil {
+		return AppSettings{}, err
+	}
+	return s, nil
 }
 
 // patchSQL walks the 36 settable fields in entity declaration order; for

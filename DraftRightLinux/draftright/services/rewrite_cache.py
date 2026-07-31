@@ -32,16 +32,20 @@ class RewriteCache:
         self._lock = threading.Lock()
 
     @staticmethod
-    def _key(text: str, tone: str) -> str:
-        # Same shape as macOS ("{tone}::{text}") so behaviour matches.
-        return f"{tone}::{text}"
+    def _key(text: str, tone: str, language: str | None = None) -> str:
+        # Same shape as macOS ("{tone}::{text}") so behaviour matches, with the
+        # target language appended when it affects the result — otherwise
+        # switching language would serve the old language from cache.
+        base = f"{tone}::{text}"
+        return f"{language}::{base}" if language else base
 
-    def get(self, text: str, tone: str) -> str | None:
+    def get(self, text: str, tone: str, language: str | None = None) -> str | None:
         with self._lock:
-            return self._data.get(self._key(text, tone))
+            return self._data.get(self._key(text, tone, language))
 
-    def set(self, text: str, tone: str, result: str) -> None:
-        key = self._key(text, tone)
+    def set(self, text: str, tone: str, result: str,
+            language: str | None = None) -> None:
+        key = self._key(text, tone, language)
         with self._lock:
             if key not in self._data and len(self._data) >= self._max:
                 # Evict the oldest ~1/evict_fraction entries in one pass so we

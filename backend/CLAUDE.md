@@ -72,3 +72,20 @@ npx ts-node src/seed.ts  # Alternative seed command
 ## Tone System Prompts
 
 Defined in `src/rewrite/rewrite.service.ts` — 7 tones: simple, natural, polished, concise, technical, claude, translate.
+
+## Secret encryption at rest (#50)
+
+`ai_providers.api_key` + 12 `app_settings` secret columns are encrypted with
+AES-256-GCM (`enc:v1:` prefix) via `src/common/crypto/secret-cipher.ts` (Node)
+and `backend-rewrite-go/internal/platform/secretcipher` (Go, same wire format —
+they share the DB). **Key-gated:** unset `SECRETS_ENCRYPTION_KEY` → no-op /
+plaintext. Node uses a TypeORM ValueTransformer on the app_settings columns
+(widened to `text` — ciphertext overflows varchar); Go decrypts at use
+(completer, payment `Credentials()`, email) and encrypts at write (repos).
+Code complete on develop; NOT enabled. Enable runbook + gotchas: memory
+`feedback_secret_encryption_50`. Adding a new secret column = encrypt at its
+Go write + decrypt at every Go read + Node transformer + widen migration.
+
+## AI Providers
+
+`AiProviderType`: openai, anthropic, ollama, custom, **google**. All except anthropic share `OpenAiStrategy` (one OpenAI-compatible wire) — Gemini (`google`) uses its `/v1beta/openai/chat/completions` endpoint. `type` is a **pg native enum** → new values need a `sql/…ALTER TYPE ai_providers_type_enum ADD VALUE…` migration (synchronize OFF in prod). Strategy dispatch: `ProviderStrategyRegistry.pick()`. **The Go backend (`backend-rewrite-go`) has a parallel `completer_factory.go` switch — add new provider types THERE too**, or prod `/rewrite` (Go) errors. Rewrite quality is a function of the provider's `model`; prod Go pins one provider via `OPENAI_PROVIDER_ID` env, so the model that matters is that pinned row's, not the admin "default".
