@@ -15,14 +15,16 @@ from __future__ import annotations
 
 import logging
 import threading
-from enum import Enum
 from typing import Callable
 
-from gi.repository import GLib, Gio  # type: ignore[attr-defined]
+from gi.repository import GLib  # type: ignore[attr-defined]
 
 from draftright import config
 from draftright.helpers.display_server import is_wayland
 from draftright.models.hotkey import Hotkey
+from draftright.services.portal import PortalClient, PortalResponse
+
+__all__ = ["HotkeyService", "PortalResponse"]
 
 log = logging.getLogger(__name__)
 
@@ -126,29 +128,6 @@ class _X11Listener:
 # ---------------------------------------------------------------------------
 
 
-class PortalResponse(Enum):
-    """``response`` code carried by ``org.freedesktop.portal.Request::Response``."""
-
-    SUCCESS = 0
-    CANCELLED = 1
-    ENDED = 2
-
-    @property
-    def display_name(self) -> str:
-        return {
-            PortalResponse.SUCCESS: "granted",
-            PortalResponse.CANCELLED: "dismissed by the user",
-            PortalResponse.ENDED: "ended by the portal",
-        }[self]
-
-    @classmethod
-    def from_wire(cls, value: int) -> "PortalResponse":
-        for response in cls:
-            if response.value == value:
-                return response
-        return cls.ENDED
-
-
 class _PortalListener:
     """Global shortcut on Wayland via ``org.freedesktop.portal.GlobalShortcuts``.
 
@@ -167,12 +146,13 @@ class _PortalListener:
     """
 
     def __init__(self) -> None:
-        self._bus: Gio.DBusConnection | None = None
+        self._client = PortalClient(
+            config.PORTAL_GLOBAL_SHORTCUTS_IFACE, name_prefix="globalshortcuts"
+        )
         self._callback: Callable[[], None] | None = None
         self._hotkey: Hotkey | None = None
         self._session_handle: str | None = None
         self._subscriptions: list[int] = []
-        self._request_serial = 0
         self.active_trigger: str | None = None
         self.on_trigger_changed: Callable[[str | None], None] | None = None
 
@@ -186,135 +166,34 @@ class _PortalListener:
             log.error("Cannot parse hotkey %r: %s", keystring, exc)
             return
 
-        try:
-            self._bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
-        except GLib.Error as exc:
-            self._report_unavailable(f"No session bus ({exc.message})")
+        if not self._client.connect():
+            self._report_unavailable("No session bus")
             return
 
         # Listen for activations before the session exists; the filter is by
         # interface, and we match the session handle when one arrives.
         self._subscriptions.append(
-            self._bus.signal_subscribe(
-                config.PORTAL_BUS_NAME,
-                config.PORTAL_GLOBAL_SHORTCUTS_IFACE,
-                "Activated",
-                config.PORTAL_OBJECT_PATH,
-                None,
-                Gio.DBusSignalFlags.NONE,
-                self._on_activated,
-            )
+            self._client.subscribe_signal("Activated", self._on_activated)
         )
         # The compositor can rebind our shortcut at any time (system settings).
         self._subscriptions.append(
-            self._bus.signal_subscribe(
-                config.PORTAL_BUS_NAME,
-                config.PORTAL_GLOBAL_SHORTCUTS_IFACE,
-                "ShortcutsChanged",
-                config.PORTAL_OBJECT_PATH,
-                None,
-                Gio.DBusSignalFlags.NONE,
-                self._on_shortcuts_changed,
-            )
+            self._client.subscribe_signal("ShortcutsChanged", self._on_shortcuts_changed)
         )
         self._create_session()
 
     def stop(self) -> None:
-        if self._bus is not None:
-            for subscription in self._subscriptions:
-                self._bus.signal_unsubscribe(subscription)
-            if self._session_handle:
-                # Best-effort: the portal also drops the session when we
-                # disconnect from the bus.
-                self._bus.call(
-                    config.PORTAL_BUS_NAME,
-                    self._session_handle,
-                    config.PORTAL_SESSION_IFACE,
-                    "Close",
-                    None,
-                    None,
-                    Gio.DBusCallFlags.NONE,
-                    config.PORTAL_CALL_TIMEOUT_MS,
-                    None,
-                    None,
-                )
+        for subscription in self._subscriptions:
+            self._client.unsubscribe(subscription)
         self._subscriptions.clear()
+        if self._session_handle:
+            self._client.close_session(self._session_handle)
         self._session_handle = None
-        self._bus = None
+        self._client.close()
         self._callback = None
         # Clear without notifying: shutdown is not "the compositor refused",
         # and firing the callback here would flip the UI to "declined" while
         # the app is quitting.
         self.active_trigger = None
-
-    # -- request plumbing --------------------------------------------------
-
-    def _next_token(self, prefix: str) -> str:
-        self._request_serial += 1
-        return f"draftright_{prefix}_{self._request_serial}"
-
-    def _request_path(self, handle_token: str) -> str:
-        """Predict the Request object path for *handle_token*.
-
-        The portal derives it from our unique bus name.  Computing it lets us
-        subscribe *before* issuing the call, closing the race where the reply
-        arrives first (the portal spec recommends exactly this).
-        """
-        sender = self._bus.get_unique_name().lstrip(":").replace(".", "_")
-        return f"{config.PORTAL_OBJECT_PATH}/request/{sender}/{handle_token}"
-
-    def _call_with_request(
-        self,
-        method: str,
-        build_params: Callable[[str], GLib.Variant],
-        on_response: Callable[[PortalResponse, GLib.Variant], None],
-        prefix: str,
-    ) -> None:
-        """Invoke a portal method that answers via a Request object."""
-        handle_token = self._next_token(prefix)
-        subscription_id: list[int] = []
-
-        def on_signal(_conn, _sender, _path, _iface, _signal, params):
-            response = PortalResponse.from_wire(params.get_child_value(0).get_uint32())
-            results = params.get_child_value(1)
-            if subscription_id:
-                self._bus.signal_unsubscribe(subscription_id[0])
-            on_response(response, results)
-
-        subscription_id.append(
-            self._bus.signal_subscribe(
-                config.PORTAL_BUS_NAME,
-                config.PORTAL_REQUEST_IFACE,
-                "Response",
-                self._request_path(handle_token),
-                None,
-                Gio.DBusSignalFlags.NONE,
-                on_signal,
-            )
-        )
-
-        def on_call_done(bus, result):
-            try:
-                bus.call_finish(result)
-            except GLib.Error as exc:
-                # No Response signal will ever arrive, so report now — the UI
-                # would otherwise wait on "requesting…" indefinitely.
-                if subscription_id:
-                    self._bus.signal_unsubscribe(subscription_id[0])
-                self._report_unavailable(f"Portal {method} failed: {exc.message}")
-
-        self._bus.call(
-            config.PORTAL_BUS_NAME,
-            config.PORTAL_OBJECT_PATH,
-            config.PORTAL_GLOBAL_SHORTCUTS_IFACE,
-            method,
-            build_params(handle_token),
-            None,
-            Gio.DBusCallFlags.NONE,
-            config.PORTAL_CALL_TIMEOUT_MS,
-            None,
-            on_call_done,
-        )
 
     # -- handshake ---------------------------------------------------------
 
@@ -323,13 +202,14 @@ class _PortalListener:
             options = {
                 "handle_token": GLib.Variant("s", handle_token),
                 "session_handle_token": GLib.Variant(
-                    "s", self._next_token("session")
+                    "s", self._client.next_token("session")
                 ),
             }
             return GLib.Variant("(a{sv})", (options,))
 
-        self._call_with_request(
-            "CreateSession", build, self._on_session_created, "createsession"
+        self._client.call_with_request(
+            "CreateSession", build, self._on_session_created, "createsession",
+            on_error=self._report_unavailable,
         )
 
     def _on_session_created(
@@ -340,8 +220,7 @@ class _PortalListener:
                 f"GlobalShortcuts session not created ({response.display_name})"
             )
             return
-        unpacked = results.unpack()
-        self._session_handle = unpacked.get("session_handle")
+        self._session_handle = results.unpack().get("session_handle")
         if not self._session_handle:
             self._report_unavailable("Portal returned no session_handle")
             return
@@ -364,17 +243,16 @@ class _PortalListener:
             )
 
         log.info("Requesting Wayland global shortcut: %s", trigger)
-        self._call_with_request(
-            "BindShortcuts", build, self._on_shortcuts_bound, "bind"
+        self._client.call_with_request(
+            "BindShortcuts", build, self._on_shortcuts_bound, "bind",
+            on_error=self._report_unavailable,
         )
 
     def _on_shortcuts_bound(
         self, response: PortalResponse, results: GLib.Variant
     ) -> None:
         if response is not PortalResponse.SUCCESS:
-            self._report_unavailable(
-                f"Shortcut request was {response.display_name}"
-            )
+            self._report_unavailable(f"Shortcut request was {response.display_name}")
             return
         self._adopt_reported_shortcuts(results, source="BindShortcuts")
         # Ask the portal what it actually bound; some compositors return an
@@ -387,7 +265,7 @@ class _PortalListener:
             options = {"handle_token": GLib.Variant("s", handle_token)}
             return GLib.Variant("(oa{sv})", (self._session_handle, options))
 
-        self._call_with_request(
+        self._client.call_with_request(
             "ListShortcuts",
             build,
             lambda response, results: self._adopt_reported_shortcuts(
@@ -454,7 +332,7 @@ class _PortalListener:
                 log.info("Wayland global shortcut rebound to: %s", trigger)
 
 
-
+# ---------------------------------------------------------------------------
 # ---------------------------------------------------------------------------
 # Public facade
 # ---------------------------------------------------------------------------

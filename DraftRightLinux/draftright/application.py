@@ -25,6 +25,7 @@ from draftright.services.api_client import APIClient
 from draftright.services.auth_service import AuthService
 from draftright.services.clipboard_service import ClipboardService
 from draftright.services.hotkey_service import HotkeyService
+from draftright.services.input_portal import RemoteDesktopInjector
 from draftright.services.rewrite_cache import RewriteCache
 from draftright.services.settings_service import SettingsService
 
@@ -52,6 +53,7 @@ class DraftRightApplication(Adw.Application):
         self.settings_service = None
         self.hotkey_service = None
         self.clipboard_service = None
+        self.input_injector = None
         # Client-side rewrite cache, shared across panel instances (a fresh
         # RewritePanel is built per hotkey press). Mirrors macOS.
         self.rewrite_cache = RewriteCache()
@@ -115,7 +117,11 @@ class DraftRightApplication(Adw.Application):
         # Input services back the core rewrite loop: grab the selection on
         # hotkey, inject the result back. Idempotent on re-activate.
         if self.clipboard_service is None:
-            self.clipboard_service = ClipboardService()
+            # On Wayland, Replace has to synthesise Ctrl+V through the
+            # RemoteDesktop portal; xdotool only reaches XWayland clients.
+            if is_wayland() and self.input_injector is None:
+                self.input_injector = RemoteDesktopInjector(self.settings_service)
+            self.clipboard_service = ClipboardService(injector=self.input_injector)
         if self.hotkey_service is None:
             self.hotkey_service = HotkeyService()
         # Let the API client recover from a 401 by refreshing the session,
@@ -394,6 +400,8 @@ class DraftRightApplication(Adw.Application):
         """Clean up resources and quit the application."""
         if self.hotkey_service:
             self.hotkey_service.stop()
+        if self.input_injector is not None:
+            self.input_injector.stop()
         if self._tray_icon is not None:
             # Reap the helper explicitly; it also self-exits on stdin EOF, but
             # that only fires once this process is gone.

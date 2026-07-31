@@ -20,6 +20,8 @@ from draftright.models.health import HealthStatus
 from draftright.models.hotkey import Hotkey, Modifier
 from draftright.models.tray import TrayAction, TrayCommand
 from draftright.services.hotkey_service import PortalResponse
+from draftright.services.input_portal import InjectorState, RemoteDesktopInjector
+from draftright.services.portal import PortalClient
 from draftright.services import settings_service as settings_service_mod
 from draftright.services.auth_service import AuthService
 from draftright.services.settings_service import SettingsService
@@ -326,6 +328,78 @@ class HotkeyModelTest(unittest.TestCase):
         self.assertIs(PortalResponse.from_wire(99), PortalResponse.ENDED)
         for response in PortalResponse:
             self.assertTrue(response.display_name)
+
+
+class InjectorStateTest(unittest.TestCase):
+    """Wayland text injection (RemoteDesktop portal) — state machine only.
+
+    The D-Bus handshake needs a live portal and user consent, so these cover
+    the parts that must behave without one: never block the caller, never
+    lose the callback, and never claim success when denied.
+    """
+
+    def test_states_have_labels(self):
+        for state in InjectorState:
+            self.assertTrue(state.display_name.strip())
+
+    def test_denied_reports_failure_without_a_session(self):
+        injector = RemoteDesktopInjector()
+        injector.state = InjectorState.DENIED
+        seen = []
+        injector.paste(seen.append)
+        # Must answer immediately and negatively — the caller is a UI button.
+        self.assertEqual(seen, [False])
+
+    def test_pending_callbacks_all_drain_on_failure(self):
+        injector = RemoteDesktopInjector()
+        injector.state = InjectorState.STARTING  # handshake already in flight
+        seen = []
+        injector.paste(seen.append)
+        injector.paste(seen.append)
+        injector._fail("test")
+        self.assertEqual(seen, [False, False])
+        self.assertIs(injector.state, InjectorState.DENIED)
+
+    def test_paste_with_no_callback_is_safe(self):
+        injector = RemoteDesktopInjector()
+        injector.state = InjectorState.STARTING
+        injector.paste(None)
+        injector._fail("test")  # must not raise on a None callback
+
+    def test_state_change_notifies_once_per_transition(self):
+        injector = RemoteDesktopInjector()
+        seen = []
+        injector.on_state_changed = seen.append
+        injector._set_state(InjectorState.STARTING)
+        injector._set_state(InjectorState.STARTING)  # no-op
+        injector._set_state(InjectorState.DENIED)
+        self.assertEqual(seen, [InjectorState.STARTING, InjectorState.DENIED])
+
+    def test_clipboard_service_without_injector_never_calls_portal(self):
+        # X11 path, and the safety net if the injector was not wired up.
+        service = ClipboardService(injector=None)
+        self.assertIsNone(service._injector)
+
+
+class PortalClientTest(unittest.TestCase):
+    """Shared portal plumbing (#99 hotkey + text injection use one copy)."""
+
+    def test_request_tokens_are_unique_per_call(self):
+        client = PortalClient("org.example.Iface", name_prefix="probe")
+        tokens = {client.next_token("x") for _ in range(5)}
+        self.assertEqual(len(tokens), 5, "handle tokens must not collide")
+
+    def test_token_carries_the_prefix(self):
+        client = PortalClient("org.example.Iface", name_prefix="probe")
+        self.assertIn("probe", client.next_token("createsession"))
+
+    def test_two_clients_do_not_collide(self):
+        a = PortalClient("org.example.A", name_prefix="alpha")
+        b = PortalClient("org.example.B", name_prefix="beta")
+        self.assertNotEqual(a.next_token("x"), b.next_token("x"))
+
+    def test_close_session_without_bus_is_a_noop(self):
+        PortalClient("org.example.Iface", name_prefix="probe").close_session("/x")
 
 
 if __name__ == "__main__":

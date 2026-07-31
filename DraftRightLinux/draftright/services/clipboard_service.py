@@ -28,9 +28,15 @@ _TIMEOUT = config.SUBPROCESS_TIMEOUT
 class ClipboardService:
     """Read and write the X11/Wayland clipboard and primary selection."""
 
-    def __init__(self) -> None:
+    def __init__(self, injector=None) -> None:
+        """
+        Args:
+            injector: Optional :class:`RemoteDesktopInjector`.  Required for
+                Replace to work on Wayland — see :meth:`inject_text`.
+        """
         self._wayland = is_wayland()
         self._sim = TextInputSimulator()
+        self._injector = injector
 
     # ------------------------------------------------------------------
     # Public API
@@ -79,18 +85,36 @@ class ClipboardService:
         else:
             log.warning("No clipboard tool found (need xsel, xclip, or wl-copy).")
 
-    def inject_text(self, text: str) -> None:
+    def inject_text(self, text: str, on_done=None) -> None:
         """Replace the current selection in the source app with *text*.
 
-        Copies *text* to the clipboard, lets it settle, then simulates a
-        Ctrl+V paste (falling back to typing for short strings). This is what
-        the rewrite panel's "Replace" action calls.
+        Copies *text* to the clipboard, lets it settle, then sends Ctrl+V.
+        This is what the rewrite panel's "Replace" action calls.
+
+        On Wayland the keystroke must go through the RemoteDesktop portal:
+        ``xdotool`` reaches only XWayland clients, so a paste aimed at a native
+        Wayland window silently does nothing.  That path is asynchronous (it
+        may prompt for permission), hence *on_done*.
+
+        Args:
+            text: The replacement text.
+            on_done: Optional callback receiving True when the keystroke was
+                delivered, False when it was not.  The text is on the clipboard
+                either way, so the user can always paste manually.
         """
         self.set_clipboard(text)
         time.sleep(0.1)  # 100 ms for the clipboard to settle before paste
-        if not self._sim.paste():
+
+        if self._wayland and self._injector is not None:
+            self._injector.paste(on_done)
+            return
+
+        delivered = self._sim.paste()
+        if not delivered:
             # No paste tool → last-resort type (short strings only).
-            self._sim.type_text(text)
+            delivered = self._sim.type_text(text)
+        if on_done is not None:
+            on_done(delivered)
 
     # ------------------------------------------------------------------
     # Internal helpers

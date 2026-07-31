@@ -306,10 +306,39 @@ class RewritePanel(Gtk.Window):
         self.present()
 
     def on_replace(self):
-        """Replace the original text with the rewritten result."""
-        if self._result_text and self.app.clipboard_service:
-            self.app.clipboard_service.inject_text(self._result_text)
-        self._close()
+        """Replace the original text with the rewritten result.
+
+        On Wayland this may need permission via the RemoteDesktop portal, so
+        the panel stays open until the keystroke is delivered — closing early
+        would leave the user staring at unchanged text with no explanation.
+        The result is on the clipboard regardless, so a denial degrades to a
+        manual paste rather than losing the rewrite.
+        """
+        if not (self._result_text and self.app.clipboard_service):
+            self._close()
+            return
+
+        self._replace_btn.set_sensitive(False)
+        self.app.clipboard_service.inject_text(
+            self._result_text,
+            on_done=lambda ok: GLib.idle_add(self._on_replace_done, ok),
+        )
+
+    def _on_replace_done(self, delivered: bool) -> bool:
+        """Close on success; explain and fall back to Copy on failure."""
+        if delivered:
+            self._close()
+            return False
+
+        self._replace_btn.set_sensitive(True)
+        self._error_label.set_text(
+            "Couldn't paste automatically — the result is on your clipboard, "
+            "press Ctrl+V to insert it."
+        )
+        self._error_label.remove_css_class("copied-label")
+        self._error_label.add_css_class("error-label")
+        self._error_box.set_visible(True)
+        return False  # don't repeat this idle callback
 
     def on_copy(self):
         """Copy the rewritten result to the clipboard."""

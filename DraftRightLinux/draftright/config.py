@@ -59,6 +59,12 @@ DEFAULT_HOTKEY = "Ctrl+Shift+R"
 PORTAL_BUS_NAME = "org.freedesktop.portal.Desktop"
 PORTAL_OBJECT_PATH = "/org/freedesktop/portal/desktop"
 PORTAL_GLOBAL_SHORTCUTS_IFACE = "org.freedesktop.portal.GlobalShortcuts"
+# Sanctioned keystroke injection on Wayland — xdotool reaches only XWayland
+# clients, and wtype needs a virtual-keyboard protocol Mutter does not provide.
+PORTAL_REMOTE_DESKTOP_IFACE = "org.freedesktop.portal.RemoteDesktop"
+# Settings key holding the portal's restore token, so the permission prompt
+# appears once rather than on every launch.
+SETTING_INPUT_RESTORE_TOKEN = "input_restore_token"
 PORTAL_REQUEST_IFACE = "org.freedesktop.portal.Request"
 PORTAL_SESSION_IFACE = "org.freedesktop.portal.Session"
 # Stable id for our one shortcut; the compositor keys its saved binding on it.
