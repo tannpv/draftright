@@ -29,6 +29,21 @@ class HealthStatus(Enum):
             HealthStatus.WRONG_SERVER: "Wrong Server",
         }[self]
 
+    @property
+    def tint_color(self) -> "str | None":
+        """Hex tint for the tray icon, or None to leave it theme-coloured.
+
+        CONNECTED stays untinted so the normal state is recoloured by the
+        shell and sits correctly in light and dark panels; the abnormal
+        states are tinted, mirroring the macOS menu-bar symbol.
+        """
+        return {
+            HealthStatus.CONNECTED: None,
+            HealthStatus.NOT_LOGGED_IN: "#eab308",   # yellow-500
+            HealthStatus.OFFLINE: "#ef4444",         # red-500
+            HealthStatus.WRONG_SERVER: "#a855f7",    # purple-500
+        }[self]
+
     @classmethod
     def from_wire(cls, value: str) -> "HealthStatus":
         """Parse a wire value; unknown → OFFLINE (safe default)."""

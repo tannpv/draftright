@@ -574,7 +574,14 @@ class DraftRightApplication(Adw.Application):
             return
         info = self._update_service.check_if_needed()
         if info is not None:
-            GLib.idle_add(self._show_update_dialog, info)
+            GLib.idle_add(self._on_update_available, info)
+
+    def _on_update_available(self, info) -> bool:
+        """Badge the tray, then offer the update (#22)."""
+        if self._tray_icon is not None:
+            self._tray_icon.set_update_available(True)
+        self._show_update_dialog(info)
+        return False
 
     def _trigger_whats_new_check(self) -> bool:
         """Kick the one-time post-update notice in a background thread."""

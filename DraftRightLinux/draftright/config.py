@@ -53,7 +53,17 @@ APP_OBJECT_PATH = "/" + APP_ID.replace(".", "/")
 # other indicators.
 TRAY_ICON_DEFAULT = f"{APP_ID}-symbolic"
 TRAY_ICON_FALLBACK = "edit-paste-symbolic"
-TRAY_ICON_ATTENTION = "dialog-warning-symbolic"   # shown while the backend is unreachable
+# Tray state colours. macOS tints its menu-bar symbol by backend status and
+# composites a red "update ready" dot; Windows composites the same dot on its
+# NotifyIcon. These are the same values so all three platforms read alike.
+TRAY_BADGE_COLOR = "#ef4444"        # red-500, identical to Windows/macOS
+TRAY_BADGE_RING_COLOR = "#ffffff"   # ring so the dot reads on any icon
+# Windows/macOS use 0.45, but their base icon is a padded app tile. Our
+# symbolic fills its viewBox, so the same ratio reads much heavier — 0.36
+# keeps the dot at a comparable visual weight.
+TRAY_BADGE_SIZE_RATIO = 0.36        # dot diameter as a fraction of the icon
+TRAY_BADGE_RING_RATIO = 0.035       # ring width; separates a red dot on a red mark
+TRAY_ICON_RENDER_SIZE = 64          # px the composited tray PNG is rendered at
 TRAY_HELPER_MODULE = "draftright.tray_helper"
 TRAY_SHUTDOWN_TIMEOUT = 2    # seconds to wait for the helper at each escalation step
 
