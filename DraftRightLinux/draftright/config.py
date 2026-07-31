@@ -47,9 +47,11 @@ APP_ID = "com.draftright.app"
 APP_OBJECT_PATH = "/" + APP_ID.replace(".", "/")
 
 # ── Tray ─────────────────────────────────────────────────────────────────────
-# The app icon, installed into the hicolor theme as com.draftright.app.
-# Falls back to a stock glyph only if the icon set was never installed.
-TRAY_ICON_DEFAULT = APP_ID
+# Top-bar icons are symbolic by convention on GNOME: flat, single-colour, and
+# recoloured by the shell to match the theme. The full-colour app icon is for
+# the dock/launcher, not here — it cannot adapt and looks heavy beside the
+# other indicators.
+TRAY_ICON_DEFAULT = f"{APP_ID}-symbolic"
 TRAY_ICON_FALLBACK = "edit-paste-symbolic"
 TRAY_ICON_ATTENTION = "dialog-warning-symbolic"   # shown while the backend is unreachable
 TRAY_HELPER_MODULE = "draftright.tray_helper"
