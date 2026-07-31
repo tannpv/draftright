@@ -47,7 +47,10 @@ APP_ID = "com.draftright.app"
 APP_OBJECT_PATH = "/" + APP_ID.replace(".", "/")
 
 # ── Tray ─────────────────────────────────────────────────────────────────────
-TRAY_ICON_DEFAULT = "edit-paste-symbolic"
+# The app icon, installed into the hicolor theme as com.draftright.app.
+# Falls back to a stock glyph only if the icon set was never installed.
+TRAY_ICON_DEFAULT = APP_ID
+TRAY_ICON_FALLBACK = "edit-paste-symbolic"
 TRAY_ICON_ATTENTION = "dialog-warning-symbolic"   # shown while the backend is unreachable
 TRAY_HELPER_MODULE = "draftright.tray_helper"
 TRAY_SHUTDOWN_TIMEOUT = 2    # seconds to wait for the helper at each escalation step

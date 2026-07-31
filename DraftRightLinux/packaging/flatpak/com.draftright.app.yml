@@ -81,6 +81,13 @@ modules:
       - pip3 install --no-build-isolation --prefix=/app --no-deps .
       - install -Dm644 data/com.draftright.app.desktop /app/share/applications/com.draftright.app.desktop
       - install -Dm644 data/com.draftright.app.metainfo.xml /app/share/metainfo/com.draftright.app.metainfo.xml
+      # App icon: without these the shell shows a generic fallback for the
+      # desktop entry's Icon=com.draftright.app.
+      - |
+        for size in 16 24 32 48 64 128 256 512; do
+          install -Dm644 "data/icons/hicolor/${size}x${size}/apps/com.draftright.app.png" \
+            "/app/share/icons/hicolor/${size}x${size}/apps/com.draftright.app.png"
+        done
     sources:
       - type: dir
         path: ../..

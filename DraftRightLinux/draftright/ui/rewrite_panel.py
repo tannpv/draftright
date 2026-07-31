@@ -9,6 +9,7 @@ gi.require_version("Gdk", "4.0")
 from gi.repository import Gdk, Gio, GLib, Gtk, Pango
 
 from draftright import config
+from draftright.models.rewrite import RewriteResult
 from draftright.models.tone import Tone
 
 # CSS for the rewrite panel, built from the shared design tokens in
@@ -404,7 +405,9 @@ class RewritePanel(Gtk.Window):
                 if self.app.api_client is None:
                     raise RuntimeError("API client not initialized. Please sign in first.")
 
-                result = self.app.api_client.rewrite(self._input_text, tone)
+                payload = self.app.api_client.rewrite(self._input_text, tone)
+                # /rewrite returns a dict; the buffer needs the text out of it.
+                result = RewriteResult.from_wire(payload).text
                 if cache is not None:
                     cache.set(self._input_text, tone, result)
                 GLib.idle_add(self._on_api_success, result)

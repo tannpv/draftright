@@ -11,6 +11,7 @@ from gi.repository import Adw, GLib, Gtk
 
 from draftright import config
 from draftright.__version__ import __version__
+from draftright.models.app_mode import AppMode
 from draftright.models.tone import Tone
 from draftright.ui.subscription_page import SubscriptionPage
 from draftright.ui.report_bug_dialog import open_report_bug_dialog
@@ -150,10 +151,49 @@ class SettingsWindow(Adw.PreferencesWindow):
         # Hotkey display
         hotkey_row = Adw.ActionRow(
             title="Hotkey",
-            subtitle=self._get_setting("hotkey", "Ctrl+Shift+R"),
+            subtitle=self._get_setting("hotkey", config.DEFAULT_HOTKEY),
         )
         hotkey_row.set_activatable(False)
         behavior_group.add(hotkey_row)
+
+        # --- Mode (#96) ---
+        # Order follows the enum so the dropdown index maps to a member.
+        self._app_modes = list(AppMode)
+        self._mode_row = Adw.ComboRow(
+            title="Hotkey mode",
+            model=Gtk.StringList.new([m.display_name for m in self._app_modes]),
+        )
+        current_mode = (
+            self.app.settings_service.app_mode
+            if self.app.settings_service
+            else AppMode.ADVANCED
+        )
+        self._mode_row.set_selected(self._app_modes.index(current_mode))
+        self._mode_row.set_subtitle(current_mode.description)
+        self._mode_row.connect("notify::selected", self._on_mode_changed)
+        behavior_group.add(self._mode_row)
+
+        # One-Click preset tone — only meaningful in that mode.
+        self._one_click_tones = list(Tone)
+        self._one_click_row = Adw.ComboRow(
+            title="One-Click tone",
+            subtitle="Used when the hotkey rewrites instantly",
+            model=Gtk.StringList.new(
+                [f"{t.icon}  {t.display_name}" for t in self._one_click_tones]
+            ),
+        )
+        current_tone = (
+            self.app.settings_service.one_click_tone
+            if self.app.settings_service
+            else Tone.POLISHED.api_value
+        )
+        for i, tone in enumerate(self._one_click_tones):
+            if tone.api_value == current_tone:
+                self._one_click_row.set_selected(i)
+                break
+        self._one_click_row.connect("notify::selected", self._on_one_click_tone_changed)
+        self._one_click_row.set_visible(current_mode is AppMode.ONE_CLICK)
+        behavior_group.add(self._one_click_row)
 
         # Translate language
         self._lang_model = Gtk.StringList.new(TRANSLATE_LANGUAGES)
@@ -483,6 +523,23 @@ class SettingsWindow(Adw.PreferencesWindow):
             else None
         )
         open_suggest_feature_dialog(self, bearer_token=token)
+
+    def _on_mode_changed(self, row, _param):
+        """Persist the hotkey mode and reveal the preset-tone row for it (#96)."""
+        mode = self._app_modes[row.get_selected()]
+        if self.app.settings_service:
+            self.app.settings_service.app_mode = mode
+            self.app.settings_service.save()
+        row.set_subtitle(mode.description)
+        self._one_click_row.set_visible(mode is AppMode.ONE_CLICK)
+
+    def _on_one_click_tone_changed(self, row, _param):
+        """Persist the tone One-Click rewrites with."""
+        if self.app.settings_service:
+            self.app.settings_service.one_click_tone = self._one_click_tones[
+                row.get_selected()
+            ].api_value
+            self.app.settings_service.save()
 
     def _on_report_bug(self, _button):
         """Open the Report a Bug dialog (#98)."""

@@ -15,7 +15,9 @@ from pathlib import Path
 
 from draftright import config
 from draftright.helpers.display_server import is_wayland
+from draftright.models.app_mode import AppMode
 from draftright.models.health import HealthStatus
+from draftright.models.rewrite import RewriteResult
 from draftright.models.tray import TrayAction
 from draftright.__version__ import __version__
 from draftright.services.logger import setup_logging
@@ -94,6 +96,10 @@ class DraftRightApplication(Adw.Application):
 
     def do_activate(self):
         """Called when the application is activated."""
+        # Name the window icon so the shell shows the DraftRight icon rather
+        # than a generic fallback; resolves against the installed hicolor set.
+        Gtk.Window.set_default_icon_name(config.APP_ID)
+
         # Force dark color scheme
         style_manager = Adw.StyleManager.get_default()
         style_manager.set_color_scheme(Adw.ColorScheme.FORCE_DARK)
@@ -315,12 +321,75 @@ class DraftRightApplication(Adw.Application):
     # ------------------------------------------------------------------
 
     def on_hotkey_pressed(self):
-        """Handle global hotkey press — capture selected text and show rewrite panel."""
+        """Handle a global hotkey press.
+
+        Advanced mode opens the panel so the user picks a tone; One-Click
+        (#96) rewrites immediately with the preset tone and replaces the
+        selection, matching macOS and Windows.
+        """
         text = ""
         if self.clipboard_service:
             text = self.clipboard_service.get_selected_text()
-        if text:
+        if not text:
+            return
+
+        mode = self.settings_service.app_mode if self.settings_service else AppMode.ADVANCED
+        if mode is AppMode.ONE_CLICK:
+            self.run_one_click_rewrite(text)
+        else:
             self.show_rewrite_panel(text)
+
+    def run_one_click_rewrite(self, text: str):
+        """Rewrite *text* with the preset tone and replace the selection (#96).
+
+        Runs without any window, so failures have nowhere to render — they go
+        to a desktop notification instead of being swallowed.
+        """
+        if self.api_client is None or self._is_rewriting:
+            return
+        tone = self.settings_service.one_click_tone
+        self._is_rewriting = True
+
+        def worker():
+            try:
+                cached = self.rewrite_cache.get(text, tone)
+                if cached is not None:
+                    GLib.idle_add(self._finish_one_click, cached, None)
+                    return
+                payload = self.api_client.rewrite(text, tone)
+                result = RewriteResult.from_wire(payload).text
+                self.rewrite_cache.set(text, tone, result)
+                GLib.idle_add(self._finish_one_click, result, None)
+            except Exception as exc:  # noqa: BLE001 — surface any failure
+                GLib.idle_add(self._finish_one_click, None, str(exc))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _finish_one_click(self, result, error) -> bool:
+        """Inject the rewrite, or tell the user why it didn't happen."""
+        self._is_rewriting = False
+        if error is not None:
+            logger.warning("One-Click rewrite failed: %s", error)
+            self._notify("Rewrite failed", error)
+            return False
+
+        def on_injected(delivered: bool):
+            if not delivered:
+                # The text is on the clipboard either way — say so, since
+                # there is no panel to show a fallback button.
+                self._notify(
+                    "Rewrite ready",
+                    "Couldn't paste automatically — press Ctrl+V to insert it.",
+                )
+
+        self.clipboard_service.inject_text(result, on_done=on_injected)
+        return False
+
+    def _notify(self, title: str, body: str) -> None:
+        """Send a desktop notification (One-Click has no window to write to)."""
+        notification = Gio.Notification.new(title)
+        notification.set_body(body)
+        self.send_notification("one-click", notification)
 
     def show_rewrite_panel(self, text: str):
         """Open the rewrite panel with the captured text.

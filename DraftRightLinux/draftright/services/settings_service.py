@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import List
 
 from draftright import config
+from draftright.models.app_mode import AppMode
 from draftright.models.tone import Tone
 
 log = logging.getLogger(__name__)
@@ -30,7 +31,10 @@ _DEFAULTS: dict[str, object] = {
     "translate_language": "Vietnamese",
     "auto_start": False,
     "enabled_tones": list(_ALL_TONE_VALUES),  # all tones enabled by default
-    "default_tone": "",  # empty = no auto-run tone
+    "default_tone": "",
+    # #96 One-Click: hotkey behaviour + the tone it uses.
+    "app_mode": AppMode.ADVANCED.value,
+    "one_click_tone": Tone.POLISHED.api_value,
     "last_seen_version": "",  # drives the one-time post-update "What's New"
 }
 
@@ -162,6 +166,26 @@ class SettingsService:
     @last_seen_version.setter
     def last_seen_version(self, value: str) -> None:
         self._data["last_seen_version"] = value
+
+    @property
+    def app_mode(self) -> AppMode:
+        """How the hotkey behaves (#96)."""
+        return AppMode.from_wire(self._data.get("app_mode"))
+
+    @app_mode.setter
+    def app_mode(self, value: AppMode) -> None:
+        self._data["app_mode"] = value.value
+
+    @property
+    def one_click_tone(self) -> str:
+        """Tone api_value used by One-Click; only read in that mode."""
+        raw = str(self._data.get("one_click_tone", _DEFAULTS["one_click_tone"]))
+        # Guard a stale/removed tone so the hotkey cannot fail silently.
+        return raw if raw in {t.api_value for t in Tone} else _DEFAULTS["one_click_tone"]
+
+    @one_click_tone.setter
+    def one_click_tone(self, value: str) -> None:
+        self._data["one_click_tone"] = value
 
     # -- key-addressed access ----------------------------------------------
 

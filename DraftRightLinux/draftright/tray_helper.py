@@ -40,19 +40,38 @@ class TrayHelper:
     def __init__(self) -> None:
         self._actions = self._connect_actions()
         self._status = HealthStatus.OFFLINE
-        self._icon = config.TRAY_ICON_DEFAULT
+        self._icon = self._resolve_default_icon()
 
         self._status_item = Gtk.MenuItem(label=self._status.display_name)
         self._status_item.set_sensitive(False)
 
         self._indicator = AyatanaAppIndicator3.Indicator.new(
             config.APP_ID,
-            config.TRAY_ICON_DEFAULT,
+            self._icon,
             AyatanaAppIndicator3.IndicatorCategory.APPLICATION_STATUS,
         )
         self._indicator.set_status(AyatanaAppIndicator3.IndicatorStatus.ACTIVE)
         self._indicator.set_title("DraftRight")
         self._indicator.set_menu(self._build_menu())
+
+    @staticmethod
+    def _resolve_default_icon() -> str:
+        """Prefer the DraftRight icon; fall back if it was never installed.
+
+        AppIndicator silently shows nothing for an unknown icon name, so check
+        the theme rather than trusting the install.
+        """
+        try:
+            if Gtk.IconTheme.get_default().has_icon(config.TRAY_ICON_DEFAULT):
+                return config.TRAY_ICON_DEFAULT
+        except Exception:  # noqa: BLE001 — theme lookup must never block startup
+            pass
+        log.warning(
+            "Icon %r not in the icon theme — using a stock glyph. Install "
+            "data/icons/hicolor into ~/.local/share/icons/.",
+            config.TRAY_ICON_DEFAULT,
+        )
+        return config.TRAY_ICON_FALLBACK
 
     # -- wiring ------------------------------------------------------------
 
@@ -102,7 +121,7 @@ class TrayHelper:
         icon = (
             config.TRAY_ICON_ATTENTION
             if status is HealthStatus.OFFLINE
-            else config.TRAY_ICON_DEFAULT
+            else self._resolve_default_icon()
         )
         if icon != self._icon:
             # Only repaint on a real change: each call is a round trip to the

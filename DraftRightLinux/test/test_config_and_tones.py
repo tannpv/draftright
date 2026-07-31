@@ -18,7 +18,9 @@ from draftright import config
 from draftright.models.tone import Tone
 from draftright.models.payment import BillingPeriod
 from draftright.models.subscription import SubscriptionStatus
+from draftright.models.app_mode import AppMode
 from draftright.models.health import HealthStatus
+from draftright.models.rewrite import RewriteResult
 from draftright.models.hotkey import Hotkey, Modifier
 from draftright.models.tray import TrayAction, TrayCommand
 from draftright.services.hotkey_service import PortalResponse
@@ -437,6 +439,82 @@ class LegacySettingsKeyTest(unittest.TestCase):
         for key in used:
             self.assertNotIn("-", key, f"{key!r} uses a hyphen; defaults use underscores")
             self.assertIn(key, settings_service_mod._DEFAULTS, f"{key!r} has no default")
+
+
+class RewriteResultTest(unittest.TestCase):
+    """The /rewrite response is a dict; the panel treated it as a string.
+
+    Every *successful* rewrite raised "TypeError: Must be string, not dict".
+    It survived because the app had never been signed in, so the success path
+    had never executed.
+    """
+
+    def test_extracts_text_from_the_wire_dict(self):
+        result = RewriteResult.from_wire(
+            {"rewritten_text": "Hello.", "usage_today": 3, "daily_limit": 50}
+        )
+        self.assertEqual(result.text, "Hello.")
+        self.assertEqual(result.usage_today, 3)
+        self.assertEqual(result.daily_limit, 50)
+        self.assertEqual(result.usage_display, "3 / 50 today")
+
+    def test_text_is_always_a_str_for_gtk(self):
+        # The actual defect: whatever reaches set_text() must be a str.
+        self.assertIsInstance(
+            RewriteResult.from_wire({"rewritten_text": "x"}).text, str
+        )
+
+    def test_accepts_a_bare_string(self):
+        # Cached values and plain-text backends must not crash the panel.
+        self.assertEqual(RewriteResult.from_wire("cached").text, "cached")
+
+    def test_missing_text_raises_rather_than_returning_a_dict(self):
+        for payload in ({}, {"rewritten_text": None}, {"other": "x"}):
+            with self.assertRaises(ValueError):
+                RewriteResult.from_wire(payload)
+
+    def test_counters_tolerate_strings_and_nulls(self):
+        result = RewriteResult.from_wire(
+            {"rewritten_text": "x", "usage_today": "7", "daily_limit": None}
+        )
+        self.assertEqual(result.usage_today, 7)
+        self.assertIsNone(result.daily_limit)
+        self.assertEqual(result.usage_display, "")
+
+
+class AppModeTest(unittest.TestCase):
+    """#96 One-Click — wire values must match macOS/Windows exactly."""
+
+    def test_wire_values_match_other_platforms(self):
+        self.assertEqual(AppMode.ADVANCED.value, "advanced")
+        # camelCase on purpose: it is what macOS and Windows already persist.
+        self.assertEqual(AppMode.ONE_CLICK.value, "oneClick")
+
+    def test_display_names_match_other_platforms(self):
+        self.assertEqual(AppMode.ADVANCED.display_name, "Advanced")
+        self.assertEqual(AppMode.ONE_CLICK.display_name, "Simple")
+
+    def test_unknown_falls_back_to_advanced(self):
+        # Advanced always shows the panel, so a bad value cannot silently
+        # rewrite and replace the user's text.
+        for raw in (None, "", "garbage", "ONECLICK"):
+            self.assertIs(AppMode.from_wire(raw), AppMode.ADVANCED)
+
+    def test_round_trips(self):
+        for mode in AppMode:
+            self.assertIs(AppMode.from_wire(mode.value), mode)
+            self.assertTrue(mode.description.strip())
+
+    def test_settings_defaults_to_advanced_with_a_valid_tone(self):
+        service = SettingsService()
+        self.assertIs(service.app_mode, AppMode.ADVANCED)
+        self.assertIn(service.one_click_tone, {t.api_value for t in Tone})
+
+    def test_settings_guards_a_stale_one_click_tone(self):
+        service = SettingsService()
+        service._data["one_click_tone"] = "a_tone_that_was_removed"
+        # Must not hand the hotkey a tone the backend will reject.
+        self.assertIn(service.one_click_tone, {t.api_value for t in Tone})
 
 
 class PortalClientTest(unittest.TestCase):
