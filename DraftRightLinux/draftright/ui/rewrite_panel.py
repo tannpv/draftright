@@ -134,6 +134,12 @@ class RewritePanel(Gtk.Window):
         # Build UI
         self._build_ui()
 
+        # The window is undecorated, so the compositor gives it no close
+        # button; Escape is the expected way out of a floating panel.
+        key_controller = Gtk.EventControllerKey()
+        key_controller.connect("key-pressed", self._on_key_pressed)
+        self.add_controller(key_controller)
+
     # A panel is created fresh on every hotkey press; register the CSS
     # provider on the display only once, or providers accumulate for the
     # life of the process (one leak per rewrite).  Keyed by display so a
@@ -468,6 +474,13 @@ class RewritePanel(Gtk.Window):
         if error_text:
             clipboard = Gdk.Display.get_default().get_clipboard()
             clipboard.set(error_text)
+
+    def _on_key_pressed(self, _controller, keyval, _keycode, _state):
+        """Escape closes the panel."""
+        if keyval == Gdk.KEY_Escape:
+            self._close()
+            return True   # handled
+        return False
 
     def _close(self):
         """Hide the panel."""

@@ -85,6 +85,7 @@ class DraftRightApplication(Adw.Application):
         self._is_rewriting = False
         self._tray_icon = None
         self._settings_window = None
+        self._rewrite_panel = None
         self._status_label = None
         self._hotkey_label = None
         # None + not resolved = still asking the portal; None + resolved =
@@ -187,7 +188,20 @@ class DraftRightApplication(Adw.Application):
         whether the backend is reachable, what the capture shortcut is, and
         whether that shortcut actually works on this display server.
         """
+        # Adw.ApplicationWindow draws NO titlebar of its own — the header has
+        # to be part of the content. Without this the window had no close
+        # button at all, so once Settings closed there was no way out of the
+        # app except the tray.
+        root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        header = Adw.HeaderBar()
+        header.set_title_widget(Adw.WindowTitle(title="DraftRight"))
+        # Only meaningful inside an AdwNavigationView; this window is not in
+        # one, so the arrow would be dead weight next to the title.
+        header.set_show_back_button(False)
+        root.append(header)
+
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        box.set_vexpand(True)
         box.set_margin_top(36)
         box.set_margin_bottom(36)
         box.set_margin_start(32)
@@ -223,7 +237,16 @@ class DraftRightApplication(Adw.Application):
         settings_btn.connect("clicked", lambda _b: self.show_settings())
         box.append(settings_btn)
 
-        return box
+        # Closing the window keeps the app alive in the tray, which is what a
+        # tray app should do — but say so, or the close button looks like Quit.
+        hide_btn = Gtk.Button(label="Hide to tray")
+        hide_btn.add_css_class("flat")
+        hide_btn.set_tooltip_text("DraftRight keeps running in the top bar")
+        hide_btn.connect("clicked", lambda _b: self.props.active_window.set_visible(False))
+        box.append(hide_btn)
+
+        root.append(box)
+        return root
 
     def _hotkey_hint(self) -> str:
         """Describe the capture shortcut honestly for the current session.
@@ -417,8 +440,19 @@ class DraftRightApplication(Adw.Application):
 
         if not text:
             return
-        panel = RewritePanel(self)
-        panel.show_with_text(text)
+        # Reuse a single panel. Building a fresh one per hotkey press stacked
+        # identical windows on top of each other, so closing the top one just
+        # revealed the next — it looked like the panel would not close.
+        # Windows does the same (App.cs: reuse _rewritePanel, update its text).
+        if self._rewrite_panel is None:
+            self._rewrite_panel = RewritePanel(self)
+            self._rewrite_panel.connect("close-request", self._on_rewrite_panel_closed)
+        self._rewrite_panel.show_with_text(text)
+
+    def _on_rewrite_panel_closed(self, _panel) -> bool:
+        """Drop the cached panel if the compositor destroys it."""
+        self._rewrite_panel = None
+        return False  # allow the default close
 
     def show_settings(self):
         """Open the settings window."""

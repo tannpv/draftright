@@ -47,9 +47,23 @@ class SettingsWindow(Adw.PreferencesWindow):
         self._register_mode = False
 
         self.set_title("DraftRight Settings")
-        self.set_default_size(500, 600)
-        self.set_transient_for(app.props.active_window)
-        self.set_modal(True)
+        # The content's natural width is ~900px with four pages; forcing 500
+        # left the header cramped, where the visible control acted as
+        # back-navigation (clicking it jumped to the first page) rather than
+        # closing the window.
+        self.set_default_size(920, 700)
+
+        # Settings is a tray-app window: it is routinely opened from the tray
+        # while the main window is hidden. Attaching a *modal* window to a
+        # parent that is not mapped leaves the compositor with a dialog whose
+        # parent it cannot decorate around — it became impossible to close.
+        # Only adopt a parent that is actually on screen, and never be modal:
+        # preferences have no reason to block the rest of the app, and GNOME
+        # apps do not make them modal.
+        parent = app.props.active_window
+        if parent is not None and parent.get_visible():
+            self.set_transient_for(parent)
+        self.set_modal(False)
 
         # Order mirrors the Windows tab order (rewrite settings before
         # Account) and decides the landing page: Adw.PreferencesWindow shows

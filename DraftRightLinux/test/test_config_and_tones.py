@@ -579,6 +579,126 @@ class GoogleOAuthTest(unittest.TestCase):
             self.assertIn("google", url)
 
 
+class MainWindowChromeTest(unittest.TestCase):
+    """The main window must carry its own header bar.
+
+    Adw.ApplicationWindow draws no titlebar; the header has to be part of the
+    content. Building it as a bare Gtk.Box left the window with no close
+    button at all — the only way out of the app was the tray.
+    """
+
+    def _content_builder(self) -> str:
+        src = (
+            Path(__file__).resolve().parent.parent / "draftright" / "application.py"
+        ).read_text(encoding="utf-8")
+        return src.split("def _build_main_content")[1].split("\n    def ")[0]
+
+    def test_main_window_has_a_header_bar(self):
+        body = self._content_builder()
+        self.assertIn("Adw.HeaderBar()", body,
+                      "Adw.ApplicationWindow has no titlebar of its own")
+
+    def test_header_is_the_first_child_of_the_returned_root(self):
+        # It has to be in the returned widget, not built and dropped.
+        body = self._content_builder()
+        self.assertIn("root.append(header)", body)
+        self.assertIn("return root", body)
+
+    def test_window_offers_an_explicit_hide_to_tray(self):
+        # Closing keeps the app alive in the tray; without a labelled action
+        # the close button reads as Quit.
+        self.assertIn("Hide to tray", self._content_builder())
+
+
+class SettingsWindowLifecycleTest(unittest.TestCase):
+    """Settings must stay closable when opened from the tray.
+
+    It was modal and transient-for app.props.active_window unconditionally.
+    Opening it from the tray while the main window is hidden produced a modal
+    window attached to an unmapped parent, which the compositor could not
+    decorate around — it could not be closed.
+    """
+
+    def _source(self) -> str:
+        return (
+            Path(__file__).resolve().parent.parent
+            / "draftright" / "ui" / "settings_window.py"
+        ).read_text(encoding="utf-8")
+
+    def test_settings_is_not_modal(self):
+        # Preferences have no reason to block the app, and modality is what
+        # made the hidden-parent case unrecoverable.
+        src = self._source()
+        self.assertIn("set_modal(False)", src)
+        self.assertNotIn("set_modal(True)", src)
+
+    def test_parent_is_only_adopted_when_visible(self):
+        src = self._source()
+        init = src.split("def __init__")[1].split("\n    def ")[0]
+        self.assertIn("get_visible()", init,
+                      "must not parent onto a hidden window")
+        # The transient_for call has to sit behind that check.
+        before = init.split("set_transient_for")[0]
+        self.assertIn("get_visible()", before)
+
+    def test_close_clears_the_cached_window(self):
+        # Otherwise reopening would present a destroyed window.
+        src = (
+            Path(__file__).resolve().parent.parent / "draftright" / "application.py"
+        ).read_text(encoding="utf-8")
+        handler = src.split("def _on_settings_closed")[1].split("\n    def ")[0]
+        self.assertIn("self._settings_window = None", handler)
+        self.assertIn("return False", handler)  # allow the default close
+
+
+class RewritePanelLifecycleTest(unittest.TestCase):
+    """One panel, reused — and a way out of it.
+
+    Each hotkey press used to build a fresh RewritePanel, so presses stacked
+    identical windows; closing the top one revealed the next and the panel
+    appeared impossible to close. Windows reuses a single panel and updates
+    its text (App.cs).
+    """
+
+    def _source(self, rel: str) -> str:
+        return (
+            Path(__file__).resolve().parent.parent / "draftright" / rel
+        ).read_text(encoding="utf-8")
+
+    def test_panel_is_cached_not_rebuilt_per_press(self):
+        body = self._source("application.py").split("def show_rewrite_panel")[1]
+        body = body.split("\n    def ")[0]
+        self.assertIn("self._rewrite_panel is None", body,
+                      "a new panel per press stacks windows")
+        self.assertIn("show_with_text", body)
+
+    def test_cached_panel_is_dropped_when_destroyed(self):
+        # Otherwise a destroyed window would be reused and never reappear.
+        src = self._source("application.py")
+        self.assertIn("_on_rewrite_panel_closed", src)
+        handler = src.split("def _on_rewrite_panel_closed")[1].split("\n    def ")[0]
+        self.assertIn("self._rewrite_panel = None", handler)
+
+    def test_escape_is_bound(self):
+        # The window is undecorated, so the compositor offers no close button.
+        src = self._source("ui/rewrite_panel.py")
+        self.assertIn("EventControllerKey", src)
+        handler = src.split("def _on_key_pressed")[1].split("\n    def ")[0]
+        self.assertIn("Gdk.KEY_Escape", handler)
+        self.assertIn("self._close()", handler)
+
+    def test_escape_handler_only_swallows_escape(self):
+        # Returning True unconditionally would eat every keystroke.
+        src = self._source("ui/rewrite_panel.py")
+        handler = src.split("def _on_key_pressed")[1].split("\n    def ")[0]
+        self.assertIn("return False", handler)
+
+    def test_panel_stays_undecorated(self):
+        # If this ever changes, the Escape binding is no longer the only exit
+        # and the reasoning above should be revisited.
+        self.assertIn("set_decorated(False)", self._source("ui/rewrite_panel.py"))
+
+
 class SettingsLayoutTest(unittest.TestCase):
     """The mode switch has to be findable, and has to visibly do something.
 
