@@ -156,8 +156,15 @@ class DraftRightApplication(Adw.Application):
             win.set_content(self._build_main_content())
         win.present()
 
-        # Start health check — immediate first check, then on a fixed interval.
-        GLib.timeout_add_seconds(0, self._trigger_health_check)
+        # Immediate first check, then on a fixed interval.
+        #
+        # This used to be timeout_add_seconds(0, ...) for the "immediate" one.
+        # _trigger_health_check returns True to keep the interval timer alive,
+        # so a 0-second timer re-armed itself instantly — measured at ~1.3M
+        # calls per 10s, each spawning a network thread. That hammered the
+        # backend and made the tray icon flicker between the app mark and the
+        # offline warning as results flapped. Just call it once instead.
+        self._trigger_health_check()
         GLib.timeout_add_seconds(config.HEALTH_CHECK_INTERVAL, self._trigger_health_check)
 
         # Start update check — shortly after launch
