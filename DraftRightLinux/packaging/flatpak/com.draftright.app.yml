@@ -83,6 +83,9 @@ modules:
       - install -Dm644 data/com.draftright.app.metainfo.xml /app/share/metainfo/com.draftright.app.metainfo.xml
       # App icon: without these the shell shows a generic fallback for the
       # desktop entry's Icon=com.draftright.app.
+      # Symbolic variant for the top bar (recoloured by the shell).
+      - install -Dm644 data/icons/hicolor/scalable/apps/com.draftright.app-symbolic.svg
+          /app/share/icons/hicolor/scalable/apps/com.draftright.app-symbolic.svg
       - |
         for size in 16 24 32 48 64 128 256 512; do
           install -Dm644 "data/icons/hicolor/${size}x${size}/apps/com.draftright.app.png" \
