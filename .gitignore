@@ -45,7 +45,10 @@ DraftRightWindows/installer/Output/
 # Logs & runtime data
 *.log
 backups/
-DraftRightLinux/data/
+# NOTE: DraftRightLinux/data/ is NOT runtime data — it holds the desktop
+# entry, AppStream metainfo and icon theme that packaging installs, and
+# it was silently ignored here for months. The app's runtime state lives
+# in ~/.config/draftright/.
 
 # Built distribution artifacts — too big for GitHub (100 MB hard limit),
 # and not source code. Hosted on draftright.info/downloads/ instead.
