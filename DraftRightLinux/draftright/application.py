@@ -18,6 +18,7 @@ from draftright.helpers.display_server import is_wayland
 from draftright.models.app_mode import AppMode
 from draftright.models.health import HealthStatus
 from draftright.models.rewrite import RewriteResult
+from draftright.models.tone import Tone
 from draftright.models.tray import TrayAction
 from draftright.__version__ import __version__
 from draftright.services.logger import setup_logging
@@ -355,17 +356,25 @@ class DraftRightApplication(Adw.Application):
         if self.api_client is None or self._is_rewriting:
             return
         tone = self.settings_service.one_click_tone
+        # Only the Translate tone depends on the language; sending it for the
+        # others would fragment the cache for no benefit.
+        selected = Tone.from_api_value(tone)
+        language = (
+            self.settings_service.translate_language
+            if selected is not None and selected.uses_target_language
+            else None
+        )
         self._is_rewriting = True
 
         def worker():
             try:
-                cached = self.rewrite_cache.get(text, tone)
+                cached = self.rewrite_cache.get(text, tone, language)
                 if cached is not None:
                     GLib.idle_add(self._finish_one_click, cached, None)
                     return
-                payload = self.api_client.rewrite(text, tone)
+                payload = self.api_client.rewrite(text, tone, language)
                 result = RewriteResult.from_wire(payload).text
-                self.rewrite_cache.set(text, tone, result)
+                self.rewrite_cache.set(text, tone, result, language)
                 GLib.idle_add(self._finish_one_click, result, None)
             except Exception as exc:  # noqa: BLE001 — surface any failure
                 GLib.idle_add(self._finish_one_click, None, str(exc))

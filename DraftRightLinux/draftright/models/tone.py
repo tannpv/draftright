@@ -16,3 +16,20 @@ class Tone(Enum):
         self.display_name = display_name
         self.icon = icon
         self.description = description
+
+    @property
+    def uses_target_language(self) -> bool:
+        """True when the result depends on the configured translate language.
+
+        Drives both what is sent to /rewrite and what goes into the cache key
+        — without it, switching language would serve the previous language's
+        translation from cache.
+        """
+        return self is Tone.TRANSLATE
+
+    @classmethod
+    def from_api_value(cls, value: str) -> "Tone | None":
+        for tone in cls:
+            if tone.api_value == value:
+                return tone
+        return None
