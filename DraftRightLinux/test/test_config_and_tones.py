@@ -579,6 +579,56 @@ class GoogleOAuthTest(unittest.TestCase):
             self.assertIn("google", url)
 
 
+class SettingsLayoutTest(unittest.TestCase):
+    """The mode switch has to be findable, and has to visibly do something.
+
+    It was a row called "Hotkey mode" inside Preferences > Behavior — a page
+    reached only by clicking past Account — and Panel Tones stayed visible in
+    Simple mode, so the choice looked inert. Windows puts it first on its own
+    Rewrite tab and hides the block that does not apply.
+    """
+
+    def _source(self) -> str:
+        path = (
+            Path(__file__).resolve().parent.parent
+            / "draftright" / "ui" / "settings_window.py"
+        )
+        return path.read_text(encoding="utf-8")
+
+    def test_rewrite_page_is_added_first(self):
+        # Adw.PreferencesWindow lands on whichever page is added first.
+        src = self._source()
+        order = [
+            line.strip() for line in src.splitlines()
+            if line.strip().startswith("self._build_") and "_page()" in line
+        ]
+        self.assertTrue(order, "expected page builders in __init__")
+        self.assertEqual(order[0], "self._build_rewrite_page()")
+
+    def test_mode_row_lives_on_the_rewrite_page(self):
+        src = self._source()
+        page = src.split("def _build_rewrite_page")[1].split("\n    def ")[0]
+        self.assertIn("_mode_row", page)
+        self.assertIn("Interaction Mode", page)
+
+    def test_mode_naming_matches_windows(self):
+        # Windows: section header "Mode", field label "Interaction Mode".
+        src = self._source()
+        self.assertIn('title="Interaction Mode"', src)
+        self.assertIn('title="Mode"', src)
+
+    def test_blocks_are_mutually_exclusive(self):
+        src = self._source()
+        helper = src.split("def _apply_mode_visibility")[1].split("\n    def ")[0]
+        self.assertIn("_simple_group.set_visible(mode is AppMode.ONE_CLICK)", helper)
+        self.assertIn("_advanced_group.set_visible(mode is AppMode.ADVANCED)", helper)
+
+    def test_changing_mode_reapplies_visibility(self):
+        src = self._source()
+        handler = src.split("def _on_mode_changed")[1].split("\n    def ")[0]
+        self.assertIn("_apply_mode_visibility(mode)", handler)
+
+
 class TranslateLanguageTest(unittest.TestCase):
     """The Translate tone must honour the user's chosen language.
 
