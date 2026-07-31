@@ -192,6 +192,8 @@ PANEL_HEIGHT = 520
 PANEL_MARGIN = 16
 PANEL_PREVIEW_CHARS = 200
 FEEDBACK_FLASH_MS = 1500
+# Height of the attachment preview in the bug report form.
+BUG_REPORT_PREVIEW_HEIGHT = 200
 
 # ── Client-side rewrite cache ────────────────────────────────────────────────
 # Mirrors the macOS RewriteCache: avoid re-hitting the backend when the user
