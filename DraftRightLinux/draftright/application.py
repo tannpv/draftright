@@ -85,6 +85,7 @@ class DraftRightApplication(Adw.Application):
         self._is_rewriting = False
         self._tray_icon = None
         self._settings_window = None
+        self._rewrite_panel = None
         self._status_label = None
         self._hotkey_label = None
         # None + not resolved = still asking the portal; None + resolved =
@@ -417,8 +418,19 @@ class DraftRightApplication(Adw.Application):
 
         if not text:
             return
-        panel = RewritePanel(self)
-        panel.show_with_text(text)
+        # Reuse a single panel. Building a fresh one per hotkey press stacked
+        # identical windows on top of each other, so closing the top one just
+        # revealed the next — it looked like the panel would not close.
+        # Windows does the same (App.cs: reuse _rewritePanel, update its text).
+        if self._rewrite_panel is None:
+            self._rewrite_panel = RewritePanel(self)
+            self._rewrite_panel.connect("close-request", self._on_rewrite_panel_closed)
+        self._rewrite_panel.show_with_text(text)
+
+    def _on_rewrite_panel_closed(self, _panel) -> bool:
+        """Drop the cached panel if the compositor destroys it."""
+        self._rewrite_panel = None
+        return False  # allow the default close
 
     def show_settings(self):
         """Open the settings window."""

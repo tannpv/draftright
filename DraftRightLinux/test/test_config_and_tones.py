@@ -579,6 +579,54 @@ class GoogleOAuthTest(unittest.TestCase):
             self.assertIn("google", url)
 
 
+class RewritePanelLifecycleTest(unittest.TestCase):
+    """One panel, reused — and a way out of it.
+
+    Each hotkey press used to build a fresh RewritePanel, so presses stacked
+    identical windows; closing the top one revealed the next and the panel
+    appeared impossible to close. Windows reuses a single panel and updates
+    its text (App.cs).
+    """
+
+    def _source(self, rel: str) -> str:
+        return (
+            Path(__file__).resolve().parent.parent / "draftright" / rel
+        ).read_text(encoding="utf-8")
+
+    def test_panel_is_cached_not_rebuilt_per_press(self):
+        body = self._source("application.py").split("def show_rewrite_panel")[1]
+        body = body.split("\n    def ")[0]
+        self.assertIn("self._rewrite_panel is None", body,
+                      "a new panel per press stacks windows")
+        self.assertIn("show_with_text", body)
+
+    def test_cached_panel_is_dropped_when_destroyed(self):
+        # Otherwise a destroyed window would be reused and never reappear.
+        src = self._source("application.py")
+        self.assertIn("_on_rewrite_panel_closed", src)
+        handler = src.split("def _on_rewrite_panel_closed")[1].split("\n    def ")[0]
+        self.assertIn("self._rewrite_panel = None", handler)
+
+    def test_escape_is_bound(self):
+        # The window is undecorated, so the compositor offers no close button.
+        src = self._source("ui/rewrite_panel.py")
+        self.assertIn("EventControllerKey", src)
+        handler = src.split("def _on_key_pressed")[1].split("\n    def ")[0]
+        self.assertIn("Gdk.KEY_Escape", handler)
+        self.assertIn("self._close()", handler)
+
+    def test_escape_handler_only_swallows_escape(self):
+        # Returning True unconditionally would eat every keystroke.
+        src = self._source("ui/rewrite_panel.py")
+        handler = src.split("def _on_key_pressed")[1].split("\n    def ")[0]
+        self.assertIn("return False", handler)
+
+    def test_panel_stays_undecorated(self):
+        # If this ever changes, the Escape binding is no longer the only exit
+        # and the reasoning above should be revisited.
+        self.assertIn("set_decorated(False)", self._source("ui/rewrite_panel.py"))
+
+
 class SettingsLayoutTest(unittest.TestCase):
     """The mode switch has to be findable, and has to visibly do something.
 
