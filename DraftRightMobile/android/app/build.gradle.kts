@@ -56,6 +56,13 @@ android {
             isMinifyEnabled = false
             isShrinkResources = false
         }
+        debug {
+            // Install alongside the release build as a separate, clearly-marked
+            // app (red "DEBUG" launcher icon + "DraftRight Debug" label) so the
+            // two never overwrite or get confused.
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
+        }
     }
 }
 
