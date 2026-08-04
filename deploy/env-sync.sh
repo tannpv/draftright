@@ -70,28 +70,44 @@ case "$TARGET" in
     ;;
 esac
 
-# sha of each value, so drift is visible without disclosing secrets. Uses
-# whichever hasher the platform has (macOS ships shasum, Linux sha256sum).
+# --- Tunables (no scattered literals) ---------------------------------------
+KEY_RE='^[A-Za-z_][A-Za-z0-9_]*='   # a shell env-assignment line (KEY=...)
+HASH_LEN=8                          # chars of value-hash shown — enough to spot
+                                    # drift, far too few to reverse the secret
+ENV_MODE=600                        # perms for any .env this tool writes
+
+# The one hash+key transform, used on BOTH sides so the fingerprints are
+# comparable. Reads env lines on stdin, emits "KEY <hash>" sorted; the VALUE is
+# only ever fed to the hasher, never printed. Tolerant of empty input so a
+# missing file (fresh pull) doesn't trip `set -e`.
+#   $1 = hasher command (Linux `sha256sum`; macOS `shasum -a 256`)
+fingerprint_stream() {
+  local hasher="$1"
+  { grep -E "$KEY_RE" || true; } | sort | while IFS= read -r line; do
+    printf '%s %s\n' "${line%%=*}" "$(printf %s "${line#*=}" | $hasher | cut -c1-"$HASH_LEN")"
+  done
+}
+
+# Pick the hasher the local platform actually ships.
 hash_cmd() {
   if command -v sha256sum >/dev/null 2>&1; then echo "sha256sum"; else echo "shasum -a 256"; fi
 }
 
-# KEY <8-char hash of value>, sorted. Blank lines and comments ignored.
-# Tolerant of a missing/empty file (a fresh pull has no local copy yet, and
-# grep's exit-1/2 must not trip `set -e`).
 fingerprint_local() {
   [ -f "$LOCAL_ENV" ] || return 0
-  local h; h="$(hash_cmd)"
-  { grep -E '^[A-Za-z_][A-Za-z0-9_]*=' "$LOCAL_ENV" 2>/dev/null || true; } | sort | while IFS= read -r line; do
-    printf '%s %s\n' "${line%%=*}" "$(printf %s "${line#*=}" | $h | cut -c1-8)"
-  done
+  fingerprint_stream "$(hash_cmd)" < "$LOCAL_ENV"
 }
 
-# The remote file is world-readable (prod is 644), so reading needs no sudo.
+# Run the SAME transform on the server (the remote file is world-readable — prod
+# is 644 — so reading needs no sudo). declare -f ships the identical function
+# over SSH to a forced bash, so there is exactly one implementation to maintain.
 fingerprint_remote() {
-  ssh "$SERVER" "{ grep -E '^[A-Za-z_][A-Za-z0-9_]*=' '$REMOTE_ENV' 2>/dev/null || true; } | sort | while IFS= read -r line; do
-      printf '%s %s\n' \"\${line%%=*}\" \"\$(printf %s \"\${line#*=}\" | sha256sum | cut -c1-8)\"
-    done"
+  ssh "$SERVER" bash -s <<REMOTE
+KEY_RE='$KEY_RE'; HASH_LEN='$HASH_LEN'
+$(declare -f fingerprint_stream)
+[ -f '$REMOTE_ENV' ] || exit 0
+fingerprint_stream sha256sum < '$REMOTE_ENV'
+REMOTE
 }
 
 require_local() {
@@ -144,7 +160,7 @@ case "$CMD" in
     tmp="/tmp/draftright-env-$stamp.$$"
     scp -q "$LOCAL_ENV" "$SERVER:$tmp"
     # cp onto the existing file keeps its owner/mode; then lock it down.
-    ssh "$SERVER" "$REMOTE_SUDO cp '$tmp' '$REMOTE_ENV' && $REMOTE_SUDO chmod 600 '$REMOTE_ENV' && rm -f '$tmp'"
+    ssh "$SERVER" "$REMOTE_SUDO cp '$tmp' '$REMOTE_ENV' && $REMOTE_SUDO chmod $ENV_MODE '$REMOTE_ENV' && rm -f '$tmp'"
     echo "→ Verifying"
     show_diff
     if [ ${#RESTART[@]} -gt 0 ]; then
@@ -169,7 +185,7 @@ case "$CMD" in
     fi
     echo "→ Pulling server env"
     scp -q "$SERVER:$REMOTE_ENV" "$LOCAL_ENV"
-    chmod 600 "$LOCAL_ENV"
+    chmod "$ENV_MODE" "$LOCAL_ENV"
     echo "→ Done. Remember: $(basename "$LOCAL_ENV") is gitignored and stays that way."
     ;;
 
