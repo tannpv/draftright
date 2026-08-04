@@ -65,3 +65,8 @@ DraftRightWindows/DraftRightWindows/Services/GoogleOAuthConfig.cs
 # Linux app — Google OAuth client_secret, mirroring the Windows policy.
 # Injected via GOOGLE_OAUTH_CLIENT_SECRET or this local file.
 DraftRightLinux/**/google_client_secret
+
+# env-sync local canonical copies (deploy/.env.dev, deploy/.env.prod) + backups
+.env.dev
+.env.prod
+.env.bak-*
