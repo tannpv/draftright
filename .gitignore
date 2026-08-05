@@ -66,6 +66,12 @@ DraftRightWindows/DraftRightWindows/Services/GoogleOAuthConfig.cs
 # Injected via GOOGLE_OAUTH_CLIENT_SECRET or this local file.
 DraftRightLinux/**/google_client_secret
 
+# Google OAuth client-secret JSON downloads (desktop/installed clients). These
+# are stray downloads from the Cloud Console and must never be committed — the
+# real secret is injected at build via GOOGLE_OAUTH_CLIENT_SECRET.
+**/client_secret_*.apps.googleusercontent.com.json
+DraftRightLinux/GCC/
+
 # env-sync local canonical copies (deploy/.env.dev, deploy/.env.prod) + backups
 .env.dev
 .env.prod
