@@ -75,6 +75,16 @@ enum WordDiff {
 
     private static func longestCommonSubsequence(_ a: [String], _ b: [String]) -> [String] {
         let m = a.count, n = b.count
+
+        // Bail out before building the table when either side is empty.
+        // `1...0` is an invalid ClosedRange and TRAPS at runtime, so without
+        // this the app crashes on any diff where one side tokenises to zero
+        // words — e.g. a backend response with an empty rewritten_text (#145).
+        // Nothing is common to an empty sequence, so [] is also the right
+        // answer: `diff` then marks one side all-deleted and the other
+        // all-inserted, which is the correct rendering.
+        if m == 0 || n == 0 { return [] }
+
         var dp = Array(repeating: Array(repeating: 0, count: n + 1), count: m + 1)
 
         for i in 1...m {

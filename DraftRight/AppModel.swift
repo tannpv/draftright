@@ -303,6 +303,9 @@ final class AppModel: ObservableObject {
         refreshToken = ""
         KeychainHelper.delete(forKey: "accessToken")
         KeychainHelper.delete(forKey: "refreshToken")
+        // Drop cached rewrites too — one account's results must never be
+        // served to whoever signs in next on the same Mac.
+        RewriteCache.shared.clear()
         isLoggedIn = false
     }
 
