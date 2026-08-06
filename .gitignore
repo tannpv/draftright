@@ -11,7 +11,13 @@
 *.key
 
 # Claude Code & IDE state
-.claude/
+# Ignore .claude CONTENTS, not the directory itself — git cannot re-include
+# a path whose parent directory is excluded, so `.claude/` would make the
+# skills negation below a no-op.
+.claude/*
+# Skills are team knowledge — share them. settings.local.json (machine-
+# specific) and worktrees/ (40MB of scratch checkouts) stay ignored above.
+!.claude/skills/
 .vscode/
 .idea/
 *.iml
