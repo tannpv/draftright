@@ -2,6 +2,33 @@
 
 AI-powered text rewriting platform — select text, pick a tone, get a polished rewrite.
 
+## RULE #1 — Clean, Reusable, Extendable
+
+**Standing first rule, applied to every task: new, in-progress, and already-merged-but-unfinished.**
+
+- **Clean** — small focused units, clear names, no dead code; comments say *why*.
+- **Reusable** — extract shared logic; never copy-paste. One source of truth per fact.
+- **Extendable** — design for the next platform, caller, or provider.
+- **No hardcoding** — any value that carries meaning is an enum/const/config with
+  ONE source of truth, never a literal at a call site. Applies to domain values,
+  platform names, tuning numbers, colours, URLs, column lists, and SQL.
+  **Duplicated logic counts** — two copies are two sources of truth and they will
+  drift. If two copies genuinely can't be merged (different languages/transports),
+  add a test that asserts they agree.
+
+No exemptions for "small change", "existing code does it this way", or "that part
+already merged". When resuming a task, audit what already landed before adding to it.
+
+Not a style preference: issue **#22** is the worked example — a copy-pasted
+`app_releases` upsert drifted between the manual and CI release paths, and
+Windows shipped unverified installers to production for two months. Read that
+issue before arguing a duplicate is harmless.
+
+> This section is a **summary for contributors**, kept self-contained because a
+> fresh clone has no other copy. The canonical rule, full checklist, and
+> no-hardcoding detail live in the maintainer's `~/.claude/CLAUDE.md`; if the two
+> disagree, that one wins. Do not expand this section — extend the canonical one.
+
 ## Quick Facts
 
 | Item | Value |
