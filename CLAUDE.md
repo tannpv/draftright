@@ -2,6 +2,25 @@
 
 AI-powered text rewriting platform — select text, pick a tone, get a polished rewrite.
 
+## RULE #1 — Clean, Reusable, Extendable
+
+**Standing first rule, applied to every task: new, in-progress, and already-merged-but-unfinished.**
+
+- **Clean** — small focused units, clear names, no dead code; comments say *why*.
+- **Reusable** — extract shared logic; never copy-paste. One source of truth per fact.
+- **Extendable** — enums and named constants, never raw literals; design for the next platform.
+
+No exemptions for "small change", "existing code does it this way", or "that part
+already merged". When resuming a task, audit what already landed before adding to it.
+
+Not a style preference — a copy-pasted `app_releases` upsert drifted between the
+manual and CI release paths, so `sha256` landed in only one and **Windows shipped
+unverified installers to production for two months** (#22). The fix was to
+extract `scripts/app-release-upsert-sql.sh` as the single source, not to patch
+the second copy.
+
+Full rule + checklist: `~/.claude/CLAUDE.md`.
+
 ## Quick Facts
 
 | Item | Value |
