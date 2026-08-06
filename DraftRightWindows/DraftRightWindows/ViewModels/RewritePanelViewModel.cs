@@ -85,7 +85,8 @@ public partial class RewritePanelViewModel : ObservableObject
         //
         // Note the usage counter isn't refreshed on a hit, since no rewrite is
         // consumed. macOS and Linux behave the same way.
-        if (tone != Tone.GrammarCheck)
+        var cacheable = tone.ProducesCacheableText();
+        if (cacheable)
         {
             var cached = App.RewriteCache.Get(InputText, tone.ApiValue(), targetLanguage);
             if (cached != null)
@@ -116,9 +117,14 @@ public partial class RewritePanelViewModel : ObservableObject
             {
                 GrammarResult = null;
                 OutputText = result.RewrittenText;
-                // Populate only on the plain-text path, keyed identically to
-                // the lookup above.
-                App.RewriteCache.Set(InputText, tone.ApiValue(), result.RewrittenText, targetLanguage);
+                // Gate the write on the SAME condition as the read above. A
+                // grammar_check call that returns no structure lands here, and
+                // writing it would create an entry the lookup can never reach —
+                // dead weight against the 200-entry bound.
+                if (cacheable)
+                {
+                    App.RewriteCache.Set(InputText, tone.ApiValue(), result.RewrittenText, targetLanguage);
+                }
             }
             UsageInfo = $"{result.UsageToday} / {result.DailyLimit} rewrites today";
         }

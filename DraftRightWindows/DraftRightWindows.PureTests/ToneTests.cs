@@ -23,6 +23,19 @@ public class ToneTests
     }
 
     [Fact]
+    public void OnlyGrammarCheck_ProducesUncacheableOutput()
+    {
+        // Grammar Check returns a structured issues object; caching it as a
+        // string would drop the structure. Every other tone returns plain text.
+        Assert.False(Tone.GrammarCheck.ProducesCacheableText());
+        foreach (var tone in (Tone[])System.Enum.GetValues(typeof(Tone)))
+        {
+            if (tone == Tone.GrammarCheck) continue;
+            Assert.True(tone.ProducesCacheableText(), $"{tone} should be cacheable");
+        }
+    }
+
+    [Fact]
     public void ApiValue_RoundTrips_ForEveryTone()
     {
         foreach (var tone in (Tone[])System.Enum.GetValues(typeof(Tone)))
