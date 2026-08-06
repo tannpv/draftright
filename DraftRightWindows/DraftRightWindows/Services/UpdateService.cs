@@ -7,58 +7,9 @@ using DraftRightWindows.Helpers;
 
 namespace DraftRightWindows.Services;
 
-public class UpdateInfo
-{
-    [JsonPropertyName("version")]
-    public string Version { get; set; } = "";
-
-    [JsonPropertyName("mac_url")]
-    public string MacUrl { get; set; } = "";
-
-    [JsonPropertyName("windows_url")]
-    public string WindowsUrl { get; set; } = "";
-
-    [JsonPropertyName("linux_url")]
-    public string LinuxUrl { get; set; } = "";
-
-    [JsonPropertyName("windows_sha256")]
-    public string WindowsSha256 { get; set; } = "";
-
-    [JsonPropertyName("release_notes")]
-    public string ReleaseNotes { get; set; } = "";
-
-    [JsonPropertyName("required")]
-    public bool Required { get; set; }
-
-    /// <summary>
-    /// Per-platform expansion added by the backend. The Windows entry is the
-    /// authoritative source for what to install on this client — the legacy
-    /// top-level <see cref="Version"/> is a cross-platform max and can drift
-    /// ahead of <see cref="WindowsUrl"/>'s actual version (root cause of the
-    /// "current 2.2.10, install 2.3.1, still 2.2.10" loop). Null on legacy
-    /// backends; the client falls back to the top-level fields then.
-    /// </summary>
-    [JsonPropertyName("platforms")]
-    public Dictionary<string, PlatformRelease>? Platforms { get; set; }
-}
-
-public class PlatformRelease
-{
-    [JsonPropertyName("version")]
-    public string Version { get; set; } = "";
-
-    [JsonPropertyName("url")]
-    public string Url { get; set; } = "";
-
-    [JsonPropertyName("sha256")]
-    public string Sha256 { get; set; } = "";
-
-    [JsonPropertyName("notes")]
-    public string Notes { get; set; } = "";
-
-    [JsonPropertyName("required")]
-    public bool Required { get; set; }
-}
+// UpdateInfo, PlatformRelease, and the pure selection logic they feed live in
+// UpdateManifest.cs so the headless test project can compile them without
+// dragging in this file's WinForms/WinUI dependencies. See issue #80.
 
 public class UpdateService : IUpdateService
 {
@@ -439,13 +390,7 @@ public class UpdateService : IUpdateService
     /// empty when the release predates hash publishing.
     /// </summary>
     internal static string ResolveWindowsSha256(UpdateInfo info)
-    {
-        var fromPlatform = info.Platforms != null
-            && info.Platforms.TryGetValue("windows", out var pin) && pin != null
-            ? pin.Sha256 : null;
-        var hash = !string.IsNullOrEmpty(fromPlatform) ? fromPlatform : info.WindowsSha256;
-        return (hash ?? "").Trim().ToLowerInvariant();
-    }
+        => UpdateManifest.ResolveSha256(info, PlatformName);
 
     private static string Sha256OfFile(string path)
     {
@@ -657,38 +602,10 @@ public class UpdateService : IUpdateService
     /// older deployments keep working.
     /// </summary>
     internal static UpdateInfo NormalizeForPlatform(UpdateInfo raw, string platform)
-    {
-        if (raw.Platforms == null) return raw;
-        if (!raw.Platforms.TryGetValue(platform, out var pin) || pin == null) return raw;
-        if (string.IsNullOrEmpty(pin.Version)) return raw;
-
-        return new UpdateInfo
-        {
-            Version = pin.Version,
-            WindowsUrl = !string.IsNullOrEmpty(pin.Url) ? pin.Url : raw.WindowsUrl,
-            WindowsSha256 = !string.IsNullOrEmpty(pin.Sha256) ? pin.Sha256 : raw.WindowsSha256,
-            MacUrl = raw.MacUrl,
-            LinuxUrl = raw.LinuxUrl,
-            ReleaseNotes = !string.IsNullOrEmpty(pin.Notes) ? pin.Notes : raw.ReleaseNotes,
-            Required = pin.Required || raw.Required,
-            Platforms = raw.Platforms,
-        };
-    }
+        => UpdateManifest.NormalizeForPlatform(raw, platform);
 
     private static bool IsNewer(string remote, string local)
-    {
-        var r = remote.Split('.').Select(s => int.TryParse(s, out var n) ? n : 0).ToArray();
-        var l = local.Split('.').Select(s => int.TryParse(s, out var n) ? n : 0).ToArray();
-        var len = Math.Max(r.Length, l.Length);
-        for (int i = 0; i < len; i++)
-        {
-            var rv = i < r.Length ? r[i] : 0;
-            var lv = i < l.Length ? l[i] : 0;
-            if (rv > lv) return true;
-            if (rv < lv) return false;
-        }
-        return false;
-    }
+        => UpdateManifest.IsNewer(remote, local);
 
     private void ShowUpdateDialog(UpdateInfo info)
     {

@@ -32,14 +32,32 @@ permissions:
   contents: write
 
 jobs:
-  # NOTE: no unit-test job here. The xUnit suite (DraftRightWindows.Tests)
+  # Headless unit gate (issue #80). DraftRightWindows.Tests cannot run here: it
   # references the WinUI app assembly, whose CsWinRT/WinUI module initializer
-  # bootstraps the WinRT runtime at load — which hangs in a headless CI test
-  # host (discovery never completes; "All tests finished running" with zero
-  # tests). Running them in CI needs a pure-logic test project that does NOT
-  # load the WinUI assembly. Tracked as a follow-up; until then tests run on a
-  # dev Windows box. See issue for the headless test-harness work.
+  # bootstraps the WinRT runtime at load and hangs discovery on a headless
+  # runner — "All tests finished running" with zero tests executed.
+  #
+  # DraftRightWindows.PureTests has no ProjectReference. It compiles the UI-free
+  # source files directly and targets plain net8.0, so it runs on ubuntu-latest
+  # in seconds. Keep it that way: adding a ProjectReference to the app project
+  # reintroduces the hang.
+  unit-tests:
+    name: Unit tests (headless)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Run pure-logic unit tests
+        working-directory: DraftRightWindows/DraftRightWindows.PureTests
+        run: dotnet test --logger "console;verbosity=normal"
+
   build:
+    needs: unit-tests
     name: Build ${{ matrix.runtime }}
     runs-on: windows-latest
     timeout-minutes: 25
@@ -389,6 +407,8 @@ jobs:
   # cert required. Independent of the unpackaged Inno-installer build above.
   msix:
     name: Build MSIX bundle for Microsoft Store
+    # Same gate as `build` — a failing unit test must not yield a Store package.
+    needs: unit-tests
     runs-on: windows-latest
     timeout-minutes: 25
 

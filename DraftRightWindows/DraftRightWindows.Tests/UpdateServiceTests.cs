@@ -29,21 +29,10 @@ public class UpdateServiceTests
         return new UpdateService(currentVersion, BackendUrl, http, download);
     }
 
-    // ── IsNewer: pure version-compare logic ─────────────────────────────────
-
-    [Theory]
-    [InlineData("2.2.5", "2.2.4", true)]
-    [InlineData("2.2.4", "2.2.4", false)]
-    [InlineData("2.2.4", "2.2.5", false)]
-    [InlineData("2.10.0", "2.9.0", true)]   // numeric, not lex (would fail under string compare: "10" < "9")
-    [InlineData("3.0.0", "2.99.0", true)]
-    [InlineData("2.2.0", "2.2.0.0", false)] // missing component treated as 0
-    [InlineData("2.2.0.1", "2.2.0", true)]  // longer wins when extra component > 0
-    [InlineData("", "2.2.0", false)]        // garbage → zeros → not newer
-    public void IsNewer_Numeric_AndPadding(string remote, string local, bool expected)
-    {
-        Assert.Equal(expected, UpdateService.IsNewerForTest(remote, local));
-    }
+    // Version comparison, per-platform normalization, and hash resolution are
+    // pure and now live in DraftRightWindows.PureTests/UpdateManifestTests.cs,
+    // which runs headlessly in CI (issue #80). What stays here needs a real
+    // UpdateService instance, which pulls in WinForms.
 
     // ── RefreshAvailableUpdateAsync: classification ─────────────────────────
 
@@ -268,124 +257,9 @@ public class UpdateServiceTests
         Assert.Equal(1, dl.CallCount); // exactly one download — staging's, not a racing second one
     }
 
-    // ── NormalizeForPlatform: per-platform pin overrides legacy envelope ────
-    //
-    // Regression: 2.2.10 users got stuck in a "current 2.2.10, install 2.3.1,
-    // still 2.2.10" loop because the backend's top-level `version` is a
-    // cross-platform max (2.3.1 from mac) but `windows_url` is the Windows
-    // row's URL (pointing at the 2.2.10 installer). The client must read
-    // `platforms.windows` as the authoritative source so it can never be
-    // tricked into installing the wrong-versioned installer.
-
-    [Fact]
-    public void Normalize_PrefersPlatformPin_OverLegacyTopLevel()
-    {
-        var raw = new UpdateInfo
-        {
-            Version = "2.3.1",                                          // cross-platform max — bogus for windows
-            WindowsUrl = "https://x/installer-2.2.10.exe",              // actually a 2.2.10 installer
-            ReleaseNotes = "mac notes",
-            Platforms = new()
-            {
-                ["windows"] = new PlatformRelease
-                {
-                    Version = "2.2.10",
-                    Url = "https://x/installer-2.2.10.exe",
-                    Notes = "windows-specific notes",
-                    Required = false,
-                },
-                ["mac"] = new PlatformRelease { Version = "2.3.1", Url = "https://x/mac.dmg" },
-            },
-        };
-
-        var n = UpdateService.NormalizeForPlatform(raw, "windows");
-
-        Assert.Equal("2.2.10", n.Version);
-        Assert.Equal("https://x/installer-2.2.10.exe", n.WindowsUrl);
-        Assert.Equal("windows-specific notes", n.ReleaseNotes);
-    }
-
-    [Fact]
-    public void Normalize_FallsThrough_WhenPlatformsMapAbsent_ForLegacyBackends()
-    {
-        var raw = new UpdateInfo
-        {
-            Version = "2.2.5",
-            WindowsUrl = "https://x/old.exe",
-            ReleaseNotes = "legacy",
-        };
-
-        var n = UpdateService.NormalizeForPlatform(raw, "windows");
-
-        Assert.Equal("2.2.5", n.Version);
-        Assert.Equal("https://x/old.exe", n.WindowsUrl);
-        Assert.Equal("legacy", n.ReleaseNotes);
-    }
-
-    [Fact]
-    public void Normalize_FallsThrough_WhenPlatformEntryHasEmptyVersion()
-    {
-        // Defensive: a half-populated row shouldn't blank out a valid top-level.
-        var raw = new UpdateInfo
-        {
-            Version = "2.2.5",
-            WindowsUrl = "https://x/installer-2.2.5.exe",
-            Platforms = new()
-            {
-                ["windows"] = new PlatformRelease { Version = "", Url = "" },
-            },
-        };
-
-        var n = UpdateService.NormalizeForPlatform(raw, "windows");
-
-        Assert.Equal("2.2.5", n.Version);
-        Assert.Equal("https://x/installer-2.2.5.exe", n.WindowsUrl);
-    }
-
-    // ── ResolveWindowsSha256: per-platform pin wins, lowercased ─────────────
-
-    [Fact]
-    public void ResolveWindowsSha256_PrefersPlatformEntry_Lowercased()
-    {
-        var info = new UpdateInfo
-        {
-            WindowsSha256 = "AAAA",
-            Platforms = new()
-            {
-                ["windows"] = new PlatformRelease { Version = "2.4.1", Url = "https://x/a.exe", Sha256 = "BBBB" },
-            },
-        };
-        Assert.Equal("bbbb", UpdateService.ResolveWindowsSha256(info));
-    }
-
-    [Fact]
-    public void ResolveWindowsSha256_FallsBackToTopLevel_WhenNoPlatformHash()
-    {
-        var info = new UpdateInfo { WindowsSha256 = "CcCc" };
-        Assert.Equal("cccc", UpdateService.ResolveWindowsSha256(info));
-    }
-
-    [Fact]
-    public void ResolveWindowsSha256_EmptyWhenUnpublished()
-    {
-        Assert.Equal("", UpdateService.ResolveWindowsSha256(new UpdateInfo()));
-    }
-
-    [Fact]
-    public void Normalize_CarriesWindowsSha256FromPin()
-    {
-        var raw = new UpdateInfo
-        {
-            Version = "2.3.1",
-            Platforms = new()
-            {
-                ["windows"] = new PlatformRelease { Version = "2.4.1", Url = "https://x/a.exe", Sha256 = "deadbeef" },
-            },
-        };
-        var n = UpdateService.NormalizeForPlatform(raw, "windows");
-        Assert.Equal("deadbeef", n.WindowsSha256);
-    }
-
+    // NormalizeForPlatform and ResolveWindowsSha256 are pure; their tests
+    // moved to DraftRightWindows.PureTests/UpdateManifestTests.cs so they
+    // run in headless CI (issue #80).
     // ── End-to-end: phantom-update loop is closed ───────────────────────────
 
     [Fact]
