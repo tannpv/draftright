@@ -1,8 +1,10 @@
 using System.Net.Http;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using System.Diagnostics;
 using System.Security.Cryptography;
+// Required for the StripTrailingSlash() string extension — used at the backend
+// URL normalisation below. Not detectable by grepping for Helpers' class names,
+// since extension methods are called on the receiver.
 using DraftRightWindows.Helpers;
 
 namespace DraftRightWindows.Services;
