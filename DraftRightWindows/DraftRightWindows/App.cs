@@ -19,6 +19,13 @@ public class App : Application
     public static ClipboardService Clipboard { get; private set; } = null!;
     public static TextInjector Injector { get; private set; } = null!;
 
+    /// <summary>
+    /// Client-side rewrite cache, shared by every rewrite path (panel and
+    /// One-Click) so an identical text+tone is served without a backend
+    /// round-trip. Cleared on sign-out — see the onSignOut handler below.
+    /// </summary>
+    public static RewriteCache RewriteCache { get; } = new();
+
     private Window? _hiddenWindow;
     private IntPtr _hwnd = IntPtr.Zero;
     private WinForms.Form? _settingsForm;
@@ -308,7 +315,9 @@ public class App : Application
         _tray = new TrayIconController(
             UpdateService,
             onOpenSettings: OpenSettings,
-            onSignOut: () => { Auth.ClearTokens(); Api.ClearToken(); },
+            // Drop cached rewrites too — one account's results must never be
+            // served to whoever signs in next on the same machine.
+            onSignOut: () => { Auth.ClearTokens(); Api.ClearToken(); RewriteCache.Clear(); },
             onQuit: DoQuit);
         _tray.Start();
 

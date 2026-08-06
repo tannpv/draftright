@@ -43,6 +43,15 @@ public static class ToneExtensions
         _ => null
     };
 
+    /// <summary>
+    /// True when the rewrite result depends on the configured target language,
+    /// so callers must send it to the backend and fold it into the cache key.
+    /// Mirrors Linux's <c>Tone.uses_target_language</c>. Kept on the enum so a
+    /// future language-aware tone is one line here rather than another
+    /// `tone == Tone.Translate` literal scattered through the UI (Rule #1).
+    /// </summary>
+    public static bool UsesTargetLanguage(this Tone tone) => tone == Tone.Translate;
+
     public static string DisplayName(this Tone tone) => tone switch
     {
         Tone.Simple => "Simple",

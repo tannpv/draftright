@@ -865,6 +865,30 @@ class TranslateLanguageTest(unittest.TestCase):
             call = src.split("api_client.rewrite(")[1].split(")")[0]
             self.assertIn("language", call, f"{rel} must send a target language")
 
+    def test_every_cache_set_call_site_passes_a_language(self):
+        # rewrite_panel.py looked the entry up WITH the language but stored it
+        # WITHOUT, so translate results were written under "translate::text"
+        # and read back as "Vietnamese::translate::text" — a guaranteed miss
+        # on every translation. The sibling test above passed throughout,
+        # because it only checked the api_client.rewrite call.
+        root = Path(__file__).resolve().parent.parent / "draftright"
+        for rel in ("application.py", "ui/rewrite_panel.py"):
+            src = (root / rel).read_text(encoding="utf-8")
+            for chunk in src.split("cache.set(")[1:]:
+                call = chunk.split(")")[0]
+                self.assertIn(
+                    "language", call,
+                    f"{rel}: cache.set must key on the same language as cache.get",
+                )
+
+    def test_asymmetric_key_would_always_miss(self):
+        # Behavioural statement of the same bug, independent of source text.
+        cache = RewriteCache()
+        cache.set("hello", "translate", "Xin chào")          # stored without
+        self.assertIsNone(cache.get("hello", "translate", "Vietnamese"))  # read with
+        cache.set("hello", "translate", "Xin chào", "Vietnamese")
+        self.assertEqual(cache.get("hello", "translate", "Vietnamese"), "Xin chào")
+
 
 class TrayIconStateTest(unittest.TestCase):
     """Tray conveys backend status by tint and an update by a red dot (#22).
