@@ -433,67 +433,14 @@ public sealed class ApiClient : IDisposable
         }
     }
 
-    // Error-body field names our backends use. NestJS carries the human
-    // message under "message"; the Go backend uses "error" (alongside "code"
-    // and "request_id"). Named so a future backend shape is a one-line add,
-    // not another buried literal (Rule #1: no magic strings).
-    private const string ErrorBodyMessageField = "message";
-    private const string ErrorBodyErrorField = "error";
-
     /// <summary>
-    /// Extracts a user-facing message from an error response body, handling
-    /// every shape our backends emit:
-    ///   • NestJS class-validator: {"message":["email must be an email"]} (string[])
-    ///   • NestJS other errors:    {"message":"…"} (string)
-    ///   • Go backend:             {"error":"Account disabled","code":"…"} (string)
-    /// Without the Go `error` case, its bodies fell through to the raw JSON and
-    /// users saw stack-trace soup (BUG-44: "Account disabled" leaked as JSON
-    /// after the Go cutover). Falls back to the raw body when unparseable.
-    /// See BUG-18 / BUG-19 (2026-05-29) for the original NestJS handling.
+    /// Extracts a user-facing message from an error response body. The parser
+    /// itself lives in <see cref="ServerErrorMessage"/> so it can be unit
+    /// tested headlessly — this type drags in HttpClient and, transitively,
+    /// the WinUI assembly that hangs test discovery (issue #80).
     /// </summary>
     internal static string ExtractServerMessage(string body)
-    {
-        if (string.IsNullOrWhiteSpace(body)) return body;
-        try
-        {
-            using var doc = JsonDocument.Parse(body);
-            var root = doc.RootElement;
-            if (root.ValueKind != JsonValueKind.Object) return body;
-
-            if (root.TryGetProperty(ErrorBodyMessageField, out var msg))
-            {
-                if (msg.ValueKind == JsonValueKind.String)
-                {
-                    var s = msg.GetString();
-                    if (!string.IsNullOrEmpty(s)) return s;
-                }
-                else if (msg.ValueKind == JsonValueKind.Array && msg.GetArrayLength() > 0)
-                {
-                    // Join with "; " so multi-field validations show all problems.
-                    var parts = new List<string>();
-                    foreach (var el in msg.EnumerateArray())
-                    {
-                        var s = el.GetString();
-                        if (!string.IsNullOrEmpty(s)) parts.Add(s);
-                    }
-                    if (parts.Count > 0) return string.Join("; ", parts);
-                }
-            }
-
-            // Go backend error shape: {"error":"…","code":"…","request_id":"…"}.
-            if (root.TryGetProperty(ErrorBodyErrorField, out var err)
-                && err.ValueKind == JsonValueKind.String)
-            {
-                var s = err.GetString();
-                if (!string.IsNullOrEmpty(s)) return s;
-            }
-        }
-        catch
-        {
-            /* body wasn't JSON — keep raw */
-        }
-        return body;
-    }
+        => ServerErrorMessage.Extract(body);
 
     private static async Task<T> HandleResponse<T>(HttpResponseMessage response)
     {

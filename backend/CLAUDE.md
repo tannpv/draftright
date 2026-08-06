@@ -84,7 +84,10 @@ plaintext. Node uses a TypeORM ValueTransformer on the app_settings columns
 (completer, payment `Credentials()`, email) and encrypts at write (repos).
 Code complete on develop; NOT enabled. Enable runbook + gotchas: memory
 `feedback_secret_encryption_50`. Adding a new secret column = encrypt at its
-Go write + decrypt at every Go read + Node transformer + widen migration.
+Go write + decrypt at every Go read + Node transformer + widen migration +
+add it to `SETTINGS_ENCRYPTED_COLUMNS` (admin/mask-settings.util.ts — the single
+source of truth the backfill script imports; `mask-settings.util.spec` fails if
+it drifts from the entity's transformer columns).
 
 ## AI Providers
 

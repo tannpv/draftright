@@ -579,6 +579,74 @@ class GoogleOAuthTest(unittest.TestCase):
             self.assertIn("google", url)
 
 
+class BugReportAttachTest(unittest.TestCase):
+    """Three ways to attach, one adoption path (#85).
+
+    Capture and paste must land the image in the form directly — the point is
+    that the user never browses for a file they just created.
+    """
+
+    def _source(self) -> str:
+        return (
+            Path(__file__).resolve().parent.parent
+            / "draftright" / "ui" / "report_bug_dialog.py"
+        ).read_text(encoding="utf-8")
+
+    def test_all_three_paths_exist(self):
+        src = self._source()
+        for probe in ("_on_capture", "_paste_from_clipboard", "_on_attach"):
+            self.assertIn(f"def {probe}", src)
+
+    def test_capture_and_paste_attach_without_browsing(self):
+        # Both must call _set_screenshot themselves; anything else means the
+        # user is sent back to the file picker for an image they just made.
+        src = self._source()
+        for method in ("_on_capture_done", "_paste_from_clipboard"):
+            body = src.split(f"def {method}")[1].split("\n    def ")[0]
+            self.assertIn("_set_screenshot", body, f"{method} must attach directly")
+
+    def test_one_adoption_path(self):
+        # Label, Remove button and stored path cannot drift if they are set
+        # in exactly one place.
+        src = self._source()
+        self.assertEqual(src.count("def _set_screenshot"), 1)
+        body = src.split("def _set_screenshot")[1].split("\n    def ")[0]
+        for effect in ("_screenshot_path", "_shot_label", "_clear_shot_btn"):
+            self.assertIn(effect, body)
+
+    def test_paste_respects_the_size_limit(self):
+        body = self._source().split("def _paste_from_clipboard")[1].split("\n    def ")[0]
+        self.assertIn("MAX_SCREENSHOT_BYTES", body)
+
+    def test_attachment_is_previewed(self):
+        # A filename alone does not tell the user whether they captured the
+        # right thing — which is the entire point of attaching an image.
+        src = self._source()
+        body = src.split("def _set_screenshot")[1].split("\n    def ")[0]
+        self.assertIn("_preview.set_filename", body)
+        self.assertIn("_preview_frame.set_visible(True)", body)
+
+    def test_removing_clears_the_preview(self):
+        body = self._source().split("def _on_clear_screenshot")[1].split("\n    def ")[0]
+        self.assertIn("_preview_frame.set_visible(False)", body)
+        self.assertIn("_screenshot_path = None", body)
+
+    def test_attachment_is_described(self):
+        # Dimensions and size, so an accidental 3-pixel capture is obvious.
+        src = self._source()
+        self.assertIn("def _describe", src)
+        body = src.split("def _describe")[1].split("\n    def ")[0]
+        self.assertIn("get_width", body)
+        self.assertIn("KB", body)
+
+    def test_ctrl_v_yields_to_text_paste(self):
+        # Ctrl+V must only be claimed when the clipboard holds an image,
+        # otherwise it would stop the user pasting text into the description.
+        body = self._source().split("def _on_key_pressed")[1].split("\n    def ")[0]
+        self.assertIn("_clipboard_has_image", body)
+        self.assertIn("return False", body)
+
+
 class MainWindowChromeTest(unittest.TestCase):
     """The main window must carry its own header bar.
 
@@ -796,6 +864,30 @@ class TranslateLanguageTest(unittest.TestCase):
             src = (root / rel).read_text(encoding="utf-8")
             call = src.split("api_client.rewrite(")[1].split(")")[0]
             self.assertIn("language", call, f"{rel} must send a target language")
+
+    def test_every_cache_set_call_site_passes_a_language(self):
+        # rewrite_panel.py looked the entry up WITH the language but stored it
+        # WITHOUT, so translate results were written under "translate::text"
+        # and read back as "Vietnamese::translate::text" — a guaranteed miss
+        # on every translation. The sibling test above passed throughout,
+        # because it only checked the api_client.rewrite call.
+        root = Path(__file__).resolve().parent.parent / "draftright"
+        for rel in ("application.py", "ui/rewrite_panel.py"):
+            src = (root / rel).read_text(encoding="utf-8")
+            for chunk in src.split("cache.set(")[1:]:
+                call = chunk.split(")")[0]
+                self.assertIn(
+                    "language", call,
+                    f"{rel}: cache.set must key on the same language as cache.get",
+                )
+
+    def test_asymmetric_key_would_always_miss(self):
+        # Behavioural statement of the same bug, independent of source text.
+        cache = RewriteCache()
+        cache.set("hello", "translate", "Xin chào")          # stored without
+        self.assertIsNone(cache.get("hello", "translate", "Vietnamese"))  # read with
+        cache.set("hello", "translate", "Xin chào", "Vietnamese")
+        self.assertEqual(cache.get("hello", "translate", "Vietnamese"), "Xin chào")
 
 
 class TrayIconStateTest(unittest.TestCase):

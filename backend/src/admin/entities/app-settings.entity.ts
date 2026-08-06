@@ -7,6 +7,10 @@ import { encryptSecret, decryptSecret } from '../../common/crypto/secret-cipher'
  * Null-safe and a no-op without SECRETS_ENCRYPTION_KEY, so legacy plaintext
  * rows keep working. Columns are `text` because ciphertext is longer than the
  * original secret and would overflow the old varchar(100/500) widths.
+ *
+ * The set of columns carrying this transformer MUST match
+ * SETTINGS_ENCRYPTED_COLUMNS in admin/mask-settings.util.ts (the backfill
+ * script's source of truth) — when adding a secret column, update both.
  */
 const secretTransformer: ValueTransformer = {
   to: (value?: string | null) => (value == null ? value : encryptSecret(value)),

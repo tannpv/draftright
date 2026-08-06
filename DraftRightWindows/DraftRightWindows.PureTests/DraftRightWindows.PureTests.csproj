@@ -1,0 +1,51 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Headless-capable unit tests (issue #80).
+
+    DraftRightWindows.Tests references the WinUI app project. Loading that
+    assembly runs its CsWinRT/WinUI module initializer, which bootstraps the
+    WinRT runtime and hangs on a headless runner — xUnit discovery never
+    finishes and zero tests execute. Passing a test filter doesn't help,
+    because the whole assembly is loaded before any filtering happens.
+
+    This project therefore has NO ProjectReference. It compiles the specific
+    UI-free source files below directly, targets plain net8.0 (not
+    net8.0-windows), and so runs anywhere: ubuntu-latest, macOS, or a dev box.
+
+    To add coverage here, the code under test must be UI-free. If it isn't,
+    extract the pure part into its own file first (as UpdateManifest.cs and
+    ServerErrorMessage.cs were) rather than reaching for a ProjectReference —
+    that is what reintroduces the hang.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>DraftRightWindows.PureTests</RootNamespace>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.10.0" />
+    <PackageReference Include="xunit" Version="2.9.0" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <!--
+    Source under test, linked rather than referenced. Link metadata keeps these
+    visible under a Source/ folder in the IDE instead of polluting the project
+    root. Every file listed here must stay free of WinUI/WinForms/Win32.
+  -->
+  <ItemGroup>
+    <Compile Include="..\DraftRightWindows\Services\UpdateManifest.cs" Link="Source\UpdateManifest.cs" />
+    <Compile Include="..\DraftRightWindows\Services\ServerErrorMessage.cs" Link="Source\ServerErrorMessage.cs" />
+    <Compile Include="..\DraftRightWindows\Services\Logger.cs" Link="Source\Logger.cs" />
+    <Compile Include="..\DraftRightWindows\Services\RewriteCache.cs" Link="Source\RewriteCache.cs" />
+    <Compile Include="..\DraftRightWindows\Models\Tone.cs" Link="Source\Tone.cs" />
+    <Compile Include="..\DraftRightWindows\Models\ApiModels.cs" Link="Source\ApiModels.cs" />
+    <Compile Include="..\DraftRightWindows\Models\GrammarIssueType.cs" Link="Source\GrammarIssueType.cs" />
+    <Compile Include="..\DraftRightWindows\Services\GrammarFixer.cs" Link="Source\GrammarFixer.cs" />
+    <Compile Include="..\DraftRightWindows\Diff\WordDiff.cs" Link="Source\WordDiff.cs" />
+  </ItemGroup>
+</Project>

@@ -8,16 +8,20 @@ dialog has no use for.
 
 from __future__ import annotations
 
+import os
+import tempfile
 import threading
+import time
 from typing import Optional
 
 import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, GLib, Gtk, Pango
+from gi.repository import Adw, Gdk, GLib, Gtk, Pango
 
 from draftright import config
+from pathlib import Path
 from draftright.services.bug_report_service import (
     MAX_SCREENSHOT_BYTES,
     MIN_DESCRIPTION_CHARS,
@@ -98,6 +102,21 @@ class ReportBugDialog(Adw.Window):
         self._shot_label.set_ellipsize(Pango.EllipsizeMode.END)
         shot_row.append(self._shot_label)
 
+        # Capture without leaving the app — no external screenshot tool.
+        self._capture_btn = Gtk.Button(label="Take screenshot")
+        self._capture_btn.set_tooltip_text(
+            "Pick an area, window or the whole screen; DraftRight hides itself first"
+        )
+        self._capture_btn.connect("clicked", self._on_capture)
+        shot_row.append(self._capture_btn)
+
+        self._paste_btn = Gtk.Button(label="Paste")
+        self._paste_btn.set_tooltip_text(
+            "Attach an image from the clipboard (Ctrl+V) — e.g. after Print Screen"
+        )
+        self._paste_btn.connect("clicked", lambda _b: self._paste_from_clipboard())
+        shot_row.append(self._paste_btn)
+
         attach_btn = Gtk.Button(label="Attach…")
         attach_btn.connect("clicked", self._on_attach)
         shot_row.append(attach_btn)
@@ -106,6 +125,18 @@ class ReportBugDialog(Adw.Window):
         self._clear_shot_btn.connect("clicked", self._on_clear_screenshot)
         shot_row.append(self._clear_shot_btn)
         outer.append(shot_row)
+
+        # Preview — the whole point of attaching is knowing what you attached.
+        # Windows and macOS both show one; a filename alone tells the user
+        # nothing about whether they captured the right thing.
+        self._preview_frame = Gtk.Frame()
+        self._preview_frame.set_visible(False)
+        self._preview = Gtk.Picture()
+        self._preview.set_can_shrink(True)
+        self._preview.set_content_fit(Gtk.ContentFit.CONTAIN)
+        self._preview.set_size_request(-1, config.BUG_REPORT_PREVIEW_HEIGHT)
+        self._preview_frame.set_child(self._preview)
+        outer.append(self._preview_frame)
 
         # Email — always shown; signed-in users can leave it blank.
         outer.append(self._field_label("Email (optional — to follow up)"))
@@ -132,6 +163,13 @@ class ReportBugDialog(Adw.Window):
         cancel_btn.connect("clicked", lambda *_: self.close())
         bottom.append(cancel_btn)
 
+        # Ctrl+V attaches a clipboard image. Print Screen on GNOME puts the
+        # shot straight on the clipboard, so this is the path most people
+        # already have muscle memory for.
+        paste_keys = Gtk.EventControllerKey()
+        paste_keys.connect("key-pressed", self._on_key_pressed)
+        self.add_controller(paste_keys)
+
         self._submit_btn = Gtk.Button(label="Send report", sensitive=False)
         self._submit_btn.add_css_class("suggested-action")
         self._submit_btn.connect("clicked", self._on_submit)
@@ -157,6 +195,123 @@ class ReportBugDialog(Adw.Window):
         )
 
     # -- screenshot --------------------------------------------------------
+
+    def _on_key_pressed(self, _controller, keyval, _keycode, state) -> bool:
+        """Ctrl+V pastes a clipboard image as the attachment."""
+        ctrl = bool(state & Gdk.ModifierType.CONTROL_MASK)
+        if ctrl and keyval in (Gdk.KEY_v, Gdk.KEY_V):
+            # Only claim the keystroke if the clipboard actually holds an
+            # image; otherwise let Ctrl+V paste text into the description.
+            if self._clipboard_has_image():
+                self._paste_from_clipboard()
+                return True
+        return False
+
+    def _clipboard_has_image(self) -> bool:
+        clipboard = Gdk.Display.get_default().get_clipboard()
+        formats = clipboard.get_formats()
+        return any(formats.contain_mime_type(m) for m in _IMAGE_MIME_TYPES)
+
+    def _paste_from_clipboard(self) -> None:
+        """Read an image off the clipboard and attach it."""
+        clipboard = Gdk.Display.get_default().get_clipboard()
+
+        def on_read(cb, result):
+            try:
+                texture = cb.read_texture_finish(result)
+            except GLib.Error as exc:
+                self._show_error(f"No image on the clipboard ({exc.message}).")
+                return
+            if texture is None:
+                self._show_error("No image on the clipboard.")
+                return
+            try:
+                path = Path(tempfile.gettempdir()) / (
+                    f"draftright-pasted-{os.getpid()}-{int(time.time())}.png"
+                )
+                texture.save_to_png(str(path))
+                if path.stat().st_size > MAX_SCREENSHOT_BYTES:
+                    self._show_error("Pasted image is larger than 5 MB.")
+                    return
+            except (OSError, GLib.Error) as exc:
+                self._show_error(f"Couldn't save the pasted image: {exc}")
+                return
+            self._set_screenshot(str(path))
+
+        clipboard.read_texture_async(None, on_read)
+
+    def _on_capture(self, _btn: Gtk.Button) -> None:
+        """Screenshot via the desktop portal, hiding this dialog first."""
+        from draftright.services.screenshot_service import ScreenshotService
+
+        self._capture_btn.set_sensitive(False)
+        self._capture_btn.set_label("Choose an area…")
+        self._status_label.set_visible(False)
+
+        # Otherwise this window sits in the middle of the user's own bug.
+        self.set_visible(False)
+
+        def finish(path, error):
+            # Portal replies arrive on the main loop already, but idle_add
+            # keeps this correct regardless of where it is dispatched from.
+            GLib.idle_add(self._on_capture_done, path, error)
+
+        # Give the compositor a moment to actually unmap us before the
+        # portal starts capturing.
+        GLib.timeout_add(
+            config.SCREENSHOT_HIDE_DELAY_MS,
+            lambda: (ScreenshotService().capture(finish), False)[1],
+        )
+
+    def _on_capture_done(self, path, error) -> bool:
+        self.set_visible(True)
+        self.present()
+        self._capture_btn.set_sensitive(True)
+        self._capture_btn.set_label("Take screenshot")
+
+        if error:
+            self._show_error(error)
+            return False
+        if not path:
+            return False  # user cancelled — nothing to say
+
+        try:
+            size = Path(path).stat().st_size
+        except OSError as exc:
+            self._show_error(f"Couldn't read the screenshot: {exc}")
+            return False
+        if size > MAX_SCREENSHOT_BYTES:
+            self._show_error("Screenshot is larger than 5 MB.")
+            return False
+
+        self._set_screenshot(path)
+        return False
+
+    def _set_screenshot(self, path: str) -> None:
+        """Adopt *path* as the attachment and reflect it in the UI."""
+        self._screenshot_path = path
+        self._shot_label.set_text(self._describe(path))
+        self._shot_label.remove_css_class("dim-label")
+        self._clear_shot_btn.set_sensitive(True)
+        self._status_label.set_visible(False)
+
+        self._preview.set_filename(path)
+        self._preview_frame.set_visible(True)
+
+    @staticmethod
+    def _describe(path: str) -> str:
+        """"name.png — 1920x1080, 240 KB", falling back to just the name."""
+        name = Path(path).name
+        try:
+            size_kb = max(1, Path(path).stat().st_size // 1024)
+        except OSError:
+            return name
+        try:
+            texture = Gdk.Texture.new_from_filename(path)
+            return f"{name} — {texture.get_width()}x{texture.get_height()}, {size_kb} KB"
+        except GLib.Error:
+            # Not decodable as an image; the size is still worth showing.
+            return f"{name} — {size_kb} KB"
 
     def _on_attach(self, _btn: Gtk.Button) -> None:
         image_filter = Gtk.FileFilter()
@@ -186,17 +341,15 @@ class ReportBugDialog(Adw.Window):
         if size > MAX_SCREENSHOT_BYTES:
             self._show_error("Screenshot is larger than 5 MB.")
             return
-        self._screenshot_path = path
-        self._shot_label.set_text(gfile.get_basename() or path)
-        self._shot_label.remove_css_class("dim-label")
-        self._clear_shot_btn.set_sensitive(True)
-        self._status_label.set_visible(False)
+        self._set_screenshot(path)
 
     def _on_clear_screenshot(self, _btn: Gtk.Button) -> None:
         self._screenshot_path = None
         self._shot_label.set_text("No file selected")
         self._shot_label.add_css_class("dim-label")
         self._clear_shot_btn.set_sensitive(False)
+        self._preview.set_filename(None)
+        self._preview_frame.set_visible(False)
 
     # -- submit ------------------------------------------------------------
 

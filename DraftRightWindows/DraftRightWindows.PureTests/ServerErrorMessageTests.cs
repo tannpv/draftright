@@ -1,10 +1,10 @@
 using DraftRightWindows.Services;
 using Xunit;
 
-namespace DraftRightWindows.Tests;
+namespace DraftRightWindows.PureTests;
 
 /// <summary>
-/// Unit tests for <see cref="ApiClient.ExtractServerMessage"/> — the parser
+/// Unit tests for <see cref="ServerErrorMessage.Extract"/> — the parser
 /// that turns an error response body into the one-line message the UI shows.
 ///
 /// BUG-44: after the Go backend cutover, error bodies switched from NestJS's
@@ -13,28 +13,28 @@ namespace DraftRightWindows.Tests;
 /// saw e.g. {"error":"Account disabled",...} verbatim on Google sign-in.
 /// These tests lock in support for every shape both backends emit.
 /// </summary>
-public class ApiClientErrorMessageTests
+public class ServerErrorMessageTests
 {
     [Fact]
     public void Extracts_Go_Error_Field()
     {
         // The exact body from BUG-44's logcat.
         var body = "{\"error\":\"Account disabled\",\"code\":\"invalid-token\",\"request_id\":\"7408d581-ca06-457f-bf55-37c357b0d53b\"}";
-        Assert.Equal("Account disabled", ApiClient.ExtractServerMessage(body));
+        Assert.Equal("Account disabled", ServerErrorMessage.Extract(body));
     }
 
     [Fact]
     public void Extracts_Nest_String_Message()
     {
         var body = "{\"message\":\"Invalid credentials\",\"statusCode\":401}";
-        Assert.Equal("Invalid credentials", ApiClient.ExtractServerMessage(body));
+        Assert.Equal("Invalid credentials", ServerErrorMessage.Extract(body));
     }
 
     [Fact]
     public void Extracts_And_Joins_Nest_Array_Message()
     {
         var body = "{\"message\":[\"email must be an email\",\"password should not be empty\"]}";
-        Assert.Equal("email must be an email; password should not be empty", ApiClient.ExtractServerMessage(body));
+        Assert.Equal("email must be an email; password should not be empty", ServerErrorMessage.Extract(body));
     }
 
     [Fact]
@@ -42,21 +42,21 @@ public class ApiClientErrorMessageTests
     {
         // If a body carries both, the human-readable "message" wins.
         var body = "{\"message\":\"Something friendly\",\"error\":\"Bad Request\"}";
-        Assert.Equal("Something friendly", ApiClient.ExtractServerMessage(body));
+        Assert.Equal("Something friendly", ServerErrorMessage.Extract(body));
     }
 
     [Fact]
     public void Falls_Back_To_Raw_Body_When_Not_Json()
     {
         var body = "upstream 502 bad gateway";
-        Assert.Equal(body, ApiClient.ExtractServerMessage(body));
+        Assert.Equal(body, ServerErrorMessage.Extract(body));
     }
 
     [Fact]
     public void Falls_Back_To_Raw_Body_When_No_Known_Field()
     {
         var body = "{\"detail\":\"nope\",\"foo\":42}";
-        Assert.Equal(body, ApiClient.ExtractServerMessage(body));
+        Assert.Equal(body, ServerErrorMessage.Extract(body));
     }
 
     [Theory]
@@ -64,6 +64,6 @@ public class ApiClientErrorMessageTests
     [InlineData("   ")]
     public void Handles_Empty_Body(string body)
     {
-        Assert.Equal(body, ApiClient.ExtractServerMessage(body));
+        Assert.Equal(body, ServerErrorMessage.Extract(body));
     }
 }

@@ -1,15 +1,18 @@
 /**
  * One-time migration for #50: encrypt existing plaintext secrets at rest.
  *
- * Phase 2 covers `ai_providers.api_key`. Idempotent — rows already in `enc:v1:`
- * form are skipped, so re-running is safe. Requires SECRETS_ENCRYPTION_KEY and
- * DATABASE_URL. Run AFTER the read-both code is deployed and the key is set:
+ * Covers `ai_providers.api_key` (phase 2) and the app_settings secret columns
+ * (phase 3). Idempotent — rows already in `enc:v1:` form are skipped, so
+ * re-running is safe. Requires SECRETS_ENCRYPTION_KEY and DATABASE_URL. Run
+ * AFTER the read-both code is deployed and the key is set:
  *
  *   SECRETS_ENCRYPTION_KEY=<base64-32b> DATABASE_URL=... \
  *     npx ts-node scripts/encrypt-secrets.ts
  */
 import { Client } from 'pg';
 import { encryptSecret, isEncrypted } from '../src/common/crypto/secret-cipher';
+// Single source of truth for which app_settings columns are encrypted at rest.
+import { SETTINGS_ENCRYPTED_COLUMNS as SECRET_COLUMNS } from '../src/admin/mask-settings.util';
 
 async function main(): Promise<void> {
   if (!process.env.SECRETS_ENCRYPTION_KEY) {
@@ -45,13 +48,7 @@ async function main(): Promise<void> {
       `ai_providers.api_key: encrypted ${encrypted}, skipped ${skipped} (already encrypted).`,
     );
 
-    // app_settings singleton — 12 secret columns.
-    const SECRET_COLUMNS = [
-      'stripe_secret_key', 'stripe_webhook_secret', 'paypal_client_secret',
-      'paypal_webhook_id', 'momo_access_key', 'momo_secret_key', 'casso_api_key',
-      'sepay_api_key', 'resend_api_key', 'google_client_secret',
-      'lemonsqueezy_api_key', 'lemonsqueezy_webhook_secret',
-    ];
+    // app_settings singleton — encrypt the at-rest secret columns (imported).
     const settings = await client.query(
       `SELECT id, ${SECRET_COLUMNS.join(', ')} FROM app_settings`,
     );

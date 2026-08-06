@@ -149,6 +149,8 @@ def _exchange_code(code: str, verifier: str, redirect_uri: str) -> str:
             config.GOOGLE_TOKEN_ENDPOINT,
             data={
                 "client_id": config.google_client_id(),
+                # Required by Google for Desktop-type clients; see config.
+                "client_secret": config.google_client_secret(),
                 "code": code,
                 "code_verifier": verifier,
                 "grant_type": "authorization_code",
