@@ -23,6 +23,11 @@ A Windows-only line under `### Windows` will never appear in the macOS
 If a version needs the user to *do* something after updating, say so
 explicitly under an **Action needed:** line inside the relevant sub-section.
 
+## 2.3.32 — 2026-08-06
+### Windows
+- Repeating a rewrite you already asked for is now instant. Ask for the same text in the same tone again — after switching tones and back, or reopening the panel — and the previous result appears immediately with no waiting and no round trip to the server. Translations are kept separately per target language, so changing the language always fetches a fresh translation.
+- Updates are now checked against a published checksum before they run. DraftRight compares the installer it downloaded against the fingerprint published alongside the release, and refuses to run it if they do not match. Previously the download was trusted on the strength of the HTTPS connection alone.
+
 ## 2.3.31 — 2026-07-23
 ### Windows
 - Fixed the rewrite shortcut (Ctrl+Shift+R) sometimes doing nothing at all after you selected text. When Windows blocks DraftRight from copying your highlighted text — usually because the active window is running as administrator — the app now tells you what happened instead of failing silently, and you can copy the text yourself (Ctrl+C) then press the shortcut. If nothing is selected, or the panel fails to open, you now get a clear tray message explaining why.
