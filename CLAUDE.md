@@ -8,7 +8,13 @@ AI-powered text rewriting platform — select text, pick a tone, get a polished 
 
 - **Clean** — small focused units, clear names, no dead code; comments say *why*.
 - **Reusable** — extract shared logic; never copy-paste. One source of truth per fact.
-- **Extendable** — enums and named constants, never raw literals; design for the next platform.
+- **Extendable** — design for the next platform, caller, or provider.
+- **No hardcoding** — any value that carries meaning is an enum/const/config with
+  ONE source of truth, never a literal at a call site. Applies to domain values,
+  platform names, tuning numbers, colours, URLs, column lists, and SQL.
+  **Duplicated logic counts** — two copies are two sources of truth and they will
+  drift. If two copies genuinely can't be merged (different languages/transports),
+  add a test that asserts they agree.
 
 No exemptions for "small change", "existing code does it this way", or "that part
 already merged". When resuming a task, audit what already landed before adding to it.
