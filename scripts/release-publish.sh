@@ -157,24 +157,12 @@ if [ -n "$DB_PLATFORM" ]; then
     NOTES=""
   fi
 
-  # Build the SQL locally and pipe it to the remote psql over stdin. Notes are
-  # dollar-quoted ($drnote$) so multi-line text needs no escaping; the heredoc
-  # is no longer embedded in the remote command string.
-  SQL=$(cat <<SQLEOF
--- Always writes the 'direct' channel row. Store-channel rows are managed
--- via the admin Versions page (POST /admin/releases with channel=store).
-INSERT INTO app_releases (platform, channel, version, download_url, sha256, release_notes, required, enabled)
-VALUES ('$DB_PLATFORM', 'direct', '$VERSION', '$SQL_URL', '$SHA256', \$drnote\$
-$NOTES
-\$drnote\$, false, true)
-ON CONFLICT (platform, channel) DO UPDATE SET
-  version = EXCLUDED.version,
-  download_url = EXCLUDED.download_url,
-  sha256 = EXCLUDED.sha256,
-  release_notes = EXCLUDED.release_notes,
-  updated_at = now();
-SQLEOF
-)
+  # Build the SQL locally and pipe it to the remote psql over stdin. The
+  # statement itself lives in app-release-upsert-sql.sh so this path and the
+  # CI path (.github/workflows/build-windows.yml) can never drift — see the
+  # header of that script for why that matters (issue #22).
+  SQL=$(RELEASE_NOTES="$NOTES" \
+    "$SCRIPT_DIR/app-release-upsert-sql.sh" "$DB_PLATFORM" direct "$VERSION" "$SQL_URL" "$SHA256")
   printf '%s\n' "$SQL" | ssh draftright "sudo docker exec -i draftright-postgres-1 psql -U draftright -d draftright -v ON_ERROR_STOP=1" 2>&1 | tail -2
 fi
 

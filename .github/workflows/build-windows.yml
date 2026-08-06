@@ -245,12 +245,19 @@ jobs:
             exit 1
           fi
           REMOTE="DraftRight-Setup-Windows-${VERSION}-x64.exe"
+          # Artifact SHA-256 — the desktop updater verifies the installer it
+          # downloads against this before executing it (issue #22). Computed
+          # here, from the exact bytes that get scp'd in the next step, so the
+          # hash and the published file cannot disagree.
+          SHA256=$(sha256sum "$INSTALLER" | awk '{print $1}')
           {
             echo "installer=$INSTALLER"
             echo "version=$VERSION"
             echo "remote=$REMOTE"
+            echo "sha256=$SHA256"
           } >> "$GITHUB_OUTPUT"
           ls -lh "$INSTALLER"
+          echo "sha256: $SHA256"
 
       - name: Extract release notes from CHANGELOG
         id: notes
@@ -296,6 +303,7 @@ jobs:
           DROPLET_HOST: ${{ secrets.DROPLET_HOST }}
           NEW_VERSION: ${{ steps.meta.outputs.version }}
           REMOTE_NAME: ${{ steps.meta.outputs.remote }}
+          SHA256: ${{ steps.meta.outputs.sha256 }}
           RELEASE_NOTES: ${{ steps.notes.outputs.notes }}
         run: |
           # Match what scripts/release-publish.sh does locally: write to
@@ -304,21 +312,18 @@ jobs:
           # the deploy user on the droplet is already trusted (it owns the
           # backend container) so a direct DB upsert is the simpler path.
           # Avoids needing to mint a fresh admin JWT every release.
-          # Notes are dollar-quoted ($drnote$) so multi-line CHANGELOG text
-          # needs no escaping; RELEASE_NOTES is passed via env (not inlined as
-          # an Actions expression) so its contents can't break the script.
-          SQL=$(cat <<SQL_EOF
-          INSERT INTO app_releases (platform, channel, version, download_url, release_notes, required, enabled)
-          VALUES ('windows', 'direct', '$NEW_VERSION', 'https://draftright.info/downloads/$REMOTE_NAME', \$drnote\$
-          $RELEASE_NOTES
-          \$drnote\$, false, true)
-          ON CONFLICT (platform, channel) DO UPDATE SET
-            version = EXCLUDED.version,
-            download_url = EXCLUDED.download_url,
-            release_notes = EXCLUDED.release_notes,
-            updated_at = now();
-          SQL_EOF
-          )
+          #
+          # The statement itself comes from scripts/app-release-upsert-sql.sh,
+          # shared with release-publish.sh — the two used to carry separate
+          # copies and drifted, which is how CI-published Windows releases
+          # ended up with an empty sha256 (issue #22).
+          # RELEASE_NOTES is passed via env (not inlined as an Actions
+          # expression) so its contents can't break the script.
+          SQL=$(RELEASE_NOTES="$RELEASE_NOTES" \
+            bash scripts/app-release-upsert-sql.sh \
+              windows direct "$NEW_VERSION" \
+              "https://draftright.info/downloads/$REMOTE_NAME" \
+              "$SHA256")
           ssh -i /tmp/deploy_key \
               -o StrictHostKeyChecking=accept-new \
               -o UserKnownHostsFile=/tmp/known_hosts \
@@ -328,14 +333,30 @@ jobs:
       - name: Verify /updates/latest reports new version
         env:
           EXPECTED: ${{ steps.meta.outputs.version }}
+          EXPECTED_SHA: ${{ steps.meta.outputs.sha256 }}
         run: |
-          ACTUAL=$(curl -fsS "https://api.draftright.info/updates/latest?platform=windows" \
-            | jq -r '.platforms.windows.version')
+          MANIFEST=$(curl -fsS "https://api.draftright.info/updates/latest?platform=windows")
+          ACTUAL=$(jq -r '.platforms.windows.version' <<<"$MANIFEST")
           if [ "$ACTUAL" != "$EXPECTED" ]; then
             echo "::error::/updates/latest reports $ACTUAL, expected $EXPECTED"
             exit 1
           fi
           echo "✓ /updates/latest reports windows $ACTUAL"
+
+          # Integrity gate (issue #22). The desktop updater treats an empty
+          # hash as "publisher didn't provide one" and installs the .exe
+          # unverified, so an empty value here is a silent security
+          # regression, not a cosmetic one — fail the release instead.
+          ACTUAL_SHA=$(jq -r '.platforms.windows.sha256 // ""' <<<"$MANIFEST")
+          if [ -z "$ACTUAL_SHA" ]; then
+            echo "::error::/updates/latest published an EMPTY windows sha256 — clients would install this installer unverified."
+            exit 1
+          fi
+          if [ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]; then
+            echo "::error::sha256 mismatch — manifest says $ACTUAL_SHA, installer hashes to $EXPECTED_SHA"
+            exit 1
+          fi
+          echo "✓ /updates/latest serves matching sha256 $ACTUAL_SHA"
 
       - name: Verify installer landed on the droplet
         env:
