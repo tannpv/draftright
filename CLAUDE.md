@@ -19,13 +19,15 @@ AI-powered text rewriting platform — select text, pick a tone, get a polished 
 No exemptions for "small change", "existing code does it this way", or "that part
 already merged". When resuming a task, audit what already landed before adding to it.
 
-Not a style preference — a copy-pasted `app_releases` upsert drifted between the
-manual and CI release paths, so `sha256` landed in only one and **Windows shipped
-unverified installers to production for two months** (#22). The fix was to
-extract `scripts/app-release-upsert-sql.sh` as the single source, not to patch
-the second copy.
+Not a style preference: issue **#22** is the worked example — a copy-pasted
+`app_releases` upsert drifted between the manual and CI release paths, and
+Windows shipped unverified installers to production for two months. Read that
+issue before arguing a duplicate is harmless.
 
-Full rule + checklist: `~/.claude/CLAUDE.md`.
+> This section is a **summary for contributors**, kept self-contained because a
+> fresh clone has no other copy. The canonical rule, full checklist, and
+> no-hardcoding detail live in the maintainer's `~/.claude/CLAUDE.md`; if the two
+> disagree, that one wins. Do not expand this section — extend the canonical one.
 
 ## Quick Facts
 
