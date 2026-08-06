@@ -255,6 +255,20 @@ struct DraftRightApp: App {
             visibleTones: appModel.visibleTones,
             autoRunTone: appModel.autoRunTone,
             onToneSelected: { tone in
+                // Only translate-style tones vary by language, so only they
+                // carry it in the cache key — and the same value must be used
+                // for the lookup and the store, or nothing ever hits (#147).
+                let cacheLanguage = tone.usesTargetLanguage ? appModel.translateLanguage : nil
+
+                // Serve an identical (text, tone, language) straight from
+                // cache: no spinner, no round-trip. Grammar Check is excluded
+                // because its result is structured rather than plain text.
+                if tone.producesCacheableText,
+                   let cached = RewriteCache.shared.get(text: text, tone: tone.apiValue, language: cacheLanguage) {
+                    diffWindow.model.handleRewriteResponse(cached, tone: tone)
+                    return
+                }
+
                 diffWindow.model.startLoading(tone: tone)
                 appModel.isRewriting = true
                 Task {
@@ -273,6 +287,10 @@ struct DraftRightApp: App {
                                 }
                             }
                         )
+                        if tone.producesCacheableText {
+                            RewriteCache.shared.set(text: text, tone: tone.apiValue,
+                                                    result: rewritten, language: cacheLanguage)
+                        }
                         diffWindow.model.handleRewriteResponse(rewritten, tone: tone)
                     } catch {
                         diffWindow.model.setError(error.localizedDescription)
@@ -299,20 +317,35 @@ struct DraftRightApp: App {
                      category: .app)
         appModel.isRewriting = true
 
+        // Same key the panel uses, so a rewrite done either way serves the
+        // other. Language only participates for tones that depend on it.
+        let cacheLanguage = tone.usesTargetLanguage ? appModel.translateLanguage : nil
+
         Task { @MainActor in
             defer {
                 appModel.isRewriting = false
                 monitor.stopLoadingAndHide()
             }
             do {
-                let rewritten = try await aiClient.rewrite(
-                    text: text,
-                    tone: tone,
-                    accessToken: appModel.accessToken,
-                    backendUrl: appModel.backendUrl,
-                    backend: appModel.effectiveBackend,
-                    targetLanguage: appModel.translateLanguage
-                )
+                let rewritten: String
+                if tone.producesCacheableText,
+                   let cached = RewriteCache.shared.get(text: text, tone: tone.apiValue, language: cacheLanguage) {
+                    DRLogger.log("One-Click served from cache — no backend call", category: .app)
+                    rewritten = cached
+                } else {
+                    rewritten = try await aiClient.rewrite(
+                        text: text,
+                        tone: tone,
+                        accessToken: appModel.accessToken,
+                        backendUrl: appModel.backendUrl,
+                        backend: appModel.effectiveBackend,
+                        targetLanguage: appModel.translateLanguage
+                    )
+                    if tone.producesCacheableText {
+                        RewriteCache.shared.set(text: text, tone: tone.apiValue,
+                                                result: rewritten, language: cacheLanguage)
+                    }
+                }
                 DRLogger.log("One-Click rewrite OK, replacing selection via clipboard paste", category: .app)
                 // AX setSelectedText is unreliable across apps — many browsers
                 // and Electron apps return AX success but don't actually mutate
