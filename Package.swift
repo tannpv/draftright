@@ -23,6 +23,11 @@ let package = Package(
                     "-Xlinker", "DraftRight/Info.plist"
                 ])
             ]
+        ),
+        .testTarget(
+            name: "DraftRightTests",
+            dependencies: ["DraftRight"],
+            path: "Tests/DraftRightTests"
         )
     ]
 )
