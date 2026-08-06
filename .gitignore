@@ -82,3 +82,10 @@ DraftRightLinux/GCC/
 .env.dev
 .env.prod
 .env.bak-*
+
+# The user's global ignore (~/.gitignore_global) has a bare `tests` pattern,
+# which matches this repo's Swift test directory and silently kept it
+# untracked. Re-include it here: the macOS test target must be committed.
+# Negate the DIRECTORY, not just its contents — git cannot re-include a path
+# whose parent directory is excluded.
+!Tests/
