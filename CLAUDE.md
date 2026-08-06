@@ -121,6 +121,23 @@ Supports: OpenAI, Anthropic (Claude), Ollama, any OpenAI-compatible API.
 
 Stripe, PayPal, Momo, VietQR (MB Bank), Bank Transfer. Configure in Admin > Settings > Payment.
 
+## Before Merging — Every Task
+
+After implementing and before `--no-ff` merging to develop, two steps are
+**mandatory** on every task — new, in progress, merged-but-unfinished, and any
+plan still in the backlog. A plan that doesn't end in both is not finished.
+
+1. **Clean garbage** — `/cleanup-garbage`. Delete what the change orphaned: dead
+   code, unused DB tables/columns, stale config and env vars, unused deps,
+   leftover files. **DELETE, never deprecate** — no commented-out code, no
+   `// TODO remove`. DB drops need a reversible migration + backup, never a
+   hand-drop on prod.
+2. **Full review** — `/epiphanydev:full-review` over the diff: correctness,
+   RULE #1 compliance, security. Fix findings before merging.
+
+Full checklist (19 steps, test-cases-first through issue closure) lives in the
+maintainer's `~/.claude/CLAUDE.md`.
+
 ## Git Workflow
 
 Standard GitFlow — see `~/.claude/CLAUDE.md` for full rules.
