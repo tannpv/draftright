@@ -52,6 +52,10 @@ if [ ! -f "$LOCAL" ]; then
   exit 1
 fi
 
+# Resolve once, at top level — the sibling helpers are called from several
+# steps below, including ones outside the DB_PLATFORM branch.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # ── Filename + URL by platform ─────────────────────────────────────────────
 case "$PLATFORM" in
   android)  REMOTE_NAME="DraftRight-Android-${VERSION}.apk" ;;
@@ -63,9 +67,13 @@ case "$PLATFORM" in
 esac
 URL="/downloads/${REMOTE_NAME}"
 
+# ── Artifact size ──────────────────────────────────────────────────────────
+# Needed unconditionally: the auto-meta text below uses it, and step 4 compares
+# it against the served Content-Length to prove the upload actually landed.
+size_bytes=$(stat -f%z "$LOCAL" 2>/dev/null || stat -c%s "$LOCAL" 2>/dev/null)
+
 # ── Auto-meta if not provided ──────────────────────────────────────────────
 if [ -z "$META" ]; then
-  size_bytes=$(stat -f%z "$LOCAL" 2>/dev/null || stat -c%s "$LOCAL" 2>/dev/null)
   size_mb=$(awk -v b="$size_bytes" 'BEGIN{printf "%.1f", b/1048576}')
   case "$PLATFORM" in
     android)  META="APK · ${size_mb} MB · Android 7.0+" ;;
@@ -141,7 +149,6 @@ if [ -n "$DB_PLATFORM" ]; then
   # a "What's New" notice after updating. Best-effort here (manual path) — a
   # missing section just publishes empty notes with a warning; the CI release
   # path enforces it.
-  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   # Pass the platform code so the extractor only returns notes scoped to this
   # release target (### macOS / ### Windows / ### All platforms). Otherwise
   # Windows-only bullets leak into the macOS publish and vice-versa. Pipeline
@@ -168,26 +175,40 @@ fi
 
 # ── 4. Verify ──────────────────────────────────────────────────────────────
 echo "==> Verifying..."
-HTTP_CODE=$(curl -sS -o /dev/null -w '%{http_code}' "https://draftright.info${URL}")
+
+# Assert the artifact is really there. This used to print the HTTP status and
+# continue regardless, which is why a missing Linux artifact stayed advertised
+# for months: /downloads falls through to the marketing site's SPA handler, so
+# a missing file answers 200 with HTML (issue #144). The helper checks the
+# status, the content type, and the byte count.
+"$SCRIPT_DIR/verify-published-artifact.sh" \
+  "https://draftright.info${URL}" "$size_bytes" --sha256 "$SHA256"
+
 JSON=$(curl -sS "https://draftright.info/downloads/versions.json")
-echo "    binary:    HTTP $HTTP_CODE  →  https://draftright.info${URL}"
-echo "$JSON" | python3 -c "
-import json, sys
+# Fields are read with .get() and defaults — versions.json entries have been
+# missing 'label' before now, and a KeyError here aborts the whole script
+# (set -e) *after* the artifact and DB row are already published, which reads
+# as a failed release when the publish actually succeeded.
+echo "$JSON" | PLATFORM="$PLATFORM" python3 -c "
+import json, os, sys
 d = json.load(sys.stdin)
-for cat in ('mobile','desktop'):
+want = os.environ['PLATFORM']
+for cat in ('mobile', 'desktop'):
     for p in d.get(cat, []):
-        if p.get('platform') == '$PLATFORM':
-            print(f'    manifest:  {p[\"label\"]} v{p[\"version\"]} → {p[\"url\"]}')
-            print(f'    meta:      {p[\"meta\"]}')
+        if p.get('platform') == want:
+            label = p.get('label', want)
+            print(f'    manifest:  {label} v{p.get(\"version\", \"?\")} → {p.get(\"url\", \"?\")}')
+            print(f'    meta:      {p.get(\"meta\", \"(none)\")}')
 "
 if [ -n "$DB_PLATFORM" ]; then
   DB_JSON=$(curl -sS "https://api.draftright.info/updates/latest")
-  echo "$DB_JSON" | python3 -c "
-import json, sys
+  echo "$DB_JSON" | DB_PLATFORM="$DB_PLATFORM" python3 -c "
+import json, os, sys
 d = json.load(sys.stdin)
-p = d.get('platforms', {}).get('$DB_PLATFORM')
+want = os.environ['DB_PLATFORM']
+p = d.get('platforms', {}).get(want)
 if p:
-    print(f'    /updates/: $DB_PLATFORM v{p[\"version\"]} → {p[\"url\"]}')
+    print(f'    /updates/: {want} v{p.get(\"version\", \"?\")} → {p.get(\"url\", \"?\")}')
     print(f'    sha256:    {p.get(\"sha256\") or \"(none — unverified)\"}')
 "
 fi
