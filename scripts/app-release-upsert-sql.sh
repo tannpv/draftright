@@ -67,14 +67,31 @@ if [ -n "$SHA256" ] && ! [[ "$SHA256" =~ ^[0-9a-f]{64}$ ]]; then
   exit 1
 fi
 
-# Notes are dollar-quoted ($drnote$) so multi-line CHANGELOG text needs no
-# escaping. Only the 'direct' channel is written here; store-channel rows are
-# managed via the admin Versions page (POST /admin/releases with channel=store).
+# Notes are dollar-quoted so multi-line CHANGELOG text needs no escaping.
+#
+# The tag must NOT appear inside the notes themselves. A fixed `$drnote$` is an
+# injection hole: notes containing that literal close the quote early and the
+# rest of the line is executed as SQL, against prod. Every other field here is
+# validated; this one cannot be, because release notes are free text. So pick a
+# tag and confirm it is absent from the body instead.
+TAG="drnote"
+i=0
+while printf '%s' "$NOTES" | grep -qF "\$${TAG}\$"; do
+  i=$((i + 1))
+  TAG="drnote${i}"
+  if [ "$i" -gt 100 ]; then
+    echo "::error::could not find a dollar-quote tag absent from the release notes" >&2
+    exit 1
+  fi
+done
+
+# Only the 'direct' channel is written here; store-channel rows are managed via
+# the admin Versions page (POST /admin/releases with channel=store).
 cat <<SQL_EOF
 INSERT INTO app_releases (platform, channel, version, download_url, sha256, release_notes, required, enabled)
-VALUES ('$DB_PLATFORM', '$CHANNEL', '$VERSION', '$DOWNLOAD_URL', '$SHA256', \$drnote\$
+VALUES ('$DB_PLATFORM', '$CHANNEL', '$VERSION', '$DOWNLOAD_URL', '$SHA256', \$${TAG}\$
 $NOTES
-\$drnote\$, false, true)
+\$${TAG}\$, false, true)
 ON CONFLICT (platform, channel) DO UPDATE SET
   version = EXCLUDED.version,
   download_url = EXCLUDED.download_url,

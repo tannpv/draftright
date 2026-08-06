@@ -52,6 +52,18 @@ public static class ToneExtensions
     /// </summary>
     public static bool UsesTargetLanguage(this Tone tone) => tone == Tone.Translate;
 
+    /// <summary>
+    /// True when the tone's result is plain text that can be cached as a string.
+    /// False for tones returning a structured payload — caching those as a
+    /// string would silently drop the structure (Grammar Check's issues list).
+    ///
+    /// Must gate the cache read AND the cache write. Reading with one condition
+    /// and writing with another produces entries that can never be hit but
+    /// still consume the bounded cache — the same asymmetry that made Linux's
+    /// translate results permanently un-cacheable (#108).
+    /// </summary>
+    public static bool ProducesCacheableText(this Tone tone) => tone != Tone.GrammarCheck;
+
     public static string DisplayName(this Tone tone) => tone switch
     {
         Tone.Simple => "Simple",

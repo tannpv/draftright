@@ -53,8 +53,11 @@ done
 
 fail() { echo "    ✗ $*" >&2; exit 1; }
 
-# One HEAD request supplies all three cheap checks.
-HEADERS=$(curl -sSI --max-time 60 "$URL" || fail "HEAD request failed for $URL")
+# One HEAD request supplies all three cheap checks. -L follows redirects: a CDN
+# or a moved /downloads path answers 3xx, and without this a perfectly good
+# publish would fail the 200 assertion below. The status/type/length parsed are
+# from the FINAL response (tail -n1), which is what a client actually receives.
+HEADERS=$(curl -sSIL --max-time 60 "$URL" || fail "HEAD request failed for $URL")
 
 status=$(printf '%s' "$HEADERS" | awk 'tolower($1) ~ /^http/ {print $2}' | tail -n1)
 # Header names are case-insensitive per RFC 9110, and the value may carry
