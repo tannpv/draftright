@@ -421,15 +421,16 @@ class RewritePanel(Gtk.Window):
                 if self.app.api_client is None:
                     raise RuntimeError("API client not initialized. Please sign in first.")
 
-                settings = self.app.settings_service
-                language = settings.translate_language if settings else None
+                # Reuse the `language` resolved above rather than re-reading it
+                # unconditionally: it is None for tones that don't translate,
+                # and it MUST match the value used in the cache lookup.
                 payload = self.app.api_client.rewrite(
                     self._input_text, tone, language
                 )
                 # /rewrite returns a dict; the buffer needs the text out of it.
                 result = RewriteResult.from_wire(payload).text
                 if cache is not None:
-                    cache.set(self._input_text, tone, result)
+                    cache.set(self._input_text, tone, result, language)
                 GLib.idle_add(self._on_api_success, result)
             except Exception as exc:
                 GLib.idle_add(self._on_api_error, str(exc))

@@ -70,14 +70,35 @@ public partial class RewritePanelViewModel : ObservableObject
         ErrorMessage = string.Empty;
         OutputText = string.Empty;
         GrammarResult = null;  // clear any previous grammar UI state
+
+        // The target language is part of the result for translate-style tones,
+        // so it has to be part of the cache key too — otherwise switching
+        // language would serve the previous language's translation.
+        var targetLanguage = tone.UsesTargetLanguage()
+            ? App.Settings.TranslateLanguage
+            : null;
+
+        // Serve an identical (text, tone, language) straight from cache — no
+        // spinner, no backend round-trip. Grammar Check is excluded: its result
+        // is a structured object rather than plain text, so a cached string
+        // would silently drop the issues list.
+        //
+        // Note the usage counter isn't refreshed on a hit, since no rewrite is
+        // consumed. macOS and Linux behave the same way.
+        if (tone != Tone.GrammarCheck)
+        {
+            var cached = App.RewriteCache.Get(InputText, tone.ApiValue(), targetLanguage);
+            if (cached != null)
+            {
+                OutputText = cached;
+                return;
+            }
+        }
+
         IsLoading = true;
 
         try
         {
-            var targetLanguage = tone == Tone.Translate
-                ? App.Settings.TranslateLanguage
-                : null;
-
             var result = await App.Api.RewriteAsync(
                 InputText,
                 tone.ApiValue(),
@@ -95,6 +116,9 @@ public partial class RewritePanelViewModel : ObservableObject
             {
                 GrammarResult = null;
                 OutputText = result.RewrittenText;
+                // Populate only on the plain-text path, keyed identically to
+                // the lookup above.
+                App.RewriteCache.Set(InputText, tone.ApiValue(), result.RewrittenText, targetLanguage);
             }
             UsageInfo = $"{result.UsageToday} / {result.DailyLimit} rewrites today";
         }
