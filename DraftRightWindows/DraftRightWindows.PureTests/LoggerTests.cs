@@ -1,7 +1,7 @@
 using DraftRightWindows.Services;
 using Xunit;
 
-namespace DraftRightWindows.Tests;
+namespace DraftRightWindows.PureTests;
 
 /// <summary>
 /// Covers the admin-driven <see cref="DRLogger.MinLevel"/> threshold mapping —
