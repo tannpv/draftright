@@ -14,6 +14,21 @@ enum Tone: String, CaseIterable, Identifiable {
 
     var apiValue: String { rawValue }
 
+    /// True when the result depends on the configured translate language, so
+    /// it must go into the rewrite-cache key. Without it, switching language
+    /// would serve the previous language's translation (#147).
+    /// Mirrors Windows `UsesTargetLanguage()` and Linux `uses_target_language`.
+    var usesTargetLanguage: Bool { self == .translate }
+
+    /// True when the result is plain text that can be cached as a string.
+    /// Grammar Check returns a structured issues payload, so caching it as a
+    /// string would silently drop the structure.
+    ///
+    /// Must gate the cache read AND the cache write — reading with one
+    /// condition and writing with another creates entries that can never be
+    /// hit but still consume the bound.
+    var producesCacheableText: Bool { self != .grammarCheck }
+
     var displayName: String {
         switch self {
         case .simple: return "Simple"
