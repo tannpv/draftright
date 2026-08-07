@@ -60,6 +60,12 @@ public sealed class RewritePanelForm : WinForms.Form
     private readonly WinForms.Label _loadingLabel;
     private readonly System.Collections.Generic.Dictionary<Tone, WinForms.Button> _toneButtons = new();
 
+    // Grammar + diff views (#107). Both overlay the output box; exactly one of
+    // the three is visible at a time — see ShowOutputMode.
+    private GrammarIssuesPanel _grammarPanel = null!;
+    private DiffPanel _diffPanel = null!;
+    private WinForms.Button _diffToggleBtn = null!;
+
     public RewritePanelForm()
     {
         ViewModel = new RewritePanelViewModel();
@@ -270,6 +276,21 @@ public sealed class RewritePanelForm : WinForms.Form
             MinimumSize = new Size(0, 200),
         };
 
+        // Grammar and diff share this area with the output box, swapped by
+        // visibility — the same overlay pattern the loading label already uses.
+        // Only one is ever visible; see ShowOutputMode.
+        _grammarPanel = new GrammarIssuesPanel { Visible = false };
+        _grammarPanel.TextChanged += (_, corrected) =>
+        {
+            // A grammar fix rewrites the text, so Replace/Copy must act on the
+            // corrected version rather than the original.
+            ViewModel.OutputText = corrected;
+        };
+        panel.Controls.Add(_grammarPanel);
+
+        _diffPanel = new DiffPanel { Visible = false };
+        panel.Controls.Add(_diffPanel);
+
         outputBox = new WinForms.TextBox
         {
             Multiline = true,
@@ -326,6 +347,23 @@ public sealed class RewritePanelForm : WinForms.Form
         closeBtn.FlatAppearance.BorderColor = BorderColor;
         closeBtn.Click += (_, _) => SafeClose();
 
+        // Before/after diff (#107). Hidden until a rewrite exists, since the
+        // diff needs both sides.
+        _diffToggleBtn = new WinForms.Button
+        {
+            Text = "Diff",
+            Size = new Size(96, 34),
+            BackColor = CardBg,
+            ForeColor = TextPrimary,
+            FlatStyle = WinForms.FlatStyle.Flat,
+            Font = new Font("Segoe UI", 10),
+            Cursor = WinForms.Cursors.Hand,
+            Margin = new WinForms.Padding(4),
+            Visible = false,
+        };
+        _diffToggleBtn.FlatAppearance.BorderColor = BorderColor;
+        _diffToggleBtn.Click += (_, _) => ToggleDiff();
+
         copyBtn = new WinForms.Button
         {
             Text = "Copy",
@@ -367,9 +405,11 @@ public sealed class RewritePanelForm : WinForms.Form
         };
 
         // RTL flow: add in reverse so left-to-right order is Replace, Copy, Close
+        // RightToLeft flow: first added sits rightmost.
         flow.Controls.Add(closeBtn);
         flow.Controls.Add(copyBtn);
         flow.Controls.Add(replaceBtn);
+        flow.Controls.Add(_diffToggleBtn);
 
         return flow;
     }
@@ -488,6 +528,10 @@ public sealed class RewritePanelForm : WinForms.Form
                 if (!string.IsNullOrEmpty(ViewModel.OutputText))
                     DRLogger.Log($"Rewrite success: {ViewModel.OutputText.Length} chars", DRLogger.Category.API);
                 SyncReplaceCopyEnabled();
+                SyncDiffAvailability();
+                break;
+            case nameof(RewritePanelViewModel.GrammarResult):
+                SyncGrammarResult();
                 break;
             case nameof(RewritePanelViewModel.UsageInfo):
                 _usageLabel.Text = ViewModel.UsageInfo;
@@ -504,6 +548,73 @@ public sealed class RewritePanelForm : WinForms.Form
                 SyncLoadingState();
                 break;
         }
+    }
+
+    /// <summary>
+    /// Which of the three stacked views the output area shows. Exactly one is
+    /// visible; the loading label is handled separately because it overlays
+    /// whichever mode is active.
+    /// </summary>
+    private enum OutputMode { Text, Grammar, Diff }
+
+    private void ShowOutputMode(OutputMode mode)
+    {
+        _outputBox.Visible    = mode == OutputMode.Text;
+        _grammarPanel.Visible = mode == OutputMode.Grammar;
+        _diffPanel.Visible    = mode == OutputMode.Diff;
+
+        // All three are Dock.Fill siblings, so the visible one must also be at
+        // the front of the z-order or it renders behind the output box.
+        switch (mode)
+        {
+            case OutputMode.Grammar: _grammarPanel.BringToFront(); break;
+            case OutputMode.Diff:    _diffPanel.BringToFront();    break;
+            default:                 _outputBox.BringToFront();    break;
+        }
+        // The loading overlay sits above whichever mode is active.
+        _loadingLabel.BringToFront();
+    }
+
+    /// <summary>
+    /// Grammar Check returns a structured result instead of plain text, so it
+    /// gets its own view. Any other tone clears it.
+    /// </summary>
+    private void SyncGrammarResult()
+    {
+        var result = ViewModel.GrammarResult;
+        if (result == null)
+        {
+            ShowOutputMode(OutputMode.Text);
+            return;
+        }
+        // Issues are resolved against the INPUT — that is the text they were
+        // found in and the text a fix must be applied to.
+        _grammarPanel.Load(ViewModel.InputText, result);
+        ShowOutputMode(OutputMode.Grammar);
+        SyncDiffAvailability();
+    }
+
+    /// <summary>Diff needs both sides; offer it only once a rewrite exists.</summary>
+    private void SyncDiffAvailability()
+    {
+        var canDiff = !string.IsNullOrEmpty(ViewModel.InputText)
+                      && !string.IsNullOrEmpty(ViewModel.OutputText);
+        _diffToggleBtn.Visible = canDiff;
+        if (!canDiff && _diffPanel.Visible) ShowOutputMode(OutputMode.Text);
+    }
+
+    private void ToggleDiff()
+    {
+        if (_diffPanel.Visible)
+        {
+            // Back to whichever view we came from.
+            ShowOutputMode(ViewModel.GrammarResult != null ? OutputMode.Grammar : OutputMode.Text);
+            _diffToggleBtn.Text = "Diff";
+            return;
+        }
+        _diffPanel.Show(ViewModel.InputText, ViewModel.OutputText);
+        ShowOutputMode(OutputMode.Diff);
+        _diffToggleBtn.Text = "Hide diff";
     }
 
     private void SyncReplaceCopyEnabled()
