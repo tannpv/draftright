@@ -25,14 +25,6 @@ namespace DraftRightWindows.Views;
 internal static class ReportBugDialog
 {
     // Theme — matches SettingsFormBuilder
-    private static readonly Color BgDark = Color.FromArgb(15, 23, 42);
-    private static readonly Color CardBg = Color.FromArgb(30, 41, 59);
-    private static readonly Color BrandBlue = Color.FromArgb(93, 135, 255);
-    private static readonly Color TextPrimary = Color.FromArgb(226, 232, 240);
-    private static readonly Color TextMuted = Color.FromArgb(148, 163, 184);
-    private static readonly Color ErrorRed = Color.FromArgb(239, 68, 68);
-    private static readonly Color SuccessGreen = Color.FromArgb(34, 197, 94);
-    private static readonly Color BorderColor = Color.FromArgb(51, 65, 85);
 
     /// <summary>
     /// Opens the dialog on its own STA thread so it works regardless of which
@@ -56,8 +48,8 @@ internal static class ReportBugDialog
             Width = 560,
             Height = 640,
             StartPosition = WinForms.FormStartPosition.CenterScreen,
-            BackColor = BgDark,
-            ForeColor = TextPrimary,
+            BackColor = Theme.BgDark,
+            ForeColor = Theme.TextPrimary,
             FormBorderStyle = WinForms.FormBorderStyle.FixedSingle,
             MaximizeBox = false,
             MinimizeBox = false,
@@ -77,7 +69,7 @@ internal static class ReportBugDialog
         {
             Text = "Report a bug",
             Font = new Font("Segoe UI", 14, FontStyle.Bold),
-            ForeColor = TextPrimary,
+            ForeColor = Theme.TextPrimary,
             Location = new Point(20, y),
             AutoSize = true,
         };
@@ -88,7 +80,7 @@ internal static class ReportBugDialog
         {
             Text = "Tell us what went wrong. A screenshot helps a lot.",
             Font = new Font("Segoe UI", 9),
-            ForeColor = TextMuted,
+            ForeColor = Theme.TextMuted,
             Location = new Point(20, y),
             AutoSize = true,
         };
@@ -100,7 +92,7 @@ internal static class ReportBugDialog
         {
             Text = "What happened? (min. 10 characters)",
             Font = new Font("Segoe UI", 9),
-            ForeColor = TextMuted,
+            ForeColor = Theme.TextMuted,
             Location = new Point(20, y),
             AutoSize = true,
         });
@@ -113,8 +105,8 @@ internal static class ReportBugDialog
             ScrollBars = WinForms.ScrollBars.Vertical,
             Location = new Point(20, y),
             Size = new Size(500, 120),
-            BackColor = CardBg,
-            ForeColor = TextPrimary,
+            BackColor = Theme.CardBg,
+            ForeColor = Theme.TextPrimary,
             BorderStyle = WinForms.BorderStyle.FixedSingle,
             Font = new Font("Segoe UI", 10),
         };
@@ -141,7 +133,7 @@ internal static class ReportBugDialog
             {
                 Text = "Email (optional — so we can follow up)",
                 Font = new Font("Segoe UI", 9),
-                ForeColor = TextMuted,
+                ForeColor = Theme.TextMuted,
                 Location = new Point(20, y),
                 AutoSize = true,
             });
@@ -151,8 +143,8 @@ internal static class ReportBugDialog
             {
                 Location = new Point(20, y),
                 Size = new Size(500, 30),
-                BackColor = CardBg,
-                ForeColor = TextPrimary,
+                BackColor = Theme.CardBg,
+                ForeColor = Theme.TextPrimary,
                 BorderStyle = WinForms.BorderStyle.FixedSingle,
                 Font = new Font("Segoe UI", 10),
             };
@@ -165,7 +157,7 @@ internal static class ReportBugDialog
             {
                 Text = $"Reporting as {signedInEmail}",
                 Font = new Font("Segoe UI", 9, FontStyle.Italic),
-                ForeColor = SuccessGreen,
+                ForeColor = Theme.SuccessGreen,
                 Location = new Point(20, y),
                 AutoSize = true,
             });
@@ -177,7 +169,7 @@ internal static class ReportBugDialog
         {
             Text = "Attach a screenshot (optional)",
             Font = new Font("Segoe UI", 9),
-            ForeColor = TextMuted,
+            ForeColor = Theme.TextMuted,
             Location = new Point(20, y),
             AutoSize = true,
         });
@@ -188,7 +180,7 @@ internal static class ReportBugDialog
         {
             Location = new Point(20, y),
             Size = new Size(500, 120),
-            BackColor = CardBg,
+            BackColor = Theme.CardBg,
             BorderStyle = WinForms.BorderStyle.FixedSingle,
             AllowDrop = true,
         };
@@ -198,7 +190,7 @@ internal static class ReportBugDialog
         {
             Text = "Drag & drop an image here, click to browse, or press Ctrl+V to paste",
             Font = new Font("Segoe UI", 9),
-            ForeColor = TextMuted,
+            ForeColor = Theme.TextMuted,
             Dock = WinForms.DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleCenter,
             Cursor = WinForms.Cursors.Hand,
@@ -209,7 +201,7 @@ internal static class ReportBugDialog
         {
             Dock = WinForms.DockStyle.Fill,
             SizeMode = WinForms.PictureBoxSizeMode.Zoom,
-            BackColor = CardBg,
+            BackColor = Theme.CardBg,
             Visible = false,
             Cursor = WinForms.Cursors.Hand,
         };
@@ -223,7 +215,7 @@ internal static class ReportBugDialog
         {
             Text = "",
             Font = new Font("Segoe UI", 8.5f),
-            ForeColor = TextMuted,
+            ForeColor = Theme.TextMuted,
             Location = new Point(20, y),
             Size = new Size(420, 18),
             AutoEllipsis = true,
@@ -235,13 +227,13 @@ internal static class ReportBugDialog
             Text = "Clear",
             Location = new Point(456, y - 4),
             Size = new Size(64, 24),
-            BackColor = CardBg,
-            ForeColor = TextMuted,
+            BackColor = Theme.CardBg,
+            ForeColor = Theme.TextMuted,
             FlatStyle = WinForms.FlatStyle.Flat,
             Font = new Font("Segoe UI", 8.5f),
             Visible = false,
         };
-        clearBtn.FlatAppearance.BorderColor = BorderColor;
+        clearBtn.FlatAppearance.BorderColor = Theme.BorderColor;
         form.Controls.Add(clearBtn);
         y += 26;
 
@@ -250,7 +242,7 @@ internal static class ReportBugDialog
         {
             Text = "",
             Font = new Font("Segoe UI", 9),
-            ForeColor = ErrorRed,
+            ForeColor = Theme.ErrorRed,
             Location = new Point(20, y),
             Size = new Size(500, 36),
             AutoEllipsis = true,
@@ -277,12 +269,12 @@ internal static class ReportBugDialog
             Text = "Cancel",
             Location = new Point(360, y),
             Size = new Size(80, 32),
-            BackColor = CardBg,
-            ForeColor = TextPrimary,
+            BackColor = Theme.CardBg,
+            ForeColor = Theme.TextPrimary,
             FlatStyle = WinForms.FlatStyle.Flat,
             Font = new Font("Segoe UI", 9.5f),
         };
-        cancelBtn.FlatAppearance.BorderColor = BorderColor;
+        cancelBtn.FlatAppearance.BorderColor = Theme.BorderColor;
         form.Controls.Add(cancelBtn);
 
         var submitBtn = new WinForms.Button
@@ -290,7 +282,7 @@ internal static class ReportBugDialog
             Text = "Submit",
             Location = new Point(448, y),
             Size = new Size(72, 32),
-            BackColor = BrandBlue,
+            BackColor = Theme.BrandBlue,
             ForeColor = Color.White,
             FlatStyle = WinForms.FlatStyle.Flat,
             Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
@@ -317,7 +309,7 @@ internal static class ReportBugDialog
                 var info = new FileInfo(path);
                 if (info.Length > 5 * 1024 * 1024)
                 {
-                    SetStatus("Screenshot exceeds 5 MB. Please attach a smaller image.", ErrorRed);
+                    SetStatus("Screenshot exceeds 5 MB. Please attach a smaller image.", Theme.ErrorRed);
                     return;
                 }
 
@@ -335,11 +327,11 @@ internal static class ReportBugDialog
                 dropHint.Visible = false;
                 fileLabel.Text = Path.GetFileName(path);
                 clearBtn.Visible = true;
-                SetStatus("", ErrorRed);
+                SetStatus("", Theme.ErrorRed);
             }
             catch (Exception ex)
             {
-                SetStatus($"Could not load image: {ex.Message}", ErrorRed);
+                SetStatus($"Could not load image: {ex.Message}", Theme.ErrorRed);
             }
         }
 
@@ -362,11 +354,11 @@ internal static class ReportBugDialog
                 selectedScreenshotPath = tmp;
                 fileLabel.Text = "Pasted image";
                 clearBtn.Visible = true;
-                SetStatus("", ErrorRed);
+                SetStatus("", Theme.ErrorRed);
             }
             catch (Exception ex)
             {
-                SetStatus($"Could not attach pasted image: {ex.Message}", ErrorRed);
+                SetStatus($"Could not attach pasted image: {ex.Message}", Theme.ErrorRed);
             }
         }
 
@@ -428,7 +420,7 @@ internal static class ReportBugDialog
                         if (ext is ".png" or ".jpg" or ".jpeg")
                             LoadScreenshotFromFile(files[0]);
                         else
-                            SetStatus("Only PNG and JPEG images are supported.", ErrorRed);
+                            SetStatus("Only PNG and JPEG images are supported.", Theme.ErrorRed);
                     }
                 }
                 else if (e.Data.GetDataPresent(WinForms.DataFormats.Bitmap))
@@ -439,7 +431,7 @@ internal static class ReportBugDialog
             }
             catch (Exception ex)
             {
-                SetStatus($"Drop failed: {ex.Message}", ErrorRed);
+                SetStatus($"Drop failed: {ex.Message}", Theme.ErrorRed);
             }
         };
 
@@ -463,7 +455,7 @@ internal static class ReportBugDialog
                 }
                 catch (Exception ex)
                 {
-                    SetStatus($"Paste failed: {ex.Message}", ErrorRed);
+                    SetStatus($"Paste failed: {ex.Message}", Theme.ErrorRed);
                 }
             }
         };
@@ -477,7 +469,7 @@ internal static class ReportBugDialog
             var description = descBox.Text?.Trim() ?? "";
             if (!BugReportService.IsDescriptionValid(description))
             {
-                SetStatus("Please describe the bug in at least 10 characters.", ErrorRed);
+                SetStatus("Please describe the bug in at least 10 characters.", Theme.ErrorRed);
                 descBox.Focus();
                 return;
             }
@@ -492,7 +484,7 @@ internal static class ReportBugDialog
             descBox.ReadOnly = true;
             if (emailBox != null) emailBox.ReadOnly = true;
             progress.Visible = true;
-            SetStatus("Sending…", TextMuted);
+            SetStatus("Sending…", Theme.TextMuted);
 
             var ctx = new Dictionary<string, object?>
             {
@@ -513,7 +505,7 @@ internal static class ReportBugDialog
                 if (result.Success)
                 {
                     DRLogger.Log($"Bug report submitted (id={result.Id ?? "?"})", DRLogger.Category.APP);
-                    SetStatus("Thanks! Your report was submitted.", SuccessGreen);
+                    SetStatus("Thanks! Your report was submitted.", Theme.SuccessGreen);
                     // Brief flash of success, then close.
                     var t = new WinForms.Timer { Interval = 900 };
                     t.Tick += (_, _) =>
@@ -526,7 +518,7 @@ internal static class ReportBugDialog
                 }
                 else
                 {
-                    SetStatus(result.ErrorMessage ?? "Submit failed.", ErrorRed);
+                    SetStatus(result.ErrorMessage ?? "Submit failed.", Theme.ErrorRed);
                     submitBtn.Enabled = true;
                     cancelBtn.Enabled = true;
                     descBox.ReadOnly = false;
@@ -537,7 +529,7 @@ internal static class ReportBugDialog
             catch (Exception ex)
             {
                 DRLogger.Log($"Bug report submit threw: {ex}", DRLogger.Category.APP);
-                SetStatus(ex.Message, ErrorRed);
+                SetStatus(ex.Message, Theme.ErrorRed);
                 submitBtn.Enabled = true;
                 cancelBtn.Enabled = true;
                 descBox.ReadOnly = false;
