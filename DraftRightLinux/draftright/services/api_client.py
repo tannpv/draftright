@@ -10,7 +10,7 @@ from typing import Callable, Optional
 import requests
 
 from draftright import config
-from draftright.models.health import HealthStatus
+from draftright.models.health import HealthStatus, RefreshOutcome
 
 
 class APIError(Exception):
@@ -19,6 +19,15 @@ class APIError(Exception):
     def __init__(self, message: str, status_code: int | None = None):
         super().__init__(message)
         self.status_code = status_code
+
+
+class SessionUnverified(APIError):
+    """The session could not be confirmed — not proof that it ended.
+
+    Raised when a 401 was met but the refresh could not be completed (backend
+    unreachable, 5xx). Distinct from a plain 401, which means the server
+    actively rejected the credentials.
+    """
 
 
 class APIClient:
@@ -35,7 +44,7 @@ class APIClient:
         # application to AuthService.refresh_session. Mirrors the macOS /
         # Windows / mobile "refresh-then-retry" behaviour so an expired
         # access token recovers silently instead of stranding the user.
-        self.on_unauthorized: Optional[Callable[[], bool]] = None
+        self.on_unauthorized: Optional[Callable[[], "RefreshOutcome"]] = None
 
     # ------------------------------------------------------------------
     # Token management
@@ -63,15 +72,26 @@ class APIClient:
         return f"{self._base_url}/{path.lstrip('/')}"
 
     def _authed(self, do_request: Callable[[], dict]) -> dict:
-        """Run an authed request; on 401, attempt one token refresh via
-        ``on_unauthorized`` and retry once. Re-raises the original error if
-        refresh is unavailable or fails."""
+        """Run an authed request; on 401, refresh once via ``on_unauthorized``
+        and retry.
+
+        Raises :class:`SessionUnverified` when the refresh could not be
+        completed at all, so callers can tell "you are signed out" from "we
+        could not check" — reporting the first for the second made the tray
+        claim a sign-out on a flaky connection while the session was live.
+        """
         try:
             return do_request()
         except APIError as exc:
-            if exc.status_code == 401 and self.on_unauthorized is not None:
-                if self.on_unauthorized():
-                    return do_request()
+            if exc.status_code != 401 or self.on_unauthorized is None:
+                raise
+            outcome = self.on_unauthorized()
+            if outcome is RefreshOutcome.UNAVAILABLE:
+                raise SessionUnverified(
+                    "could not reach the backend to refresh the session"
+                ) from exc
+            if getattr(outcome, "may_retry", bool(outcome)):
+                return do_request()
             raise
 
     def refresh(self, refresh_token: str) -> dict:
@@ -270,18 +290,35 @@ class APIClient:
         except Exception:
             return HealthStatus.OFFLINE
 
-        # Step 2: Check /auth/me for login state
-        try:
+        # Step 2: Check /auth/me for login state.
+        #
+        # Routed through _authed() rather than a bare request so it inherits
+        # the one definition of refresh-then-retry. A 401 here almost always
+        # means the 15-minute access token aged out, not that the user signed
+        # out — every other authed call recovered from that and the health
+        # probe did not, so the tray flipped to "not logged in" a quarter of
+        # an hour after each launch while rewriting kept working. Hand-rolling
+        # the retry here instead would leave two copies of the policy to drift.
+        def _probe() -> dict:
             resp = requests.get(
                 self._url("/auth/me"),
                 headers=self._headers(auth=True),
                 timeout=config.HEALTH_TIMEOUT,
             )
-            if resp.status_code == 200:
-                return HealthStatus.CONNECTED
-            elif resp.status_code == 401:
+            return self._handle_response(resp)
+
+        try:
+            self._authed(_probe)
+            return HealthStatus.CONNECTED
+        except SessionUnverified:
+            # The refresh could not be completed, so auth state is unknown.
+            # Calling that "not logged in" contradicted AuthService, which
+            # still held a live session.
+            return HealthStatus.OFFLINE
+        except APIError as exc:
+            # Still 401 after a completed refresh — genuinely signed out.
+            if exc.status_code == 401:
                 return HealthStatus.NOT_LOGGED_IN
-            else:
-                return HealthStatus.OFFLINE
+            return HealthStatus.OFFLINE
         except Exception:
             return HealthStatus.OFFLINE

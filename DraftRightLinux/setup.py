@@ -24,6 +24,10 @@ setup(
         "PyGObject>=3.44.0",
         "pycairo>=1.24.0",
         "requests>=2.31.0",
+        # X11 global hotkey (XGrabKey). Omitting it left every pip install
+        # silently without a hotkey on X11 — `_X11Listener` logs one line and
+        # returns. Unused on Wayland, which binds through the portal.
+        "python-xlib>=0.33",
     ],
     entry_points={
         "console_scripts": [

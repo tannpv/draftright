@@ -180,8 +180,11 @@ class SettingsService:
     def one_click_tone(self) -> str:
         """Tone api_value used by One-Click; only read in that mode."""
         raw = str(self._data.get("one_click_tone", _DEFAULTS["one_click_tone"]))
-        # Guard a stale/removed tone so the hotkey cannot fail silently.
-        return raw if raw in {t.api_value for t in Tone} else _DEFAULTS["one_click_tone"]
+        # Guard a stale/removed tone so the hotkey cannot fail silently, and a
+        # tone that returns an analysis instead of replacement text — One-Click
+        # has no UI to review one in, so it could only fail (#107).
+        usable = {t.api_value for t in Tone if t.produces_replacement_text}
+        return raw if raw in usable else _DEFAULTS["one_click_tone"]
 
     @one_click_tone.setter
     def one_click_tone(self, value: str) -> None:

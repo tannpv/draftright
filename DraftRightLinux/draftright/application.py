@@ -31,6 +31,7 @@ from draftright.services.hotkey_service import HotkeyService
 from draftright.services.input_portal import RemoteDesktopInjector
 from draftright.services.rewrite_cache import RewriteCache
 from draftright.services.settings_service import SettingsService
+from draftright.ui import styles
 
 # Wire crash reporting as early as possible — sys.excepthook covers
 # anything that throws after this point.
@@ -137,8 +138,10 @@ class DraftRightApplication(Adw.Application):
         # mirroring the macOS / Windows / mobile behaviour (issue #22).
         self.api_client.on_unauthorized = self.auth_service.refresh_session
 
-        # Load CSS
-        self._load_css()
+        # Load CSS. do_activate() runs again on every re-activation (including
+        # the tray's own "Show"), so this must be idempotent — it used to add
+        # another provider to the display each time.
+        styles.ensure_resource_css_loaded()
 
         # Set up tray icon
         self._setup_tray()
@@ -279,22 +282,6 @@ class DraftRightApplication(Adw.Application):
             self.show_rewrite_panel(text)
         elif self._status_label is not None:
             self._status_label.set_text("Clipboard is empty — copy some text first.")
-
-    def _load_css(self):
-        """Load custom CSS from resources."""
-        css_provider = Gtk.CssProvider()
-        import importlib.resources as pkg_resources
-        try:
-            css_path = pkg_resources.files("draftright.resources").joinpath("style.css")
-            css_provider.load_from_path(str(css_path))
-        except Exception:
-            pass
-        Gtk.StyleContext.add_provider_for_display(
-            self.props.active_window.get_display() if self.props.active_window else
-            __import__("gi.repository", fromlist=["Gdk"]).Gdk.Display.get_default(),
-            css_provider,
-            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
-        )
 
     def _setup_tray(self):
         """Set up the system tray icon (idempotent).

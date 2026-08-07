@@ -10,13 +10,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
+from draftright import config
+
 
 class DiffKind(Enum):
     """How a token changed between the two sides."""
 
     EQUAL = ("equal", None)
-    DELETED = ("deleted", "#ef4444")
-    INSERTED = ("inserted", "#10b981")
+    DELETED = ("deleted", config.COLOR_DIFF_DELETED)
+    INSERTED = ("inserted", config.COLOR_DIFF_INSERTED)
 
     def __init__(self, wire_value: str, tint_color: str | None):
         self.wire_value = wire_value
@@ -86,10 +88,43 @@ def _longest_common_subsequence(a: list[str], b: list[str]) -> list[str]:
     return result
 
 
-def word_diff(old_text: str, new_text: str) -> tuple[list[DiffToken], list[DiffToken]]:
-    """Return (old_tokens, new_tokens) marked equal / deleted / inserted."""
+def exceeds_diff_cap(
+    old_text: str,
+    new_text: str,
+    max_tokens: int = config.DIFF_MAX_TOKENS_PER_SIDE,
+) -> bool:
+    """True when the pair is too large to diff word-by-word.
+
+    Lets a caller say so before rendering, instead of leaving a wholesale
+    red/green wall to read as "every word changed".
+    """
+    return (
+        len(_tokenize(old_text)) > max_tokens
+        or len(_tokenize(new_text)) > max_tokens
+    )
+
+
+def word_diff(
+    old_text: str,
+    new_text: str,
+    max_tokens: int = config.DIFF_MAX_TOKENS_PER_SIDE,
+) -> tuple[list[DiffToken], list[DiffToken]]:
+    """Return (old_tokens, new_tokens) marked equal / deleted / inserted.
+
+    The LCS table is O(len(old) × len(new)); a document-sized selection would
+    otherwise stall the caller for seconds — on Linux that is the GTK main
+    loop. Past *max_tokens* the result degrades to a wholesale replacement
+    rather than freezing, which is honest for a rewrite of that size.
+    """
     old_words = _tokenize(old_text)
     new_words = _tokenize(new_text)
+
+    if len(old_words) > max_tokens or len(new_words) > max_tokens:
+        return (
+            [DiffToken(w, DiffKind.DELETED) for w in old_words],
+            [DiffToken(w, DiffKind.INSERTED) for w in new_words],
+        )
+
     lcs = _longest_common_subsequence(old_words, new_words)
 
     old_tokens: list[DiffToken] = []

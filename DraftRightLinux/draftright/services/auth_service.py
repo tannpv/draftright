@@ -15,6 +15,12 @@ import stat
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+# Runtime import (not TYPE_CHECKING): refresh_session has to tell a rejected
+# refresh token apart from an unreachable backend, and only the former may
+# clear the session.
+from draftright.models.health import RefreshOutcome
+from draftright.services.api_client import APIError
+
 if TYPE_CHECKING:
     from draftright.services.api_client import APIClient
 
@@ -189,27 +195,44 @@ class AuthService:
         self._save(data)
         return data
 
-    def refresh_session(self) -> bool:
+    def refresh_session(self) -> RefreshOutcome:
         """Exchange the stored refresh token for a fresh access token.
 
         Wired into ``APIClient.on_unauthorized`` so an expired access token
-        recovers silently mid-request. Returns ``True`` on success. On any
-        failure the session is cleared (``logout``) so the tray/status falls
-        back to the logged-out state instead of looping on a dead token.
+        recovers silently mid-request.
+
+        Returns a :class:`RefreshOutcome` rather than a bool because the two
+        failure modes are not interchangeable. Only a refresh token the
+        **server rejects** clears the session; a network blip or a 5xx must
+        not. This runs unattended from the health poll, and ``logout()``
+        erases the refresh token from the keyring, so treating a transient
+        failure as a sign-out would strand the user at the login screen with
+        no way back but re-entering credentials — while UNAVAILABLE lets the
+        caller say "offline" instead of falsely reporting a sign-out.
         """
         if not self._refresh_token:
-            return False
+            return RefreshOutcome.REJECTED
         try:
             data = self._api.refresh(self._refresh_token)
-        except Exception as exc:  # network error or refresh token rejected
-            log.info("Token refresh failed (%s); signing out.", exc)
-            self.logout()
-            return False
+        except APIError as exc:
+            if exc.status_code in (401, 403):
+                log.info("Refresh token rejected (%s); signing out.", exc)
+                self.logout()
+                return RefreshOutcome.REJECTED
+            log.warning("Token refresh failed with %s; keeping the session.", exc)
+            return RefreshOutcome.UNAVAILABLE
+        except Exception as exc:  # network down, DNS, timeout, TLS…
+            log.warning(
+                "Token refresh could not reach the backend (%s); keeping the "
+                "session.", exc
+            )
+            return RefreshOutcome.UNAVAILABLE
 
         access = data.get("access_token")
         if not access:
+            # A 2xx with no token is a broken contract, not a transient fault.
             self.logout()
-            return False
+            return RefreshOutcome.REJECTED
         self._access_token = access
         self._refresh_token = data.get("refresh_token") or self._refresh_token
         self._api.set_token(self._access_token)
@@ -218,7 +241,7 @@ class AuthService:
         if not ok:
             _store_file(self._access_token, self._refresh_token)
         log.info("Access token refreshed.")
-        return True
+        return RefreshOutcome.REFRESHED
 
     def logout(self) -> None:
         """Clear tokens from memory and storage."""
