@@ -37,7 +37,6 @@ DraftRightLinux/
   data/
     com.draftright.app.desktop        # Desktop entry
     com.draftright.app.metainfo.xml   # AppStream metadata
-    com.draftright.app.gschema.xml    # GSettings schema
   packaging/
     flatpak/
       com.draftright.app.yml          # Flatpak manifest
