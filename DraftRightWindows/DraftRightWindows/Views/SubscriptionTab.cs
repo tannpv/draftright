@@ -19,12 +19,6 @@ namespace DraftRightWindows.Views;
 /// </summary>
 public sealed class SubscriptionTab : WinForms.UserControl, IPaymentSheetPresenter
 {
-    private static readonly Color BgDark      = Color.FromArgb(15, 23, 42);
-    private static readonly Color CardBg      = Color.FromArgb(30, 41, 59);
-    private static readonly Color BrandBlue   = Color.FromArgb(93, 135, 255);
-    private static readonly Color TextPrimary = Color.FromArgb(226, 232, 240);
-    private static readonly Color TextMuted   = Color.FromArgb(148, 163, 184);
-    private static readonly Color BorderColor = Color.FromArgb(51, 65, 85);
 
     private readonly PaymentService _payments;
     private readonly WinForms.Panel _content = new();
@@ -42,8 +36,8 @@ public sealed class SubscriptionTab : WinForms.UserControl, IPaymentSheetPresent
     {
         _payments = new PaymentService(App.Api);
         Dock = WinForms.DockStyle.Fill;
-        BackColor = BgDark;
-        ForeColor = TextPrimary;
+        BackColor = Theme.BgDark;
+        ForeColor = Theme.TextPrimary;
         _content.Dock = WinForms.DockStyle.Fill;
         _content.AutoScroll = true;
         Controls.Add(_content);
@@ -76,7 +70,7 @@ public sealed class SubscriptionTab : WinForms.UserControl, IPaymentSheetPresent
         _content.Controls.Add(new WinForms.Label
         {
             Text = message,
-            ForeColor = TextPrimary,
+            ForeColor = Theme.TextPrimary,
             Location = new Point(16, 16),
             AutoSize = true,
             Font = new Font("Segoe UI", 10),
@@ -118,7 +112,7 @@ public sealed class SubscriptionTab : WinForms.UserControl, IPaymentSheetPresent
         {
             Text = text,
             Font = new Font("Segoe UI", 14, FontStyle.Bold),
-            ForeColor = TextPrimary,
+            ForeColor = Theme.TextPrimary,
             Location = new Point(16, y),
             AutoSize = true,
         });
@@ -131,7 +125,7 @@ public sealed class SubscriptionTab : WinForms.UserControl, IPaymentSheetPresent
         {
             Text = label,
             Font = new Font("Segoe UI", 9),
-            ForeColor = TextMuted,
+            ForeColor = Theme.TextMuted,
             Location = new Point(16, y),
             AutoSize = true,
         });
@@ -139,7 +133,7 @@ public sealed class SubscriptionTab : WinForms.UserControl, IPaymentSheetPresent
         {
             Text = value,
             Font = new Font("Segoe UI", 10, FontStyle.Bold),
-            ForeColor = TextPrimary,
+            ForeColor = Theme.TextPrimary,
             Location = new Point(140, y - 2),
             AutoSize = true,
         });
@@ -152,7 +146,7 @@ public sealed class SubscriptionTab : WinForms.UserControl, IPaymentSheetPresent
         {
             Text = "Upgrade to Pro",
             Font = new Font("Segoe UI", 11, FontStyle.Bold),
-            ForeColor = TextPrimary,
+            ForeColor = Theme.TextPrimary,
             Location = new Point(16, y),
             AutoSize = true,
         });
@@ -162,7 +156,7 @@ public sealed class SubscriptionTab : WinForms.UserControl, IPaymentSheetPresent
         {
             Text = "Pick a billing cadence, then a payment method.  Your plan activates automatically once payment completes.",
             Font = new Font("Segoe UI", 9),
-            ForeColor = TextMuted,
+            ForeColor = Theme.TextMuted,
             Location = new Point(16, y),
             Size = new Size(440, 32),
         });
@@ -175,7 +169,7 @@ public sealed class SubscriptionTab : WinForms.UserControl, IPaymentSheetPresent
             _content.Controls.Add(new WinForms.Label
             {
                 Text = "No payment methods are enabled yet. Please check back later.",
-                ForeColor = TextMuted,
+                ForeColor = Theme.TextMuted,
                 Location = new Point(16, y),
                 AutoSize = true,
             });
@@ -199,7 +193,7 @@ public sealed class SubscriptionTab : WinForms.UserControl, IPaymentSheetPresent
         {
             Location = new Point(16, y),
             Size = new Size(448, 32),
-            BackColor = BgDark,
+            BackColor = Theme.BgDark,
         };
         var values = (BillingPeriod[])Enum.GetValues(typeof(BillingPeriod));
         var segWidth = group.Width / values.Length;
@@ -213,11 +207,11 @@ public sealed class SubscriptionTab : WinForms.UserControl, IPaymentSheetPresent
                 Location = new Point(i * segWidth, 0),
                 Size = new Size(segWidth, 32),
                 FlatStyle = WinForms.FlatStyle.Flat,
-                BackColor = isSelected ? BrandBlue : CardBg,
-                ForeColor = TextPrimary,
+                BackColor = isSelected ? Theme.BrandBlue : Theme.CardBg,
+                ForeColor = Theme.TextPrimary,
                 Font = new Font("Segoe UI", 9, isSelected ? FontStyle.Bold : FontStyle.Regular),
             };
-            btn.FlatAppearance.BorderColor = BorderColor;
+            btn.FlatAppearance.BorderColor = Theme.BorderColor;
             btn.FlatAppearance.BorderSize = 1;
             btn.Click += (_, _) =>
             {
@@ -240,19 +234,19 @@ public sealed class SubscriptionTab : WinForms.UserControl, IPaymentSheetPresent
         {
             Location = new Point(16, y),
             Size = new Size(448, 64),
-            BackColor = CardBg,
+            BackColor = Theme.CardBg,
             Cursor = WinForms.Cursors.Hand,
         };
         tile.Paint += (s, e) =>
         {
-            using var pen = new Pen(BorderColor, 1);
+            using var pen = new Pen(Theme.BorderColor, 1);
             e.Graphics.DrawRectangle(pen, 0, 0, tile.Width - 1, tile.Height - 1);
         };
         tile.Controls.Add(new WinForms.Label
         {
             Text = d.DisplayName,
             Font = new Font("Segoe UI", 10, FontStyle.Bold),
-            ForeColor = TextPrimary,
+            ForeColor = Theme.TextPrimary,
             Location = new Point(12, 8),
             AutoSize = true,
         });
@@ -260,7 +254,7 @@ public sealed class SubscriptionTab : WinForms.UserControl, IPaymentSheetPresent
         {
             Text = d.Description,
             Font = new Font("Segoe UI", 8),
-            ForeColor = TextMuted,
+            ForeColor = Theme.TextMuted,
             Location = new Point(12, 32),
             AutoSize = true,
         });
@@ -268,7 +262,7 @@ public sealed class SubscriptionTab : WinForms.UserControl, IPaymentSheetPresent
         {
             Text = "›",
             Font = new Font("Segoe UI", 18, FontStyle.Bold),
-            ForeColor = TextMuted,
+            ForeColor = Theme.TextMuted,
             Location = new Point(420, 18),
             AutoSize = true,
         };
@@ -314,7 +308,7 @@ public sealed class SubscriptionTab : WinForms.UserControl, IPaymentSheetPresent
             Text = "Manage subscription",
             Location = new Point(16, y),
             Size = new Size(220, 36),
-            BackColor = BrandBlue,
+            BackColor = Theme.BrandBlue,
             ForeColor = Color.White,
             FlatStyle = WinForms.FlatStyle.Flat,
             Font = new Font("Segoe UI", 9, FontStyle.Bold),
@@ -358,7 +352,7 @@ public sealed class SubscriptionTab : WinForms.UserControl, IPaymentSheetPresent
         {
             Text = "Cancel, change plan, or update your payment method.",
             Font = new Font("Segoe UI", 9),
-            ForeColor = TextMuted,
+            ForeColor = Theme.TextMuted,
             Location = new Point(16, y),
             AutoSize = true,
         });

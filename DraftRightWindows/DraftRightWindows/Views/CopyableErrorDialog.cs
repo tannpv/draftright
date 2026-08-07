@@ -13,11 +13,6 @@ namespace DraftRightWindows.Views;
 /// </summary>
 internal static class CopyableErrorDialog
 {
-    private static readonly Color BgDark = Color.FromArgb(15, 23, 42);
-    private static readonly Color CardBg = Color.FromArgb(30, 41, 59);
-    private static readonly Color BrandBlue = Color.FromArgb(93, 135, 255);
-    private static readonly Color TextPrimary = Color.FromArgb(226, 232, 240);
-    private static readonly Color BorderColor = Color.FromArgb(51, 65, 85);
 
     public static void Show(string title, string message)
     {
@@ -35,8 +30,8 @@ internal static class CopyableErrorDialog
             Width = 600,
             Height = 380,
             StartPosition = WinForms.FormStartPosition.CenterScreen,
-            BackColor = BgDark,
-            ForeColor = TextPrimary,
+            BackColor = Theme.BgDark,
+            ForeColor = Theme.TextPrimary,
             FormBorderStyle = WinForms.FormBorderStyle.Sizable,
             MinimumSize = new Size(440, 260),
             ShowInTaskbar = true,
@@ -55,8 +50,8 @@ internal static class CopyableErrorDialog
             ScrollBars = WinForms.ScrollBars.Vertical,
             Text = message,
             Dock = WinForms.DockStyle.Fill,
-            BackColor = CardBg,
-            ForeColor = TextPrimary,
+            BackColor = Theme.CardBg,
+            ForeColor = Theme.TextPrimary,
             BorderStyle = WinForms.BorderStyle.FixedSingle,
             Font = new Font("Consolas", 9.5f),
             WordWrap = true,
@@ -67,14 +62,14 @@ internal static class CopyableErrorDialog
         {
             Dock = WinForms.DockStyle.Bottom,
             Height = 56,
-            BackColor = BgDark,
+            BackColor = Theme.BgDark,
         };
 
         var copyBtn = new WinForms.Button
         {
             Text = "Copy",
             Size = new Size(110, 32),
-            BackColor = BrandBlue,
+            BackColor = Theme.BrandBlue,
             ForeColor = Color.White,
             FlatStyle = WinForms.FlatStyle.Flat,
             Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
@@ -97,12 +92,12 @@ internal static class CopyableErrorDialog
         {
             Text = "Close",
             Size = new Size(110, 32),
-            BackColor = CardBg,
-            ForeColor = TextPrimary,
+            BackColor = Theme.CardBg,
+            ForeColor = Theme.TextPrimary,
             FlatStyle = WinForms.FlatStyle.Flat,
             Font = new Font("Segoe UI", 9.5f),
         };
-        closeBtn.FlatAppearance.BorderColor = BorderColor;
+        closeBtn.FlatAppearance.BorderColor = Theme.BorderColor;
         closeBtn.Click += (_, _) => form.Close();
 
         buttonPanel.Controls.Add(copyBtn);

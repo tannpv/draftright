@@ -28,7 +28,7 @@ public sealed class BankTransferDialog : WinForms.Form
         Width = 460;
         Height = 380;
         StartPosition = WinForms.FormStartPosition.CenterParent;
-        BackColor = Color.FromArgb(15, 23, 42);
+        BackColor = Theme.BgDark;
         ForeColor = Color.White;
         FormBorderStyle = WinForms.FormBorderStyle.FixedDialog;
         MaximizeBox = false;
@@ -64,7 +64,7 @@ public sealed class BankTransferDialog : WinForms.Form
             Text = "Close",
             Location = new Point(360, Height - 80),
             Size = new Size(80, 32),
-            BackColor = Color.FromArgb(51, 65, 85),
+            BackColor = Theme.BorderColor,
             ForeColor = Color.White,
             FlatStyle = WinForms.FlatStyle.Flat,
         };
@@ -101,7 +101,7 @@ internal static class BankInfoTable
         {
             Text = value,
             ReadOnly = true,
-            BackColor = Color.FromArgb(30, 41, 59),
+            BackColor = Theme.CardBg,
             ForeColor = Color.White,
             BorderStyle = WinForms.BorderStyle.FixedSingle,
             Location = new Point(108, y - 2),
@@ -115,7 +115,7 @@ internal static class BankInfoTable
                 Text = "Copy",
                 Location = new Point(364, y - 3),
                 Size = new Size(70, 24),
-                BackColor = Color.FromArgb(51, 65, 85),
+                BackColor = Theme.BorderColor,
                 ForeColor = Color.White,
                 FlatStyle = WinForms.FlatStyle.Flat,
                 Font = new Font("Segoe UI", 8),

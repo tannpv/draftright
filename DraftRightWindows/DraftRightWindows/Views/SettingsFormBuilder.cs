@@ -13,14 +13,6 @@ namespace DraftRightWindows;
 internal static class SettingsFormBuilder
 {
     // ── Dark theme constants ─────────────────────────────────
-    private static readonly Color BgDark = Color.FromArgb(15, 23, 42);
-    private static readonly Color CardBg = Color.FromArgb(30, 41, 59);
-    private static readonly Color BrandBlue = Color.FromArgb(93, 135, 255);
-    private static readonly Color TextPrimary = Color.FromArgb(226, 232, 240);
-    private static readonly Color TextMuted = Color.FromArgb(148, 163, 184);
-    private static readonly Color ErrorRed = Color.FromArgb(239, 68, 68);
-    private static readonly Color SuccessGreen = Color.FromArgb(34, 197, 94);
-    private static readonly Color BorderColor = Color.FromArgb(51, 65, 85);
 
     // ── Window geometry ──────────────────────────────────────
     // Default is comfortable for the 6 tabs; MinimumSize keeps content usable
@@ -43,8 +35,8 @@ internal static class SettingsFormBuilder
             ClientSize = DefaultClientSize,
             MinimumSize = MinWindowSize,
             StartPosition = WinForms.FormStartPosition.CenterScreen,
-            BackColor = BgDark,
-            ForeColor = TextPrimary,
+            BackColor = Theme.BgDark,
+            ForeColor = Theme.TextPrimary,
             // Resizable (was FixedSingle) so users can enlarge the window when
             // content feels cramped; maximize enabled for the same reason.
             FormBorderStyle = WinForms.FormBorderStyle.Sizable,
@@ -56,8 +48,8 @@ internal static class SettingsFormBuilder
         var tabControl = new WinForms.TabControl
         {
             Dock = WinForms.DockStyle.Fill,
-            BackColor = BgDark,
-            ForeColor = TextPrimary,
+            BackColor = Theme.BgDark,
+            ForeColor = Theme.TextPrimary,
             Appearance = WinForms.TabAppearance.Normal,
             SizeMode = WinForms.TabSizeMode.FillToRight,
             Padding = new System.Drawing.Point(12, 6),
@@ -101,8 +93,8 @@ internal static class SettingsFormBuilder
     {
         return new WinForms.TabPage(title)
         {
-            BackColor = BgDark,
-            ForeColor = TextPrimary,
+            BackColor = Theme.BgDark,
+            ForeColor = Theme.TextPrimary,
             Padding = new WinForms.Padding(16),
             AutoScroll = true,
         };
@@ -114,7 +106,7 @@ internal static class SettingsFormBuilder
         {
             Text = text,
             Font = new Font("Segoe UI", 12, FontStyle.Bold),
-            ForeColor = TextPrimary,
+            ForeColor = Theme.TextPrimary,
             Location = new Point(16, y),
             AutoSize = true,
         };
@@ -126,7 +118,7 @@ internal static class SettingsFormBuilder
         {
             Text = text,
             Font = new Font("Segoe UI", 9),
-            ForeColor = TextMuted,
+            ForeColor = Theme.TextMuted,
             Location = new Point(16, y),
             AutoSize = true,
         };
@@ -139,8 +131,8 @@ internal static class SettingsFormBuilder
             Text = value,
             Location = new Point(16, y),
             Size = new Size(448, 30),
-            BackColor = CardBg,
-            ForeColor = TextPrimary,
+            BackColor = Theme.CardBg,
+            ForeColor = Theme.TextPrimary,
             BorderStyle = WinForms.BorderStyle.FixedSingle,
             Font = new Font("Segoe UI", 10),
         };
@@ -152,8 +144,8 @@ internal static class SettingsFormBuilder
         {
             Location = new Point(16, y),
             Size = new Size(448, 30),
-            BackColor = CardBg,
-            ForeColor = TextPrimary,
+            BackColor = Theme.CardBg,
+            ForeColor = Theme.TextPrimary,
             Font = new Font("Segoe UI", 10),
             DropDownStyle = WinForms.ComboBoxStyle.DropDownList,
             FlatStyle = WinForms.FlatStyle.Flat,
@@ -167,7 +159,7 @@ internal static class SettingsFormBuilder
             Text = text,
             Location = new Point(16, y),
             Size = new Size(width, 36),
-            BackColor = BrandBlue,
+            BackColor = Theme.BrandBlue,
             ForeColor = Color.White,
             FlatStyle = WinForms.FlatStyle.Flat,
             Font = new Font("Segoe UI", 10, FontStyle.Bold),
@@ -183,12 +175,12 @@ internal static class SettingsFormBuilder
             Text = text,
             Location = new Point(x, y),
             Size = new Size(width, 32),
-            BackColor = CardBg,
-            ForeColor = TextPrimary,
+            BackColor = Theme.CardBg,
+            ForeColor = Theme.TextPrimary,
             FlatStyle = WinForms.FlatStyle.Flat,
             Font = new Font("Segoe UI", 10),
         };
-        btn.FlatAppearance.BorderColor = BorderColor;
+        btn.FlatAppearance.BorderColor = Theme.BorderColor;
         return btn;
     }
 
@@ -198,8 +190,8 @@ internal static class SettingsFormBuilder
         {
             Text = text,
             Checked = checkedInit,
-            ForeColor = TextPrimary,
-            BackColor = BgDark,
+            ForeColor = Theme.TextPrimary,
+            BackColor = Theme.BgDark,
             Font = new Font("Segoe UI", 10),
             Location = new Point(16, y),
             AutoSize = true,
@@ -244,7 +236,7 @@ internal static class SettingsFormBuilder
         tab.Controls.Add(new WinForms.Label
         {
             Text = $"Version: {displayVer}",
-            ForeColor = TextMuted,
+            ForeColor = Theme.TextMuted,
             Font = new Font("Segoe UI", 9),
             Location = new Point(16, y),
             AutoSize = true,
@@ -445,8 +437,8 @@ internal static class SettingsFormBuilder
         {
             Location = new Point(16, 0),
             Size = new Size(448, 30),
-            BackColor = CardBg,
-            ForeColor = TextPrimary,
+            BackColor = Theme.CardBg,
+            ForeColor = Theme.TextPrimary,
             Font = new Font("Segoe UI", 10),
             DropDownStyle = WinForms.ComboBoxStyle.DropDown,
             FlatStyle = WinForms.FlatStyle.Flat,
@@ -509,7 +501,7 @@ internal static class SettingsFormBuilder
         tab.Controls.Add(new WinForms.Label
         {
             Text = FormatHotkey(App.Settings.HotkeyModifiers, App.Settings.HotkeyKey),
-            ForeColor = BrandBlue,
+            ForeColor = Theme.BrandBlue,
             Font = new Font("Segoe UI", 10, FontStyle.Bold),
             Location = new Point(16, y),
             AutoSize = true,
@@ -520,7 +512,7 @@ internal static class SettingsFormBuilder
         {
             Text = "Select text anywhere, then press the hotkey to rewrite.\r\n" +
                    "Hotkey editing is not yet available in this build.",
-            ForeColor = TextMuted,
+            ForeColor = Theme.TextMuted,
             Font = new Font("Segoe UI", 9),
             Location = new Point(16, y),
             Size = new Size(448, 40),
@@ -593,7 +585,7 @@ internal static class SettingsFormBuilder
                 Text = string.IsNullOrEmpty(emailDisplay)
                     ? "Signed in"
                     : $"Signed in as {emailDisplay}",
-                ForeColor = SuccessGreen,
+                ForeColor = Theme.SuccessGreen,
                 Font = new Font("Segoe UI", 10),
                 Location = new Point(16, y),
                 AutoSize = true,
@@ -634,8 +626,8 @@ internal static class SettingsFormBuilder
             {
                 ReadOnly = true,
                 Multiline = true,
-                ForeColor = ErrorRed,
-                BackColor = BgDark,
+                ForeColor = Theme.ErrorRed,
+                BackColor = Theme.BgDark,
                 BorderStyle = WinForms.BorderStyle.None,
                 Font = new Font("Segoe UI", 9),
                 Location = new Point(16, y),
@@ -652,14 +644,14 @@ internal static class SettingsFormBuilder
                 Text = "Copy",
                 Location = new Point(400, y),
                 Size = new Size(64, 24),
-                BackColor = CardBg,
-                ForeColor = TextMuted,
+                BackColor = Theme.CardBg,
+                ForeColor = Theme.TextMuted,
                 FlatStyle = WinForms.FlatStyle.Flat,
                 Font = new Font("Segoe UI", 8),
                 Visible = false,
                 TabStop = false,
             };
-            copyBtn.FlatAppearance.BorderColor = BorderColor;
+            copyBtn.FlatAppearance.BorderColor = Theme.BorderColor;
             copyBtn.Click += (_, _) =>
             {
                 if (!string.IsNullOrEmpty(statusBox.Text))
@@ -681,7 +673,7 @@ internal static class SettingsFormBuilder
                 var hasText = !string.IsNullOrEmpty(text);
                 statusBox.Visible = hasText;
                 // Only show Copy for actual errors (red), not success messages.
-                copyBtn.Visible = hasText && color == ErrorRed;
+                copyBtn.Visible = hasText && color == Theme.ErrorRed;
             };
 
             y += 72;
@@ -689,7 +681,7 @@ internal static class SettingsFormBuilder
             var signInBtn = MakePrimaryButton("Sign In", y);
             signInBtn.Click += async (_, _) =>
             {
-                setStatus("", ErrorRed);
+                setStatus("", Theme.ErrorRed);
 
                 // Client-side validation BEFORE hitting /auth/login so the
                 // backend's 400 ("email must be an email") doesn't bubble up
@@ -698,17 +690,17 @@ internal static class SettingsFormBuilder
                 var password = passBox.Text;
                 if (string.IsNullOrEmpty(email))
                 {
-                    setStatus("Please enter your email.", ErrorRed);
+                    setStatus("Please enter your email.", Theme.ErrorRed);
                     return;
                 }
                 if (!IsValidEmail(email))
                 {
-                    setStatus("Please enter a valid email address.", ErrorRed);
+                    setStatus("Please enter a valid email address.", Theme.ErrorRed);
                     return;
                 }
                 if (string.IsNullOrEmpty(password))
                 {
-                    setStatus("Please enter your password.", ErrorRed);
+                    setStatus("Please enter your password.", Theme.ErrorRed);
                     return;
                 }
 
@@ -726,7 +718,7 @@ internal static class SettingsFormBuilder
                     }
                     else
                     {
-                        setStatus("Login failed.", ErrorRed);
+                        setStatus("Login failed.", Theme.ErrorRed);
                     }
                 }
                 catch (ApiException apiEx)
@@ -734,12 +726,12 @@ internal static class SettingsFormBuilder
                     // Show the parsed server message ("Invalid credentials",
                     // "email must be an email", etc.) — NOT the full stack
                     // trace, which is what users were seeing before.
-                    setStatus(apiEx.ServerMessage ?? apiEx.Message, ErrorRed);
+                    setStatus(apiEx.ServerMessage ?? apiEx.Message, Theme.ErrorRed);
                     DRLogger.Error($"Login API error: {apiEx}", DRLogger.Category.AUTH);
                 }
                 catch (Exception ex)
                 {
-                    setStatus("Something went wrong. Please try again.", ErrorRed);
+                    setStatus("Something went wrong. Please try again.", Theme.ErrorRed);
                     DRLogger.Error($"Login error: {ex}", DRLogger.Category.AUTH);
                 }
                 finally
@@ -761,7 +753,7 @@ internal static class SettingsFormBuilder
             var googleBtn = MakeSecondaryButton("Continue with Google", 16, y + 44, 448);
             googleBtn.Click += async (_, _) =>
             {
-                setStatus("", ErrorRed);
+                setStatus("", Theme.ErrorRed);
                 googleBtn.Enabled = false;
                 signInBtn.Enabled = false;
                 try
@@ -777,17 +769,17 @@ internal static class SettingsFormBuilder
                     }
                     else
                     {
-                        setStatus("Google sign-in failed.", ErrorRed);
+                        setStatus("Google sign-in failed.", Theme.ErrorRed);
                     }
                 }
                 catch (ApiException apiEx)
                 {
-                    setStatus(apiEx.ServerMessage ?? apiEx.Message, ErrorRed);
+                    setStatus(apiEx.ServerMessage ?? apiEx.Message, Theme.ErrorRed);
                     DRLogger.Error($"Google sign-in API error: {apiEx}", DRLogger.Category.AUTH);
                 }
                 catch (Exception ex)
                 {
-                    setStatus(ex.Message, ErrorRed);
+                    setStatus(ex.Message, Theme.ErrorRed);
                     DRLogger.Error($"Google sign-in error: {ex}", DRLogger.Category.AUTH);
                 }
                 finally
@@ -804,7 +796,7 @@ internal static class SettingsFormBuilder
             {
                 Text = "New to DraftRight? Use \"Continue with Google\" to create your account in seconds.",
                 Font = new Font("Segoe UI", 8.5f),
-                ForeColor = TextMuted,
+                ForeColor = Theme.TextMuted,
                 Location = new Point(16, y + 80),
                 AutoSize = true,
             };
@@ -883,7 +875,7 @@ internal static class SettingsFormBuilder
         tab.Controls.Add(new WinForms.Label
         {
             Text = "Hit a bug? Send us a description (and a screenshot if you have one) and we'll take a look.",
-            ForeColor = TextMuted,
+            ForeColor = Theme.TextMuted,
             Font = new Font("Segoe UI", 9),
             Location = new Point(16, y),
             Size = new Size(448, 36),
