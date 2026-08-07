@@ -15,6 +15,7 @@ See memory ``feedback_llm_offsets_unreliable``.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Iterable
 
 from draftright.models.grammar import GrammarIssue
@@ -58,18 +59,52 @@ def apply_fix(text: str, issue: GrammarIssue) -> str:
     return text[:start] + issue.suggestion + text[start + length:]
 
 
-def fix_all(text: str, issues: Iterable[GrammarIssue]) -> str:
+@dataclass(frozen=True)
+class FixOutcome:
+    """What ``apply_all`` actually managed to do.
+
+    ``skipped`` is the part a plain "fixed text" return cannot express: when
+    two suggestions overlap, applying the first destroys the span the second
+    anchors to, so the second can never apply. Reporting it is what stops the
+    UI announcing "All issues fixed!" over text that is still wrong — and what
+    stops those suggestions vanishing with no explanation.
+    """
+
+    text: str
+    applied: list[GrammarIssue]
+    skipped: list[GrammarIssue]
+
+    @property
+    def is_complete(self) -> bool:
+        """True when every issue was applied and none had to be skipped."""
+        return not self.skipped
+
+
+def apply_all(text: str, issues: Iterable[GrammarIssue]) -> FixOutcome:
     """Apply every issue, re-resolving against the evolving text each time.
 
     Order does not matter because ranges come from content rather than
     offsets — which is exactly what the offset-based version got wrong.
     """
-    if not issues:
-        return text
     result = text
-    for issue in issues:
+    applied: list[GrammarIssue] = []
+    skipped: list[GrammarIssue] = []
+    for issue in issues or []:
+        if resolve_range(issue, result) is None:
+            skipped.append(issue)
+            continue
         result = apply_fix(result, issue)
-    return result
+        applied.append(issue)
+    return FixOutcome(text=result, applied=applied, skipped=skipped)
+
+
+def fix_all(text: str, issues: Iterable[GrammarIssue]) -> str:
+    """Apply every issue and return just the corrected text.
+
+    Thin wrapper over :func:`apply_all` so the loop exists once; callers that
+    need to know what was skipped use ``apply_all`` directly.
+    """
+    return apply_all(text, issues).text
 
 
 def remaining_issues(text: str, issues: Iterable[GrammarIssue]) -> list[GrammarIssue]:

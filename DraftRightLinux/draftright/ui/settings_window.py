@@ -127,7 +127,10 @@ class SettingsWindow(Adw.PreferencesWindow):
         )
         page.add(self._simple_group)
 
-        self._one_click_tones = list(Tone)
+        # Grammar Check returns an analysis to review, not text to paste, so
+        # it cannot be a One-Click tone — offering it produced a "Rewrite
+        # failed" notification and nothing else (#107).
+        self._one_click_tones = [t for t in Tone if t.produces_replacement_text]
         self._one_click_row = Adw.ComboRow(
             title="One-Click tone",
             model=Gtk.StringList.new(
