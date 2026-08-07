@@ -772,6 +772,10 @@ class TrayBusyPulseTest(unittest.TestCase):
             self._tmp = tempfile.mkdtemp()
         return self._tmp
 
+    def test_the_minimum_outlasts_a_single_frame(self):
+        # Otherwise the hold cannot make the pulse visible.
+        self.assertGreater(config.TRAY_BUSY_MIN_MS, config.TRAY_BUSY_FRAME_MS)
+
     def test_the_busy_command_round_trips(self):
         from draftright.models.tray import TrayCommand
         line = TrayCommand.BUSY.encode("1")

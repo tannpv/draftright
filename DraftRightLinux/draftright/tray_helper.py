@@ -46,6 +46,9 @@ class TrayHelper:
         # Busy pulse (#6): GLib source id while animating, None when idle.
         self._busy_source: int | None = None
         self._busy_frame = 0
+        # Deferred stop, holding the pulse to its minimum visible time.
+        self._busy_stop_source: int | None = None
+        self._busy_started_us = 0
         self._icon = self._resolve_default_icon()
         # Composited state icons are written here and the indicator is pointed
         # at it as an extra icon-theme directory.
@@ -148,24 +151,52 @@ class TrayHelper:
 
         One-Click replaces the selection with no window of its own, so without
         this the hotkey looks inert until the text changes.
+
+        The pulse is held for :data:`config.TRAY_BUSY_MIN_MS` however quickly
+        the rewrite finishes — a backend cache hit returns in less than one
+        frame, and a single-frame flash reads as nothing at all.
         """
-        if busy == (self._busy_source is not None):
-            return
         if busy:
+            self._cancel_pending_stop()
+            if self._busy_source is not None:
+                return                      # already pulsing
             self._busy_frame = 0
+            self._busy_started_us = GLib.get_monotonic_time()
             # A positive interval, and the callback returns True to repeat: a
             # zero interval would re-arm instantly and spin the CPU.
             self._busy_source = GLib.timeout_add(
                 config.TRAY_BUSY_FRAME_MS, self._on_busy_tick
             )
-            self._on_busy_tick()      # show the first frame without waiting
+            self._on_busy_tick()            # show the first frame without waiting
+            return
+
+        if self._busy_source is None or self._busy_stop_source is not None:
+            return                          # not pulsing, or already stopping
+
+        elapsed_ms = (GLib.get_monotonic_time() - self._busy_started_us) // 1000
+        remaining = config.TRAY_BUSY_MIN_MS - int(elapsed_ms)
+        if remaining > 0:
+            self._busy_stop_source = GLib.timeout_add(remaining, self._end_busy)
         else:
+            self._end_busy()
+
+    def _cancel_pending_stop(self) -> None:
+        """Drop a deferred stop, so a new rewrite keeps the pulse running."""
+        if self._busy_stop_source is not None:
+            GLib.source_remove(self._busy_stop_source)
+            self._busy_stop_source = None
+
+    def _end_busy(self) -> bool:
+        """Stop the pulse and put the status icon back."""
+        self._busy_stop_source = None
+        if self._busy_source is not None:
             GLib.source_remove(self._busy_source)
             self._busy_source = None
-            # Force a repaint: _refresh_icon short-circuits when the icon name
-            # is unchanged, and the pulse left a busy frame showing.
-            self._icon = None
-            self._refresh_icon()
+        # Force a repaint: _refresh_icon short-circuits when the icon name is
+        # unchanged, and the pulse left a busy frame showing.
+        self._icon = None
+        self._refresh_icon()
+        return False    # one-shot
 
     def _on_busy_tick(self) -> bool:
         rendered = tray_icon_render.build_busy_frame(

@@ -74,6 +74,11 @@ TRAY_ICON_NAME_PREFIX = "draftright-tray-"
 # rather than blinking — a hard on/off flicker is tiring and reads as an error.
 TRAY_BUSY_FRAME_MS = 180            # per frame; ~1.4s for a full there-and-back
 TRAY_BUSY_FRAME_COUNT = 4           # steps in one direction; the cycle mirrors
+# Shortest time the pulse stays up, however fast the rewrite finishes. A
+# backend cache hit returns in well under one frame, so without this the icon
+# changed once and changed straight back — indistinguishable from nothing
+# happening, which is the very problem the pulse exists to solve.
+TRAY_BUSY_MIN_MS = 700
 # Accessibility label announced while the pulse runs, alongside the status one.
 TRAY_BUSY_DESCRIPTION = "DraftRight — rewriting…"
 TRAY_HELPER_MODULE = "draftright.tray_helper"
