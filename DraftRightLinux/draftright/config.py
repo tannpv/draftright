@@ -64,6 +64,18 @@ TRAY_BADGE_RING_COLOR = "#ffffff"   # ring so the dot reads on any icon
 TRAY_BADGE_SIZE_RATIO = 0.36        # dot diameter as a fraction of the icon
 TRAY_BADGE_RING_RATIO = 0.035       # ring width; separates a red dot on a red mark
 TRAY_ICON_RENDER_SIZE = 64          # px the composited tray PNG is rendered at
+# Shared by the helper's temp icon directory and every composited icon name.
+TRAY_ICON_NAME_PREFIX = "draftright-tray-"
+# Busy pulse (#6): One-Click mode replaces the selection with no window of its
+# own, so without this the hotkey looks like it did nothing until the text
+# changes. macOS and Windows show a spinner at the cursor; Wayland forbids a
+# client placing its own surface, so the always-visible tray icon carries the
+# signal instead. The icon breathes between the brand blue and the muted grey
+# rather than blinking — a hard on/off flicker is tiring and reads as an error.
+TRAY_BUSY_FRAME_MS = 180            # per frame; ~1.4s for a full there-and-back
+TRAY_BUSY_FRAME_COUNT = 4           # steps in one direction; the cycle mirrors
+# Accessibility label announced while the pulse runs, alongside the status one.
+TRAY_BUSY_DESCRIPTION = "DraftRight — rewriting…"
 TRAY_HELPER_MODULE = "draftright.tray_helper"
 TRAY_SHUTDOWN_TIMEOUT = 2    # seconds to wait for the helper at each escalation step
 

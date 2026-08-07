@@ -63,6 +63,10 @@ class TrayCommand(Enum):
     STATUS = "status"
     # "1"/"0" — an app update is ready to install (#22).
     UPDATE = "update"
+    # "1"/"0" — a One-Click rewrite is in flight, so pulse the icon (#6).
+    # Transient and outranks the status tint while it lasts; the helper
+    # restores the status icon when it clears.
+    BUSY = "busy"
     QUIT = "quit"
 
     def encode(self, payload: str = "") -> str:

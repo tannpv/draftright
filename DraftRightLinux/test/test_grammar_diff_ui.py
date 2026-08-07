@@ -28,6 +28,7 @@ from draftright.models.health import HealthStatus, RefreshOutcome
 from draftright.models.rewrite import RewriteResult
 from draftright.models.tone import Tone
 from draftright.services import api_client as api_client_mod
+from draftright.helpers import tray_icon_render
 from draftright.services import grammar_fixer
 from draftright.services import hotkey_service as hotkey_service_mod
 from draftright.services.api_client import APIClient, APIError
@@ -733,6 +734,73 @@ class ResultViewStyleTest(unittest.TestCase):
         self.assertNotIn("add_provider_for_display", src)
         self.assertIn("styles.ensure_resource_css_loaded()", src)
 
+class TrayBusyPulseTest(unittest.TestCase):
+    """One-Click has no window, so the tray is the only progress signal (#6).
+
+    macOS and Windows show a spinner at the cursor; Wayland forbids a client
+    placing its own surface, so the always-visible tray icon carries it.
+    """
+
+    def test_the_pulse_endpoints_are_design_tokens(self):
+        self.assertEqual(tray_icon_render.busy_frame_color(0),
+                         config.COLOR_BRAND_BLUE)
+        self.assertEqual(
+            tray_icon_render.busy_frame_color(config.TRAY_BUSY_FRAME_COUNT),
+            config.COLOR_MUTED)
+
+    def test_the_cycle_mirrors_so_it_breathes(self):
+        cycle = config.TRAY_BUSY_FRAME_COUNT * 2
+        self.assertEqual(tray_icon_render.busy_frame_color(1),
+                         tray_icon_render.busy_frame_color(cycle - 1),
+                         "the pulse snaps instead of easing back")
+
+    def test_the_cycle_repeats_forever(self):
+        cycle = config.TRAY_BUSY_FRAME_COUNT * 2
+        self.assertEqual(tray_icon_render.busy_cycle_index(cycle * 7 + 3), 3)
+        self.assertEqual(tray_icon_render.busy_frame_color(0),
+                         tray_icon_render.busy_frame_color(cycle))
+
+    def test_each_frame_gets_its_own_icon_name(self):
+        # AppIndicator caches by name; a shared name would never repaint.
+        names = {tray_icon_render.build_busy_frame(i, directory=self._dir())[1]
+                 for i in range(config.TRAY_BUSY_FRAME_COUNT * 2)}
+        self.assertEqual(len(names), config.TRAY_BUSY_FRAME_COUNT * 2)
+
+    def _dir(self):
+        if not hasattr(self, "_tmp"):
+            import tempfile
+            self._tmp = tempfile.mkdtemp()
+        return self._tmp
+
+    def test_the_busy_command_round_trips(self):
+        from draftright.models.tray import TrayCommand
+        line = TrayCommand.BUSY.encode("1")
+        self.assertEqual(TrayCommand.parse(line), (TrayCommand.BUSY, "1"))
+
+    def test_the_flag_and_the_pulse_move_together(self):
+        # One place owns both, so the icon cannot keep spinning after the
+        # rewrite has finished.
+        from draftright.application import DraftRightApplication
+        app = DraftRightApplication.__new__(DraftRightApplication)
+        app._is_rewriting = False
+        app._tray_icon = mock.Mock()
+
+        DraftRightApplication._set_rewriting(app, True)
+        self.assertTrue(app._is_rewriting)
+        app._tray_icon.set_busy.assert_called_with(True)
+
+        DraftRightApplication._set_rewriting(app, False)
+        self.assertFalse(app._is_rewriting)
+        app._tray_icon.set_busy.assert_called_with(False)
+
+    def test_it_survives_a_missing_tray(self):
+        # The tray is optional; One-Click must still run without it.
+        from draftright.application import DraftRightApplication
+        app = DraftRightApplication.__new__(DraftRightApplication)
+        app._is_rewriting = False
+        app._tray_icon = None
+        DraftRightApplication._set_rewriting(app, True)
+        self.assertTrue(app._is_rewriting)
 
 if __name__ == "__main__":
     unittest.main()

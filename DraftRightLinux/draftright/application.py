@@ -374,7 +374,7 @@ class DraftRightApplication(Adw.Application):
             if selected is not None and selected.uses_target_language
             else None
         )
-        self._is_rewriting = True
+        self._set_rewriting(True)
 
         def worker():
             try:
@@ -391,9 +391,19 @@ class DraftRightApplication(Adw.Application):
 
         threading.Thread(target=worker, daemon=True).start()
 
+    def _set_rewriting(self, rewriting: bool) -> None:
+        """Track an in-flight One-Click rewrite and show it in the tray.
+
+        One place owns both, so the flag and the pulse cannot drift apart and
+        leave the icon spinning after the rewrite has finished.
+        """
+        self._is_rewriting = rewriting
+        if self._tray_icon is not None:
+            self._tray_icon.set_busy(rewriting)
+
     def _finish_one_click(self, result, error) -> bool:
         """Inject the rewrite, or tell the user why it didn't happen."""
-        self._is_rewriting = False
+        self._set_rewriting(False)
         if error is not None:
             logger.warning("One-Click rewrite failed: %s", error)
             self._notify("Rewrite failed", error)

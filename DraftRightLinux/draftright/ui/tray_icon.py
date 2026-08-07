@@ -95,6 +95,14 @@ class TrayIcon:
         """Flag an available app update, drawn as a red dot on the tray icon."""
         self._send(TrayCommand.UPDATE, "1" if available else "0")
 
+    def set_busy(self, busy: bool):
+        """Pulse the tray icon while a One-Click rewrite runs (#6).
+
+        One-Click has no window, so this is the only progress signal the user
+        gets between pressing the hotkey and the text changing.
+        """
+        self._send(TrayCommand.BUSY, "1" if busy else "0")
+
     def stop(self):
         """Shut the helper down.
 
