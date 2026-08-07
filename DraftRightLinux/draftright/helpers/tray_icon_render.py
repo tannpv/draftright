@@ -146,6 +146,29 @@ def _compose(
         return None
 
 
+def prerender_all(directory: str) -> int:
+    """Write every icon the tray can ever reference, before anything scans it.
+
+    The shell resolves ``IconName`` against ``IconThemePath`` through GTK's
+    icon theme, which caches a directory's contents when it first looks there.
+    A PNG written *after* that scan is simply not found, so the icon silently
+    never changes — which is why the busy pulse wrote all eight frames to disk
+    and the panel showed none of them.
+
+    Driven by the enums, so a new status or a longer pulse is covered without
+    touching this function. Returns how many icons were written.
+    """
+    written = 0
+    for status in HealthStatus:
+        for update_available in (False, True):
+            if build(status, update_available, directory=directory):
+                written += 1
+    for frame in range(max(1, config.TRAY_BUSY_FRAME_COUNT) * 2):
+        if build_busy_frame(frame, directory=directory):
+            written += 1
+    return written
+
+
 def busy_cycle_index(frame: int) -> int:
     """Normalise a frame counter into one mirrored pulse cycle."""
     return frame % (max(1, config.TRAY_BUSY_FRAME_COUNT) * 2)

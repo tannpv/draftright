@@ -772,6 +772,32 @@ class TrayBusyPulseTest(unittest.TestCase):
             self._tmp = tempfile.mkdtemp()
         return self._tmp
 
+    def test_every_icon_exists_before_the_shell_scans(self):
+        # The shell resolves IconName against IconThemePath through GTK's icon
+        # theme, which caches a directory's contents. A PNG written later is
+        # never found — the pulse wrote all eight frames and the panel showed
+        # none of them.
+        import os, tempfile
+        d = tempfile.mkdtemp()
+        written = tray_icon_render.prerender_all(d)
+        present = set(os.listdir(d))
+        self.assertEqual(written, len(present))
+        for frame in range(config.TRAY_BUSY_FRAME_COUNT * 2):
+            name = tray_icon_render.build_busy_frame(frame, directory=d)[1]
+            self.assertIn(f"{name}.png", present,
+                          "a pulse frame the helper can reference is missing")
+
+    def test_prerender_covers_every_status(self):
+        import os, tempfile
+        from draftright.models.health import HealthStatus
+        d = tempfile.mkdtemp()
+        tray_icon_render.prerender_all(d)
+        present = set(os.listdir(d))
+        for status in HealthStatus:
+            rendered = tray_icon_render.build(status, False, directory=d)
+            if rendered:                      # connected uses the named symbolic
+                self.assertIn(f"{rendered[1]}.png", present, status.value)
+
     def test_the_minimum_outlasts_a_single_frame(self):
         # Otherwise the hold cannot make the pulse visible.
         self.assertGreater(config.TRAY_BUSY_MIN_MS, config.TRAY_BUSY_FRAME_MS)

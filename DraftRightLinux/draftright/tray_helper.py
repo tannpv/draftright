@@ -53,6 +53,11 @@ class TrayHelper:
         # Composited state icons are written here and the indicator is pointed
         # at it as an extra icon-theme directory.
         self._icon_dir = tempfile.mkdtemp(prefix=config.TRAY_ICON_NAME_PREFIX)
+        # Every icon must exist before the shell scans this path: GTK's icon
+        # theme caches a directory's contents, so anything written later is
+        # never found and the icon silently stops changing.
+        log.debug("Pre-rendered %d tray icons into %s",
+                  tray_icon_render.prerender_all(self._icon_dir), self._icon_dir)
 
         self._status_item = Gtk.MenuItem(label=self._status.display_name)
         self._status_item.set_sensitive(False)
