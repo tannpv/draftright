@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist gettext-domain="draftright">
+  <schema id="com.draftright.app" path="/com/draftright/app/">
+
+    <key name="backend-url" type="s">
+      <default>'https://api.draftright.info'</default>
+      <summary>Backend API URL</summary>
+      <description>The base URL of the DraftRight backend API server.</description>
+    </key>
+
+    <key name="hotkey" type="s">
+      <default>'Ctrl+Shift+R'</default>
+      <summary>Global hotkey</summary>
+      <description>Keyboard shortcut to capture selected text and open the rewrite panel.</description>
+    </key>
+
+    <key name="translate-language" type="s">
+      <default>'Spanish'</default>
+      <summary>Translate language</summary>
+      <description>Target language used when the Translate tone is selected.</description>
+    </key>
+
+    <key name="auto-start" type="b">
+      <default>false</default>
+      <summary>Auto-start on login</summary>
+      <description>Whether to start DraftRight automatically when the user logs in.</description>
+    </key>
+
+  </schema>
+</schemalist>
