@@ -74,6 +74,13 @@ KEEPALIVE_START_LIMIT_INTERVAL = 60   # ...within this window, to avoid a loop
 
 # ── Input / hotkey ───────────────────────────────────────────────────────────
 DEFAULT_HOTKEY = "Ctrl+Shift+R"
+# How long the X11 listener waits on the X socket before re-checking its stop
+# flag. Only a backstop — stop() wakes it immediately through a self-pipe.
+X11_EVENT_WAIT_TIMEOUT = 0.5
+# How long stop() waits for the listener thread to release its grab. Must
+# exceed X11_EVENT_WAIT_TIMEOUT or stop() would routinely return while the old
+# grab is still held and the rebind would fail.
+X11_STOP_JOIN_TIMEOUT = 2.0
 
 # ── xdg-desktop-portal (Wayland global shortcuts, #99) ───────────────────────
 PORTAL_BUS_NAME = "org.freedesktop.portal.Desktop"
@@ -211,4 +218,38 @@ COLOR_MUTED = "#94a3b8"
 COLOR_SUCCESS = "#10b981"
 COLOR_BRAND_BLUE_HOVER = "#4a6fe0"   # darker brand blue for :hover states
 COLOR_ERROR = "#ef4444"              # error / destructive text
+COLOR_WARNING = "#f59e0b"            # amber-500, the macOS systemOrange slot
 COLOR_WHITE = "#ffffff"
+
+# ── Diff view (#107) ─────────────────────────────────────────────────────────
+# Same red/green reading as macOS DiffView and the Windows port: removed on the
+# left, added on the right. Aliases, not new hexes — retinting the palette
+# retints the diff.
+COLOR_DIFF_DELETED = COLOR_ERROR
+COLOR_DIFF_INSERTED = COLOR_SUCCESS
+DIFF_HIGHLIGHT_ALPHA = 0.7       # tint strength behind a changed word
+# The LCS table is O(old × new) tokens; past this the diff degrades to a whole
+# text replacement instead of stalling the GTK main loop on a document-sized
+# selection. Counts whitespace tokens too, so ~750 words a side.
+DIFF_MAX_TOKENS_PER_SIDE = 1500
+PANEL_DIFF_COLUMN_MIN_WIDTH = 240   # each diff column wraps at this width
+PANEL_RESULT_MIN_HEIGHT = 120
+
+# ── Grammar check (#107) ─────────────────────────────────────────────────────
+# Issue types are colour-coded as macOS GrammarCheckView: spelling red,
+# grammar orange, style blue, anything unrecognised grey.
+COLOR_GRAMMAR_SPELLING = COLOR_ERROR
+COLOR_GRAMMAR_GRAMMAR = COLOR_WARNING
+COLOR_GRAMMAR_STYLE = COLOR_BRAND_BLUE
+COLOR_GRAMMAR_OTHER = COLOR_MUTED
+GRAMMAR_SCORE_MAX = 100
+GRAMMAR_SCORE_GOOD = 90      # ≥ this reads green
+GRAMMAR_SCORE_FAIR = 70      # ≥ this reads amber, below reads red
+GRAMMAR_HIGHLIGHT_ALPHA = 0.15   # tint behind a flagged span in the text view
+# A Gtk.TextView inside a scroller has no natural height and collapses to a
+# sliver, so the flagged text needs an explicit floor.
+GRAMMAR_TEXT_MIN_HEIGHT = 90
+PANEL_GRAMMAR_MIN_HEIGHT = 280
+# Shown in place of an empty suggestion, i.e. an issue fixed by deleting the
+# flagged text — an empty label would read as a broken card.
+GRAMMAR_EMPTY_SUGGESTION_LABEL = "(remove)"

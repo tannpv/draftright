@@ -14,6 +14,8 @@ rendered per backend — see that module.
 from __future__ import annotations
 
 import logging
+import os
+import select
 import threading
 from typing import Callable
 
@@ -33,22 +35,110 @@ log = logging.getLogger(__name__)
 # X11 listener
 # ---------------------------------------------------------------------------
 
+def grab_hotkey(dpy, root, keycode: int, mod_mask: int, ignored, X) -> list:
+    """Grab *keycode* for every lock-key variant; return the errors X reported.
+
+    Split out of the listener so it can be exercised against a stub display —
+    the real path needs an X server, and the two defects it guards against are
+    both invisible without one:
+
+    * **The grabs must be flushed.** python-xlib buffers void requests and only
+      writes them inside ``send_and_recv``. The listener then waits with
+      ``select()``, which never writes to the socket, so without an explicit
+      round trip the grabs sit in the queue forever, the key is never actually
+      grabbed, and the app cheerfully logs "hotkey registered". The old
+      ``next_event()`` loop flushed as a side effect; losing that silently
+      disabled the X11 hotkey entirely.
+    * **The error handler must be scoped.** BadAccess (another client already
+      owns the combination) arrives asynchronously, so an unhandled failure is
+      silent. Left installed afterwards it would swallow every later error on
+      the connection — including a failing ``ungrab_key``, which leaves the
+      combination dead for every app until this process exits.
+    """
+    errors: list = []
+    dpy.set_error_handler(lambda err, *_a: errors.append(err))
+    try:
+        for extra in ignored:
+            root.grab_key(
+                keycode, mod_mask | extra, True,
+                X.GrabModeAsync, X.GrabModeAsync,
+            )
+        dpy.sync()          # flush the grabs AND surface any BadAccess
+    finally:
+        dpy.set_error_handler(None)
+    return errors
+
+
 class _X11Listener:
     """Grabs a key combo on the X root window and waits in a thread."""
 
     def __init__(self) -> None:
         self._thread: threading.Thread | None = None
         self._running = False
+        # Self-pipe: stop() has to both return promptly (it runs on the GTK
+        # main loop, at quit and on every rebind) and guarantee the grab is
+        # released before the caller re-grabs. Waiting only on a timeout gave
+        # one or the other, never both — a 0.5s UI freeze, or a rebind that
+        # collided with the grab the old thread still held. Writing a byte
+        # here wakes select() at once, so the join is effectively immediate.
+        self._wake_r: int | None = None
+        self._wake_w: int | None = None
+
+    def is_active(self) -> bool:
+        """True while the grab is actually held.
+
+        The thread exits on its own when the grab fails (BadAccess), so this
+        is what distinguishes "bound" from "we tried once and it did not
+        take" — callers must be able to retry rather than assume success.
+        """
+        return self._thread is not None and self._thread.is_alive()
 
     def start(self, keystring: str, callback: Callable[[], None]) -> None:
         self._running = True
+        self._wake_r, self._wake_w = os.pipe()
         self._thread = threading.Thread(
             target=self._run, args=(keystring, callback), daemon=True
         )
         self._thread.start()
 
     def stop(self) -> None:
+        """Signal the thread and wait for it to release the grab.
+
+        The wait is deliberate — a rebind grabs the same combination straight
+        after, and X refuses a grab another client still holds, reporting it
+        asynchronously so the hotkey would just die. The self-pipe keeps that
+        wait from being felt: the thread wakes immediately rather than at the
+        end of its select() timeout.
+        """
         self._running = False
+        thread, self._thread = self._thread, None
+
+        if self._wake_w is not None:
+            try:
+                os.write(self._wake_w, b"\0")
+            except OSError:
+                pass
+
+        if thread is not None and thread.is_alive():
+            thread.join(timeout=config.X11_STOP_JOIN_TIMEOUT)
+            if thread.is_alive():
+                log.warning(
+                    "X11 hotkey listener did not exit within %.1fs; the "
+                    "previous grab may still be held.",
+                    config.X11_STOP_JOIN_TIMEOUT,
+                )
+
+        self._close_pipe()
+
+    def _close_pipe(self) -> None:
+        for attr in ("_wake_r", "_wake_w"):
+            fd = getattr(self, attr)
+            if fd is not None:
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
+                setattr(self, attr, None)
 
     def _run(self, keystring: str, callback: Callable[[], None]) -> None:
         try:
@@ -99,28 +189,58 @@ class _X11Listener:
                    numlk | capslk, numlk | scrolllk,
                    capslk | scrolllk, numlk | capslk | scrolllk]
 
-        for extra in ignored:
-            root.grab_key(
-                keycode,
-                mod_mask | extra,
-                True,
-                X.GrabModeAsync,
-                X.GrabModeAsync,
-            )
+        grab_errors = grab_hotkey(dpy, root, keycode, mod_mask, ignored, X)
 
+        if grab_errors:
+            log.error(
+                "X11 hotkey %s could not be grabbed (%d error(s), e.g. %r) — "
+                "another application already owns this combination.",
+                keystring, len(grab_errors), grab_errors[0],
+            )
+            for extra in ignored:
+                root.ungrab_key(keycode, mod_mask | extra)
+            dpy.sync()
+            dpy.close()
+            return
+
+        # After the grab check, so an error here is never misreported as
+        # "another application owns this combination" — which would abandon a
+        # grab that had in fact succeeded.
         root.change_attributes(event_mask=X.KeyPressMask)
+        dpy.flush()
+
         log.info("X11 hotkey registered: %s (keycode=%d, mod_mask=0x%x)",
                  keystring, keycode, mod_mask)
 
-        while self._running:
-            evt = dpy.next_event()
-            if evt.type == X.KeyPress:
-                GLib.idle_add(callback)
-
-        # Ungrab on exit.
-        for extra in ignored:
-            root.ungrab_key(keycode, mod_mask | extra)
-        dpy.close()
+        try:
+            # Wait on the X socket rather than calling next_event() straight
+            # out: next_event() blocks until an event arrives, so stop() could
+            # only ever take effect on the *next* keypress — the ungrab below
+            # was unreachable and rebinding the hotkey leaked a thread that
+            # still held the old grab. The wake pipe is watched alongside it so
+            # stop() does not have to wait out the timeout on the GTK main
+            # thread; the timeout is only a backstop.
+            wake = self._wake_r
+            watch = [dpy.fileno()] + ([wake] if wake is not None else [])
+            while self._running:
+                # Ask the library first: python-xlib keeps its own event queue,
+                # so an event already buffered there leaves the socket quiet
+                # and a select()-first loop would sit on it until unrelated
+                # traffic happened to wake it.
+                queued = dpy.pending_events()
+                if queued:
+                    for _ in range(queued):
+                        if dpy.next_event().type == X.KeyPress:
+                            GLib.idle_add(callback)
+                    continue
+                select.select(watch, [], [], config.X11_EVENT_WAIT_TIMEOUT)
+        finally:
+            # Always release the grab — otherwise the combination stays dead
+            # for every other app until this process exits.
+            for extra in ignored:
+                root.ungrab_key(keycode, mod_mask | extra)
+            dpy.close()
+            log.info("X11 hotkey released: %s", keystring)
 
 
 # ---------------------------------------------------------------------------
@@ -155,15 +275,30 @@ class _PortalListener:
         self._subscriptions: list[int] = []
         self.active_trigger: str | None = None
         self.on_trigger_changed: Callable[[str | None], None] | None = None
+        # Explicit failure, as distinct from "the handshake has not finished".
+        # active_trigger is None in both states, so it cannot tell them apart,
+        # and treating an in-flight handshake as failed would tear it down on
+        # the next activation.
+        self._failed = False
+
+    def is_active(self) -> bool:
+        """True unless the binding is known to have failed.
+
+        An unfinished handshake counts as active: the portal may still be
+        prompting the user. Only a reported failure makes a retry worthwhile.
+        """
+        return not self._failed
 
     # -- lifecycle ---------------------------------------------------------
 
     def start(self, keystring: str, callback: Callable[[], None]) -> None:
         self._callback = callback
+        self._failed = False
         try:
             self._hotkey = Hotkey.parse(keystring)
         except ValueError as exc:
             log.error("Cannot parse hotkey %r: %s", keystring, exc)
+            self._failed = True
             return
 
         if not self._client.connect():
@@ -305,6 +440,10 @@ class _PortalListener:
     def _report_unavailable(self, reason: str) -> None:
         """Tell the app no shortcut is bound, and why."""
         log.warning("%s — the Wayland global hotkey will not fire.", reason)
+        # Marks the binding retryable: the next activation re-attempts the
+        # handshake, which is how a hotkey recovers once the portal comes up
+        # or a conflicting app quits.
+        self._failed = True
         self._set_active_trigger(None, force=True)
 
     def _on_activated(self, _conn, _sender, _path, _iface, _signal, params) -> None:
@@ -342,6 +481,7 @@ class HotkeyService:
 
     def __init__(self) -> None:
         self._listener: _X11Listener | _PortalListener | None = None
+        self._bound_keystring: str | None = None
         # Called with the trigger the compositor actually bound, or None when
         # no global shortcut is available.  Wayland only: on X11 the grab
         # either succeeds with the requested combination or fails outright.
@@ -358,6 +498,23 @@ class HotkeyService:
         successful return does not mean the shortcut is live.  Subscribe to
         :attr:`on_trigger_changed` for the authoritative answer.
         """
+        # do_activate() re-registers the hotkey on every activation, including
+        # the tray's "Show". Tearing a *live* binding down to rebuild the same
+        # one costs an X re-grab (which can fail while the old one lingers)
+        # and, on Wayland, a fresh portal handshake — for no change at all.
+        #
+        # A binding that FAILED must still be retried, though: re-activation
+        # is how the hotkey recovers once a conflicting app quits or the
+        # portal becomes reachable. Skipping that left it dead for the rest of
+        # the process with only a debug line.
+        if (
+            self._listener is not None
+            and self._bound_keystring == keystring
+            and self._listener.is_active()
+        ):
+            log.debug("Hotkey %s is already bound; leaving it alone.", keystring)
+            return
+
         self.stop()
 
         if is_wayland():
@@ -370,12 +527,14 @@ class HotkeyService:
             self._listener = _X11Listener()
 
         self._listener.start(keystring, callback)
+        self._bound_keystring = keystring
 
     def stop(self) -> None:
         """Stop listening and release the binding."""
         if self._listener is not None:
             self._listener.stop()
             self._listener = None
+        self._bound_keystring = None
 
     @property
     def active_trigger(self) -> str | None:

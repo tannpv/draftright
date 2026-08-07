@@ -6,97 +6,20 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Gdk", "4.0")
 
-from gi.repository import Gdk, Gio, GLib, Gtk, Pango
+from gi.repository import Gdk, GLib, Gtk, Pango
 
 from draftright import config
+from draftright.models.grammar import GrammarResult
 from draftright.models.rewrite import RewriteResult
 from draftright.models.tone import Tone
+from draftright.ui import styles
+from draftright.ui.diff_view import DiffView
+from draftright.ui.grammar_view import GrammarView
 
-# CSS for the rewrite panel, built from the shared design tokens in
-# ``config`` (Rule #1: single source — no duplicated hex literals).
-PANEL_CSS = f"""
-.rewrite-panel {{
-    background-color: {config.COLOR_BACKGROUND};
-    border: 1px solid {config.COLOR_BORDER};
-    border-radius: 12px;
-}}
-.rewrite-header {{
-    color: {config.COLOR_BRAND_BLUE};
-    font-size: 16px;
-    font-weight: bold;
-}}
-.input-preview {{
-    color: {config.COLOR_MUTED};
-    font-size: 13px;
-}}
-.tone-button {{
-    background-color: {config.COLOR_CARD};
-    color: {config.COLOR_TEXT};
-    border: 1px solid {config.COLOR_BORDER};
-    border-radius: 8px;
-    padding: 8px 12px;
-    font-size: 13px;
-    min-height: 40px;
-}}
-.tone-button:hover {{
-    background-color: {config.COLOR_BORDER};
-}}
-.tone-button-selected {{
-    background-color: {config.COLOR_BRAND_BLUE};
-    color: {config.COLOR_WHITE};
-    border: 1px solid {config.COLOR_BRAND_BLUE};
-    border-radius: 8px;
-    padding: 8px 12px;
-    font-size: 13px;
-    min-height: 40px;
-}}
-.result-area {{
-    background-color: {config.COLOR_CARD};
-    color: {config.COLOR_TEXT};
-    border: 1px solid {config.COLOR_BORDER};
-    border-radius: 8px;
-    padding: 8px;
-    font-size: 14px;
-}}
-.btn-primary {{
-    background-color: {config.COLOR_BRAND_BLUE};
-    color: {config.COLOR_WHITE};
-    border-radius: 8px;
-    padding: 8px 16px;
-    font-weight: bold;
-}}
-.btn-primary:hover {{
-    background-color: {config.COLOR_BRAND_BLUE_HOVER};
-}}
-.btn-outlined {{
-    background-color: transparent;
-    color: {config.COLOR_BRAND_BLUE};
-    border: 1px solid {config.COLOR_BRAND_BLUE};
-    border-radius: 8px;
-    padding: 8px 16px;
-}}
-.btn-outlined:hover {{
-    background-color: {config.COLOR_CARD};
-}}
-.btn-ghost {{
-    background-color: transparent;
-    color: {config.COLOR_MUTED};
-    border: none;
-    border-radius: 8px;
-    padding: 8px 16px;
-}}
-.btn-ghost:hover {{
-    background-color: {config.COLOR_CARD};
-}}
-.error-label {{
-    color: {config.COLOR_ERROR};
-    font-size: 13px;
-}}
-.copied-label {{
-    color: {config.COLOR_SUCCESS};
-    font-size: 13px;
-}}
-"""
+# Result pages. Which one is shown is decided by the tone, not by the caller.
+PAGE_TEXT = "text"
+PAGE_DIFF = "diff"
+PAGE_GRAMMAR = "grammar"
 
 
 class RewritePanel(Gtk.Window):
@@ -119,17 +42,22 @@ class RewritePanel(Gtk.Window):
         self._selected_tone = None
         self._input_text = ""
         self._result_text = ""
+        # Bumped per tone click; responses carrying an older number are dropped.
+        self._request_seq = 0
+        # Whether _diff_view holds a diff of the current result (computed on
+        # first view, not on arrival).
+        self._diff_rendered = False
 
         # Window properties
-        self.set_default_size(420, 520)
+        self.set_default_size(config.PANEL_WIDTH, config.PANEL_HEIGHT)
         self.set_decorated(False)
         self.set_resizable(False)
 
         # Keep on top
         self.set_transient_for(None)
 
-        # Load CSS
-        self._load_css()
+        # Load CSS (shared with the diff / grammar result views)
+        styles.ensure_loaded()
 
         # Build UI
         self._build_ui()
@@ -140,34 +68,14 @@ class RewritePanel(Gtk.Window):
         key_controller.connect("key-pressed", self._on_key_pressed)
         self.add_controller(key_controller)
 
-    # A panel is created fresh on every hotkey press; register the CSS
-    # provider on the display only once, or providers accumulate for the
-    # life of the process (one leak per rewrite).  Keyed by display so a
-    # multi-seat / multi-display session still gets styled.
-    _css_loaded_displays: "set" = set()
-
-    def _load_css(self):
-        """Load panel-specific CSS once per display."""
-        display = Gdk.Display.get_default()
-        if display is None or display in RewritePanel._css_loaded_displays:
-            return
-        css_provider = Gtk.CssProvider()
-        css_provider.load_from_string(PANEL_CSS)
-        Gtk.StyleContext.add_provider_for_display(
-            display,
-            css_provider,
-            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
-        )
-        RewritePanel._css_loaded_displays.add(display)
-
     def _build_ui(self):
         """Build the panel layout."""
         # Main container
         main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        main_box.set_margin_top(16)
-        main_box.set_margin_bottom(16)
-        main_box.set_margin_start(16)
-        main_box.set_margin_end(16)
+        main_box.set_margin_top(config.PANEL_MARGIN)
+        main_box.set_margin_bottom(config.PANEL_MARGIN)
+        main_box.set_margin_start(config.PANEL_MARGIN)
+        main_box.set_margin_end(config.PANEL_MARGIN)
         main_box.add_css_class("rewrite-panel")
         self.set_child(main_box)
 
@@ -222,9 +130,18 @@ class RewritePanel(Gtk.Window):
         main_box.append(self._spinner)
 
         # --- Result area ---
+        # Three interchangeable presentations of one result: the plain text,
+        # the same text diffed against the input, and — for Grammar Check,
+        # which returns an analysis rather than a rewrite — the issue list.
+        # Non-homogeneous so the panel only widens on the page that needs it.
+        self._result_stack = Gtk.Stack()
+        self._result_stack.set_hhomogeneous(False)
+        self._result_stack.set_vhomogeneous(False)
+        self._result_stack.set_vexpand(True)
+
         scrolled = Gtk.ScrolledWindow()
         scrolled.set_vexpand(True)
-        scrolled.set_min_content_height(120)
+        scrolled.set_min_content_height(config.PANEL_RESULT_MIN_HEIGHT)
 
         self._result_view = Gtk.TextView()
         self._result_view.set_editable(False)
@@ -232,7 +149,17 @@ class RewritePanel(Gtk.Window):
         self._result_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
         self._result_view.add_css_class("result-area")
         scrolled.set_child(self._result_view)
-        main_box.append(scrolled)
+        self._result_stack.add_named(scrolled, PAGE_TEXT)
+
+        self._diff_view = DiffView()
+        self._result_stack.add_named(self._diff_view, PAGE_DIFF)
+
+        self._grammar_view = GrammarView(
+            on_text_changed=self._on_grammar_text_changed
+        )
+        self._result_stack.add_named(self._grammar_view, PAGE_GRAMMAR)
+
+        main_box.append(self._result_stack)
 
         # --- Error / feedback row ---
         self._error_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
@@ -256,7 +183,22 @@ class RewritePanel(Gtk.Window):
 
         # --- Action buttons ---
         action_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        action_box.set_halign(Gtk.Align.END)
+        action_box.set_halign(Gtk.Align.FILL)
+
+        # Toggles the result between plain text and the before/after diff.
+        # Hidden until there is something to compare, and for Grammar Check,
+        # which has no rewritten text to diff.
+        self._diff_toggle = Gtk.ToggleButton(label="Diff")
+        self._diff_toggle.add_css_class("btn-outlined")
+        self._diff_toggle.set_visible(False)
+        self._diff_toggle.connect("toggled", self._on_diff_toggled)
+        action_box.append(self._diff_toggle)
+
+        # Keeps the actions right-aligned whether or not Diff is showing;
+        # halign END on the row would have left-packed them once it hid.
+        spacer = Gtk.Box()
+        spacer.set_hexpand(True)
+        action_box.append(spacer)
 
         self._replace_btn = Gtk.Button(label="Replace")
         self._replace_btn.add_css_class("btn-primary")
@@ -288,18 +230,22 @@ class RewritePanel(Gtk.Window):
             text: The selected text to rewrite.
         """
         self._input_text = text
-        self._result_text = ""
         self._selected_tone = None
+        # Supersede anything still in flight. The panel is cached and reused,
+        # so without this a rewrite requested for the *previous* selection is
+        # not stale when it lands: it would be shown as this selection's
+        # result, diffed against the wrong original, and — with Replace
+        # enabled — pasted over the text the user has selected now.
+        self._request_seq += 1
 
         # Update input preview
-        preview = text[:200].replace("\n", " ")
+        preview = text[: config.PANEL_PREVIEW_CHARS].replace("\n", " ")
         self._input_label.set_text(preview)
 
-        # Clear previous result
-        self._result_view.get_buffer().set_text("")
+        # Clear previous result — including the other two pages, or a stale
+        # diff / analysis would flash under the next tone's result.
+        self._reset_result()
         self._error_box.set_visible(False)
-        self._replace_btn.set_sensitive(False)
-        self._copy_btn.set_sensitive(False)
 
         # Reset tone button styles
         for btn in self._tone_buttons.values():
@@ -359,8 +305,7 @@ class RewritePanel(Gtk.Window):
             self._error_label.add_css_class("copied-label")
             self._error_box.set_visible(True)
 
-            # Hide after 1.5 seconds
-            GLib.timeout_add(1500, self._hide_copied_feedback)
+            GLib.timeout_add(config.FEEDBACK_FLASH_MS, self._hide_copied_feedback)
 
     # ------------------------------------------------------------------
     # Private methods
@@ -390,10 +335,10 @@ class RewritePanel(Gtk.Window):
         Args:
             tone: The tone to apply to the rewrite.
         """
-        # Serve an identical (text, tone) instantly from the client cache —
-        # no spinner, no backend round-trip. Mirrors macOS.
         selected = Tone.from_api_value(tone)
         settings = self.app.settings_service
+        # Only Translate depends on the language; sending it for the others
+        # would fragment the cache for no benefit.
         language = (
             settings.translate_language
             if settings is not None
@@ -401,68 +346,180 @@ class RewritePanel(Gtk.Window):
             and selected.uses_target_language
             else None
         )
+        expects_grammar = selected is not None and selected.returns_grammar_analysis
 
+        # Every click supersedes the one before it. Without this, clicking a
+        # second tone while the first is still in flight lets the slower,
+        # older response land last and overwrite the newer result.
+        self._request_seq += 1
+        seq = self._request_seq
+
+        # Clear before the cache lookup too, so a hit cannot leave the previous
+        # tone's error or result page showing underneath it.
+        self._error_box.set_visible(False)
+        self._reset_result()
+
+        # Snapshot the input: the panel is reused, so a request outliving a
+        # reopen must not key its cache entry on the *next* selection's text.
+        text = self._input_text
+
+        # Serve an identical (text, tone) instantly from the client cache —
+        # no spinner, no backend round-trip. Mirrors macOS.
         cache = getattr(self.app, "rewrite_cache", None)
         if cache is not None:
-            cached = cache.get(self._input_text, tone, language)
+            cached = cache.get(text, tone, language)
             if cached is not None:
-                self._on_api_success(cached)
+                self._on_api_success(cached, seq, selected)
                 return
 
         self._spinner.set_visible(True)
         self._spinner.start()
-        self._error_box.set_visible(False)
-        self._replace_btn.set_sensitive(False)
-        self._copy_btn.set_sensitive(False)
-        self._result_view.get_buffer().set_text("")
 
         def _do_request():
             try:
                 if self.app.api_client is None:
                     raise RuntimeError("API client not initialized. Please sign in first.")
 
-                # Reuse the `language` resolved above rather than re-reading it
-                # unconditionally: it is None for tones that don't translate,
-                # and it MUST match the value used in the cache lookup.
-                payload = self.app.api_client.rewrite(
-                    self._input_text, tone, language
-                )
-                # /rewrite returns a dict; the buffer needs the text out of it.
-                result = RewriteResult.from_wire(payload).text
+                payload = self.app.api_client.rewrite(text, tone, language)
+                # /rewrite returns a dict; the views need the payload out of
+                # it — the rewritten text, or the grammar analysis as JSON.
+                result = RewriteResult.from_wire(
+                    payload, expects_grammar=expects_grammar
+                ).text
                 if cache is not None:
-                    cache.set(self._input_text, tone, result, language)
-                GLib.idle_add(self._on_api_success, result)
+                    # Keyed exactly as the lookup above: without the language
+                    # every Translate result was written under a key that
+                    # ``get`` never reads, so its cache never hit.
+                    cache.set(text, tone, result, language)
+                GLib.idle_add(self._on_api_success, result, seq, selected)
             except Exception as exc:
-                GLib.idle_add(self._on_api_error, str(exc))
+                GLib.idle_add(self._on_api_error, str(exc), seq)
 
         thread = threading.Thread(target=_do_request, daemon=True)
         thread.start()
 
-    def _on_api_success(self, result: str):
+    def _is_stale(self, seq) -> bool:
+        """True when a newer tone click has already superseded this response."""
+        return seq is not None and seq != self._request_seq
+
+    def _on_api_success(self, result: str, seq=None, tone: "Tone | None" = None):
         """Handle successful API response on the main thread.
 
         Args:
-            result: The rewritten text.
+            result: The rewritten text, or the grammar analysis as JSON when
+                the tone returns one.
+            seq: Request generation; a superseded response is dropped.
+            tone: The tone this response was requested for. Passed in rather
+                than re-read from ``_selected_tone``, which is mutable and may
+                already describe a different request by the time this runs —
+                reading it back could route a grammar payload into the plain
+                text view, pasting raw JSON over the user's selection.
         """
+        if self._is_stale(seq):
+            return False
+
         self._spinner.stop()
         self._spinner.set_visible(False)
+
+        if tone is not None and tone.returns_grammar_analysis:
+            self._show_grammar(result)
+        else:
+            self._show_rewrite(result)
+        return False  # don't repeat this idle callback
+
+    def _show_rewrite(self, result: str):
+        """Present rewritten text: the plain result, and a diff on demand."""
         self._result_text = result
         self._result_view.get_buffer().set_text(result)
+        self._diff_toggle.set_visible(True)
+        # Not diffed yet — word_diff is an O(m×n) table on the main loop, and
+        # most results are never toggled to the diff page at all.
+        self._diff_rendered = False
+        self._show_result_page(
+            PAGE_DIFF if self._diff_toggle.get_active() else PAGE_TEXT
+        )
         self._replace_btn.set_sensitive(True)
         self._copy_btn.set_sensitive(True)
 
-    def _on_api_error(self, message: str):
+    def _show_result_page(self, page: str):
+        """Switch pages, computing the diff the first time it is actually shown."""
+        if page == PAGE_DIFF and not self._diff_rendered:
+            self._diff_view.set_texts(self._input_text, self._result_text)
+            self._diff_rendered = True
+        self._result_stack.set_visible_child_name(page)
+
+    def _show_grammar(self, payload: str):
+        """Present a grammar analysis: score, flagged text, per-issue fixes."""
+        try:
+            result = GrammarResult.from_json_text(payload)
+        except ValueError as exc:
+            self._on_api_error(f"Grammar check returned an unreadable result: {exc}")
+            return
+
+        # The backend answers with score 0 and an empty issue list when the
+        # model's JSON did not parse; that is a failure, not a perfect zero.
+        if result.error:
+            self._on_api_error(result.error)
+            return
+
+        # Nothing to diff and nothing to toggle — this page is the result.
+        # Only hidden, not un-toggled, so the user's diff preference survives
+        # a detour through Grammar Check.
+        self._diff_toggle.set_visible(False)
+
+        self._grammar_view.set_result(self._input_text, result)
+        self._show_result_page(PAGE_GRAMMAR)
+
+        # Replace / Copy act on the corrected text, which starts out as the
+        # input and gains each fix as it is applied.
+        self._result_text = self._grammar_view.corrected_text
+        self._replace_btn.set_sensitive(True)
+        self._copy_btn.set_sensitive(True)
+
+    def _on_grammar_text_changed(self, text: str):
+        """Keep Replace / Copy pointed at the latest corrected text."""
+        self._result_text = text
+
+    def _on_diff_toggled(self, button: Gtk.ToggleButton):
+        """Switch the result area between the plain text and the diff."""
+        self._show_result_page(PAGE_DIFF if button.get_active() else PAGE_TEXT)
+
+    def _reset_result(self):
+        """Clear every result page and disable the actions that act on one."""
+        # Stop the spinner here, not only when a response lands: a superseded
+        # response returns at the staleness check before it would ever reach
+        # _spinner.stop(), so a panel reopened while a request was in flight
+        # spin forever with no result and no error.
+        self._spinner.stop()
+        self._spinner.set_visible(False)
+        self._result_text = ""
+        self._diff_rendered = False
+        self._result_view.get_buffer().set_text("")
+        self._diff_view.clear()
+        self._grammar_view.clear()
+        self._diff_toggle.set_visible(False)
+        self._result_stack.set_visible_child_name(PAGE_TEXT)
+        self._replace_btn.set_sensitive(False)
+        self._copy_btn.set_sensitive(False)
+
+    def _on_api_error(self, message: str, seq=None):
         """Handle API error on the main thread.
 
         Args:
             message: The error message to display.
+            seq: Request generation; a superseded failure is dropped, so a
+                slow error cannot bury a newer tone's successful result.
         """
+        if self._is_stale(seq):
+            return False
+
         self._spinner.stop()
         self._spinner.set_visible(False)
         self._error_label.remove_css_class("copied-label")
         self._error_label.add_css_class("error-label")
         self._error_label.set_text(message)
         self._error_box.set_visible(True)
+        return False  # don't repeat this idle callback
 
     def _hide_copied_feedback(self):
         """Hide the 'Copied!' feedback label."""

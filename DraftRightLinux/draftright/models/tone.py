@@ -27,6 +27,25 @@ class Tone(Enum):
         """
         return self is Tone.TRANSLATE
 
+    @property
+    def returns_grammar_analysis(self) -> bool:
+        """True when /rewrite answers with a ``grammar`` object, not text.
+
+        Grammar Check is the one tone whose response has no ``rewritten_text``
+        — parsing it as one raised "/rewrite response has no rewritten_text"
+        and the tone did nothing but show an error (#107).
+        """
+        return self is Tone.GRAMMAR_CHECK
+
+    @property
+    def produces_replacement_text(self) -> bool:
+        """True when the result can be pasted straight over the selection.
+
+        One-Click has no UI to review anything, so it can only offer tones that
+        yield replacement text — a grammar analysis has nothing to inject.
+        """
+        return not self.returns_grammar_analysis
+
     @classmethod
     def from_api_value(cls, value: str) -> "Tone | None":
         for tone in cls:
