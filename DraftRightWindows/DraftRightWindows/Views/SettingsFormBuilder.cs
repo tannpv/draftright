@@ -888,28 +888,6 @@ internal static class SettingsFormBuilder
         var featureBtn = MakeSecondaryButton("Suggest a feature…", 188, y, 180);
         featureBtn.Click += (_, _) => Views.SuggestFeatureDialog.Show();
         tab.Controls.Add(featureBtn);
-        y += 50;
-
-        // SPIKE — remove with WpfUiSpikeWindow once the toolkit decision is
-        // made (#155). WinUI 3 already failed here; this asks the same
-        // question of WPF UI, which has no PRI dependency.
-        tab.Controls.Add(MakeSectionHeader("Experimental", y));
-        y += 30;
-        tab.Controls.Add(new WinForms.Label
-        {
-            Text = "Opens a WPF test window. Checks whether DraftRight can move to the modern "
-                 + "Windows look — this is the second toolkit being tried.",
-            ForeColor = Theme.TextMuted,
-            Font = new Font("Segoe UI", 9),
-            Location = new Point(16, y),
-            // 36px clipped the second line at this width (visible in report #58).
-            Size = new Size(448, 44),
-        });
-        y += 48;
-        // 220px cut the caption to "Open WPF test windo".
-        var spikeBtn = MakeSecondaryButton("Open WPF test window", 16, y, 240);
-        spikeBtn.Click += (_, _) => Views.WpfUiSpikeWindow.Show();
-        tab.Controls.Add(spikeBtn);
 
         return tab;
     }
