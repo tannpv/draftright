@@ -33,4 +33,24 @@ internal static class Theme
 
     /// <summary>Background wash behind inserted words in the diff view.</summary>
     public static readonly Color DiffInsertedBg = Color.FromArgb(20, 68, 48);
+
+    /// <summary>
+    /// The same colour as a WPF brush, for views migrated to WPF UI (#156).
+    ///
+    /// WinForms speaks <see cref="System.Drawing.Color"/> and WPF speaks
+    /// <c>System.Windows.Media.Color</c>. Bridging here means a migrated view
+    /// reuses this palette instead of restating hex values — during a
+    /// migration both stacks are live at once, which is exactly when a second
+    /// copy would drift (Rule #1).
+    ///
+    /// Frozen: these are shared across UI threads and never mutate, and an
+    /// unfrozen brush takes a lock on every render.
+    /// </summary>
+    public static System.Windows.Media.SolidColorBrush WpfBrush(Color c)
+    {
+        var brush = new System.Windows.Media.SolidColorBrush(
+            System.Windows.Media.Color.FromArgb(c.A, c.R, c.G, c.B));
+        brush.Freeze();
+        return brush;
+    }
 }
