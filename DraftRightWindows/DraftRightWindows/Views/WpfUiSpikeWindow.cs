@@ -77,6 +77,19 @@ internal static class WpfUiSpikeWindow
             ExtendsContentIntoTitleBar = true,
         };
 
+        // WPF-UI ships its control templates and theme brushes as resource
+        // dictionaries that a normal app merges in App.xaml. This process has
+        // no App.xaml — it is a WindowsAppSDK app with no XAML at all — so
+        // nothing loaded them, every control resolved to no template, and the
+        // window rendered as a bare white rectangle (bug report #58).
+        //
+        // Merging them into the window's own resources scopes the theme to
+        // this window, which is what we want anyway: the spike must not
+        // restyle the WinForms UI around it.
+        window.Resources.MergedDictionaries.Add(
+            new Wpf.Ui.Markup.ThemesDictionary { Theme = Wpf.Ui.Appearance.ApplicationTheme.Dark });
+        window.Resources.MergedDictionaries.Add(new Wpf.Ui.Markup.ControlsDictionary());
+
         var root = new StackPanel { Margin = new Thickness(24) };
 
         root.Children.Add(new TitleBar { Title = "DraftRight" });
