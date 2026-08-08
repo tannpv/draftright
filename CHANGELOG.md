@@ -23,6 +23,10 @@ A Windows-only line under `### Windows` will never appear in the macOS
 If a version needs the user to *do* something after updating, say so
 explicitly under an **Action needed:** line inside the relevant sub-section.
 
+## 2.3.38 — 2026-08-08
+### Windows
+- Added a WPF test window under Settings → Advanced → Experimental, checking whether DraftRight can move to the modern Windows look. This is the second toolkit being tried; the first could not render. It touches nothing else and will be removed once we know.
+
 ## 2.3.37 — 2026-08-08
 ### Windows
 - Fixed the "Capture screen" button on the bug report form being invisible. It was drawn underneath the filename label, so it had been unusable since it was added.
