@@ -315,6 +315,9 @@ public class App : Application
         _tray = new TrayIconController(
             UpdateService,
             onOpenSettings: OpenSettings,
+            // Safe to call straight from the tray's STA thread: the dialog
+            // spawns its own, so the tray menu never blocks behind it.
+            onReportBug: () => Views.ReportBugDialog.Show(),
             // Drop cached rewrites too — one account's results must never be
             // served to whoever signs in next on the same machine.
             onSignOut: () => { Auth.ClearTokens(); Api.ClearToken(); RewriteCache.Clear(); },
