@@ -23,6 +23,10 @@ A Windows-only line under `### Windows` will never appear in the macOS
 If a version needs the user to *do* something after updating, say so
 explicitly under an **Action needed:** line inside the relevant sub-section.
 
+## 2.3.34 — 2026-08-08
+### Windows
+- Added "Report a Bug…" to the tray menu. It was previously tucked away in Settings under the Advanced tab, which meant hunting for it at exactly the moment something had gone wrong.
+
 ## 2.3.33 — 2026-08-08
 ### Windows
 - Grammar Check now shows its results. Run it and you get a list of what it found — spelling, grammar and style each colour-coded — with the correction next to the original and the reason underneath. Fix them one at a time, or use Fix All. Corrections land on the word they were meant for even when an earlier fix has changed the length of the sentence, and anything already fixed by an overlapping correction quietly drops off the list instead of being applied twice.
