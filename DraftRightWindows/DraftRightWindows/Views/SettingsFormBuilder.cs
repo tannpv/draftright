@@ -888,26 +888,6 @@ internal static class SettingsFormBuilder
         var featureBtn = MakeSecondaryButton("Suggest a feature…", 188, y, 180);
         featureBtn.Click += (_, _) => Views.SuggestFeatureDialog.Show();
         tab.Controls.Add(featureBtn);
-        y += 50;
-
-        // Temporary — remove with WinUiSpikeWindow once we know whether Fluent
-        // is viable on unpackaged builds. Parked in Advanced so it is reachable
-        // for testing without appearing on a path normal users take.
-        tab.Controls.Add(MakeSectionHeader("Experimental", y));
-        y += 30;
-        tab.Controls.Add(new WinForms.Label
-        {
-            Text = "Opens a WinUI 3 test window. Tells us whether this app can move to the "
-                 + "modern Fluent look instead of the current WinForms panels.",
-            ForeColor = Theme.TextMuted,
-            Font = new Font("Segoe UI", 9),
-            Location = new Point(16, y),
-            Size = new Size(448, 36),
-        });
-        y += 40;
-        var spikeBtn = MakeSecondaryButton("Open WinUI 3 test window", 16, y, 220);
-        spikeBtn.Click += (_, _) => App.ShowWinUiSpike();
-        tab.Controls.Add(spikeBtn);
 
         return tab;
     }

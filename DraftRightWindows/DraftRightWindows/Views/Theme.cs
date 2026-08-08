@@ -33,16 +33,4 @@ internal static class Theme
 
     /// <summary>Background wash behind inserted words in the diff view.</summary>
     public static readonly Color DiffInsertedBg = Color.FromArgb(20, 68, 48);
-
-    /// <summary>
-    /// The same colour as a WinUI brush.
-    ///
-    /// WinForms speaks <see cref="System.Drawing.Color"/> and WinUI speaks
-    /// <c>Windows.UI.Color</c>. Bridging here means a WinUI surface reuses this
-    /// palette rather than restating the hex values — the whole point of
-    /// consolidating them (Rule #1). Delete this along with the WinForms views
-    /// if the UI ever moves over wholesale.
-    /// </summary>
-    public static Microsoft.UI.Xaml.Media.SolidColorBrush Brush(Color c) =>
-        new(Windows.UI.Color.FromArgb(c.A, c.R, c.G, c.B));
 }
