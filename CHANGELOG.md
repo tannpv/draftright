@@ -23,6 +23,10 @@ A Windows-only line under `### Windows` will never appear in the macOS
 If a version needs the user to *do* something after updating, say so
 explicitly under an **Action needed:** line inside the relevant sub-section.
 
+## 2.3.36 — 2026-08-08
+### Windows
+- Added a test window under Settings → Advanced → Experimental. It checks whether DraftRight can move to the modern Windows look instead of the current panels. It does nothing to your settings or your text — it just draws some controls so we can see whether they render. It will be removed in a later release.
+
 ## 2.3.35 — 2026-08-08
 ### Windows
 - The bug report form can now take the screenshot for you. Click "Capture screen" and DraftRight briefly hides itself, grabs the screen and attaches it — no need to alt-tab to a snipping tool, which often disturbs whatever you were trying to show us in the first place. Large screens are scaled down automatically so the report still sends.
