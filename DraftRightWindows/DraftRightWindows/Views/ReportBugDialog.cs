@@ -232,7 +232,11 @@ internal static class ReportBugDialog
             Font = new Font("Segoe UI", 8.5f),
             ForeColor = Theme.TextMuted,
             Location = new Point(20, y),
-            Size = new Size(420, 18),
+            // Stops short of the buttons that share this row. It used to be
+            // 420 wide, which ran under "Capture screen" — and because
+            // WinForms paints lower-index controls on top, the label's
+            // background hid the button entirely.
+            Size = new Size(300, 18),
             AutoEllipsis = true,
         };
         form.Controls.Add(fileLabel);
