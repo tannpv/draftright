@@ -855,6 +855,22 @@ internal sealed class UpdateProgressUI
             _backgroundButton.Enabled = false;
             _statusLabel.Text = "Continuing in background...";
             try { CancelRequested?.Invoke(); } catch { /* listener errors are not our problem */ }
+
+            // Close here rather than leaving it to the caller's ui.Close().
+            //
+            // That call only runs after TryDownloadInstallerAsync returns, so
+            // the window's lifetime was tied to the download task unwinding.
+            // Early in a transfer the token trips and it returns promptly, but
+            // at 100% — exactly when users reach for this button — there is
+            // nothing left to interrupt and the task is still writing the file
+            // and hashing 134 MB for the integrity check. The window sat there
+            // reading "100%" and ignoring the click (#153).
+            //
+            // We are already on the form's own UI thread here, so this is a
+            // direct close. Background work is unaffected: cancellation is
+            // signalled above, silent staging continues, and every other UI
+            // method no-ops once the handle is gone.
+            _form.Close();
         };
         var tip = new System.Windows.Forms.ToolTip();
         tip.SetToolTip(_backgroundButton, "Hide this window. The download keeps running silently — you'll get a 'ready to install' notice when it's done.");
