@@ -23,6 +23,10 @@ A Windows-only line under `### Windows` will never appear in the macOS
 If a version needs the user to *do* something after updating, say so
 explicitly under an **Action needed:** line inside the relevant sub-section.
 
+## 2.3.35 — 2026-08-08
+### Windows
+- The bug report form can now take the screenshot for you. Click "Capture screen" and DraftRight briefly hides itself, grabs the screen and attaches it — no need to alt-tab to a snipping tool, which often disturbs whatever you were trying to show us in the first place. Large screens are scaled down automatically so the report still sends.
+
 ## 2.3.34 — 2026-08-08
 ### Windows
 - Added "Report a Bug…" to the tray menu. It was previously tucked away in Settings under the Advanced tab, which meant hunting for it at exactly the moment something had gone wrong.
