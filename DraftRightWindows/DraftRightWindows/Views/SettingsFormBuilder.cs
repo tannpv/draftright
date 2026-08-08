@@ -902,10 +902,12 @@ internal static class SettingsFormBuilder
             ForeColor = Theme.TextMuted,
             Font = new Font("Segoe UI", 9),
             Location = new Point(16, y),
-            Size = new Size(448, 36),
+            // 36px clipped the second line at this width (visible in report #58).
+            Size = new Size(448, 44),
         });
-        y += 40;
-        var spikeBtn = MakeSecondaryButton("Open WPF test window", 16, y, 220);
+        y += 48;
+        // 220px cut the caption to "Open WPF test windo".
+        var spikeBtn = MakeSecondaryButton("Open WPF test window", 16, y, 240);
         spikeBtn.Click += (_, _) => Views.WpfUiSpikeWindow.Show();
         tab.Controls.Add(spikeBtn);
 
