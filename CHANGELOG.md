@@ -23,6 +23,12 @@ A Windows-only line under `### Windows` will never appear in the macOS
 If a version needs the user to *do* something after updating, say so
 explicitly under an **Action needed:** line inside the relevant sub-section.
 
+## 2.3.33 — 2026-08-08
+### Windows
+- Grammar Check now shows its results. Run it and you get a list of what it found — spelling, grammar and style each colour-coded — with the correction next to the original and the reason underneath. Fix them one at a time, or use Fix All. Corrections land on the word they were meant for even when an earlier fix has changed the length of the sentence, and anything already fixed by an overlapping correction quietly drops off the list instead of being applied twice.
+- Added a Diff button that shows your original and the rewrite side by side, with the removed words marked on the left and the added ones on the right. It appears once a rewrite exists, and toggles back to the normal view.
+- The "Continue in background" button on the update window now closes it straight away. Previously, if you clicked it once the download had reached 100%, the window sat there still showing 100% while the installer was being checked — so it looked like the click had done nothing. The download continues in the background either way; you'll get the "ready to install" notice when it lands.
+
 ## 2.3.32 — 2026-08-06
 ### Windows
 - Repeating a rewrite you already asked for is now instant. Ask for the same text in the same tone again — after switching tones and back, or reopening the panel — and the previous result appears immediately with no waiting and no round trip to the server. Translations are kept separately per target language, so changing the language always fetches a fresh translation.
