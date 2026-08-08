@@ -8,7 +8,7 @@
            - .exe FileVersion / ProductVersion (read by Inno Setup for the installer)
            - Installer filename: DraftRight-Setup-{Version}-{arch}.exe
          Bump here on every release. -->
-    <Version>2.3.37</Version>
+    <Version>2.3.38</Version>
     <!-- RuntimeIdentifier is supplied at publish time via `dotnet publish -r <rid>`
          (CI passes win-x64/win-arm64 from a matrix). Hardcoding it here would force
          the value even when the CLI overrides, breaking local x64 dev builds. -->
@@ -45,8 +45,16 @@
   <ItemGroup>
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
     <FrameworkReference Include="Microsoft.WindowsDesktop.App.WindowsForms" />
+    <!-- SPIKE (#155 follow-up): WPF alongside WinForms, so a WPF-UI Fluent
+         window can be evaluated without disturbing the shipping panels.
+         Remove with the spike if WPF UI is not adopted. -->
+    <FrameworkReference Include="Microsoft.WindowsDesktop.App.WPF" />
     <PackageReference Include="H.NotifyIcon.WinUI" Version="2.1.0" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+    <!-- SPIKE (#155 follow-up): Fluent-styled WPF controls, evaluated as the
+         alternative to WinUI 3 after WinUI proved unrenderable on unpackaged
+         builds. Remove with the spike if not adopted. -->
+    <PackageReference Include="WPF-UI" Version="4.3.0" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.6.250108002" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.1742" />
   </ItemGroup>
