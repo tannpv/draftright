@@ -22,6 +22,7 @@ internal sealed class TrayIconController : IDisposable
 {
     private readonly IUpdateService _updateService;
     private readonly Action _onOpenSettings;
+    private readonly Action _onReportBug;
     private readonly Action _onSignOut;
     private readonly Action _onQuit;
 
@@ -41,11 +42,13 @@ internal sealed class TrayIconController : IDisposable
     public TrayIconController(
         IUpdateService updateService,
         Action onOpenSettings,
+        Action onReportBug,
         Action onSignOut,
         Action onQuit)
     {
         _updateService = updateService;
         _onOpenSettings = onOpenSettings;
+        _onReportBug = onReportBug;
         _onSignOut = onSignOut;
         _onQuit = onQuit;
     }
@@ -100,6 +103,11 @@ internal sealed class TrayIconController : IDisposable
         menu.Items.Add(_updateMenuItem);
         menu.Items.Add(new WinForms.ToolStripSeparator());
         menu.Items.Add("Settings", null, (_, _) => _onOpenSettings());
+        // Reporting a bug previously meant Settings -> Advanced -> scroll to
+        // the bottom, which is three steps into a tab nobody associates with
+        // feedback. Users hit a bug when the app is misbehaving, which is
+        // exactly the moment to not make them go hunting.
+        menu.Items.Add("Report a Bug…", null, (_, _) => _onReportBug());
         menu.Items.Add(new WinForms.ToolStripSeparator());
         menu.Items.Add("Sign Out", null, (_, _) => _onSignOut());
         menu.Items.Add("Quit", null, (_, _) => _onQuit());
