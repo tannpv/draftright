@@ -33,7 +33,7 @@ public sealed class QrCheckoutDialog : WinForms.Form
         Width = 460;
         Height = 620;
         StartPosition = WinForms.FormStartPosition.CenterParent;
-        BackColor = Color.FromArgb(15, 23, 42);
+        BackColor = Theme.BgDark;
         ForeColor = Color.White;
         FormBorderStyle = WinForms.FormBorderStyle.FixedDialog;
         MaximizeBox = false;
@@ -63,7 +63,7 @@ public sealed class QrCheckoutDialog : WinForms.Form
             Location = new Point(96, 140),
             Size = new Size(260, 260),
             SizeMode = WinForms.PictureBoxSizeMode.Zoom,
-            BackColor = Color.FromArgb(30, 41, 59),
+            BackColor = Theme.CardBg,
         };
         _ = LoadQrAsync(qr, _checkout.ImageUrl);
 
@@ -92,7 +92,7 @@ public sealed class QrCheckoutDialog : WinForms.Form
             Text = "Close",
             Location = new Point(360, Height - 80),
             Size = new Size(80, 32),
-            BackColor = Color.FromArgb(51, 65, 85),
+            BackColor = Theme.BorderColor,
             ForeColor = Color.White,
             FlatStyle = WinForms.FlatStyle.Flat,
         };
@@ -119,7 +119,7 @@ public sealed class QrCheckoutDialog : WinForms.Form
                 {
                     Text = "Could not load QR.\nUse manual transfer below.",
                     ForeColor = Color.White,
-                    BackColor = Color.FromArgb(30, 41, 59),
+                    BackColor = Theme.CardBg,
                     TextAlign = ContentAlignment.MiddleCenter,
                     Dock = WinForms.DockStyle.Fill,
                 };

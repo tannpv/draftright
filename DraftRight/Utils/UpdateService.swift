@@ -254,7 +254,10 @@ final class UpdateService: ObservableObject {
         }
     }
 
-    private func isNewer(remote: String, local: String) -> Bool {
+    /// Internal rather than private so the test target can reach it: this is
+    /// pure version arithmetic and the source of the "current 2.2.10, install
+    /// 2.3.1, still 2.2.10" class of bug. Not called from outside this type.
+    func isNewer(remote: String, local: String) -> Bool {
         let r = remote.split(separator: ".").compactMap { Int($0) }
         let l = local.split(separator: ".").compactMap { Int($0) }
         for i in 0..<max(r.count, l.count) {
@@ -344,7 +347,10 @@ final class UpdateService: ObservableObject {
     /// hash — older releases install unverified, mirroring the Linux/Windows
     /// clients. Throws on mismatch so a corrupt or tampered download is never
     /// mounted or copied into /Applications.
-    private func verifyIntegrity(at path: String, expected: String?) throws {
+    /// Internal rather than private so the test target can reach it. This is
+    /// the gate that stops a tampered or corrupt DMG being mounted (#22), and
+    /// it had no coverage at all. Not called from outside this type.
+    func verifyIntegrity(at path: String, expected: String?) throws {
         guard let expected = expected?
                 .trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
               !expected.isEmpty else {

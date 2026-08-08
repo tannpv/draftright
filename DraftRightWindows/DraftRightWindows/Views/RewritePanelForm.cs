@@ -28,15 +28,6 @@ public sealed class RewritePanelForm : WinForms.Form
     public RewritePanelViewModel ViewModel { get; }
 
     // ── Theme constants (match the dark theme used elsewhere) ─────────
-    private static readonly Color BgDark      = Color.FromArgb(15, 23, 42);
-    private static readonly Color CardBg      = Color.FromArgb(30, 41, 59);
-    private static readonly Color ResultBg    = Color.FromArgb(15, 41, 34);
-    private static readonly Color BrandBlue   = Color.FromArgb(93, 135, 255);
-    private static readonly Color TextPrimary = Color.FromArgb(226, 232, 240);
-    private static readonly Color TextMuted   = Color.FromArgb(148, 163, 184);
-    private static readonly Color BorderColor = Color.FromArgb(51, 65, 85);
-    private static readonly Color ErrorRed    = Color.FromArgb(239, 68, 68);
-    private static readonly Color SuccessGreen = Color.FromArgb(34, 197, 94);
 
     // ── Tone button layout: 6 visible tones in a 3×2 grid ─────────────
     private static readonly (Tone Tone, string Icon, string Label)[] ToneButtonsLayout =
@@ -75,8 +66,8 @@ public sealed class RewritePanelForm : WinForms.Form
         Width = 640;
         Height = 600;
         StartPosition = WinForms.FormStartPosition.CenterScreen;
-        BackColor = BgDark;
-        ForeColor = TextPrimary;
+        BackColor = Theme.BgDark;
+        ForeColor = Theme.TextPrimary;
         FormBorderStyle = WinForms.FormBorderStyle.Sizable;
         MinimumSize = new Size(480, 460);
         ShowInTaskbar = true;
@@ -91,7 +82,7 @@ public sealed class RewritePanelForm : WinForms.Form
             Dock = WinForms.DockStyle.Fill,
             ColumnCount = 1,
             RowCount = 6,
-            BackColor = BgDark,
+            BackColor = Theme.BgDark,
         };
         root.ColumnStyles.Add(new WinForms.ColumnStyle(WinForms.SizeType.Percent, 100));
         root.RowStyles.Add(new WinForms.RowStyle(WinForms.SizeType.AutoSize));         // input
@@ -107,8 +98,8 @@ public sealed class RewritePanelForm : WinForms.Form
             Multiline = true,
             ReadOnly = true,
             ScrollBars = WinForms.ScrollBars.Vertical,
-            BackColor = CardBg,
-            ForeColor = TextMuted,
+            BackColor = Theme.CardBg,
+            ForeColor = Theme.TextMuted,
             BorderStyle = WinForms.BorderStyle.FixedSingle,
             Font = new Font("Segoe UI", 9.5f),
             Dock = WinForms.DockStyle.Fill,
@@ -127,7 +118,7 @@ public sealed class RewritePanelForm : WinForms.Form
         _usageLabel = new WinForms.Label
         {
             Text = "",
-            ForeColor = TextMuted,
+            ForeColor = Theme.TextMuted,
             Font = new Font("Segoe UI", 9),
             AutoSize = true,
             Margin = new WinForms.Padding(2, 4, 0, 6),
@@ -228,7 +219,7 @@ public sealed class RewritePanelForm : WinForms.Form
             Dock = WinForms.DockStyle.Fill,
             ColumnCount = 3,
             RowCount = 2,
-            BackColor = BgDark,
+            BackColor = Theme.BgDark,
             Margin = new WinForms.Padding(0, 0, 0, 12),
             AutoSize = true,
             AutoSizeMode = WinForms.AutoSizeMode.GrowAndShrink,
@@ -249,14 +240,14 @@ public sealed class RewritePanelForm : WinForms.Form
                 Dock = WinForms.DockStyle.Fill,
                 Height = 44,
                 Margin = new WinForms.Padding(4),
-                BackColor = CardBg,
-                ForeColor = TextPrimary,
+                BackColor = Theme.CardBg,
+                ForeColor = Theme.TextPrimary,
                 FlatStyle = WinForms.FlatStyle.Flat,
                 Font = new Font("Segoe UI", 10),
                 TextAlign = ContentAlignment.MiddleCenter,
                 Cursor = WinForms.Cursors.Hand,
             };
-            btn.FlatAppearance.BorderColor = BorderColor;
+            btn.FlatAppearance.BorderColor = Theme.BorderColor;
             btn.FlatAppearance.BorderSize = 1;
             btn.Click += OnToneClick;
             _toneButtons[tone] = btn;
@@ -271,7 +262,7 @@ public sealed class RewritePanelForm : WinForms.Form
         var panel = new WinForms.Panel
         {
             Dock = WinForms.DockStyle.Fill,
-            BackColor = BgDark,
+            BackColor = Theme.BgDark,
             Margin = new WinForms.Padding(0, 0, 0, 8),
             MinimumSize = new Size(0, 200),
         };
@@ -296,8 +287,8 @@ public sealed class RewritePanelForm : WinForms.Form
             Multiline = true,
             ReadOnly = true,
             ScrollBars = WinForms.ScrollBars.Vertical,
-            BackColor = ResultBg,
-            ForeColor = TextPrimary,
+            BackColor = Theme.ResultBg,
+            ForeColor = Theme.TextPrimary,
             BorderStyle = WinForms.BorderStyle.FixedSingle,
             Font = new Font("Segoe UI", 10.5f),
             Dock = WinForms.DockStyle.Fill,
@@ -309,8 +300,8 @@ public sealed class RewritePanelForm : WinForms.Form
         {
             Text = "Loading…",
             Font = new Font("Segoe UI", 11, FontStyle.Bold),
-            ForeColor = BrandBlue,
-            BackColor = ResultBg,
+            ForeColor = Theme.BrandBlue,
+            BackColor = Theme.ResultBg,
             TextAlign = ContentAlignment.MiddleCenter,
             Dock = WinForms.DockStyle.Fill,
             Visible = false,
@@ -327,7 +318,7 @@ public sealed class RewritePanelForm : WinForms.Form
         {
             Dock = WinForms.DockStyle.Fill,
             FlowDirection = WinForms.FlowDirection.RightToLeft,
-            BackColor = BgDark,
+            BackColor = Theme.BgDark,
             AutoSize = true,
             AutoSizeMode = WinForms.AutoSizeMode.GrowAndShrink,
             Margin = new WinForms.Padding(0, 4, 0, 4),
@@ -337,14 +328,14 @@ public sealed class RewritePanelForm : WinForms.Form
         {
             Text = "Close",
             Size = new Size(96, 34),
-            BackColor = CardBg,
-            ForeColor = TextPrimary,
+            BackColor = Theme.CardBg,
+            ForeColor = Theme.TextPrimary,
             FlatStyle = WinForms.FlatStyle.Flat,
             Font = new Font("Segoe UI", 10),
             Cursor = WinForms.Cursors.Hand,
             Margin = new WinForms.Padding(4),
         };
-        closeBtn.FlatAppearance.BorderColor = BorderColor;
+        closeBtn.FlatAppearance.BorderColor = Theme.BorderColor;
         closeBtn.Click += (_, _) => SafeClose();
 
         // Before/after diff (#107). Hidden until a rewrite exists, since the
@@ -353,30 +344,30 @@ public sealed class RewritePanelForm : WinForms.Form
         {
             Text = "Diff",
             Size = new Size(96, 34),
-            BackColor = CardBg,
-            ForeColor = TextPrimary,
+            BackColor = Theme.CardBg,
+            ForeColor = Theme.TextPrimary,
             FlatStyle = WinForms.FlatStyle.Flat,
             Font = new Font("Segoe UI", 10),
             Cursor = WinForms.Cursors.Hand,
             Margin = new WinForms.Padding(4),
             Visible = false,
         };
-        _diffToggleBtn.FlatAppearance.BorderColor = BorderColor;
+        _diffToggleBtn.FlatAppearance.BorderColor = Theme.BorderColor;
         _diffToggleBtn.Click += (_, _) => ToggleDiff();
 
         copyBtn = new WinForms.Button
         {
             Text = "Copy",
             Size = new Size(96, 34),
-            BackColor = CardBg,
-            ForeColor = TextPrimary,
+            BackColor = Theme.CardBg,
+            ForeColor = Theme.TextPrimary,
             FlatStyle = WinForms.FlatStyle.Flat,
             Font = new Font("Segoe UI", 10),
             Cursor = WinForms.Cursors.Hand,
             Margin = new WinForms.Padding(4),
             Enabled = false,
         };
-        copyBtn.FlatAppearance.BorderColor = BorderColor;
+        copyBtn.FlatAppearance.BorderColor = Theme.BorderColor;
         var copyBtnRef = copyBtn;
         copyBtn.Click += (_, _) =>
         {
@@ -389,7 +380,7 @@ public sealed class RewritePanelForm : WinForms.Form
         {
             Text = "Replace",
             Size = new Size(110, 34),
-            BackColor = BrandBlue,
+            BackColor = Theme.BrandBlue,
             ForeColor = Color.White,
             FlatStyle = WinForms.FlatStyle.Flat,
             Font = new Font("Segoe UI", 10, FontStyle.Bold),
@@ -422,14 +413,14 @@ public sealed class RewritePanelForm : WinForms.Form
             FlowDirection = WinForms.FlowDirection.LeftToRight,
             AutoSize = true,
             AutoSizeMode = WinForms.AutoSizeMode.GrowAndShrink,
-            BackColor = BgDark,
+            BackColor = Theme.BgDark,
             Margin = new WinForms.Padding(0, 6, 0, 0),
         };
 
         errorLabel = new WinForms.Label
         {
             Text = "",
-            ForeColor = ErrorRed,
+            ForeColor = Theme.ErrorRed,
             Font = new Font("Segoe UI", 9),
             AutoSize = true,
             MaximumSize = new Size(540, 0),
@@ -441,15 +432,15 @@ public sealed class RewritePanelForm : WinForms.Form
         {
             Text = "Copy",
             Size = new Size(70, 26),
-            BackColor = CardBg,
-            ForeColor = ErrorRed,
+            BackColor = Theme.CardBg,
+            ForeColor = Theme.ErrorRed,
             FlatStyle = WinForms.FlatStyle.Flat,
             Font = new Font("Segoe UI", 9),
             Cursor = WinForms.Cursors.Hand,
             Margin = new WinForms.Padding(0, 2, 0, 0),
             Visible = false,
         };
-        copyErrorBtn.FlatAppearance.BorderColor = ErrorRed;
+        copyErrorBtn.FlatAppearance.BorderColor = Theme.ErrorRed;
         var errorLabelRef = errorLabel;
         copyErrorBtn.Click += (_, _) =>
         {
@@ -495,15 +486,15 @@ public sealed class RewritePanelForm : WinForms.Form
         {
             if (tone == selected)
             {
-                btn.BackColor = BrandBlue;
+                btn.BackColor = Theme.BrandBlue;
                 btn.ForeColor = Color.White;
-                btn.FlatAppearance.BorderColor = BrandBlue;
+                btn.FlatAppearance.BorderColor = Theme.BrandBlue;
             }
             else
             {
-                btn.BackColor = CardBg;
-                btn.ForeColor = TextPrimary;
-                btn.FlatAppearance.BorderColor = BorderColor;
+                btn.BackColor = Theme.CardBg;
+                btn.ForeColor = Theme.TextPrimary;
+                btn.FlatAppearance.BorderColor = Theme.BorderColor;
             }
         }
     }

@@ -40,8 +40,8 @@ public static class WhatsNewWindow
             MaximizeBox = false,
             MinimizeBox = false,
             TopMost = true,
-            BackColor = Color.FromArgb(15, 23, 42),
-            ForeColor = Color.FromArgb(226, 232, 240),
+            BackColor = Theme.BgDark,
+            ForeColor = Theme.TextPrimary,
         };
 
         var heading = new WinForms.Label
@@ -50,7 +50,7 @@ public static class WhatsNewWindow
             Location = new Point(20, 18),
             Size = new Size(420, 26),
             Font = new Font("Segoe UI", 12, FontStyle.Bold),
-            ForeColor = Color.FromArgb(226, 232, 240),
+            ForeColor = Theme.TextPrimary,
         };
 
         var body = new WinForms.TextBox
@@ -62,8 +62,8 @@ public static class WhatsNewWindow
             ReadOnly = true,
             ScrollBars = WinForms.ScrollBars.Vertical,
             BorderStyle = WinForms.BorderStyle.FixedSingle,
-            BackColor = Color.FromArgb(30, 41, 59),
-            ForeColor = Color.FromArgb(226, 232, 240),
+            BackColor = Theme.CardBg,
+            ForeColor = Theme.TextPrimary,
             Font = new Font("Segoe UI", 10),
             TabStop = false,
         };

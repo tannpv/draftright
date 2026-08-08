@@ -6,13 +6,15 @@ namespace DraftRightWindows.Views;
 /// The dark palette every view shares. Values match the design tokens used by
 /// the Linux app and the marketing site.
 ///
-/// These RGB triples were previously retyped in nine separate view files. Any
-/// new view must read them from here rather than adding a tenth copy — a
-/// palette scattered across call sites drifts one file at a time and nobody
-/// notices until two dialogs are visibly different shades (Rule #1).
+/// These RGB triples were previously retyped across nine view files — 44 local
+/// declarations plus 13 inline literals. Every view now reads them from here.
+/// Keep it that way: a palette scattered across call sites drifts one file at a
+/// time and nobody notices until two dialogs are visibly different shades
+/// (Rule #1, no hardcoding).
 ///
-/// Existing views still carry their own copies; migrating them is a mechanical
-/// change kept out of the feature commit that introduced this file.
+/// Colours used exactly once and carrying no shared meaning — a single status
+/// banner's tint, say — stay inline at their call site. Naming a value used
+/// once adds indirection without adding a source of truth.
 /// </summary>
 internal static class Theme
 {

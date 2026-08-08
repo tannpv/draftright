@@ -15,14 +15,6 @@ namespace DraftRightWindows.Views;
 internal static class SuggestFeatureDialog
 {
     // Theme — matches ReportBugDialog / SettingsFormBuilder
-    private static readonly Color BgDark = Color.FromArgb(15, 23, 42);
-    private static readonly Color CardBg = Color.FromArgb(30, 41, 59);
-    private static readonly Color BrandBlue = Color.FromArgb(93, 135, 255);
-    private static readonly Color TextPrimary = Color.FromArgb(226, 232, 240);
-    private static readonly Color TextMuted = Color.FromArgb(148, 163, 184);
-    private static readonly Color ErrorRed = Color.FromArgb(239, 68, 68);
-    private static readonly Color SuccessGreen = Color.FromArgb(34, 197, 94);
-    private static readonly Color BorderColor = Color.FromArgb(51, 65, 85);
 
     /// <summary>
     /// Tiny value type that lets a ComboBox display a human-readable label
@@ -55,8 +47,8 @@ internal static class SuggestFeatureDialog
             Width = 560,
             Height = 640,
             StartPosition = WinForms.FormStartPosition.CenterScreen,
-            BackColor = BgDark,
-            ForeColor = TextPrimary,
+            BackColor = Theme.BgDark,
+            ForeColor = Theme.TextPrimary,
             FormBorderStyle = WinForms.FormBorderStyle.FixedSingle,
             MaximizeBox = false,
             MinimizeBox = false,
@@ -75,7 +67,7 @@ internal static class SuggestFeatureDialog
         {
             Text = "Suggest a feature",
             Font = new Font("Segoe UI", 14, FontStyle.Bold),
-            ForeColor = TextPrimary,
+            ForeColor = Theme.TextPrimary,
             Location = new Point(20, y),
             AutoSize = true,
         };
@@ -86,7 +78,7 @@ internal static class SuggestFeatureDialog
         {
             Text = "Got an idea? We'd love to hear it.",
             Font = new Font("Segoe UI", 9),
-            ForeColor = TextMuted,
+            ForeColor = Theme.TextMuted,
             Location = new Point(20, y),
             AutoSize = true,
         };
@@ -98,7 +90,7 @@ internal static class SuggestFeatureDialog
         {
             Text = "Title",
             Font = new Font("Segoe UI", 9),
-            ForeColor = TextMuted,
+            ForeColor = Theme.TextMuted,
             Location = new Point(20, y),
             AutoSize = true,
         });
@@ -110,8 +102,8 @@ internal static class SuggestFeatureDialog
             Multiline = false,
             Location = new Point(20, y),
             Size = new Size(500, 30),
-            BackColor = CardBg,
-            ForeColor = TextPrimary,
+            BackColor = Theme.CardBg,
+            ForeColor = Theme.TextPrimary,
             BorderStyle = WinForms.BorderStyle.FixedSingle,
             Font = new Font("Segoe UI", 10),
         };
@@ -123,7 +115,7 @@ internal static class SuggestFeatureDialog
         {
             Text = "Target platform",
             Font = new Font("Segoe UI", 9),
-            ForeColor = TextMuted,
+            ForeColor = Theme.TextMuted,
             Location = new Point(20, y),
             AutoSize = true,
         });
@@ -134,8 +126,8 @@ internal static class SuggestFeatureDialog
             DropDownStyle = WinForms.ComboBoxStyle.DropDownList,
             Location = new Point(20, y),
             Size = new Size(240, 30),
-            BackColor = CardBg,
-            ForeColor = TextPrimary,
+            BackColor = Theme.CardBg,
+            ForeColor = Theme.TextPrimary,
             FlatStyle = WinForms.FlatStyle.Flat,
             Font = new Font("Segoe UI", 10),
         };
@@ -156,7 +148,7 @@ internal static class SuggestFeatureDialog
         {
             Text = "Describe the feature",
             Font = new Font("Segoe UI", 9),
-            ForeColor = TextMuted,
+            ForeColor = Theme.TextMuted,
             Location = new Point(20, y),
             AutoSize = true,
         });
@@ -170,8 +162,8 @@ internal static class SuggestFeatureDialog
             ScrollBars = WinForms.ScrollBars.Vertical,
             Location = new Point(20, y),
             Size = new Size(500, 120),
-            BackColor = CardBg,
-            ForeColor = TextPrimary,
+            BackColor = Theme.CardBg,
+            ForeColor = Theme.TextPrimary,
             BorderStyle = WinForms.BorderStyle.FixedSingle,
             Font = new Font("Segoe UI", 10),
         };
@@ -198,7 +190,7 @@ internal static class SuggestFeatureDialog
             {
                 Text = "Email (optional — so we can follow up)",
                 Font = new Font("Segoe UI", 9),
-                ForeColor = TextMuted,
+                ForeColor = Theme.TextMuted,
                 Location = new Point(20, y),
                 AutoSize = true,
             });
@@ -208,8 +200,8 @@ internal static class SuggestFeatureDialog
             {
                 Location = new Point(20, y),
                 Size = new Size(500, 30),
-                BackColor = CardBg,
-                ForeColor = TextPrimary,
+                BackColor = Theme.CardBg,
+                ForeColor = Theme.TextPrimary,
                 BorderStyle = WinForms.BorderStyle.FixedSingle,
                 Font = new Font("Segoe UI", 10),
             };
@@ -222,7 +214,7 @@ internal static class SuggestFeatureDialog
             {
                 Text = $"Submitting as {signedInEmail}",
                 Font = new Font("Segoe UI", 9, FontStyle.Italic),
-                ForeColor = SuccessGreen,
+                ForeColor = Theme.SuccessGreen,
                 Location = new Point(20, y),
                 AutoSize = true,
             });
@@ -234,7 +226,7 @@ internal static class SuggestFeatureDialog
         {
             Text = "See all requests →",
             Font = new Font("Segoe UI", 9),
-            LinkColor = BrandBlue,
+            LinkColor = Theme.BrandBlue,
             Location = new Point(20, y),
             AutoSize = true,
         };
@@ -256,7 +248,7 @@ internal static class SuggestFeatureDialog
         {
             Text = "",
             Font = new Font("Segoe UI", 9),
-            ForeColor = ErrorRed,
+            ForeColor = Theme.ErrorRed,
             Location = new Point(20, y),
             Size = new Size(500, 36),
             AutoEllipsis = true,
@@ -271,12 +263,12 @@ internal static class SuggestFeatureDialog
             Text = "Cancel",
             Location = new Point(360, y),
             Size = new Size(80, 32),
-            BackColor = CardBg,
-            ForeColor = TextPrimary,
+            BackColor = Theme.CardBg,
+            ForeColor = Theme.TextPrimary,
             FlatStyle = WinForms.FlatStyle.Flat,
             Font = new Font("Segoe UI", 9.5f),
         };
-        cancelBtn.FlatAppearance.BorderColor = BorderColor;
+        cancelBtn.FlatAppearance.BorderColor = Theme.BorderColor;
         form.Controls.Add(cancelBtn);
 
         var submitBtn = new WinForms.Button
@@ -284,7 +276,7 @@ internal static class SuggestFeatureDialog
             Text = "Submit",
             Location = new Point(448, y),
             Size = new Size(72, 32),
-            BackColor = BrandBlue,
+            BackColor = Theme.BrandBlue,
             ForeColor = Color.White,
             FlatStyle = WinForms.FlatStyle.Flat,
             Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
@@ -324,13 +316,13 @@ internal static class SuggestFeatureDialog
 
             if (titleText.Length == 0)
             {
-                SetStatus("Please enter a title.", ErrorRed);
+                SetStatus("Please enter a title.", Theme.ErrorRed);
                 titleBox.Focus();
                 return;
             }
             if (detailsText.Length == 0)
             {
-                SetStatus("Please describe the feature.", ErrorRed);
+                SetStatus("Please describe the feature.", Theme.ErrorRed);
                 detailsBox.Focus();
                 return;
             }
@@ -347,7 +339,7 @@ internal static class SuggestFeatureDialog
             detailsBox.ReadOnly = true;
             if (emailBox != null) emailBox.ReadOnly = true;
             platformCombo.Enabled = false;
-            SetStatus("Submitting…", TextMuted);
+            SetStatus("Submitting…", Theme.TextMuted);
 
             try
             {
@@ -361,7 +353,7 @@ internal static class SuggestFeatureDialog
                 if (result.Success)
                 {
                     DRLogger.Log($"Feature request submitted (id={result.Id ?? "?"})", DRLogger.Category.APP);
-                    SetStatus("Thanks! Your suggestion was submitted.", SuccessGreen);
+                    SetStatus("Thanks! Your suggestion was submitted.", Theme.SuccessGreen);
                     // Brief flash of success, then close — mirrors ReportBugDialog.
                     var t = new WinForms.Timer { Interval = 900 };
                     t.Tick += (_, _) =>
@@ -374,7 +366,7 @@ internal static class SuggestFeatureDialog
                 }
                 else
                 {
-                    SetStatus(result.ErrorMessage ?? "Submit failed.", ErrorRed);
+                    SetStatus(result.ErrorMessage ?? "Submit failed.", Theme.ErrorRed);
                     submitBtn.Enabled = true;
                     cancelBtn.Enabled = true;
                     titleBox.ReadOnly = false;
@@ -386,7 +378,7 @@ internal static class SuggestFeatureDialog
             catch (Exception ex)
             {
                 DRLogger.Log($"Feature request submit threw: {ex}", DRLogger.Category.APP);
-                SetStatus(ex.Message, ErrorRed);
+                SetStatus(ex.Message, Theme.ErrorRed);
                 submitBtn.Enabled = true;
                 cancelBtn.Enabled = true;
                 titleBox.ReadOnly = false;
