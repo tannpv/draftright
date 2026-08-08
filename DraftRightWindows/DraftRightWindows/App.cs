@@ -698,6 +698,45 @@ public class App : Application
         _settingsForm.Show();
     }
 
+    /// <summary>
+    /// Opens the WinUI 3 spike (<see cref="Views.WinUiSpikeWindow"/>) on the
+    /// WinUI dispatcher thread, which is the only thread a Window may be
+    /// constructed on.
+    ///
+    /// Failures are caught and surfaced rather than allowed to propagate: the
+    /// whole point is to learn whether XAML renders here, and an unhandled
+    /// STATUS_STOWED_EXCEPTION would take the app down and tell us less than a
+    /// readable message would.
+    /// </summary>
+    public static void ShowWinUiSpike()
+    {
+        if (Application.Current is not App app || app._dispatcherQueue == null)
+        {
+            WinForms.MessageBox.Show("WinUI dispatcher unavailable — cannot open the spike.",
+                "DraftRight", WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Warning);
+            return;
+        }
+
+        app._dispatcherQueue.TryEnqueue(() =>
+        {
+            try
+            {
+                Views.WinUiSpikeWindow.Show();
+            }
+            catch (Exception ex)
+            {
+                DRLogger.Error($"WinUI spike FAILED: {ex}", DRLogger.Category.APP);
+                WinForms.MessageBox.Show(
+                    $"WinUI 3 still cannot render here.\n\n{ex.GetType().Name}: {ex.Message}\n\n"
+                    + "That answers the question — the PRI fix is not sufficient and a "
+                    + "different toolkit is needed.",
+                    "WinUI spike failed",
+                    WinForms.MessageBoxButtons.OK,
+                    WinForms.MessageBoxIcon.Error);
+            }
+        });
+    }
+
     private void DoQuit()
     {
         _healthTimer?.Dispose();
