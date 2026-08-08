@@ -101,7 +101,19 @@ class TelexComposer : Composer {
             // users type the modifier after the trailing consonant cluster, e.g.
             // "nguyen" + e → "nguyên" (skip the trailing 'n'). Same shape covers
             // the cancel case for re-typing.
-            val targetIdx = findLastVowelThroughConsonants(buffer)
+            // Search the whole trailing vowel cluster, not just its last char.
+            //
+            // Checking only the last vowel meant base-first typing worked when
+            // the syllable ended in a consonant ("canaf" -> cần: skip the 'n',
+            // find the 'a') but failed the moment it ended in a vowel. "day" +
+            // 'a' hit the 'y' — itself a vowel — and gave up, so the 'a' landed
+            // as a literal and a following tone hit the wrong char: "dayaj"
+            // produced "daỵa" instead of "dậy" (#152).
+            //
+            // Vowel-final syllables are a large slice of everyday Vietnamese
+            // (dậy, mấy, cây, này, mới, tuổi, người), so the old behaviour read
+            // as the keyboard being unreliable rather than as a rule.
+            val targetIdx = findModifierTargetInVowelCluster(buffer, low, replacement)
             if (targetIdx != null) {
                 val targetChar = buffer[targetIdx]
                 val targetLow = targetChar.lowercaseChar()
@@ -133,6 +145,59 @@ class TelexComposer : Composer {
          * precede it. Used by tryCombine to support modifiers typed AFTER the
          * syllable's trailing consonants (e.g. "nguyen" + e, "truong" + w).
          */
+        /**
+         * Index of the char in the trailing vowel cluster that [low] (or its
+         * marked form [replacement], for cancel-by-retype) should act on, or
+         * null if the cluster holds neither.
+         *
+         * Scans right-to-left from the cluster's end so the RIGHTMOST match
+         * wins — "oo" + o must cancel the second o, not the first. Only the
+         * final cluster is considered, and only through at most
+         * [MAX_TRAILING_CONS] consonants, so a modifier can never reach back
+         * into the previous syllable.
+         */
+        private fun findModifierTargetInVowelCluster(
+            buffer: String,
+            low: Char,
+            replacement: Char,
+        ): Int? {
+            val last = findLastVowelThroughConsonants(buffer) ?: return null
+            // Walk left while still inside the same vowel run.
+            var i = last
+            var firstOfCluster = last
+            while (i >= 0 && TelexState.isVowelLike(buffer[i])) {
+                firstOfCluster = i
+                i--
+            }
+            for (idx in last downTo firstOfCluster) {
+                val c = buffer[idx].lowercaseChar()
+                if ((c == low || c == replacement) && canReachBack(buffer, idx)) return idx
+            }
+            return null
+        }
+
+        /**
+         * True when a modifier typed at the end may act on the vowel at [idx].
+         *
+         * It may reach back over trailing consonants and over OFFGLIDES
+         * ([GLIDE_CODAS]) — "day" + a is really a + the offglide y, so the 'a'
+         * is still the nucleus and takes the circumflex.
+         *
+         * It may NOT reach back over another nucleus vowel. "oeo" (ngoẻo) and
+         * "oao" are genuine three-vowel clusters where the final letter is a
+         * literal vowel, not a modifier for the first one; without this guard
+         * they became "ôe" and "ôa" — 312 corpus regressions when the cluster
+         * scan was first added for #152.
+         */
+        private fun canReachBack(buffer: String, idx: Int): Boolean {
+            for (j in idx + 1 until buffer.length) {
+                val c = buffer[j]
+                if (!TelexState.isVowelLike(c)) continue          // trailing consonant
+                if (!TelexState.isGlideCoda(c)) return false      // another nucleus
+            }
+            return true
+        }
+
         private fun findLastVowelThroughConsonants(buffer: String): Int? {
             var cons = 0
             for (i in buffer.indices.reversed()) {
