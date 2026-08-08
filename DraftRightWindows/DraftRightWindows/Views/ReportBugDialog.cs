@@ -27,6 +27,21 @@ internal static class ReportBugDialog
     // Theme — matches SettingsFormBuilder
 
     /// <summary>
+    /// Largest edge a captured screenshot keeps, in pixels. A full-screen PNG
+    /// off a 4K display runs well past the 5 MB upload cap and would only fail
+    /// at submit time, so captures are downscaled first. Matches the macOS
+    /// sheet, which uses the same bound for the same reason.
+    /// </summary>
+    private const int CaptureMaxDimension = 2000;
+
+    /// <summary>
+    /// Pause between hiding the dialog and grabbing the screen, so the
+    /// compositor has actually removed our own window from the frame.
+    /// macOS uses the same 250 ms.
+    /// </summary>
+    private const int CaptureHideDelayMs = 250;
+
+    /// <summary>
     /// Opens the dialog on its own STA thread so it works regardless of which
     /// thread the caller (tray menu, settings, hotkey…) is on.
     /// </summary>
@@ -222,6 +237,23 @@ internal static class ReportBugDialog
         };
         form.Controls.Add(fileLabel);
 
+        // Capture the screen directly — the fourth input method, and the one
+        // that matters when a user is mid-bug: alt-tabbing to a snipping tool
+        // often disturbs the very state they are trying to show us (#138).
+        var captureBtn = new WinForms.Button
+        {
+            Text = "Capture screen",
+            Location = new Point(330, y - 4),
+            Size = new Size(120, 24),
+            BackColor = Theme.CardBg,
+            ForeColor = Theme.TextPrimary,
+            FlatStyle = WinForms.FlatStyle.Flat,
+            Font = new Font("Segoe UI", 8.5f),
+            Cursor = WinForms.Cursors.Hand,
+        };
+        captureBtn.FlatAppearance.BorderColor = Theme.BorderColor;
+        form.Controls.Add(captureBtn);
+
         var clearBtn = new WinForms.Button
         {
             Text = "Clear",
@@ -307,7 +339,7 @@ internal static class ReportBugDialog
             try
             {
                 var info = new FileInfo(path);
-                if (info.Length > 5 * 1024 * 1024)
+                if (info.Length > Services.BugReportService.MaxScreenshotBytes)
                 {
                     SetStatus("Screenshot exceeds 5 MB. Please attach a smaller image.", Theme.ErrorRed);
                     return;
@@ -335,7 +367,7 @@ internal static class ReportBugDialog
             }
         }
 
-        void LoadScreenshotFromImage(Image img)
+        void LoadScreenshotFromImage(Image img, string label = "Pasted image")
         {
             try
             {
@@ -352,7 +384,7 @@ internal static class ReportBugDialog
                 dropHint.Visible = false;
 
                 selectedScreenshotPath = tmp;
-                fileLabel.Text = "Pasted image";
+                fileLabel.Text = label;
                 clearBtn.Visible = true;
                 SetStatus("", Theme.ErrorRed);
             }
@@ -461,6 +493,39 @@ internal static class ReportBugDialog
         };
 
         clearBtn.Click += (_, _) => ClearScreenshot();
+
+        captureBtn.Click += (_, _) =>
+        {
+            // Hide ourselves first, or the screenshot is mostly this dialog.
+            // The delay lets the compositor actually remove the window before
+            // the grab; without it the frame still contains a ghost of it.
+            form.Visible = false;
+            var timer = new WinForms.Timer { Interval = CaptureHideDelayMs };
+            timer.Tick += (_, _) =>
+            {
+                timer.Stop();
+                timer.Dispose();
+                try
+                {
+                    using var shot = CaptureScreen();
+                    using var scaled = Downscale(shot, CaptureMaxDimension);
+                    // Reuse the paste path: it already writes the temp PNG the
+                    // multipart upload streams from, refreshes the preview, and
+                    // wires up Clear.
+                    LoadScreenshotFromImage(scaled, "Captured screenshot");
+                }
+                catch (Exception ex)
+                {
+                    SetStatus($"Could not capture the screen: {ex.Message}", Theme.ErrorRed);
+                }
+                finally
+                {
+                    form.Visible = true;
+                    form.Activate();
+                }
+            };
+            timer.Start();
+        };
         cancelBtn.Click += (_, _) => form.Close();
 
         // Submit
@@ -554,6 +619,59 @@ internal static class ReportBugDialog
     private static string? SafeRead(Func<string?> reader)
     {
         try { return reader(); } catch { return null; }
+    }
+
+    /// <summary>
+    /// Grabs the primary display. Matches macOS, which captures the main
+    /// display rather than every monitor — a multi-monitor grab produces an
+    /// enormous, mostly-empty image that is harder to read, not easier.
+    /// </summary>
+    private static Bitmap CaptureScreen()
+    {
+        var bounds = WinForms.Screen.PrimaryScreen?.Bounds
+            ?? throw new InvalidOperationException("No primary display found.");
+        var bmp = new Bitmap(bounds.Width, bounds.Height);
+        try
+        {
+            using var g = Graphics.FromImage(bmp);
+            g.CopyFromScreen(bounds.Location, Point.Empty, bounds.Size);
+            return bmp;
+        }
+        catch
+        {
+            bmp.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Shrinks <paramref name="src"/> so its longest edge is at most
+    /// <paramref name="maxDimension"/>, preserving aspect ratio. Returns a
+    /// copy either way, so the caller can dispose both without special cases.
+    ///
+    /// A 4K screenshot saves to a PNG several times the upload cap; without
+    /// this the attach would succeed and the submit would fail, which reads as
+    /// the report being lost.
+    /// </summary>
+    private static Bitmap Downscale(Image src, int maxDimension)
+    {
+        var scale = Math.Min(1.0, (double)maxDimension / Math.Max(src.Width, src.Height));
+        var w = Math.Max(1, (int)Math.Round(src.Width * scale));
+        var h = Math.Max(1, (int)Math.Round(src.Height * scale));
+
+        var outBmp = new Bitmap(w, h);
+        try
+        {
+            using var g = Graphics.FromImage(outBmp);
+            g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+            g.DrawImage(src, 0, 0, w, h);
+            return outBmp;
+        }
+        catch
+        {
+            outBmp.Dispose();
+            throw;
+        }
     }
 }
 

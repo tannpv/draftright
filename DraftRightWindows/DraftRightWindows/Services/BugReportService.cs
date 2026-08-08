@@ -24,6 +24,17 @@ public static class BugReportService
     private const string DefaultBackendUrl = "https://api.draftright.info";
 
     /// <summary>
+    /// Largest screenshot the backend accepts. Public because the dialog
+    /// validates against it too — it must reject oversized images up front
+    /// rather than letting the user write a report and fail at submit.
+    ///
+    /// One constant, not two: this limit was previously written out in both
+    /// places, so changing it here alone would have left the UI accepting what
+    /// the service rejects (Rule #1).
+    /// </summary>
+    public const long MaxScreenshotBytes = 5 * 1024 * 1024;
+
+    /// <summary>
     /// Result of a bug report submission. <see cref="Success"/> indicates
     /// HTTP 2xx; <see cref="ErrorMessage"/> carries the failure reason on
     /// non-2xx, network errors, or local exceptions.
@@ -101,7 +112,7 @@ public static class BugReportService
             if (!string.IsNullOrWhiteSpace(screenshotPath) && File.Exists(screenshotPath))
             {
                 var info = new FileInfo(screenshotPath);
-                if (info.Length > 5 * 1024 * 1024)
+                if (info.Length > MaxScreenshotBytes)
                 {
                     return new SubmitResult(false,
                         ErrorMessage: "Screenshot exceeds 5 MB limit.");
