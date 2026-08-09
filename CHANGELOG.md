@@ -23,6 +23,10 @@ A Windows-only line under `### Windows` will never appear in the macOS
 If a version needs the user to *do* something after updating, say so
 explicitly under an **Action needed:** line inside the relevant sub-section.
 
+## 2.3.42 — 2026-08-09
+### Windows
+- Fixed the new rewrite panel showing washed-out, hard-to-read text on some setups (Windows 10, virtual machines, or with transparency effects turned off). The panel now uses a solid dark background so the text is always legible.
+
 ## 2.3.41 — 2026-08-09
 ### Windows
 - The rewrite panel has a fresh look, rebuilt on the modern Windows (Fluent) UI — the same rewrite, tones, diff and grammar-check you already use, with cleaner styling. This is the first surface to move over; the rest follow.
