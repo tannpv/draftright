@@ -93,6 +93,9 @@ memory. Adding a `ProjectReference` to PureTests reintroduces the hang.
 
 ## Releases
 
+Full step-by-step runbook (all platforms, incl. the client auto-update
+mechanism and verification): **`docs/release-runbook.md`**.
+
 Tag `v<semver>` on `main`; CI builds x64 + arm64 + MSIX and publishes to the
 update server. `.csproj <Version>` drives the built exe's ProductVersion, which
 the installer reads; `Package.appxmanifest` drives the MSIX — **bump both**.
