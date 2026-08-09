@@ -155,4 +155,5 @@ Standard GitFlow — see `~/.claude/CLAUDE.md` for full rules.
 - `website/CLAUDE.md` — Marketing site, web playground
 - `DraftRightLinux/CLAUDE.md` — Linux native app
 - `DraftRightWindows/CLAUDE.md` — Windows native app, UI toolkit decision, release + signing
+- `docs/release-runbook.md` — Release & auto-update runbook (all platforms)
 - `docs/superpowers/plans/` — Implementation plans for Windows & Linux native apps
