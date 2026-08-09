@@ -12,18 +12,23 @@ namespace DraftRightWindows.Views;
 ///      has no <c>App.xaml</c>, so nothing merges them globally; without them
 ///      controls resolve to no ControlTemplate and the window paints as a bare
 ///      white rectangle (#58).
-///   2. Paint a solid dark background. The Mica backdrop only applies on
-///      Windows 11 with transparency effects on; on Windows 10, in VMs/RDP, or
-///      with transparency off it falls back to a light surface, and our
-///      near-white text renders white-on-white (#163).
+///   2. Paint a solid, opaque dark background — and keep it. The Mica backdrop
+///      makes the window background transparent to reveal the DWM effect, so an
+///      opaque brush alone is NOT enough: on a Mica-capable Windows 11 with a
+///      light wallpaper the panel renders translucent and the near-white text
+///      washes out (#163). The backdrop is therefore forced OFF here so the
+///      dark brush actually paints on every machine and wallpaper. On Windows
+///      10 / VM / transparency-off there is no Mica anyway; this just makes the
+///      result deterministic everywhere.
 ///
 /// Both shipped as production regressions when they lived inline in a single
 /// window and the next surface would have re-copied them. Centralising here is
 /// the fix and the guard: RULE #1 — one source of truth for the theme contract.
+/// Subclasses must NOT re-enable a backdrop — that reintroduces #163.
 ///
-/// Subclasses set their own size, backdrop, and content in their constructor;
-/// the base constructor runs first, so the dictionaries are already merged when
-/// the subclass builds its controls.
+/// Subclasses set their own size and content in their constructor; the base
+/// constructor runs first, so the dictionaries are already merged when the
+/// subclass builds its controls.
 /// </summary>
 public abstract class FluentWindowBase : FluentWindow
 {
@@ -34,10 +39,10 @@ public abstract class FluentWindowBase : FluentWindow
             new Wpf.Ui.Markup.ThemesDictionary { Theme = Wpf.Ui.Appearance.ApplicationTheme.Dark });
         Resources.MergedDictionaries.Add(new Wpf.Ui.Markup.ControlsDictionary());
 
-        // (2) Opaque dark background so contrast holds regardless of whether the
-        // Mica backdrop is available on this machine (#163). Paints over Mica
-        // where supported; deterministic readability is worth more than the
-        // translucency effect.
+        // (2) No translucent backdrop — a Mica backdrop would blank our opaque
+        // background and let the wallpaper bleed through, washing out the text
+        // (#163). Deterministic readability beats the translucency effect.
+        WindowBackdropType = WindowBackdropType.None;
         Background = Theme.WpfBrush(Theme.BgDark);
     }
 }

@@ -58,12 +58,13 @@ public sealed class RewritePanelWindow : FluentWindowBase
         Width = 560;
         Height = 660;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
-        WindowBackdropType = WindowBackdropType.Mica;
         ExtendsContentIntoTitleBar = true;
         ResizeMode = ResizeMode.CanResize;
 
-        // Theme dictionaries (#58) and the opaque dark background (#163) are
-        // provided by FluentWindowBase — do not re-add them here.
+        // Theme dictionaries (#58), the opaque dark background AND the
+        // backdrop-off setting (#163) are provided by FluentWindowBase — do not
+        // set WindowBackdropType.Mica here; it would blank the background and
+        // wash the text out again.
 
         var root = new Grid { Margin = new Thickness(16, 0, 16, 16) };
         foreach (var h in new[] { GridLength.Auto, GridLength.Auto, GridLength.Auto,
