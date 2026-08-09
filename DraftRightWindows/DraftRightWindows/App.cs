@@ -51,12 +51,14 @@ public class App : Application
 
     // ── Rewrite flow ────────────────────────────────────────
     private DispatcherQueue? _dispatcherQueue;
-    // The rewrite UI is a WinForms form (RewritePanelForm), not WinUI XAML: on
-    // unpackaged builds without the VS AppX tooling (no real resources.pri), a
-    // WinUI panel crashed on first render (STATUS_STOWED_EXCEPTION 0xc000027b —
-    // "Cannot find a Resource ... TabViewScrollButtonBackground"). The WinForms
-    // form shares the same ViewModel API + dark theme and works on local x64.
-    private RewritePanelForm? _rewritePanel;
+    // The rewrite UI is WPF (RewritePanelWindow), migrated off WinForms in
+    // #156. WinUI 3 was tried twice and cannot render here — unpackaged builds
+    // have no usable resources.pri, so the first attempt crashed with
+    // STATUS_STOWED_EXCEPTION and a later one with COMException
+    // "element not found" even after the installer began regenerating a PRI.
+    // WPF has no PRI concept at all and renders correctly (#155). The window
+    // binds the same ViewModel the WinForms panel did — no logic moved.
+    private RewritePanelWindow? _rewritePanel;
     private Thread? _rewritePanelThread;
     private IntPtr _sourceWindow = IntPtr.Zero;
     private LoadingIndicator? _loadingIndicator;
@@ -456,17 +458,19 @@ public class App : Application
     }
 
     /// <summary>
-    /// Runs the WinForms RewritePanelForm on a dedicated STA thread with its own
-    /// message pump (Application.Run). When the panel closes, the thread exits.
+    /// Runs the WPF RewritePanelWindow on a dedicated STA thread with its own
+    /// dispatcher. When the window closes, the dispatcher shuts down and the
+    /// thread exits.
     /// </summary>
     private void ShowRewritePanelOnNewThread(string text)
     {
-        // If a previous panel is still open, just bring it forward and update its text.
+        // Already open: bring it forward with the new selection rather than
+        // stacking a second panel.
         if (_rewritePanel != null)
         {
             try
             {
-                _rewritePanel.BeginInvoke(new Action(() =>
+                _rewritePanel.Dispatcher.BeginInvoke(new Action(() =>
                 {
                     _rewritePanel.SetInputText(text);
                     _rewritePanel.Activate();
@@ -482,17 +486,17 @@ public class App : Application
         var sourceHwnd = _sourceWindow;
         _rewritePanelThread = new Thread(() =>
         {
+            RewritePanelWindow? panel = null;
             try
             {
                 DRLogger.Log("Panel: thread starting", DRLogger.Category.PANEL);
-                using var panel = new RewritePanelForm();
+                panel = new RewritePanelWindow();
                 _rewritePanel = panel;
                 panel.SetInputText(text);
 
-                // Advanced mode: auto-run the configured "Default Tone" on open
-                // (if set and still enabled), so the panel produces a rewrite
-                // without requiring a tone click — mirrors the macOS auto-run
-                // behavior. Empty default = manual pick (unchanged).
+                // Advanced mode: auto-run the configured Default Tone on open,
+                // so the panel produces a rewrite without a click. Mirrors
+                // macOS. Empty default = manual pick.
                 var defaultToneApi = Settings.DefaultTone;
                 if (!string.IsNullOrEmpty(defaultToneApi)
                     && Settings.EnabledTones.Contains(defaultToneApi)
@@ -501,18 +505,17 @@ public class App : Application
                     panel.AutoRunTone = autoTone;
                 }
 
+                var window = panel;
                 panel.ViewModel.PasteRequested += (_, rewrittenText) =>
                 {
-                    // Hide panel immediately so focus can return to source app.
-                    // Close (dispose) AFTER inject completes — otherwise the panel's
-                    // STA pump tears down and the await Task.Delay continuations
-                    // inside Injector.InjectTextAsync get dropped, leaving SendInput
-                    // unfired.
-                    if (panel.IsHandleCreated)
-                    {
-                        try { panel.BeginInvoke(new Action(() => panel.Hide())); }
-                        catch { /* panel may already be closing */ }
-                    }
+                    // Hide immediately so focus can return to the source app,
+                    // but close only AFTER the inject completes. Closing first
+                    // tears down this thread's dispatcher, and the awaited
+                    // delays inside InjectTextAsync are then dropped, leaving
+                    // SendInput unfired.
+                    try { window.Dispatcher.BeginInvoke(new Action(window.Hide)); }
+                    catch { /* may already be closing */ }
+
                     _ = Task.Run(async () =>
                     {
                         try
@@ -526,25 +529,28 @@ public class App : Application
                         }
                         finally
                         {
-                            try
-                            {
-                                if (panel.IsHandleCreated)
-                                    panel.BeginInvoke(new Action(() => panel.Close()));
-                            }
+                            try { window.Dispatcher.BeginInvoke(new Action(window.Close)); }
                             catch { /* panel may already be gone */ }
                         }
                     });
                 };
 
+                // Shut the dispatcher down with the window, so the thread ends
+                // instead of pumping an empty loop forever.
+                panel.Closed += (_, _) =>
+                    System.Windows.Threading.Dispatcher.CurrentDispatcher.InvokeShutdown();
+
                 DRLogger.Log("Panel: running message loop", DRLogger.Category.PANEL);
-                System.Windows.Forms.Application.Run(panel);
+                panel.Show();
+                panel.Activate();
+                System.Windows.Threading.Dispatcher.Run();
                 DRLogger.Log("Panel: closed", DRLogger.Category.PANEL);
             }
             catch (Exception ex)
             {
                 DRLogger.Error($"Panel: EXCEPTION {ex.GetType().Name}: {ex.Message}", DRLogger.Category.PANEL);
-                // Capture succeeded but the panel failed to open — don't leave the
-                // user staring at nothing after a valid selection.
+                // Capture succeeded but the panel failed to open — don't leave
+                // the user staring at nothing after a valid selection.
                 _tray?.ShowError(
                     "DraftRight — couldn't open the rewrite panel",
                     $"Something went wrong opening the panel ({ex.GetType().Name}). Please try the hotkey again; if it keeps happening, report a bug from the tray menu.");

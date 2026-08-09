@@ -18,7 +18,7 @@ namespace DraftRightWindows.Views;
 ///   dialog closes and the caller shows a tray balloon.
 ///
 /// Implemented in WinForms for consistency with the rest of this app
-/// (SettingsWindow, RewritePanelForm, CopyableErrorDialog) — the WinUI XAML
+/// (SettingsWindow, CopyableErrorDialog) — the WinUI XAML
 /// surface intentionally remains minimal because of the unpackaged-build
 /// XAML resource issue documented in App.cs.
 /// </summary>
