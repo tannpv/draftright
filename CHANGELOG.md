@@ -23,6 +23,10 @@ A Windows-only line under `### Windows` will never appear in the macOS
 If a version needs the user to *do* something after updating, say so
 explicitly under an **Action needed:** line inside the relevant sub-section.
 
+## 2.3.41 — 2026-08-09
+### Windows
+- The rewrite panel has a fresh look, rebuilt on the modern Windows (Fluent) UI — the same rewrite, tones, diff and grammar-check you already use, with cleaner styling. This is the first surface to move over; the rest follow.
+
 ## 2.3.40 — 2026-08-08
 ### Windows
 - Removed the experimental test window. It answered the question it was there for: DraftRight can move to the modern Windows look, and that work starts next.
