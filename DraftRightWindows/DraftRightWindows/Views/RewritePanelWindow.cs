@@ -63,6 +63,17 @@ public sealed class RewritePanelWindow : FluentWindow
         ExtendsContentIntoTitleBar = true;
         ResizeMode = ResizeMode.CanResize;
 
+        // Solid dark fallback background. The Mica backdrop only paints on
+        // Windows 11 with transparency effects on; on Windows 10, in VMs/RDP,
+        // or with transparency off it does not apply and the FluentWindow falls
+        // back to a light system surface. Our foreground text is near-white
+        // (Theme.TextPrimary), so without an explicit dark background it renders
+        // white-on-white and the panel looks empty (#163). An opaque dark
+        // background guarantees contrast on every config. It paints over Mica
+        // where Mica is supported, but deterministic readability is worth more
+        // than the translucency effect.
+        Background = Theme.WpfBrush(Theme.BgDark);
+
         // No App.xaml in this process, so nothing merges WPF-UI's control
         // templates or theme brushes globally. Without these the window paints
         // as a bare white rectangle (#58).
