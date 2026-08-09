@@ -10,9 +10,10 @@ using WpfButton = Wpf.Ui.Controls.Button;
 namespace DraftRightWindows.Views;
 
 /// <summary>
-/// Grammar-check results in WPF — the migrated counterpart of
-/// <see cref="GrammarIssuesPanel"/> (#156). Score, one card per issue
-/// colour-coded by type, each individually fixable, plus Fix All.
+/// Grammar-check results in WPF — the migrated counterpart of the old
+/// WinForms <c>GrammarIssuesPanel</c> (removed in #157 once this replaced it).
+/// Score, one card per issue colour-coded by type, each individually fixable,
+/// plus Fix All.
 ///
 /// Every range comes from <see cref="GrammarFixer"/>, which resolves by the
 /// issue's <c>Original</c> CONTENT rather than the LLM's offset — trusting
