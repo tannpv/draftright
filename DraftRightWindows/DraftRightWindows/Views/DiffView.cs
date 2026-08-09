@@ -7,9 +7,10 @@ using DraftRightWindows.Diff;
 namespace DraftRightWindows.Views;
 
 /// <summary>
-/// Side-by-side before/after diff in WPF — the migrated counterpart of
-/// <see cref="DiffPanel"/> (#156). Original on the left with deletions
-/// highlighted, rewritten on the right with insertions highlighted.
+/// Side-by-side before/after diff in WPF — the migrated counterpart of the
+/// old WinForms <c>DiffPanel</c> (removed in #157 once this replaced it).
+/// Original on the left with deletions highlighted, rewritten on the right
+/// with insertions highlighted.
 ///
 /// Presentation only. The diffing is <see cref="WordDiff"/>, already unit
 /// tested and verified byte-identical to the macOS and Linux implementations,
