@@ -24,11 +24,10 @@ namespace DraftRightWindows.Views;
 ///
 /// Built in C# rather than XAML markup to match the rest of this project,
 /// which has no XAML files and therefore none of the build machinery they
-/// require. WPF-UI's theme dictionaries are merged per-window, since this
-/// process has no App.xaml — that omission is what made the spike render
-/// blank (bug report #58).
+/// require. The theme contract (dictionary merge #58, dark background #163)
+/// is inherited from <see cref="FluentWindowBase"/>.
 /// </summary>
-public sealed class RewritePanelWindow : FluentWindow
+public sealed class RewritePanelWindow : FluentWindowBase
 {
     public RewritePanelViewModel ViewModel { get; } = new();
 
@@ -63,23 +62,8 @@ public sealed class RewritePanelWindow : FluentWindow
         ExtendsContentIntoTitleBar = true;
         ResizeMode = ResizeMode.CanResize;
 
-        // Solid dark fallback background. The Mica backdrop only paints on
-        // Windows 11 with transparency effects on; on Windows 10, in VMs/RDP,
-        // or with transparency off it does not apply and the FluentWindow falls
-        // back to a light system surface. Our foreground text is near-white
-        // (Theme.TextPrimary), so without an explicit dark background it renders
-        // white-on-white and the panel looks empty (#163). An opaque dark
-        // background guarantees contrast on every config. It paints over Mica
-        // where Mica is supported, but deterministic readability is worth more
-        // than the translucency effect.
-        Background = Theme.WpfBrush(Theme.BgDark);
-
-        // No App.xaml in this process, so nothing merges WPF-UI's control
-        // templates or theme brushes globally. Without these the window paints
-        // as a bare white rectangle (#58).
-        Resources.MergedDictionaries.Add(
-            new Wpf.Ui.Markup.ThemesDictionary { Theme = Wpf.Ui.Appearance.ApplicationTheme.Dark });
-        Resources.MergedDictionaries.Add(new Wpf.Ui.Markup.ControlsDictionary());
+        // Theme dictionaries (#58) and the opaque dark background (#163) are
+        // provided by FluentWindowBase — do not re-add them here.
 
         var root = new Grid { Margin = new Thickness(16, 0, 16, 16) };
         foreach (var h in new[] { GridLength.Auto, GridLength.Auto, GridLength.Auto,
