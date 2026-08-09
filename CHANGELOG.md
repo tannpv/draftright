@@ -27,6 +27,14 @@ explicitly under an **Action needed:** line inside the relevant sub-section.
 ### Windows
 - Fixed the new rewrite panel showing washed-out, hard-to-read text on some setups (Windows 10, virtual machines, or with transparency effects turned off). The panel now uses a solid dark background so the text is always legible.
 
+## 2.3.43 — 2026-08-09
+### Windows
+- Fixed the rewrite panel still looking see-through and washed out on Windows 11 with a bright wallpaper — the desktop showed through the panel and the text was hard to read. The panel now always uses a solid dark background instead of the translucent effect, so it stays readable on every setup.
+
+## 2.3.42 — 2026-08-09
+### Windows
+- Fixed the new rewrite panel showing washed-out, hard-to-read text on some setups (Windows 10, virtual machines, or with transparency effects turned off). The panel now uses a solid dark background so the text is always legible.
+
 ## 2.3.41 — 2026-08-09
 ### Windows
 - The rewrite panel has a fresh look, rebuilt on the modern Windows (Fluent) UI — the same rewrite, tones, diff and grammar-check you already use, with cleaner styling. This is the first surface to move over; the rest follow.
