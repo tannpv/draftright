@@ -70,6 +70,12 @@ jobs:
     env:
       RUNTIME: ${{ matrix.runtime }}
       COMMIT_SHA: ${{ github.sha }}
+      # Single source of truth for the signing script path — both sign steps
+      # below reference this, and both run from working-directory:
+      # DraftRightWindows so the one relative literal resolves for each.
+      # The secret NAMES (WINDOWS_SIGNING_PFX_*) are owned by this script's
+      # header — see DraftRightWindows/installer/sign-file.ps1.
+      SIGN_SCRIPT: installer/sign-file.ps1
 
     defaults:
       run:
@@ -122,6 +128,17 @@ jobs:
             -p:EnableMsixTooling=true `
             -p:IncludeAllContentForSelfExtract=true `
             -o publish
+
+      # Sign the app binary before it is wrapped into the installer, so the
+      # installed program is trusted on first launch too. Dormant until a
+      # signing cert is configured — see installer/sign-file.ps1 and #154.
+      - name: Sign app binary
+        shell: pwsh
+        working-directory: DraftRightWindows
+        env:
+          WINDOWS_SIGNING_PFX_BASE64: ${{ secrets.WINDOWS_SIGNING_PFX_BASE64 }}
+          WINDOWS_SIGNING_PFX_PASSWORD: ${{ secrets.WINDOWS_SIGNING_PFX_PASSWORD }}
+        run: '& $env:SIGN_SCRIPT -Path DraftRightWindows/publish/DraftRightWindows.exe'
 
       - name: Inspect output and rename for upload
         shell: pwsh
@@ -198,6 +215,18 @@ jobs:
           $stamped = "DraftRight-Setup-$version-$arch-$shortSha.exe"
           Move-Item $built.FullName "installer\Output\$stamped"
           Add-Content -Path $env:GITHUB_ENV -Value "INSTALLER_NAME=$stamped"
+
+      # Sign the installer before it is uploaded, so the bytes the update
+      # server hashes (sha256, #22) and serves are the signed bytes — the
+      # signature and the published hash cannot disagree. Dormant until a
+      # signing cert is configured (installer/sign-file.ps1, #154).
+      - name: Sign installer
+        shell: pwsh
+        working-directory: DraftRightWindows
+        env:
+          WINDOWS_SIGNING_PFX_BASE64: ${{ secrets.WINDOWS_SIGNING_PFX_BASE64 }}
+          WINDOWS_SIGNING_PFX_PASSWORD: ${{ secrets.WINDOWS_SIGNING_PFX_PASSWORD }}
+        run: '& $env:SIGN_SCRIPT -Path installer/Output/$env:INSTALLER_NAME'
 
       - name: Upload installer
         uses: actions/upload-artifact@v7
