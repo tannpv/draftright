@@ -30,6 +30,29 @@ So "set up auto-update" = **cut a release** that writes the `app_releases` row.
 
 ---
 
+## One command
+
+```
+scripts/release.sh <windows|macos> <version> [--yes] [--dry-run]
+```
+
+Orchestrates the whole flow below by driving the same scripts/workflow — it is
+not a second release path. From a clean `develop`, with the `## <version>`
+CHANGELOG section already written, it: bumps the version file, commits, merges
+`--no-ff` into develop then main, pushes, and publishes:
+
+- **windows** — tags `vX.Y.Z`, which triggers `build-windows.yml` to build +
+  publish; then polls `/updates/latest` until it reports the new version.
+- **macos** — builds the notarized universal DMG *first* (so a notarization
+  failure aborts before any git push), then merges/pushes, tags `macos-vX.Y.Z`
+  (never `vX.Y.Z` — that is the Windows trigger), runs `release-publish.sh`, and
+  polls.
+
+`--dry-run` prints every step and changes nothing. Preconditions (clean tree, on
+`develop`, in sync with origin, CHANGELOG notes present, not already live) are
+checked up front and fail fast. The manual steps below are what this automates —
+read them to understand what the command does.
+
 ## Release runbook — Windows (tag-triggered, fully automated)
 
 Windows publishes itself from a tag push. You do steps 1–4; CI does the rest.
