@@ -23,6 +23,11 @@ A Windows-only line under `### Windows` will never appear in the macOS
 If a version needs the user to *do* something after updating, say so
 explicitly under an **Action needed:** line inside the relevant sub-section.
 
+## 2.3.49 — 2026-08-10
+### Windows
+- Fixed the app crashing and vanishing from the taskbar when you opened Report a Bug (or another window) after having opened Settings. All windows now open reliably.
+- When Windows Smart App Control blocks an update (because the app isn't code-signed yet), DraftRight now explains what happened and offers to open Windows Security so you can turn it off, instead of just showing a generic error.
+
 ## 2.3.48 — 2026-08-10
 ### Windows
 - Every window (Settings, Report a Bug, Suggest a Feature, the payment dialogs) can now be dragged by its title bar.
