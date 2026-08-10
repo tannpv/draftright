@@ -1,130 +1,124 @@
 using System;
-using System.Drawing;
 using System.IO;
 using System.Net.Http;
 using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media.Imaging;
 using DraftRightWindows.Models;
-using WinForms = System.Windows.Forms;
+using WpfTextBlock = System.Windows.Controls.TextBlock;
+using WpfImage = System.Windows.Controls.Image;
+using F = DraftRightWindows.Views.FluentFormControls;
 
 namespace DraftRightWindows.Views;
 
 /// <summary>
-/// Modal dialog shown for VietQR checkout.  Renders the QR image and
-/// (when included) the manual-transfer fallback fields so users on
-/// PCs without a camera can still pay.  When a status stream is
-/// provided, a live banner inside the dialog auto-dismisses on
-/// confirmation.
+/// VietQR checkout dialog (WPF, #160). Renders the QR image and, when included,
+/// the manual-transfer fallback fields via <see cref="BankInfoTable"/>. A live
+/// <see cref="PaymentStatusBanner"/> auto-dismisses on confirmation.
 /// </summary>
-public sealed class QrCheckoutDialog : WinForms.Form
+public sealed class QrCheckoutDialog : FluentWindowBase
 {
-    private readonly QrCheckout _checkout;
-    private readonly IObservable<PaymentStatusUpdate>? _statusStream;
-
     public QrCheckoutDialog(QrCheckout checkout, IObservable<PaymentStatusUpdate>? statusStream)
     {
-        _checkout = checkout;
-        _statusStream = statusStream;
-        InitializeUI();
-    }
-
-    private void InitializeUI()
-    {
-        Text = "Scan to pay";
+        Title = "Scan to pay";
         Width = 460;
-        Height = 620;
-        StartPosition = WinForms.FormStartPosition.CenterParent;
-        BackColor = Theme.BgDark;
-        ForeColor = Color.White;
-        FormBorderStyle = WinForms.FormBorderStyle.FixedDialog;
-        MaximizeBox = false;
+        Height = 640;
+        ResizeMode = ResizeMode.NoResize;
+        WindowStartupLocation = WindowStartupLocation.CenterOwner;
 
-        var banner = new PaymentStatusBanner(_statusStream, onConfirmed: Close);
-        Controls.Add(banner);
+        var icon = Helpers.AppIcon.LoadImageSource();
+        if (icon != null) Icon = icon;
 
-        var heading = new WinForms.Label
+        var outer = new DockPanel();
+
+        var banner = new PaymentStatusBanner(statusStream, onConfirmed: Close);
+        DockPanel.SetDock(banner, Dock.Top);
+        outer.Children.Add(banner);
+
+        var panel = new StackPanel { Margin = new Thickness(F.ContentPad) };
+        panel.Children.Add(new WpfTextBlock
         {
             Text = "Scan to pay",
-            Font = new Font("Segoe UI", 14, FontStyle.Bold),
-            ForeColor = Color.White,
-            AutoSize = true,
-            Location = new Point(16, 56),
-        };
-        var blurb = new WinForms.Label
+            FontSize = 15,
+            FontWeight = FontWeights.Bold,
+            Foreground = Theme.WpfBrush(Theme.TextPrimary),
+            Margin = new Thickness(0, 0, 0, F.LabelGap),
+        });
+        panel.Children.Add(new WpfTextBlock
         {
-            Text = "Open your banking app and scan this QR code.\n" +
-                   "Your plan activates automatically after payment.",
-            ForeColor = Color.LightGray,
-            AutoSize = true,
-            Location = new Point(16, 94),
-        };
+            Text = "Open your banking app and scan this QR code.\nYour plan activates automatically after payment.",
+            Foreground = Theme.WpfBrush(Theme.TextMuted),
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 0, F.FieldGap),
+        });
 
-        var qr = new WinForms.PictureBox
+        var qr = new WpfImage { Width = 260, Height = 260, HorizontalAlignment = HorizontalAlignment.Center, Stretch = System.Windows.Media.Stretch.Uniform };
+        var qrHost = new Border
         {
-            Location = new Point(96, 140),
-            Size = new Size(260, 260),
-            SizeMode = WinForms.PictureBoxSizeMode.Zoom,
-            BackColor = Theme.CardBg,
+            Background = Theme.WpfBrush(Theme.CardBg),
+            Width = 260,
+            Height = 260,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(0, 0, 0, F.SectionGap),
+            Child = qr,
         };
-        _ = LoadQrAsync(qr, _checkout.ImageUrl);
+        panel.Children.Add(qrHost);
+        _ = LoadQrAsync(qr, qrHost, checkout.ImageUrl);
 
-        Controls.Add(heading);
-        Controls.Add(blurb);
-        Controls.Add(qr);
-
-        int y = 420;
-        if (_checkout.BankInfo is { } bank)
+        if (checkout.BankInfo is { } bank)
         {
-            var divider = new WinForms.Label
+            panel.Children.Add(new WpfTextBlock
             {
-                Text = "─── Or transfer manually ───",
-                Font = new Font("Segoe UI", 9, FontStyle.Bold),
-                ForeColor = Color.LightGray,
-                AutoSize = true,
-                Location = new Point(16, y),
-            };
-            Controls.Add(divider);
-            y += 24;
-            BankInfoTable.Render(this, bank, ref y);
+                Text = "Or transfer manually",
+                FontWeight = FontWeights.Bold,
+                Foreground = Theme.WpfBrush(Theme.TextMuted),
+                Margin = new Thickness(0, 0, 0, F.FieldGap),
+            });
+            BankInfoTable.Render(panel, bank);
         }
 
-        var close = new WinForms.Button
+        var close = F.SecondaryButton("Close", Close);
+        close.HorizontalAlignment = HorizontalAlignment.Right;
+        close.Margin = new Thickness(0, F.FieldGap, 0, 0);
+        panel.Children.Add(close);
+
+        outer.Children.Add(new ScrollViewer
         {
-            Text = "Close",
-            Location = new Point(360, Height - 80),
-            Size = new Size(80, 32),
-            BackColor = Theme.BorderColor,
-            ForeColor = Color.White,
-            FlatStyle = WinForms.FlatStyle.Flat,
-        };
-        close.Click += (_, _) => Close();
-        Controls.Add(close);
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            Content = panel,
+        });
+        Content = outer;
     }
 
-    private static async Task LoadQrAsync(WinForms.PictureBox box, string url)
+    private static async Task LoadQrAsync(WpfImage image, Border host, string url)
     {
         try
         {
             using var http = new HttpClient();
             var bytes = await http.GetByteArrayAsync(url);
-            if (box.IsDisposed) return;
-            using var ms = new MemoryStream(bytes);
-            box.Image = Image.FromStream(ms);
+            var bmp = new BitmapImage();
+            using (var ms = new MemoryStream(bytes))
+            {
+                bmp.BeginInit();
+                bmp.CacheOption = BitmapCacheOption.OnLoad;
+                bmp.StreamSource = ms;
+                bmp.EndInit();
+            }
+            bmp.Freeze();
+            image.Source = bmp;
         }
         catch
         {
-            if (box.IsDisposed) return;
-            box.BeginInvoke(new Action(() =>
+            host.Child = new WpfTextBlock
             {
-                var lbl = new WinForms.Label
-                {
-                    Text = "Could not load QR.\nUse manual transfer below.",
-                    ForeColor = Color.White,
-                    BackColor = Theme.CardBg,
-                    TextAlign = ContentAlignment.MiddleCenter,
-                    Dock = WinForms.DockStyle.Fill,
-                };
-                box.Controls.Add(lbl);
-            }));
+                Text = "Could not load QR.\nUse manual transfer below.",
+                Foreground = Theme.WpfBrush(Theme.TextPrimary),
+                TextAlignment = TextAlignment.Center,
+                TextWrapping = TextWrapping.Wrap,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
         }
     }
 }

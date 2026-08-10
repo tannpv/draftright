@@ -1,92 +1,95 @@
 using System;
 using System.Threading;
-using WinForms = System.Windows.Forms;
-using System.Drawing;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Threading;
+using Wpf.Ui.Controls;
+using WpfTextBlock = System.Windows.Controls.TextBlock;
+using F = DraftRightWindows.Views.FluentFormControls;
 
 namespace DraftRightWindows.Views;
 
 /// <summary>
-/// One-time "What's New in DraftRight vX" notice shown on the first launch
-/// after an update applies. Runs on its own STA thread with a WinForms message
-/// pump (Application.Run) — same approach as the updater progress window — so
-/// it paints reliably regardless of which thread asked to show it.
+/// One-time "What's New in DraftRight vX" notice shown on the first launch after
+/// an update applies (#160, WPF). Runs on its own STA thread with a WPF
+/// dispatcher — same approach as the other detached windows. On the update path,
+/// so it must stay reliable.
 /// </summary>
 public static class WhatsNewWindow
 {
     /// <summary>Shows the notice on a dedicated STA thread and returns
     /// immediately. <paramref name="notes"/> is the release-note text from the
-    /// backend (markdown-ish bullet lines); it's displayed verbatim.</summary>
+    /// backend; displayed verbatim.</summary>
     public static void Show(string version, string notes)
     {
         var thread = new Thread(() =>
         {
-            try { WinForms.Application.Run(BuildForm(version, notes)); }
+            try
+            {
+                Services.CrashLog.InstallForCurrentDispatcher("whats-new");
+                var win = new WhatsNewNotice(version, notes);
+                win.Closed += (_, _) => Dispatcher.CurrentDispatcher.InvokeShutdown();
+                win.Show();
+                win.Activate();
+                Dispatcher.Run();
+            }
             catch { /* never let a notice window crash the app */ }
         });
         thread.SetApartmentState(ApartmentState.STA);
         thread.IsBackground = true;
         thread.Start();
     }
+}
 
-    private static WinForms.Form BuildForm(string version, string notes)
+internal sealed class WhatsNewNotice : FluentWindowBase
+{
+    public WhatsNewNotice(string version, string notes)
     {
-        var form = new WinForms.Form
-        {
-            Text = "What's New",
-            Width = 460,
-            Height = 360,
-            StartPosition = WinForms.FormStartPosition.CenterScreen,
-            FormBorderStyle = WinForms.FormBorderStyle.FixedDialog,
-            MaximizeBox = false,
-            MinimizeBox = false,
-            TopMost = true,
-            BackColor = Theme.BgDark,
-            ForeColor = Theme.TextPrimary,
-        };
+        Title = "What's New";
+        Width = 480;
+        Height = 380;
+        ResizeMode = ResizeMode.NoResize;
+        Topmost = true;
+        WindowStartupLocation = WindowStartupLocation.CenterScreen;
 
-        var heading = new WinForms.Label
+        var icon = Helpers.AppIcon.LoadImageSource();
+        if (icon != null) Icon = icon;
+
+        var panel = new StackPanel { Margin = new Thickness(F.ContentPad) };
+        panel.Children.Add(new WpfTextBlock
         {
             Text = $"What's new in DraftRight v{version}",
-            Location = new Point(20, 18),
-            Size = new Size(420, 26),
-            Font = new Font("Segoe UI", 12, FontStyle.Bold),
-            ForeColor = Theme.TextPrimary,
-        };
+            FontSize = 15,
+            FontWeight = FontWeights.Bold,
+            Foreground = Theme.WpfBrush(Theme.TextPrimary),
+            Margin = new Thickness(0, 0, 0, F.FieldGap),
+        });
 
-        var body = new WinForms.TextBox
+        panel.Children.Add(new Border
         {
-            Text = string.IsNullOrWhiteSpace(notes) ? "Various improvements and fixes." : notes,
-            Location = new Point(20, 54),
-            Size = new Size(420, 220),
-            Multiline = true,
-            ReadOnly = true,
-            ScrollBars = WinForms.ScrollBars.Vertical,
-            BorderStyle = WinForms.BorderStyle.FixedSingle,
-            BackColor = Theme.CardBg,
-            ForeColor = Theme.TextPrimary,
-            Font = new Font("Segoe UI", 10),
-            TabStop = false,
-        };
-        // Start at the top, no selection highlight.
-        body.Select(0, 0);
+            Background = Theme.WpfBrush(Theme.CardBg),
+            BorderBrush = Theme.WpfBrush(Theme.BorderColor),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(4),
+            Height = 210,
+            Margin = new Thickness(0, 0, 0, F.FieldGap),
+            Child = new ScrollViewer
+            {
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                Padding = new Thickness(10),
+                Content = new WpfTextBlock
+                {
+                    Text = string.IsNullOrWhiteSpace(notes) ? "Various improvements and fixes." : notes,
+                    Foreground = Theme.WpfBrush(Theme.TextPrimary),
+                    TextWrapping = TextWrapping.Wrap,
+                },
+            },
+        });
 
-        var closeButton = new WinForms.Button
-        {
-            Text = "Got it",
-            Location = new Point(350, 286),
-            Size = new Size(90, 32),
-            FlatStyle = WinForms.FlatStyle.Flat,
-            BackColor = Color.FromArgb(59, 130, 246),
-            ForeColor = Color.White,
-            Font = new Font("Segoe UI", 9, FontStyle.Bold),
-            UseVisualStyleBackColor = false,
-            Cursor = WinForms.Cursors.Hand,
-        };
-        closeButton.FlatAppearance.BorderSize = 0;
-        closeButton.Click += (_, _) => form.Close();
+        var gotIt = F.PrimaryButton("Got it", Close);
+        gotIt.HorizontalAlignment = HorizontalAlignment.Right;
+        panel.Children.Add(gotIt);
 
-        form.Controls.AddRange(new WinForms.Control[] { heading, body, closeButton });
-        form.AcceptButton = closeButton;
-        return form;
+        Content = panel;
     }
 }
