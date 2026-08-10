@@ -1,394 +1,295 @@
 using System;
-using System.Drawing;
-using System.Linq;
+using System.Collections.Generic;
 using System.Threading.Tasks;
-using DraftRightWindows.Helpers;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
 using DraftRightWindows.Models;
 using DraftRightWindows.Services;
-using WinForms = System.Windows.Forms;
+using Wpf.Ui.Controls;
+using WpfTextBlock = System.Windows.Controls.TextBlock;
+using F = DraftRightWindows.Views.FluentFormControls;
 
 namespace DraftRightWindows.Views;
 
 /// <summary>
-/// UserControl rendered inside the Settings TabPage.  Mirrors the
-/// Flutter SubscriptionScreen and macOS SubscriptionView: shows
-/// plan + usage, lists payment methods for free users, shows the
-/// Manage button for paid users.  Acts as
-/// <see cref="IPaymentSheetPresenter"/> so handlers can open the
-/// QR / bank dialogs without depending on Form types directly.
+/// The Subscription tab in WPF (#159) — plan + usage, payment-method tiles for
+/// free users, Manage button for paid users. Mirrors the Flutter / macOS
+/// subscription surface. Acts as <see cref="IPaymentSheetPresenter"/> so the
+/// payment handlers can open the checkout dialogs without depending on view
+/// types.
+///
+/// TEMPORARY BRIDGE: <see cref="QrCheckoutDialog"/> and
+/// <see cref="BankTransferDialog"/> are still WinForms (phase 4 / #160), so they
+/// are opened ownerless from this WPF control. Once #160 migrates them this
+/// bridge goes away.
 /// </summary>
-public sealed class SubscriptionTab : WinForms.UserControl, IPaymentSheetPresenter
+public sealed class SubscriptionTab : UserControl, IPaymentSheetPresenter
 {
-
     private readonly PaymentService _payments;
-    private readonly WinForms.Panel _content = new();
+    private readonly StackPanel _content = new() { Margin = new Thickness(F.ContentPad) };
     private bool _isStarting;
-    private PaymentMethodKind? _startingKind;
-
-    /// <summary>
-    /// User-selected billing cadence for the upgrade button.  Defaults
-    /// to monthly (lower friction).  Threaded into
-    /// <see cref="PaymentService.ResolveProPlanIdAsync"/>.
-    /// </summary>
     private BillingPeriod _billingPeriod = BillingPeriod.Monthly;
 
     public SubscriptionTab()
     {
         _payments = new PaymentService(App.Api);
-        Dock = WinForms.DockStyle.Fill;
-        BackColor = Theme.BgDark;
-        ForeColor = Theme.TextPrimary;
-        _content.Dock = WinForms.DockStyle.Fill;
-        _content.AutoScroll = true;
-        Controls.Add(_content);
-        HandleCreated += async (_, _) => await RefreshAsync();
+        Content = new ScrollViewer
+        {
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            Content = _content,
+        };
+        Loaded += async (_, _) => await RefreshAsync();
     }
-
-    // MARK: Refresh
 
     private async Task RefreshAsync()
     {
         ShowMessage("Loading subscription…");
         try
         {
-            var subRawTask = App.Api.GetSubscriptionAsync();
+            var subTask = App.Api.GetSubscriptionAsync();
             var methodsTask = _payments.ListAvailableMethodsAsync();
-            await Task.WhenAll(subRawTask, methodsTask);
-            if (IsDisposed) return;
-            BeginInvoke(new Action(() => Render(subRawTask.Result, methodsTask.Result)));
+            await Task.WhenAll(subTask, methodsTask);
+            Render(subTask.Result, methodsTask.Result);
         }
         catch (Exception e)
         {
-            if (IsDisposed) return;
-            BeginInvoke(new Action(() => ShowMessage("Error: " + e.Message)));
+            ShowMessage("Error: " + e.Message);
         }
     }
 
     private void ShowMessage(string message)
     {
-        _content.Controls.Clear();
-        _content.Controls.Add(new WinForms.Label
+        _content.Children.Clear();
+        _content.Children.Add(new WpfTextBlock
         {
             Text = message,
-            ForeColor = Theme.TextPrimary,
-            Location = new Point(16, 16),
-            AutoSize = true,
-            Font = new Font("Segoe UI", 10),
+            Foreground = Theme.WpfBrush(Theme.TextPrimary),
         });
     }
 
-    // MARK: Rendering
-
-    private void Render(SubscriptionResponse sub, System.Collections.Generic.List<PaymentMethodKind> methods)
+    private void Render(SubscriptionResponse sub, List<PaymentMethodKind> methods)
     {
-        _content.Controls.Clear();
-        int y = 12;
+        _content.Children.Clear();
 
-        AddHeader("Subscription", ref y);
+        _content.Children.Add(new WpfTextBlock
+        {
+            Text = "Subscription",
+            FontSize = 18,
+            FontWeight = FontWeights.Bold,
+            Foreground = Theme.WpfBrush(Theme.TextPrimary),
+            Margin = new Thickness(0, 0, 0, F.SectionGap),
+        });
 
         var billing = sub.Plan?.BillingPeriod ?? "none";
         var isFree = string.IsNullOrEmpty(billing) || billing == "none";
 
-        AddRow("Plan",        sub.Plan?.Name ?? "Free",     ref y);
-        AddRow("Billing",     BillingLabel(billing),         ref y);
-        AddRow("Status",      StatusLabel(sub.Status),       ref y);
-        AddRow("Usage today", $"{sub.UsageToday} / {sub.Plan?.DailyLimit ?? 10}", ref y);
+        AddRow("Plan", sub.Plan?.Name ?? "Free");
+        AddRow("Billing", BillingLabel(billing));
+        AddRow("Status", StatusLabel(sub.Status));
+        AddRow("Usage today", $"{sub.UsageToday} / {sub.Plan?.DailyLimit ?? 10}");
 
-        y += 14;
+        _content.Children.Add(new WpfTextBlock { Height = F.SectionGap });
 
-        if (isFree)
-        {
-            AddUpgradeSection(methods, ref y);
-        }
-        else
-        {
-            AddManageSection(ref y);
-        }
+        if (isFree) AddUpgradeSection(methods);
+        else AddManageSection();
     }
 
-    private void AddHeader(string text, ref int y)
+    private void AddRow(string label, string value)
     {
-        _content.Controls.Add(new WinForms.Label
-        {
-            Text = text,
-            Font = new Font("Segoe UI", 14, FontStyle.Bold),
-            ForeColor = Theme.TextPrimary,
-            Location = new Point(16, y),
-            AutoSize = true,
-        });
-        y += 36;
+        var grid = new Grid { Margin = new Thickness(0, 0, 0, F.LabelGap) };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(130) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        var l = new WpfTextBlock { Text = label, FontSize = 12, Foreground = Theme.WpfBrush(Theme.TextMuted) };
+        var v = new WpfTextBlock { Text = value, FontWeight = FontWeights.SemiBold, Foreground = Theme.WpfBrush(Theme.TextPrimary) };
+        Grid.SetColumn(l, 0); Grid.SetColumn(v, 1);
+        grid.Children.Add(l); grid.Children.Add(v);
+        _content.Children.Add(grid);
     }
 
-    private void AddRow(string label, string value, ref int y)
+    private void AddUpgradeSection(List<PaymentMethodKind> methods)
     {
-        _content.Controls.Add(new WinForms.Label
-        {
-            Text = label,
-            Font = new Font("Segoe UI", 9),
-            ForeColor = Theme.TextMuted,
-            Location = new Point(16, y),
-            AutoSize = true,
-        });
-        _content.Controls.Add(new WinForms.Label
-        {
-            Text = value,
-            Font = new Font("Segoe UI", 10, FontStyle.Bold),
-            ForeColor = Theme.TextPrimary,
-            Location = new Point(140, y - 2),
-            AutoSize = true,
-        });
-        y += 24;
-    }
-
-    private void AddUpgradeSection(System.Collections.Generic.List<PaymentMethodKind> methods, ref int y)
-    {
-        _content.Controls.Add(new WinForms.Label
+        _content.Children.Add(new WpfTextBlock
         {
             Text = "Upgrade to Pro",
-            Font = new Font("Segoe UI", 11, FontStyle.Bold),
-            ForeColor = Theme.TextPrimary,
-            Location = new Point(16, y),
-            AutoSize = true,
+            FontSize = 14,
+            FontWeight = FontWeights.Bold,
+            Foreground = Theme.WpfBrush(Theme.TextPrimary),
+            Margin = new Thickness(0, 0, 0, F.LabelGap),
         });
-        y += 24;
-
-        _content.Controls.Add(new WinForms.Label
+        _content.Children.Add(new WpfTextBlock
         {
-            Text = "Pick a billing cadence, then a payment method.  Your plan activates automatically once payment completes.",
-            Font = new Font("Segoe UI", 9),
-            ForeColor = Theme.TextMuted,
-            Location = new Point(16, y),
-            Size = new Size(440, 32),
+            Text = "Pick a billing cadence, then a payment method. Your plan activates automatically once payment completes.",
+            Foreground = Theme.WpfBrush(Theme.TextMuted),
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 0, F.FieldGap),
         });
-        y += 36;
 
-        AddBillingPeriodPicker(ref y);
+        AddBillingPeriodPicker();
 
         if (methods.Count == 0)
         {
-            _content.Controls.Add(new WinForms.Label
+            _content.Children.Add(new WpfTextBlock
             {
                 Text = "No payment methods are enabled yet. Please check back later.",
-                ForeColor = Theme.TextMuted,
-                Location = new Point(16, y),
-                AutoSize = true,
+                Foreground = Theme.WpfBrush(Theme.TextMuted),
             });
             return;
         }
 
-        foreach (var kind in methods)
-        {
-            AddMethodTile(kind, ref y);
-        }
+        foreach (var kind in methods) AddMethodTile(kind);
     }
 
-    /// <summary>
-    /// Monthly / Yearly segmented control rendered above the
-    /// payment-method tiles.  Two RadioButtons styled as a flat
-    /// segmented look (WinForms has no native segmented control).
-    /// </summary>
-    private void AddBillingPeriodPicker(ref int y)
+    // Monthly / Yearly segmented picker — one button per BillingPeriod value.
+    private void AddBillingPeriodPicker()
     {
-        var group = new WinForms.Panel
+        var row = new StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal, Margin = new Thickness(0, 0, 0, F.FieldGap) };
+        foreach (var period in Enum.GetValues<BillingPeriod>())
         {
-            Location = new Point(16, y),
-            Size = new Size(448, 32),
-            BackColor = Theme.BgDark,
-        };
-        var values = (BillingPeriod[])Enum.GetValues(typeof(BillingPeriod));
-        var segWidth = group.Width / values.Length;
-        for (int i = 0; i < values.Length; i++)
-        {
-            var period = values[i];
-            var isSelected = period == _billingPeriod;
-            var btn = new WinForms.Button
-            {
-                Text = period.DisplayName(),
-                Location = new Point(i * segWidth, 0),
-                Size = new Size(segWidth, 32),
-                FlatStyle = WinForms.FlatStyle.Flat,
-                BackColor = isSelected ? Theme.BrandBlue : Theme.CardBg,
-                ForeColor = Theme.TextPrimary,
-                Font = new Font("Segoe UI", 9, isSelected ? FontStyle.Bold : FontStyle.Regular),
-            };
-            btn.FlatAppearance.BorderColor = Theme.BorderColor;
-            btn.FlatAppearance.BorderSize = 1;
-            btn.Click += (_, _) =>
-            {
-                if (_billingPeriod == period) return;
-                _billingPeriod = period;
-                // Re-render the section so the highlighted segment updates.
-                _ = RefreshAsync();
-            };
-            group.Controls.Add(btn);
+            var selected = period == _billingPeriod;
+            var btn = F.Button(period.DisplayName(),
+                selected ? ControlAppearance.Primary : ControlAppearance.Secondary,
+                () =>
+                {
+                    if (_billingPeriod == period) return;
+                    _billingPeriod = period;
+                    _ = RefreshAsync();
+                });
+            btn.Margin = new Thickness(0, 0, F.ButtonGap, 0);
+            row.Children.Add(btn);
         }
-        _content.Controls.Add(group);
-        y += 44;
+        _content.Children.Add(row);
     }
 
-    private void AddMethodTile(PaymentMethodKind kind, ref int y)
+    private void AddMethodTile(PaymentMethodKind kind)
     {
         var d = PaymentMethodDescriptor.ForKind(kind);
 
-        var tile = new WinForms.Panel
-        {
-            Location = new Point(16, y),
-            Size = new Size(448, 64),
-            BackColor = Theme.CardBg,
-            Cursor = WinForms.Cursors.Hand,
-        };
-        tile.Paint += (s, e) =>
-        {
-            using var pen = new Pen(Theme.BorderColor, 1);
-            e.Graphics.DrawRectangle(pen, 0, 0, tile.Width - 1, tile.Height - 1);
-        };
-        tile.Controls.Add(new WinForms.Label
-        {
-            Text = d.DisplayName,
-            Font = new Font("Segoe UI", 10, FontStyle.Bold),
-            ForeColor = Theme.TextPrimary,
-            Location = new Point(12, 8),
-            AutoSize = true,
-        });
-        tile.Controls.Add(new WinForms.Label
-        {
-            Text = d.Description,
-            Font = new Font("Segoe UI", 8),
-            ForeColor = Theme.TextMuted,
-            Location = new Point(12, 32),
-            AutoSize = true,
-        });
-        var chevron = new WinForms.Label
+        var title = new WpfTextBlock { Text = d.DisplayName, FontWeight = FontWeights.Bold, Foreground = Theme.WpfBrush(Theme.TextPrimary) };
+        var desc = new WpfTextBlock { Text = d.Description, FontSize = 12, Foreground = Theme.WpfBrush(Theme.TextMuted), TextWrapping = TextWrapping.Wrap };
+        var text = new StackPanel();
+        text.Children.Add(title);
+        text.Children.Add(desc);
+
+        var chevron = new WpfTextBlock
         {
             Text = "›",
-            Font = new Font("Segoe UI", 18, FontStyle.Bold),
-            ForeColor = Theme.TextMuted,
-            Location = new Point(420, 18),
-            AutoSize = true,
+            FontSize = 20,
+            FontWeight = FontWeights.Bold,
+            Foreground = Theme.WpfBrush(Theme.TextMuted),
+            VerticalAlignment = VerticalAlignment.Center,
         };
-        tile.Controls.Add(chevron);
 
-        EventHandler handler = async (_, _) =>
+        var grid = new Grid();
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        Grid.SetColumn(text, 0); Grid.SetColumn(chevron, 1);
+        grid.Children.Add(text); grid.Children.Add(chevron);
+
+        var tile = new Border
+        {
+            Background = Theme.WpfBrush(Theme.CardBg),
+            BorderBrush = Theme.WpfBrush(Theme.BorderColor),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(4),
+            Padding = new Thickness(12),
+            Margin = new Thickness(0, 0, 0, F.ButtonGap),
+            Cursor = Cursors.Hand,
+            Child = grid,
+        };
+        tile.MouseLeftButtonUp += async (_, _) =>
         {
             if (_isStarting) return;
             _isStarting = true;
-            _startingKind = kind;
             chevron.Text = "…";
             try
             {
-                // Pass method + cadence so the resolver picks a
-                // currency-compatible plan at the cadence the user
-                // toggled.  See [[project_cc_payment_lemonsqueezy]].
                 var planId = await _payments.ResolveProPlanIdAsync(kind, _billingPeriod);
                 await _payments.UpgradeAsync(kind, planId, this);
             }
             catch (Exception e)
             {
-                WinForms.MessageBox.Show(this, e.Message, "Upgrade failed",
-                    WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error);
+                System.Windows.MessageBox.Show(e.Message, "Upgrade failed", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
             }
             finally
             {
                 _isStarting = false;
-                _startingKind = null;
                 chevron.Text = "›";
             }
         };
-        tile.Click += handler;
-        foreach (WinForms.Control c in tile.Controls) c.Click += handler;
-
-        _content.Controls.Add(tile);
-        y += 72;
+        _content.Children.Add(tile);
     }
 
-    private void AddManageSection(ref int y)
+    private void AddManageSection()
     {
-        var btn = new WinForms.Button
-        {
-            Text = "Manage subscription",
-            Location = new Point(16, y),
-            Size = new Size(220, 36),
-            BackColor = Theme.BrandBlue,
-            ForeColor = Color.White,
-            FlatStyle = WinForms.FlatStyle.Flat,
-            Font = new Font("Segoe UI", 9, FontStyle.Bold),
-        };
+        var btn = F.PrimaryButton("Manage subscription", () => { });
+        btn.Margin = new Thickness(0, 0, 0, F.FieldGap);
         btn.Click += async (_, _) =>
         {
-            btn.Enabled = false;
-            btn.Text = "Opening…";
+            btn.IsEnabled = false;
+            btn.Content = "Opening…";
             try
             {
                 await _payments.OpenCustomerPortalAsync();
             }
             catch (ApiException api) when (api.StatusCode == System.Net.HttpStatusCode.NotFound)
             {
-                // A 404 from /payment/portal means this subscription's source
-                // (admin-granted, VietQR, bank transfer) has no self-service
-                // billing portal. Explain it plainly instead of dumping the
-                // raw "API 404 Not Found: {json}" body into the user's face.
-                WinForms.MessageBox.Show(this,
+                System.Windows.MessageBox.Show(
                     "This plan has no self-service billing portal — it was granted by an "
                     + "administrator or paid via QR code / bank transfer. Please contact "
                     + "support to change or cancel it.",
-                    "Manage subscription",
-                    WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Information);
+                    "Manage subscription", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
             }
             catch (Exception e)
             {
-                WinForms.MessageBox.Show(this, e.Message, "Could not open portal",
-                    WinForms.MessageBoxButtons.OK, WinForms.MessageBoxIcon.Error);
+                System.Windows.MessageBox.Show(e.Message, "Could not open portal", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
             }
             finally
             {
-                btn.Enabled = true;
-                btn.Text = "Manage subscription";
+                btn.IsEnabled = true;
+                btn.Content = "Manage subscription";
             }
         };
-        _content.Controls.Add(btn);
-        y += 44;
-
-        _content.Controls.Add(new WinForms.Label
+        _content.Children.Add(btn);
+        _content.Children.Add(new WpfTextBlock
         {
             Text = "Cancel, change plan, or update your payment method.",
-            Font = new Font("Segoe UI", 9),
-            ForeColor = Theme.TextMuted,
-            Location = new Point(16, y),
-            AutoSize = true,
+            Foreground = Theme.WpfBrush(Theme.TextMuted),
         });
     }
 
     private static string BillingLabel(string p) => p switch
     {
-        "none"    => "Free",
+        "none" => "Free",
         "monthly" => "Monthly",
-        "yearly"  => "Yearly",
-        _         => p,
+        "yearly" => "Yearly",
+        _ => p,
     };
 
     private static string StatusLabel(string s) => s switch
     {
-        "active"    => "Active",
-        "expired"   => "Expired",
+        "active" => "Active",
+        "expired" => "Expired",
         "cancelled" => "Cancelled",
-        _           => s,
+        _ => s,
     };
 
-    // MARK: IPaymentSheetPresenter
+    // ── IPaymentSheetPresenter (temporary WinForms bridge, #160) ──────────────
 
     public void PresentQrDialog(QrCheckout checkout, IObservable<PaymentStatusUpdate>? statusStream)
     {
-        if (InvokeRequired) { BeginInvoke(new Action(() => PresentQrDialog(checkout, statusStream))); return; }
+        if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(new Action(() => PresentQrDialog(checkout, statusStream))); return; }
         using var dlg = new QrCheckoutDialog(checkout, statusStream);
-        dlg.ShowDialog(this);
+        dlg.ShowDialog();
         _ = RefreshAsync();
     }
 
     public void PresentBankTransferDialog(BankTransferCheckout checkout, IObservable<PaymentStatusUpdate>? statusStream)
     {
-        if (InvokeRequired) { BeginInvoke(new Action(() => PresentBankTransferDialog(checkout, statusStream))); return; }
+        if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(new Action(() => PresentBankTransferDialog(checkout, statusStream))); return; }
         using var dlg = new BankTransferDialog(checkout, statusStream);
-        dlg.ShowDialog(this);
+        dlg.ShowDialog();
         _ = RefreshAsync();
     }
 }
