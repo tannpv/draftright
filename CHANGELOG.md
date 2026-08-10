@@ -23,6 +23,11 @@ A Windows-only line under `### Windows` will never appear in the macOS
 If a version needs the user to *do* something after updating, say so
 explicitly under an **Action needed:** line inside the relevant sub-section.
 
+## 2.3.48 — 2026-08-10
+### Windows
+- Every window (Settings, Report a Bug, Suggest a Feature, the payment dialogs) can now be dragged by its title bar.
+- Fixed the Settings window still opening at full height on scaled displays (e.g. 150% on a 1080p laptop), where the close button could end up off-screen. It now always fits your screen, opens centred, and stays closable.
+
 ## 2.3.47 — 2026-08-10
 ### Windows
 - Under-the-hood cleanup: the app now creates its windows and buttons through one shared path, so the crash protection added in 2.3.46 applies uniformly to every window. No visible changes.

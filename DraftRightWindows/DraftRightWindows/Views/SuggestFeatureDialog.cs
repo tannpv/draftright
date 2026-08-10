@@ -135,10 +135,10 @@ internal sealed class SuggestFeatureWindow : FeedbackDialogBase
                 });
         };
 
-        Content = new ScrollViewer
+        SetBody(new ScrollViewer
         {
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             Content = panel,
-        };
+        });
     }
 }
