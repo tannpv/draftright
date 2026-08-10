@@ -67,19 +67,25 @@ internal sealed class SettingsWindow : FluentWindowBase
     private SettingsWindow()
     {
         Title = "DraftRight Settings";
-        // Never open taller/wider than the screen's work area, or the title bar
-        // (with the close button) can land off-screen on small or scaled
-        // displays and the window can't be closed (#reported). Clamp to the work
-        // area and cap MaxHeight so it can't grow past it; each tab scrolls
-        // internally, and the window stays resizable.
+        // Keep the window comfortably INSIDE the work area, with real slack, and
+        // centre it within the work area (not the full screen). On a scaled
+        // display the work area is small in DIPs — e.g. 1080p @ 150% ≈ 680 DIP
+        // tall — so a 680 window would fill it and shove the title bar to the
+        // edge with no way to close it (#165 recurred). Leave >=80px vertical /
+        // >=40px horizontal margin, and position by the work area so the whole
+        // window (title bar included) is always on-screen. Stays resizable.
         var work = SystemParameters.WorkArea;
-        Width = Math.Min(660, work.Width);
-        Height = Math.Min(680, work.Height);
-        MinWidth = Math.Min(520, work.Width);
-        MinHeight = Math.Min(480, work.Height);
+        double maxH = Math.Max(360, work.Height - 80);
+        double maxW = Math.Max(420, work.Width - 40);
+        Height = Math.Min(680, maxH);
+        Width = Math.Min(660, maxW);
+        MinHeight = Math.Min(440, maxH);
+        MinWidth = Math.Min(480, maxW);
         MaxHeight = work.Height;
         MaxWidth = work.Width;
-        WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        WindowStartupLocation = WindowStartupLocation.Manual;
+        Left = work.Left + (work.Width - Width) / 2;
+        Top = work.Top + (work.Height - Height) / 2;
 
         var icon = Helpers.AppIcon.LoadImageSource();
         if (icon != null) Icon = icon;
