@@ -23,6 +23,11 @@ A Windows-only line under `### Windows` will never appear in the macOS
 If a version needs the user to *do* something after updating, say so
 explicitly under an **Action needed:** line inside the relevant sub-section.
 
+## 2.3.50 — 2026-08-10
+### Windows
+- The Submit, Sign In and other primary buttons are now brand blue instead of black.
+- Prepared the Microsoft Store build (package version brought back in step with the app version).
+
 ## 2.3.49 — 2026-08-10
 ### Windows
 - Fixed the app crashing and vanishing from the taskbar when you opened Report a Bug (or another window) after having opened Settings. All windows now open reliably.
