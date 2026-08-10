@@ -1,3 +1,5 @@
+using System.Windows;
+using System.Windows.Controls;
 using Wpf.Ui.Controls;
 
 namespace DraftRightWindows.Views;
@@ -44,5 +46,32 @@ public abstract class FluentWindowBase : FluentWindow
         // (#163). Deterministic readability beats the translucency effect.
         WindowBackdropType = WindowBackdropType.None;
         Background = Theme.WpfBrush(Theme.BgDark);
+    }
+
+    /// <summary>
+    /// Sets the window content wrapped in a draggable WPF-UI title bar. A Fluent
+    /// window drags by its <see cref="Wpf.Ui.Controls.TitleBar"/>, not the OS
+    /// caption — a window without one is stuck where it opens (reported for the
+    /// dialogs). Every window routes its content through here so the title bar
+    /// (drag + minimise/close) is never forgotten. RULE #1: one chrome path.
+    /// </summary>
+    /// <param name="body">The window body, placed below the title bar.</param>
+    /// <param name="showMaximize">Show the maximise button (true only for
+    /// resizable windows; dialogs are fixed-size).</param>
+    protected void SetBody(UIElement body, bool showMaximize = false)
+    {
+        ExtendsContentIntoTitleBar = true;
+
+        var titleBar = new TitleBar
+        {
+            Title = Title,
+            ShowMaximize = showMaximize,
+        };
+        DockPanel.SetDock(titleBar, Dock.Top);
+
+        var root = new DockPanel { LastChildFill = true };
+        root.Children.Add(titleBar);
+        root.Children.Add(body);
+        Content = root;
     }
 }

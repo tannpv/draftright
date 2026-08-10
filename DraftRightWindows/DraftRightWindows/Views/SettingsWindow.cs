@@ -91,7 +91,7 @@ internal sealed class SettingsWindow : FluentWindowBase
         tabs.Items.Add(Tab("Account", BuildAccount()));
         tabs.Items.Add(Tab("Subscription", new SubscriptionTab()));
         tabs.Items.Add(Tab("Advanced", BuildAdvanced()));
-        Content = tabs;
+        SetBody(tabs, showMaximize: true); // resizable window
     }
 
     // Each tab: a scrollable padded stack.

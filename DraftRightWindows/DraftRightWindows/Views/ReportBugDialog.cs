@@ -170,7 +170,7 @@ internal sealed class BugReportWindow : FeedbackDialogBase
                 });
         };
 
-        Content = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Content = panel };
+        SetBody(new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Content = panel });
 
         PreviewKeyDown += OnPreviewKeyDown;
         Closed += (_, _) => _tempScreenshotPath?.SafeDelete();
