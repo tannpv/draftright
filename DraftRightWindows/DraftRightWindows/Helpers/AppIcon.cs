@@ -25,9 +25,6 @@ public static class AppIcon
     private static Icon? _cached;
     private static bool _loaded;
 
-    private static System.Windows.Media.ImageSource? _cachedImageSource;
-    private static bool _imageSourceLoaded;
-
     /// <summary>
     /// The app icon, or null if it can't be loaded. Best-effort: callers should
     /// tolerate null and leave the window's default icon in place. The returned
@@ -50,27 +47,31 @@ public static class AppIcon
     /// The app icon as a WPF <see cref="System.Windows.Media.ImageSource"/> for
     /// <c>Window.Icon</c>, or null if it can't be loaded. Reads the SAME embedded
     /// <see cref="ResourceName"/> resource as <see cref="Load"/> — one source of
-    /// truth — so WinForms and WPF windows show the identical icon. Frozen +
-    /// cached; shared across windows and threads, do not mutate.
+    /// truth — so WinForms and WPF windows show the identical icon.
+    ///
+    /// Deliberately NOT cached/shared. Every WPF window opens on its own STA
+    /// thread, and an ImageSource is owned by the thread that created it:
+    /// <c>Window.Show()</c> → <c>UpdateIcon</c> reads the image's frames and
+    /// throws "the calling thread cannot access this object" if the icon was
+    /// built on another thread. That crashed the app when a second window opened
+    /// on a different thread from the first. Decoding fresh per call — into a
+    /// frozen, decoder-detached <see cref="System.Windows.Media.Imaging.BitmapImage"/>
+    /// (OnLoad) on the CALLING thread — keeps each window's icon on its own thread.
     /// </summary>
     public static System.Windows.Media.ImageSource? LoadImageSource()
     {
-        if (_imageSourceLoaded) return _cachedImageSource;
-        _imageSourceLoaded = true;
         try
         {
             using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(ResourceName);
-            if (stream != null)
-            {
-                var frame = System.Windows.Media.Imaging.BitmapFrame.Create(
-                    stream,
-                    System.Windows.Media.Imaging.BitmapCreateOptions.None,
-                    System.Windows.Media.Imaging.BitmapCacheOption.OnLoad);
-                frame.Freeze();
-                _cachedImageSource = frame;
-            }
+            if (stream == null) return null;
+            var bmp = new System.Windows.Media.Imaging.BitmapImage();
+            bmp.BeginInit();
+            bmp.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+            bmp.StreamSource = stream;
+            bmp.EndInit();
+            bmp.Freeze();
+            return bmp;
         }
-        catch { /* best-effort — fall back to the default icon */ }
-        return _cachedImageSource;
+        catch { return null; /* best-effort — fall back to the default icon */ }
     }
 }
