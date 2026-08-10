@@ -26,6 +26,7 @@ public static class WhatsNewWindow
         {
             try
             {
+                Services.CrashLog.InstallForCurrentDispatcher("whats-new");
                 var win = new WhatsNewNotice(version, notes);
                 win.Closed += (_, _) => Dispatcher.CurrentDispatcher.InvokeShutdown();
                 win.Show();

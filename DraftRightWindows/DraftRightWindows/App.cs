@@ -84,26 +84,18 @@ public class App : Application
 
         UnhandledException += (sender, e) =>
         {
-            DRLogger.Error($"WinUI UnhandledException: {e.Exception}", DRLogger.Category.APP);
-            WriteCrashFile("WinUI", e.Exception);
-            ErrorReporter.Report(e.Exception, source: "WinUI", severity: "fatal");
+            CrashLog.Capture("WinUI", e.Exception, severity: "fatal");
             e.Handled = true;
         };
 
         AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
         {
-            var ex = e.ExceptionObject as Exception;
-            DRLogger.Error($"AppDomain UnhandledException (terminating={e.IsTerminating}): {ex}",
-                DRLogger.Category.APP);
-            WriteCrashFile("AppDomain", ex);
-            if (ex != null) ErrorReporter.Report(ex, source: "AppDomain", severity: "fatal");
+            CrashLog.Capture($"AppDomain(terminating={e.IsTerminating})", e.ExceptionObject as Exception, severity: "fatal");
         };
 
         TaskScheduler.UnobservedTaskException += (sender, e) =>
         {
-            DRLogger.Warn($"UnobservedTaskException: {e.Exception}", DRLogger.Category.APP);
-            WriteCrashFile("UnobservedTask", e.Exception);
-            ErrorReporter.Report(e.Exception, source: "UnobservedTask", severity: "error");
+            CrashLog.Capture("UnobservedTask", e.Exception, severity: "error");
             e.SetObserved();
         };
 
@@ -124,22 +116,6 @@ public class App : Application
         catch (Exception ex)
         {
             DRLogger.Warn($"Startup banner failed: {ex.Message}", DRLogger.Category.APP);
-        }
-    }
-
-    private static void WriteCrashFile(string source, Exception? ex)
-    {
-        try
-        {
-            var path = System.IO.Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
-                "draftright-crash.log");
-            System.IO.File.AppendAllText(path,
-                $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {source}: {ex}\n\n");
-        }
-        catch
-        {
-            // best-effort — Desktop may not be writable in some elevated contexts
         }
     }
 
@@ -488,6 +464,7 @@ public class App : Application
             RewritePanelWindow? panel = null;
             try
             {
+                CrashLog.InstallForCurrentDispatcher("rewrite-panel");
                 DRLogger.Log("Panel: thread starting", DRLogger.Category.PANEL);
                 panel = new RewritePanelWindow();
                 _rewritePanel = panel;

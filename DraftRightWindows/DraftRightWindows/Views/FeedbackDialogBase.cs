@@ -56,6 +56,7 @@ internal abstract class FeedbackDialogBase : FluentWindowBase
         {
             try
             {
+                CrashLog.InstallForCurrentDispatcher("feedback-dialog");
                 var win = factory();
                 win.Closed += (_, _) => Dispatcher.CurrentDispatcher.InvokeShutdown();
                 win.Show();
