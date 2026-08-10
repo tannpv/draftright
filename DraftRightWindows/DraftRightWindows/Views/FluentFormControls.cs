@@ -91,6 +91,19 @@ internal static class FluentFormControls
             MinWidth = 96,
             Padding = new Thickness(14, 6, 14, 6),
         };
+
+        // Primary buttons rely on WPF-UI's accent brush, which is unset here:
+        // there is no WPF Application (the app is a WinUI host running each
+        // window on its own thread), so nothing populates the accent resources
+        // and Primary renders black. Give it our brand blue explicitly — an
+        // inline Background beats the appearance style, so the button is brand-
+        // coloured everywhere (#reported: black Submit button).
+        if (appearance == ControlAppearance.Primary)
+        {
+            b.Background = Theme.WpfBrush(Theme.BrandBlue);
+            b.Foreground = System.Windows.Media.Brushes.White;
+        }
+
         b.Click += (_, _) => onClick();
         return b;
     }
