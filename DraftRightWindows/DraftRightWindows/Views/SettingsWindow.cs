@@ -45,6 +45,7 @@ internal sealed class SettingsWindow : FluentWindowBase
 
         var thread = new Thread(() =>
         {
+            Services.CrashLog.InstallForCurrentDispatcher("settings");
             SettingsWindow win;
             try { win = new SettingsWindow(); }
             catch (Exception ex)
@@ -81,10 +82,18 @@ internal sealed class SettingsWindow : FluentWindowBase
     private SettingsWindow()
     {
         Title = "DraftRight Settings";
-        Width = 660;
-        Height = 680;
-        MinWidth = 520;
-        MinHeight = 560;
+        // Never open taller/wider than the screen's work area, or the title bar
+        // (with the close button) can land off-screen on small or scaled
+        // displays and the window can't be closed (#reported). Clamp to the work
+        // area and cap MaxHeight so it can't grow past it; each tab scrolls
+        // internally, and the window stays resizable.
+        var work = SystemParameters.WorkArea;
+        Width = Math.Min(660, work.Width);
+        Height = Math.Min(680, work.Height);
+        MinWidth = Math.Min(520, work.Width);
+        MinHeight = Math.Min(480, work.Height);
+        MaxHeight = work.Height;
+        MaxWidth = work.Width;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
 
         var icon = Helpers.AppIcon.LoadImageSource();
