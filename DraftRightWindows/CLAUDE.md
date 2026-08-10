@@ -103,10 +103,37 @@ the installer reads; `Package.appxmanifest` drives the MSIX — **bump both**.
 The published artifact's SHA-256 is recorded at publish time and the release
 **fails** if `/updates/latest` serves an empty or mismatched hash (#22).
 
-**The installer is unsigned** (#154). Smart App Control blocks it outright —
-"An Application Control policy has blocked this file" — so direct-download users
-must Unblock the file manually. The Store build is signed by Microsoft and
-sidesteps it. Unresolved; needs a certificate decision.
+**The installer is unsigned** (#154) — the real auto-update blocker. Smart App
+Control blocks the install launch: "An Application Control policy has blocked
+this file." SAC has 3 states (Off / Evaluation=doesn't block / On=enforced); it
+flips itself to enforced and only reverts on a clean Windows reinstall — so
+"updates worked before" was luck, not stable. Per-file Unblock is for SmartScreen
+NOT SAC; the reliable user workaround is turning SAC Off.
+
+CI signing is **wired + dormant**: `installer/sign-file.ps1` + `build-windows.yml`,
+gated on secrets `WINDOWS_SIGNING_PFX_BASE64` + `WINDOWS_SIGNING_PFX_PASSWORD`.
+Set them → next release signs, no code change.
+
+**Cert path: OV/EV, not Azure.** Azure Trusted Signing is NOT available for
+Vietnam (individual = US/CA only; org list excludes VN). Use an **OV** cert
+(Sectigo/GlobalSign, ~$200-400/yr, issues to VN; Tan has a hộ kinh doanh) or EV.
+MS Store (MS-signed) sidesteps signing but abandons direct download (#3).
+
+## WPF migration (done)
+
+WinForms→WPF (#156) is complete in prod: rewrite panel (#156), bug dialog (#158),
+Settings+Subscription (#159), remaining dialogs (#160). Only `LoadingIndicator`
+(Win32 click-through) + tray icon stay WinForms by design. Conventions for any
+new window:
+- derive **`FluentWindowBase`** (owns theme dictionaries #58 + opaque dark bg +
+  `WindowBackdropType.None` #163 — never set a Mica backdrop);
+- set content via **`FluentWindowBase.SetBody(body, showMaximize)`**, never
+  `Content =` directly — SetBody adds the draggable `Wpf.Ui` TitleBar (#167);
+- launch detached windows via **`Services.StaWindowHost.Run`** (STA thread +
+  crash handler + Dispatcher.Run — the crash handler is what keeps a WPF
+  UI-thread exception from killing the app, #166);
+- build fields with **`Views.FluentFormControls`** (one form vocabulary + button
+  factory); feedback dialogs share **`FeedbackDialogBase`**.
 
 ## Known traps
 
