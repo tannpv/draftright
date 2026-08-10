@@ -23,6 +23,10 @@ A Windows-only line under `### Windows` will never appear in the macOS
 If a version needs the user to *do* something after updating, say so
 explicitly under an **Action needed:** line inside the relevant sub-section.
 
+## 2.3.47 — 2026-08-10
+### Windows
+- Under-the-hood cleanup: the app now creates its windows and buttons through one shared path, so the crash protection added in 2.3.46 applies uniformly to every window. No visible changes.
+
 ## 2.3.46 — 2026-08-10
 ### Windows
 - Fixed the Settings window opening taller than the screen on some displays, which could hide the close button. It now always fits your screen and scrolls within each tab.
