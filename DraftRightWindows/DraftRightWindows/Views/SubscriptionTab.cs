@@ -17,12 +17,8 @@ namespace DraftRightWindows.Views;
 /// free users, Manage button for paid users. Mirrors the Flutter / macOS
 /// subscription surface. Acts as <see cref="IPaymentSheetPresenter"/> so the
 /// payment handlers can open the checkout dialogs without depending on view
-/// types.
-///
-/// TEMPORARY BRIDGE: <see cref="QrCheckoutDialog"/> and
-/// <see cref="BankTransferDialog"/> are still WinForms (phase 4 / #160), so they
-/// are opened ownerless from this WPF control. Once #160 migrates them this
-/// bridge goes away.
+/// types. The QR and bank-transfer dialogs are WPF (#160) and open modal to the
+/// Settings window.
 /// </summary>
 public sealed class SubscriptionTab : UserControl, IPaymentSheetPresenter
 {
@@ -275,21 +271,19 @@ public sealed class SubscriptionTab : UserControl, IPaymentSheetPresenter
         _ => s,
     };
 
-    // ── IPaymentSheetPresenter (temporary WinForms bridge, #160) ──────────────
+    // ── IPaymentSheetPresenter ────────────────────────────────────────────────
 
     public void PresentQrDialog(QrCheckout checkout, IObservable<PaymentStatusUpdate>? statusStream)
     {
         if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(new Action(() => PresentQrDialog(checkout, statusStream))); return; }
-        using var dlg = new QrCheckoutDialog(checkout, statusStream);
-        dlg.ShowDialog();
+        new QrCheckoutDialog(checkout, statusStream) { Owner = Window.GetWindow(this) }.ShowDialog();
         _ = RefreshAsync();
     }
 
     public void PresentBankTransferDialog(BankTransferCheckout checkout, IObservable<PaymentStatusUpdate>? statusStream)
     {
         if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(new Action(() => PresentBankTransferDialog(checkout, statusStream))); return; }
-        using var dlg = new BankTransferDialog(checkout, statusStream);
-        dlg.ShowDialog();
+        new BankTransferDialog(checkout, statusStream) { Owner = Window.GetWindow(this) }.ShowDialog();
         _ = RefreshAsync();
     }
 }

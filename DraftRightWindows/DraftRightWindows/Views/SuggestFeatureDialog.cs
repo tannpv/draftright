@@ -1,396 +1,144 @@
 using System;
-using System.Drawing;
-using System.IO;
-using System.Threading;
+using System.Windows;
+using System.Windows.Controls;
 using DraftRightWindows.Services;
-using WinForms = System.Windows.Forms;
+using Wpf.Ui.Controls;
+using WpfButton = Wpf.Ui.Controls.Button;
+using WpfTextBox = Wpf.Ui.Controls.TextBox;
+using WpfTextBlock = System.Windows.Controls.TextBlock;
+using F = DraftRightWindows.Views.FluentFormControls;
 
 namespace DraftRightWindows.Views;
 
 /// <summary>
-/// "Suggest a feature" dialog. Mirrors <see cref="ReportBugDialog"/> for
-/// STA-thread construction, dark theme, control layout, and async submit
-/// pattern. Posts to <see cref="FeedbackService"/>.
+/// "Suggest a feature" dialog (WPF, #160). Shares the shell — STA launcher,
+/// identity block, status, submit flow — with <see cref="BugReportWindow"/> via
+/// <see cref="FeedbackDialogBase"/>. Posts to <see cref="FeedbackService"/>.
 /// </summary>
 internal static class SuggestFeatureDialog
 {
-    // Theme — matches ReportBugDialog / SettingsFormBuilder
+    public static void Show(IntPtr ownerHwnd = default) =>
+        FeedbackDialogBase.RunOnStaThread(() => new SuggestFeatureWindow());
+}
 
-    /// <summary>
-    /// Tiny value type that lets a ComboBox display a human-readable label
-    /// while we read the backend-facing value string on submit.
-    /// </summary>
+internal sealed class SuggestFeatureWindow : FeedbackDialogBase
+{
+    // Human label ↔ backend value for the platform dropdown. One seed list.
     private sealed record PlatformOpt(string Value, string Label)
     {
         public override string ToString() => Label;
     }
 
-    /// <summary>
-    /// Opens the dialog on its own STA thread so it works regardless of which
-    /// thread the caller (tray menu, settings, hotkey…) is on.
-    /// </summary>
-    public static void Show(IntPtr ownerHwnd = default)
+    private static readonly PlatformOpt[] Platforms =
     {
-        var thread = new Thread(() => RunDialog(ownerHwnd));
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.IsBackground = true;
-        thread.Start();
-    }
+        new("playground", "Playground (web)"),
+        new("mobile", "Mobile (iOS / Android)"),
+        new("windows", "Windows"),
+        new("mac", "macOS"),
+        new("linux", "Linux"),
+    };
 
-    private static void RunDialog(IntPtr ownerHwnd)
+    public SuggestFeatureWindow() : base("Suggest a feature")
     {
-        WinForms.Application.EnableVisualStyles();
+        var panel = new StackPanel { Margin = new Thickness(F.ContentPad) };
 
-        var form = new WinForms.Form
-        {
-            Text = "Suggest a feature",
-            Width = 560,
-            Height = 640,
-            StartPosition = WinForms.FormStartPosition.CenterScreen,
-            BackColor = Theme.BgDark,
-            ForeColor = Theme.TextPrimary,
-            FormBorderStyle = WinForms.FormBorderStyle.FixedSingle,
-            MaximizeBox = false,
-            MinimizeBox = false,
-            ShowInTaskbar = true,
-        };
-
-        // Embedded-resource load — survives single-file publish where the .ico
-        // isn't next to the exe (#78). See Helpers/AppIcon.
-        var ico = Helpers.AppIcon.Load();
-        if (ico != null) form.Icon = ico;
-
-        // ── Layout ───────────────────────────────────────────
-        int y = 16;
-
-        var titleHeading = new WinForms.Label
-        {
-            Text = "Suggest a feature",
-            Font = new Font("Segoe UI", 14, FontStyle.Bold),
-            ForeColor = Theme.TextPrimary,
-            Location = new Point(20, y),
-            AutoSize = true,
-        };
-        form.Controls.Add(titleHeading);
-        y += 32;
-
-        var subtitle = new WinForms.Label
+        panel.Children.Add(new WpfTextBlock
         {
             Text = "Got an idea? We'd love to hear it.",
-            Font = new Font("Segoe UI", 9),
-            ForeColor = Theme.TextMuted,
-            Location = new Point(20, y),
-            AutoSize = true,
-        };
-        form.Controls.Add(subtitle);
-        y += 28;
-
-        // Title field
-        form.Controls.Add(new WinForms.Label
-        {
-            Text = "Title",
-            Font = new Font("Segoe UI", 9),
-            ForeColor = Theme.TextMuted,
-            Location = new Point(20, y),
-            AutoSize = true,
+            Foreground = Theme.WpfBrush(Theme.TextMuted),
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 0, F.SectionGap),
         });
-        y += 18;
 
-        var titleBox = new WinForms.TextBox
-        {
-            MaxLength = 80,
-            Multiline = false,
-            Location = new Point(20, y),
-            Size = new Size(500, 30),
-            BackColor = Theme.CardBg,
-            ForeColor = Theme.TextPrimary,
-            BorderStyle = WinForms.BorderStyle.FixedSingle,
-            Font = new Font("Segoe UI", 10),
-        };
-        form.Controls.Add(titleBox);
-        y += 44;
+        panel.Children.Add(F.FieldLabel("Title"));
+        var titleBox = new WpfTextBox { MaxLength = 80, Margin = new Thickness(0, 0, 0, F.FieldGap) };
+        panel.Children.Add(titleBox);
 
-        // Target platform
-        form.Controls.Add(new WinForms.Label
-        {
-            Text = "Target platform",
-            Font = new Font("Segoe UI", 9),
-            ForeColor = Theme.TextMuted,
-            Location = new Point(20, y),
-            AutoSize = true,
-        });
-        y += 18;
+        panel.Children.Add(F.FieldLabel("Target platform"));
+        var platformCombo = F.Dropdown();
+        foreach (var p in Platforms) platformCombo.Items.Add(p);
+        platformCombo.SelectedIndex = 2; // Windows
+        platformCombo.HorizontalAlignment = HorizontalAlignment.Left;
+        platformCombo.MinWidth = 240;
+        panel.Children.Add(platformCombo);
 
-        var platformCombo = new WinForms.ComboBox
-        {
-            DropDownStyle = WinForms.ComboBoxStyle.DropDownList,
-            Location = new Point(20, y),
-            Size = new Size(240, 30),
-            BackColor = Theme.CardBg,
-            ForeColor = Theme.TextPrimary,
-            FlatStyle = WinForms.FlatStyle.Flat,
-            Font = new Font("Segoe UI", 10),
-        };
-        platformCombo.Items.AddRange(new object[]
-        {
-            new PlatformOpt("playground", "Playground (web)"),
-            new PlatformOpt("mobile",     "Mobile (iOS / Android)"),
-            new PlatformOpt("windows",    "Windows"),
-            new PlatformOpt("mac",        "macOS"),
-            new PlatformOpt("linux",      "Linux"),
-        });
-        platformCombo.SelectedIndex = 2; // Default: Windows
-        form.Controls.Add(platformCombo);
-        y += 44;
-
-        // Details field
-        form.Controls.Add(new WinForms.Label
-        {
-            Text = "Describe the feature",
-            Font = new Font("Segoe UI", 9),
-            ForeColor = Theme.TextMuted,
-            Location = new Point(20, y),
-            AutoSize = true,
-        });
-        y += 18;
-
-        var detailsBox = new WinForms.TextBox
+        panel.Children.Add(F.FieldLabel("Describe the feature"));
+        var detailsBox = new WpfTextBox
         {
             MaxLength = 2000,
-            Multiline = true,
             AcceptsReturn = true,
-            ScrollBars = WinForms.ScrollBars.Vertical,
-            Location = new Point(20, y),
-            Size = new Size(500, 120),
-            BackColor = Theme.CardBg,
-            ForeColor = Theme.TextPrimary,
-            BorderStyle = WinForms.BorderStyle.FixedSingle,
-            Font = new Font("Segoe UI", 10),
+            TextWrapping = TextWrapping.Wrap,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            Height = 120,
+            Margin = new Thickness(0, 0, 0, F.FieldGap),
         };
-        form.Controls.Add(detailsBox);
-        y += 132;
+        panel.Children.Add(detailsBox);
 
-        // Email — only shown when not signed in (mirrors ReportBugDialog)
-        bool isSignedIn = false;
-        string? signedInEmail = null;
-        try
-        {
-            isSignedIn = App.Auth?.IsLoggedIn ?? false;
-            signedInEmail = App.Auth?.CurrentEmail;
-        }
-        catch
-        {
-            // App.Auth may be null in test/standalone scenarios.
-        }
+        var identity = BuildIdentityBlock("Submitting", out var readEmail);
+        panel.Children.Add(identity);
 
-        WinForms.TextBox? emailBox = null;
-        if (!isSignedIn)
+        var seeAll = new HyperlinkButton
         {
-            form.Controls.Add(new WinForms.Label
-            {
-                Text = "Email (optional — so we can follow up)",
-                Font = new Font("Segoe UI", 9),
-                ForeColor = Theme.TextMuted,
-                Location = new Point(20, y),
-                AutoSize = true,
-            });
-            y += 18;
-
-            emailBox = new WinForms.TextBox
-            {
-                Location = new Point(20, y),
-                Size = new Size(500, 30),
-                BackColor = Theme.CardBg,
-                ForeColor = Theme.TextPrimary,
-                BorderStyle = WinForms.BorderStyle.FixedSingle,
-                Font = new Font("Segoe UI", 10),
-            };
-            form.Controls.Add(emailBox);
-            y += 44;
-        }
-        else
-        {
-            form.Controls.Add(new WinForms.Label
-            {
-                Text = $"Submitting as {signedInEmail}",
-                Font = new Font("Segoe UI", 9, FontStyle.Italic),
-                ForeColor = Theme.SuccessGreen,
-                Location = new Point(20, y),
-                AutoSize = true,
-            });
-            y += 28;
-        }
-
-        // "See all requests" link
-        var seeAllLink = new WinForms.LinkLabel
-        {
-            Text = "See all requests →",
-            Font = new Font("Segoe UI", 9),
-            LinkColor = Theme.BrandBlue,
-            Location = new Point(20, y),
-            AutoSize = true,
+            Content = "See all requests →",
+            Margin = new Thickness(0, 0, 0, F.FieldGap),
         };
-        seeAllLink.LinkClicked += (_, _) =>
+        seeAll.Click += (_, _) =>
         {
             try
             {
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(
-                    "https://draftright.info/feedback")
-                { UseShellExecute = true });
+                    "https://draftright.info/feedback") { UseShellExecute = true });
             }
             catch { /* best-effort */ }
         };
-        form.Controls.Add(seeAllLink);
-        y += 28;
+        panel.Children.Add(seeAll);
 
-        // Status / error label
-        var statusLabel = new WinForms.Label
-        {
-            Text = "",
-            Font = new Font("Segoe UI", 9),
-            ForeColor = Theme.ErrorRed,
-            Location = new Point(20, y),
-            Size = new Size(500, 36),
-            AutoEllipsis = true,
-            Visible = false,
-        };
-        form.Controls.Add(statusLabel);
-        y += 44;
+        panel.Children.Add(StatusBar);
 
-        // Buttons — bottom-right aligned
-        var cancelBtn = new WinForms.Button
-        {
-            Text = "Cancel",
-            Location = new Point(360, y),
-            Size = new Size(80, 32),
-            BackColor = Theme.CardBg,
-            ForeColor = Theme.TextPrimary,
-            FlatStyle = WinForms.FlatStyle.Flat,
-            Font = new Font("Segoe UI", 9.5f),
-        };
-        cancelBtn.FlatAppearance.BorderColor = Theme.BorderColor;
-        form.Controls.Add(cancelBtn);
+        var actions = BuildActions("Submit", out var submitBtn, out var cancelBtn);
+        panel.Children.Add(actions);
 
-        var submitBtn = new WinForms.Button
-        {
-            Text = "Submit",
-            Location = new Point(448, y),
-            Size = new Size(72, 32),
-            BackColor = Theme.BrandBlue,
-            ForeColor = Color.White,
-            FlatStyle = WinForms.FlatStyle.Flat,
-            Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
-            Enabled = false, // starts disabled until title + details are filled
-        };
-        submitBtn.FlatAppearance.BorderSize = 0;
-        form.Controls.Add(submitBtn);
+        // Submit stays disabled until title + details are non-empty.
+        void RefreshEnabled() =>
+            submitBtn.IsEnabled = titleBox.Text.Trim().Length > 0 && detailsBox.Text.Trim().Length > 0;
+        titleBox.TextChanged += (_, _) => RefreshEnabled();
+        detailsBox.TextChanged += (_, _) => RefreshEnabled();
+        RefreshEnabled();
 
-        // ── Helpers ─────────────────────────────────────────
-
-        void SetStatus(string text, Color color)
-        {
-            statusLabel.Text = text;
-            statusLabel.ForeColor = color;
-            statusLabel.Visible = !string.IsNullOrEmpty(text);
-        }
-
-        void RefreshSubmitEnabled()
-        {
-            submitBtn.Enabled =
-                titleBox.Text.Trim().Length > 0 &&
-                detailsBox.Text.Trim().Length > 0;
-        }
-
-        // ── Wiring ──────────────────────────────────────────
-
-        titleBox.TextChanged += (_, _) => RefreshSubmitEnabled();
-        detailsBox.TextChanged += (_, _) => RefreshSubmitEnabled();
-
-        cancelBtn.Click += (_, _) => form.Close();
-
-        // Submit
         submitBtn.Click += async (_, _) =>
         {
-            var titleText = titleBox.Text?.Trim() ?? "";
-            var detailsText = detailsBox.Text?.Trim() ?? "";
-
-            if (titleText.Length == 0)
-            {
-                SetStatus("Please enter a title.", Theme.ErrorRed);
-                titleBox.Focus();
-                return;
-            }
-            if (detailsText.Length == 0)
-            {
-                SetStatus("Please describe the feature.", Theme.ErrorRed);
-                detailsBox.Focus();
-                return;
-            }
+            var titleText = titleBox.Text.Trim();
+            var detailsText = detailsBox.Text.Trim();
+            if (titleText.Length == 0) { SetStatus(InfoBarSeverity.Error, "Please enter a title."); titleBox.Focus(); return; }
+            if (detailsText.Length == 0) { SetStatus(InfoBarSeverity.Error, "Please describe the feature."); detailsBox.Focus(); return; }
 
             var platform = ((PlatformOpt)platformCombo.SelectedItem!).Value;
-            var email = emailBox?.Text?.Trim();
+            var email = readEmail();
             string? authToken = null;
             try { authToken = App.Auth?.AccessToken; } catch { authToken = null; }
 
-            // Lock UI
-            submitBtn.Enabled = false;
-            cancelBtn.Enabled = false;
-            titleBox.ReadOnly = true;
-            detailsBox.ReadOnly = true;
-            if (emailBox != null) emailBox.ReadOnly = true;
-            platformCombo.Enabled = false;
-            SetStatus("Submitting…", Theme.TextMuted);
-
-            try
-            {
-                var result = await FeedbackService.SubmitAsync(
-                    title: titleText,
-                    targetPlatform: platform,
-                    description: detailsText,
-                    userEmail: !string.IsNullOrWhiteSpace(email) ? email : null,
-                    authToken: authToken);
-
-                if (result.Success)
+            await RunSubmitAsync(submitBtn, cancelBtn,
+                lockFields: () => { titleBox.IsReadOnly = detailsBox.IsReadOnly = true; platformCombo.IsEnabled = false; },
+                unlockFields: () => { titleBox.IsReadOnly = detailsBox.IsReadOnly = false; platformCombo.IsEnabled = true; },
+                successMessage: "Thanks! Your suggestion was submitted.",
+                action: async () =>
                 {
-                    DRLogger.Log($"Feature request submitted (id={result.Id ?? "?"})", DRLogger.Category.APP);
-                    SetStatus("Thanks! Your suggestion was submitted.", Theme.SuccessGreen);
-                    // Brief flash of success, then close — mirrors ReportBugDialog.
-                    var t = new WinForms.Timer { Interval = 900 };
-                    t.Tick += (_, _) =>
-                    {
-                        t.Stop();
-                        t.Dispose();
-                        form.Close();
-                    };
-                    t.Start();
-                }
-                else
-                {
-                    SetStatus(result.ErrorMessage ?? "Submit failed.", Theme.ErrorRed);
-                    submitBtn.Enabled = true;
-                    cancelBtn.Enabled = true;
-                    titleBox.ReadOnly = false;
-                    detailsBox.ReadOnly = false;
-                    if (emailBox != null) emailBox.ReadOnly = false;
-                    platformCombo.Enabled = true;
-                }
-            }
-            catch (Exception ex)
-            {
-                DRLogger.Log($"Feature request submit threw: {ex}", DRLogger.Category.APP);
-                SetStatus(ex.Message, Theme.ErrorRed);
-                submitBtn.Enabled = true;
-                cancelBtn.Enabled = true;
-                titleBox.ReadOnly = false;
-                detailsBox.ReadOnly = false;
-                if (emailBox != null) emailBox.ReadOnly = false;
-                platformCombo.Enabled = true;
-            }
+                    var result = await FeedbackService.SubmitAsync(
+                        title: titleText,
+                        targetPlatform: platform,
+                        description: detailsText,
+                        userEmail: !string.IsNullOrWhiteSpace(email) ? email : null,
+                        authToken: authToken);
+                    if (result.Success)
+                        DRLogger.Log($"Feature request submitted (id={result.Id ?? "?"})", DRLogger.Category.APP);
+                    return (result.Success, result.ErrorMessage);
+                });
         };
 
-        form.AcceptButton = submitBtn;
-        form.CancelButton = cancelBtn;
-
-        WinForms.Application.Run(form);
+        Content = new ScrollViewer
+        {
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            Content = panel,
+        };
     }
 }
