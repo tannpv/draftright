@@ -23,6 +23,12 @@ A Windows-only line under `### Windows` will never appear in the macOS
 If a version needs the user to *do* something after updating, say so
 explicitly under an **Action needed:** line inside the relevant sub-section.
 
+## 2.3.46 — 2026-08-10
+### Windows
+- Fixed the Settings window opening taller than the screen on some displays, which could hide the close button. It now always fits your screen and scrolls within each tab.
+- Report a Bug, Suggest a Feature and the payment dialogs are rebuilt on the modern Windows (Fluent) UI, matching the rest of the app.
+- More crash-resistant: a problem inside one window no longer closes the whole app, and crashes are now recorded (to a file on your Desktop and sent to us) so we can find and fix them faster.
+
 ## 2.3.45 — 2026-08-10
 ### Windows
 - Settings is rebuilt on the modern Windows (Fluent) UI. All six tabs — General, Rewrite, Trigger, Account, Subscription and Advanced — are refreshed with cleaner spacing and a solid dark background, and the window now resizes cleanly. Every setting works as before.
