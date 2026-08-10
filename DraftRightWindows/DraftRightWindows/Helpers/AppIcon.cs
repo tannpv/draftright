@@ -25,6 +25,9 @@ public static class AppIcon
     private static Icon? _cached;
     private static bool _loaded;
 
+    private static System.Windows.Media.ImageSource? _cachedImageSource;
+    private static bool _imageSourceLoaded;
+
     /// <summary>
     /// The app icon, or null if it can't be loaded. Best-effort: callers should
     /// tolerate null and leave the window's default icon in place. The returned
@@ -41,5 +44,33 @@ public static class AppIcon
         }
         catch { /* best-effort — fall back to the default icon */ }
         return _cached;
+    }
+
+    /// <summary>
+    /// The app icon as a WPF <see cref="System.Windows.Media.ImageSource"/> for
+    /// <c>Window.Icon</c>, or null if it can't be loaded. Reads the SAME embedded
+    /// <see cref="ResourceName"/> resource as <see cref="Load"/> — one source of
+    /// truth — so WinForms and WPF windows show the identical icon. Frozen +
+    /// cached; shared across windows and threads, do not mutate.
+    /// </summary>
+    public static System.Windows.Media.ImageSource? LoadImageSource()
+    {
+        if (_imageSourceLoaded) return _cachedImageSource;
+        _imageSourceLoaded = true;
+        try
+        {
+            using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(ResourceName);
+            if (stream != null)
+            {
+                var frame = System.Windows.Media.Imaging.BitmapFrame.Create(
+                    stream,
+                    System.Windows.Media.Imaging.BitmapCreateOptions.None,
+                    System.Windows.Media.Imaging.BitmapCacheOption.OnLoad);
+                frame.Freeze();
+                _cachedImageSource = frame;
+            }
+        }
+        catch { /* best-effort — fall back to the default icon */ }
+        return _cachedImageSource;
     }
 }

@@ -1,687 +1,560 @@
 using System;
 using System.Collections.Generic;
-using System.Drawing;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using DraftRightWindows.Services;
-using WinForms = System.Windows.Forms;
+using Wpf.Ui.Controls;
+using WpfButton = Wpf.Ui.Controls.Button;
+using WpfTextBox = Wpf.Ui.Controls.TextBox;
+using WpfTextBlock = System.Windows.Controls.TextBlock;
+using WpfImage = System.Windows.Controls.Image;
 
 namespace DraftRightWindows.Views;
 
 /// <summary>
-/// "Report a bug" dialog. Modeled on the macOS / admin-portal flow:
-/// — multi-line description (min 10 chars)
-/// — optional email (auto-filled when signed in, editable when not)
-/// — optional screenshot via three input methods (browse, drag-drop, paste)
-/// — Submit button posts to <see cref="BugReportService"/>; on success the
-///   dialog closes and the caller shows a tray balloon.
+/// "Report a bug" dialog — WPF UI (#158, phase 2 of the #156 migration).
 ///
-/// Implemented in WinForms for consistency with the rest of this app
-/// (SettingsWindow, CopyableErrorDialog) — the WinUI XAML
-/// surface intentionally remains minimal because of the unpackaged-build
-/// XAML resource issue documented in App.cs.
+/// — multi-line description (min 10 chars, <see cref="BugReportService.IsDescriptionValid"/>)
+/// — optional email (auto-filled when signed in, editable when not)
+/// — optional screenshot via four inputs: browse, drag-drop, Ctrl+V, Capture
+/// — Submit posts to <see cref="BugReportService"/>; on success the dialog
+///   closes and the caller shows a tray balloon.
+///
+/// Public API (<see cref="Show"/>) is unchanged from the WinForms version, so
+/// the tray menu and Settings → Advanced callers did not change. Capture +
+/// downscale live in <see cref="ScreenCapture"/>, shared with the phase-4
+/// Suggest-a-feature dialog rather than copied.
 /// </summary>
 internal static class ReportBugDialog
 {
-    // Theme — matches SettingsFormBuilder
-
     /// <summary>
-    /// Largest edge a captured screenshot keeps, in pixels. A full-screen PNG
-    /// off a 4K display runs well past the 5 MB upload cap and would only fail
-    /// at submit time, so captures are downscaled first. Matches the macOS
-    /// sheet, which uses the same bound for the same reason.
-    /// </summary>
-    private const int CaptureMaxDimension = 2000;
-
-    /// <summary>
-    /// Pause between hiding the dialog and grabbing the screen, so the
-    /// compositor has actually removed our own window from the frame.
-    /// macOS uses the same 250 ms.
-    /// </summary>
-    private const int CaptureHideDelayMs = 250;
-
-    /// <summary>
-    /// Opens the dialog on its own STA thread so it works regardless of which
-    /// thread the caller (tray menu, settings, hotkey…) is on.
+    /// Opens the dialog on its own STA thread with its own dispatcher, so it
+    /// works regardless of which thread the caller (tray, settings, hotkey…)
+    /// is on. Same pattern as the rewrite panel. <paramref name="ownerHwnd"/>
+    /// is accepted for API compatibility; WPF owner across threads is not set.
     /// </summary>
     public static void Show(IntPtr ownerHwnd = default)
     {
-        var thread = new Thread(() => RunDialog(ownerHwnd));
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                var win = new BugReportWindow();
+                // Shut the dispatcher down with the window so the thread ends
+                // instead of pumping an empty loop forever.
+                win.Closed += (_, _) => Dispatcher.CurrentDispatcher.InvokeShutdown();
+                win.Show();
+                win.Activate();
+                Dispatcher.Run();
+            }
+            catch (Exception ex)
+            {
+                DRLogger.Error($"ReportBugDialog: EXCEPTION {ex.GetType().Name}: {ex.Message}", DRLogger.Category.APP);
+            }
+        });
         thread.SetApartmentState(ApartmentState.STA);
         thread.IsBackground = true;
         thread.Start();
     }
+}
 
-    private static void RunDialog(IntPtr ownerHwnd)
+/// <summary>The bug-report window. Derives from <see cref="FluentWindowBase"/>
+/// so the WPF-UI theme dictionaries (#58) and the dark background (#163) are
+/// inherited, not re-inlined.</summary>
+internal sealed class BugReportWindow : FluentWindowBase
+{
+    private readonly WpfTextBox _descBox;
+    private readonly WpfTextBox? _emailBox;
+    private readonly Border _dropZone;
+    private readonly WpfTextBlock _dropHint;
+    private readonly WpfImage _preview;
+    private readonly WpfTextBlock _fileLabel;
+    private readonly WpfButton _clearBtn;
+    private readonly WpfButton _captureBtn;
+    private readonly WpfButton _submitBtn;
+    private readonly WpfButton _cancelBtn;
+    private readonly InfoBar _status;
+    private readonly ProgressRing _progress;
+
+    private readonly bool _isSignedIn;
+
+    // Layout spacing — one source each, so every section lines up the same.
+    private const double ContentPad = 24;   // window content padding
+    private const double SectionGap = 16;    // between sections
+    private const double LabelGap = 4;       // caption/label to its control
+    private const double ButtonGap = 8;      // between adjacent buttons
+
+    // The path handed to the upload. For browse/drag-file this is the user's
+    // own file (never deleted). For paste/drag-bitmap/capture it is a temp PNG
+    // we own — tracked separately in _tempScreenshotPath so cleanup only ever
+    // deletes files we created.
+    private string? _selectedScreenshotPath;
+    private string? _tempScreenshotPath;
+
+    public BugReportWindow()
     {
-        WinForms.Application.EnableVisualStyles();
+        Title = "Report a bug";
+        Width = 600;
+        Height = 680;
+        WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        ResizeMode = ResizeMode.NoResize;
+        // Standard caption (no ExtendsContentIntoTitleBar) so content starts
+        // cleanly below the title bar; the window Title is the only "Report a
+        // bug" label — no separate heading duplicating it.
+        // No WindowBackdropType here — FluentWindowBase forces it off so the
+        // dark background paints (#163). Re-enabling Mica would wash the text out.
 
-        var form = new WinForms.Form
-        {
-            Text = "Report a bug",
-            Width = 560,
-            Height = 640,
-            StartPosition = WinForms.FormStartPosition.CenterScreen,
-            BackColor = Theme.BgDark,
-            ForeColor = Theme.TextPrimary,
-            FormBorderStyle = WinForms.FormBorderStyle.FixedSingle,
-            MaximizeBox = false,
-            MinimizeBox = false,
-            ShowInTaskbar = true,
-            KeyPreview = true, // so Ctrl+V hits the form-level handler regardless of focus
-        };
+        var icon = Helpers.AppIcon.LoadImageSource();
+        if (icon != null) Icon = icon;
 
-        // Embedded-resource load — survives single-file publish where the .ico
-        // isn't next to the exe (#78). See Helpers/AppIcon.
-        var ico = Helpers.AppIcon.Load();
-        if (ico != null) form.Icon = ico;
+        try { _isSignedIn = App.Auth?.IsLoggedIn ?? false; } catch { _isSignedIn = false; }
+        string? signedInEmail = null;
+        try { signedInEmail = App.Auth?.CurrentEmail; } catch { /* App.Auth may be null */ }
 
-        // ── Layout ───────────────────────────────────────────
-        int y = 16;
+        // Vertical stack with uniform section spacing (SectionGap). A StackPanel
+        // avoids the row-index fragility of a fixed Grid and keeps every section
+        // spaced the same. The window Title supplies the "Report a bug" caption,
+        // so the first line here is the intro subtitle, not a second heading.
+        var panel = new StackPanel { Margin = new Thickness(ContentPad) };
 
-        var title = new WinForms.Label
-        {
-            Text = "Report a bug",
-            Font = new Font("Segoe UI", 14, FontStyle.Bold),
-            ForeColor = Theme.TextPrimary,
-            Location = new Point(20, y),
-            AutoSize = true,
-        };
-        form.Controls.Add(title);
-        y += 32;
-
-        var subtitle = new WinForms.Label
+        panel.Children.Add(new WpfTextBlock
         {
             Text = "Tell us what went wrong. A screenshot helps a lot.",
-            Font = new Font("Segoe UI", 9),
-            ForeColor = Theme.TextMuted,
-            Location = new Point(20, y),
-            AutoSize = true,
-        };
-        form.Controls.Add(subtitle);
-        y += 28;
+            Foreground = Theme.WpfBrush(Theme.TextMuted),
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 0, SectionGap),
+        });
 
         // Description
-        form.Controls.Add(new WinForms.Label
+        panel.Children.Add(Caption("What happened? (min. 10 characters)"));
+        _descBox = new WpfTextBox
         {
-            Text = "What happened? (min. 10 characters)",
-            Font = new Font("Segoe UI", 9),
-            ForeColor = Theme.TextMuted,
-            Location = new Point(20, y),
-            AutoSize = true,
-        });
-        y += 18;
-
-        var descBox = new WinForms.TextBox
-        {
-            Multiline = true,
             AcceptsReturn = true,
-            ScrollBars = WinForms.ScrollBars.Vertical,
-            Location = new Point(20, y),
-            Size = new Size(500, 120),
-            BackColor = Theme.CardBg,
-            ForeColor = Theme.TextPrimary,
-            BorderStyle = WinForms.BorderStyle.FixedSingle,
-            Font = new Font("Segoe UI", 10),
+            TextWrapping = TextWrapping.Wrap,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            Height = 120,
+            Margin = new Thickness(0, LabelGap, 0, SectionGap),
         };
-        form.Controls.Add(descBox);
-        y += 132;
+        panel.Children.Add(_descBox);
 
-        // Email (only shown when not signed in)
-        bool isSignedIn = false;
-        string? signedInEmail = null;
-        try
+        // Email (only when not signed in)
+        if (!_isSignedIn)
         {
-            isSignedIn = App.Auth?.IsLoggedIn ?? false;
-            signedInEmail = App.Auth?.CurrentEmail;
-        }
-        catch
-        {
-            // App.Auth may be null in test/standalone scenarios.
-        }
-
-        WinForms.TextBox? emailBox = null;
-        if (!isSignedIn)
-        {
-            form.Controls.Add(new WinForms.Label
-            {
-                Text = "Email (optional — so we can follow up)",
-                Font = new Font("Segoe UI", 9),
-                ForeColor = Theme.TextMuted,
-                Location = new Point(20, y),
-                AutoSize = true,
-            });
-            y += 18;
-
-            emailBox = new WinForms.TextBox
-            {
-                Location = new Point(20, y),
-                Size = new Size(500, 30),
-                BackColor = Theme.CardBg,
-                ForeColor = Theme.TextPrimary,
-                BorderStyle = WinForms.BorderStyle.FixedSingle,
-                Font = new Font("Segoe UI", 10),
-            };
-            form.Controls.Add(emailBox);
-            y += 44;
+            panel.Children.Add(Caption("Email (optional — so we can follow up)"));
+            _emailBox = new WpfTextBox { Margin = new Thickness(0, LabelGap, 0, SectionGap) };
+            panel.Children.Add(_emailBox);
         }
         else
         {
-            form.Controls.Add(new WinForms.Label
+            panel.Children.Add(new WpfTextBlock
             {
                 Text = $"Reporting as {signedInEmail}",
-                Font = new Font("Segoe UI", 9, FontStyle.Italic),
-                ForeColor = Theme.SuccessGreen,
-                Location = new Point(20, y),
-                AutoSize = true,
+                FontStyle = FontStyles.Italic,
+                Foreground = Theme.WpfBrush(Theme.SuccessGreen),
+                Margin = new Thickness(0, 0, 0, SectionGap),
             });
-            y += 28;
         }
 
-        // Screenshot section
-        form.Controls.Add(new WinForms.Label
-        {
-            Text = "Attach a screenshot (optional)",
-            Font = new Font("Segoe UI", 9),
-            ForeColor = Theme.TextMuted,
-            Location = new Point(20, y),
-            AutoSize = true,
-        });
-        y += 18;
+        // Screenshot label
+        panel.Children.Add(Caption("Attach a screenshot (optional)"));
 
-        // Drop zone — also shows a thumbnail preview when an image is loaded.
-        var dropZone = new WinForms.Panel
-        {
-            Location = new Point(20, y),
-            Size = new Size(500, 120),
-            BackColor = Theme.CardBg,
-            BorderStyle = WinForms.BorderStyle.FixedSingle,
-            AllowDrop = true,
-        };
-        form.Controls.Add(dropZone);
-
-        var dropHint = new WinForms.Label
+        // Drop zone (also hosts the preview) — click to browse, drop to attach.
+        _dropHint = new WpfTextBlock
         {
             Text = "Drag & drop an image here, click to browse, or press Ctrl+V to paste",
-            Font = new Font("Segoe UI", 9),
-            ForeColor = Theme.TextMuted,
-            Dock = WinForms.DockStyle.Fill,
-            TextAlign = ContentAlignment.MiddleCenter,
-            Cursor = WinForms.Cursors.Hand,
+            Foreground = Theme.WpfBrush(Theme.TextMuted),
+            TextWrapping = TextWrapping.Wrap,
+            TextAlignment = TextAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(12),
         };
-        dropZone.Controls.Add(dropHint);
-
-        var preview = new WinForms.PictureBox
+        _preview = new WpfImage
         {
-            Dock = WinForms.DockStyle.Fill,
-            SizeMode = WinForms.PictureBoxSizeMode.Zoom,
-            BackColor = Theme.CardBg,
-            Visible = false,
-            Cursor = WinForms.Cursors.Hand,
+            Stretch = System.Windows.Media.Stretch.Uniform,
+            Visibility = Visibility.Collapsed,
         };
-        dropZone.Controls.Add(preview);
-
-        y += 132;
-
-        // Selected file label + clear button
-        string? selectedScreenshotPath = null;
-        var fileLabel = new WinForms.Label
+        var dropContent = new Grid();
+        dropContent.Children.Add(_preview);
+        dropContent.Children.Add(_dropHint);
+        _dropZone = new Border
         {
-            Text = "",
-            Font = new Font("Segoe UI", 8.5f),
-            ForeColor = Theme.TextMuted,
-            Location = new Point(20, y),
-            // Stops short of the buttons that share this row. It used to be
-            // 420 wide, which ran under "Capture screen" — and because
-            // WinForms paints lower-index controls on top, the label's
-            // background hid the button entirely.
-            Size = new Size(300, 18),
-            AutoEllipsis = true,
+            Background = Theme.WpfBrush(Theme.CardBg),
+            BorderBrush = Theme.WpfBrush(Theme.BorderColor),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(4),
+            Height = 140,
+            Margin = new Thickness(0, LabelGap, 0, LabelGap),
+            Cursor = Cursors.Hand,
+            AllowDrop = true,
+            Child = dropContent,
         };
-        form.Controls.Add(fileLabel);
+        _dropZone.MouseLeftButtonUp += (_, _) => Browse();
+        _dropZone.DragEnter += OnDragEnter;
+        _dropZone.Drop += OnDrop;
+        panel.Children.Add(_dropZone);
 
-        // Capture the screen directly — the fourth input method, and the one
-        // that matters when a user is mid-bug: alt-tabbing to a snipping tool
-        // often disturbs the very state they are trying to show us (#138).
-        var captureBtn = new WinForms.Button
+        // File label (left, elastic) + Capture + Clear (right)
+        _fileLabel = new WpfTextBlock
         {
-            Text = "Capture screen",
-            Location = new Point(330, y - 4),
-            Size = new Size(120, 24),
-            BackColor = Theme.CardBg,
-            ForeColor = Theme.TextPrimary,
-            FlatStyle = WinForms.FlatStyle.Flat,
-            Font = new Font("Segoe UI", 8.5f),
-            Cursor = WinForms.Cursors.Hand,
+            Foreground = Theme.WpfBrush(Theme.TextMuted),
+            FontSize = 12,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            VerticalAlignment = VerticalAlignment.Center,
         };
-        captureBtn.FlatAppearance.BorderColor = Theme.BorderColor;
-        form.Controls.Add(captureBtn);
+        _captureBtn = ActionButton("Capture screen", ControlAppearance.Secondary, CaptureScreen);
+        _clearBtn = ActionButton("Clear", ControlAppearance.Secondary, ClearScreenshot);
+        _clearBtn.Visibility = Visibility.Collapsed;
+        _clearBtn.Margin = new Thickness(ButtonGap, 0, 0, 0);
 
-        var clearBtn = new WinForms.Button
-        {
-            Text = "Clear",
-            Location = new Point(456, y - 4),
-            Size = new Size(64, 24),
-            BackColor = Theme.CardBg,
-            ForeColor = Theme.TextMuted,
-            FlatStyle = WinForms.FlatStyle.Flat,
-            Font = new Font("Segoe UI", 8.5f),
-            Visible = false,
-        };
-        clearBtn.FlatAppearance.BorderColor = Theme.BorderColor;
-        form.Controls.Add(clearBtn);
-        y += 26;
+        var fileRow = new Grid { Margin = new Thickness(0, 0, 0, SectionGap) };
+        fileRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        fileRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        fileRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        Grid.SetColumn(_fileLabel, 0);
+        Grid.SetColumn(_captureBtn, 1);
+        Grid.SetColumn(_clearBtn, 2);
+        fileRow.Children.Add(_fileLabel);
+        fileRow.Children.Add(_captureBtn);
+        fileRow.Children.Add(_clearBtn);
+        panel.Children.Add(fileRow);
 
-        // Status / error message
-        var statusLabel = new WinForms.Label
+        // Status (errors + success)
+        _status = new InfoBar
         {
-            Text = "",
-            Font = new Font("Segoe UI", 9),
-            ForeColor = Theme.ErrorRed,
-            Location = new Point(20, y),
-            Size = new Size(500, 36),
-            AutoEllipsis = true,
-            Visible = false,
+            IsClosable = false,
+            IsOpen = false,
+            Margin = new Thickness(0, 0, 0, SectionGap),
         };
-        form.Controls.Add(statusLabel);
-        y += 44;
+        panel.Children.Add(_status);
 
         // Progress
-        var progress = new WinForms.ProgressBar
+        _progress = new ProgressRing
         {
-            Style = WinForms.ProgressBarStyle.Marquee,
-            MarqueeAnimationSpeed = 30,
-            Location = new Point(20, y),
-            Size = new Size(500, 6),
-            Visible = false,
+            IsIndeterminate = true,
+            Width = 28,
+            Height = 28,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Visibility = Visibility.Collapsed,
+            Margin = new Thickness(0, 0, 0, SectionGap),
         };
-        form.Controls.Add(progress);
-        y += 14;
+        panel.Children.Add(_progress);
 
-        // Buttons
-        var cancelBtn = new WinForms.Button
+        // Actions (right-aligned)
+        _cancelBtn = ActionButton("Cancel", ControlAppearance.Secondary, Close);
+        _submitBtn = ActionButton("Submit", ControlAppearance.Primary, () => _ = SubmitAsync());
+        _submitBtn.Margin = new Thickness(ButtonGap, 0, 0, 0);
+        var actions = new StackPanel
         {
-            Text = "Cancel",
-            Location = new Point(360, y),
-            Size = new Size(80, 32),
-            BackColor = Theme.CardBg,
-            ForeColor = Theme.TextPrimary,
-            FlatStyle = WinForms.FlatStyle.Flat,
-            Font = new Font("Segoe UI", 9.5f),
+            Orientation = System.Windows.Controls.Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right,
         };
-        cancelBtn.FlatAppearance.BorderColor = Theme.BorderColor;
-        form.Controls.Add(cancelBtn);
+        actions.Children.Add(_cancelBtn);
+        actions.Children.Add(_submitBtn);
+        panel.Children.Add(actions);
 
-        var submitBtn = new WinForms.Button
+        Content = panel;
+
+        // Ctrl+V at the window level → attach a clipboard image, unless the
+        // description box has focus (where Ctrl+V should paste text).
+        PreviewKeyDown += OnPreviewKeyDown;
+        Closed += (_, _) =>
         {
-            Text = "Submit",
-            Location = new Point(448, y),
-            Size = new Size(72, 32),
-            BackColor = Theme.BrandBlue,
-            ForeColor = Color.White,
-            FlatStyle = WinForms.FlatStyle.Flat,
-            Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+            _tempScreenshotPath?.SafeDelete();
         };
-        submitBtn.FlatAppearance.BorderSize = 0;
-        form.Controls.Add(submitBtn);
+    }
 
-        // ── Helpers ─────────────────────────────────────────
+    // ── UI helpers ──────────────────────────────────────────────────────────
 
-        // Tracks an in-process temp file so we clean it up on close.
-        string? tempScreenshotPath = null;
+    private WpfTextBlock Caption(string text) => new()
+    {
+        Text = text,
+        Foreground = Theme.WpfBrush(Theme.TextMuted),
+        FontSize = 12,
+    };
 
-        void SetStatus(string text, Color color)
+    // One button shape for the whole dialog — MinWidth + padding so labels like
+    // "Capture screen" and "Submit" never clip (they did before). RULE #1: the
+    // sizing lives here once, not repeated per button.
+    private static WpfButton ActionButton(string text, ControlAppearance appearance, Action onClick)
+    {
+        var b = new WpfButton
         {
-            statusLabel.Text = text;
-            statusLabel.ForeColor = color;
-            statusLabel.Visible = !string.IsNullOrEmpty(text);
+            Content = text,
+            Appearance = appearance,
+            MinWidth = 96,
+            Padding = new Thickness(14, 6, 14, 6),
+        };
+        b.Click += (_, _) => onClick();
+        return b;
+    }
+
+    private void SetStatus(string text, System.Drawing.Color color)
+    {
+        if (string.IsNullOrEmpty(text)) { _status.IsOpen = false; return; }
+        _status.Severity = color == Theme.SuccessGreen ? InfoBarSeverity.Success
+            : color == Theme.TextMuted ? InfoBarSeverity.Informational
+            : InfoBarSeverity.Error;
+        _status.Message = text;
+        _status.IsOpen = true;
+    }
+
+    // ── Attach paths ────────────────────────────────────────────────────────
+
+    private void Browse()
+    {
+        var dlg = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Choose a screenshot",
+            Filter = "Images (*.png;*.jpg;*.jpeg)|*.png;*.jpg;*.jpeg",
+            CheckFileExists = true,
+            Multiselect = false,
+        };
+        if (dlg.ShowDialog(this) == true) LoadScreenshotFromFile(dlg.FileName);
+    }
+
+    private void OnDragEnter(object sender, DragEventArgs e)
+    {
+        e.Effects = (e.Data.GetDataPresent(DataFormats.FileDrop) || e.Data.GetDataPresent(DataFormats.Bitmap))
+            ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private void OnDrop(object sender, DragEventArgs e)
+    {
+        try
+        {
+            if (e.Data.GetDataPresent(DataFormats.FileDrop))
+            {
+                if (e.Data.GetData(DataFormats.FileDrop) is string[] { Length: > 0 } files)
+                {
+                    var ext = Path.GetExtension(files[0]).ToLowerInvariant();
+                    if (ext is ".png" or ".jpg" or ".jpeg") LoadScreenshotFromFile(files[0]);
+                    else SetStatus("Only PNG and JPEG images are supported.", Theme.ErrorRed);
+                }
+            }
+            else if (e.Data.GetData(DataFormats.Bitmap) is BitmapSource bmp)
+            {
+                LoadScreenshotFromBitmap(bmp, "Dropped image");
+            }
         }
-
-        void LoadScreenshotFromFile(string path)
+        catch (Exception ex)
         {
+            SetStatus($"Drop failed: {ex.Message}", Theme.ErrorRed);
+        }
+    }
+
+    private void OnPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.V || (Keyboard.Modifiers & ModifierKeys.Control) == 0) return;
+        if (Keyboard.FocusedElement == _descBox) return; // let the text box paste text
+        try
+        {
+            if (System.Windows.Clipboard.ContainsImage())
+            {
+                var img = System.Windows.Clipboard.GetImage();
+                if (img != null) { LoadScreenshotFromBitmap(img, "Pasted image"); e.Handled = true; }
+            }
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"Paste failed: {ex.Message}", Theme.ErrorRed);
+        }
+    }
+
+    private void CaptureScreen()
+    {
+        // Hide first, or the shot is mostly this dialog. The delay lets the
+        // compositor actually remove the window before the grab.
+        Hide();
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(ScreenCapture.HideDelayMs) };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
             try
             {
-                var info = new FileInfo(path);
-                if (info.Length > Services.BugReportService.MaxScreenshotBytes)
-                {
-                    SetStatus("Screenshot exceeds 5 MB. Please attach a smaller image.", Theme.ErrorRed);
-                    return;
-                }
-
-                // Load the image fully into memory then dispose the file handle so
-                // PictureBox doesn't keep the underlying file locked.
-                using (var fs = File.OpenRead(path))
-                {
-                    var img = Image.FromStream(fs);
-                    preview.Image?.Dispose();
-                    preview.Image = img;
-                }
-
-                selectedScreenshotPath = path;
-                preview.Visible = true;
-                dropHint.Visible = false;
-                fileLabel.Text = Path.GetFileName(path);
-                clearBtn.Visible = true;
-                SetStatus("", Theme.ErrorRed);
+                var tmp = ScreenCapture.CaptureToTempPng();
+                AttachTempFile(tmp, "Captured screenshot");
             }
             catch (Exception ex)
             {
-                SetStatus($"Could not load image: {ex.Message}", Theme.ErrorRed);
+                SetStatus($"Could not capture the screen: {ex.Message}", Theme.ErrorRed);
             }
-        }
-
-        void LoadScreenshotFromImage(Image img, string label = "Pasted image")
-        {
-            try
+            finally
             {
-                // Persist to a temp PNG so the multipart upload can stream from disk.
-                tempScreenshotPath?.SafeDelete();
-                var tmp = Path.Combine(Path.GetTempPath(),
-                    $"draftright-bugreport-{Guid.NewGuid():N}.png");
-                img.Save(tmp, System.Drawing.Imaging.ImageFormat.Png);
-                tempScreenshotPath = tmp;
-
-                preview.Image?.Dispose();
-                preview.Image = (Image)img.Clone();
-                preview.Visible = true;
-                dropHint.Visible = false;
-
-                selectedScreenshotPath = tmp;
-                fileLabel.Text = label;
-                clearBtn.Visible = true;
-                SetStatus("", Theme.ErrorRed);
-            }
-            catch (Exception ex)
-            {
-                SetStatus($"Could not attach pasted image: {ex.Message}", Theme.ErrorRed);
-            }
-        }
-
-        void ClearScreenshot()
-        {
-            selectedScreenshotPath = null;
-            preview.Image?.Dispose();
-            preview.Image = null;
-            preview.Visible = false;
-            dropHint.Visible = true;
-            fileLabel.Text = "";
-            clearBtn.Visible = false;
-            tempScreenshotPath?.SafeDelete();
-            tempScreenshotPath = null;
-        }
-
-        // ── Wiring ──────────────────────────────────────────
-
-        // Browse via single-click on the drop zone (and the hint label).
-        WinForms.MouseEventHandler browseHandler = (_, _) =>
-        {
-            using var dlg = new WinForms.OpenFileDialog
-            {
-                Title = "Choose a screenshot",
-                Filter = "Images (*.png;*.jpg;*.jpeg)|*.png;*.jpg;*.jpeg",
-                CheckFileExists = true,
-                Multiselect = false,
-            };
-            if (dlg.ShowDialog(form) == WinForms.DialogResult.OK)
-            {
-                LoadScreenshotFromFile(dlg.FileName);
+                Show();
+                Activate();
             }
         };
-        dropHint.MouseClick += browseHandler;
-        preview.MouseClick += browseHandler;
-        dropZone.MouseClick += browseHandler;
+        timer.Start();
+    }
 
-        // Drag & drop
-        dropZone.DragEnter += (_, e) =>
+    // Browse / drag-file: the user's own file, used directly (never deleted).
+    private void LoadScreenshotFromFile(string path)
+    {
+        try
         {
-            if (e.Data == null) return;
-            if (e.Data.GetDataPresent(WinForms.DataFormats.FileDrop) ||
-                e.Data.GetDataPresent(WinForms.DataFormats.Bitmap))
+            if (new FileInfo(path).Length > BugReportService.MaxScreenshotBytes)
             {
-                e.Effect = WinForms.DragDropEffects.Copy;
-            }
-        };
-        dropZone.DragDrop += (_, e) =>
-        {
-            try
-            {
-                if (e.Data == null) return;
-                if (e.Data.GetDataPresent(WinForms.DataFormats.FileDrop))
-                {
-                    var files = (string[]?)e.Data.GetData(WinForms.DataFormats.FileDrop);
-                    if (files != null && files.Length > 0)
-                    {
-                        var ext = Path.GetExtension(files[0]).ToLowerInvariant();
-                        if (ext is ".png" or ".jpg" or ".jpeg")
-                            LoadScreenshotFromFile(files[0]);
-                        else
-                            SetStatus("Only PNG and JPEG images are supported.", Theme.ErrorRed);
-                    }
-                }
-                else if (e.Data.GetDataPresent(WinForms.DataFormats.Bitmap))
-                {
-                    if (e.Data.GetData(WinForms.DataFormats.Bitmap) is Image img)
-                        LoadScreenshotFromImage(img);
-                }
-            }
-            catch (Exception ex)
-            {
-                SetStatus($"Drop failed: {ex.Message}", Theme.ErrorRed);
-            }
-        };
-
-        // Form-level Ctrl+V → grab bitmap from clipboard if any.
-        form.KeyDown += (_, e) =>
-        {
-            if (e.Control && e.KeyCode == WinForms.Keys.V)
-            {
-                // Description box also accepts Ctrl+V for text — only intercept
-                // when the focused control is NOT the description text box.
-                if (form.ActiveControl == descBox) return;
-
-                try
-                {
-                    if (WinForms.Clipboard.ContainsImage())
-                    {
-                        var img = WinForms.Clipboard.GetImage();
-                        if (img != null) LoadScreenshotFromImage(img);
-                        e.Handled = true;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    SetStatus($"Paste failed: {ex.Message}", Theme.ErrorRed);
-                }
-            }
-        };
-
-        clearBtn.Click += (_, _) => ClearScreenshot();
-
-        captureBtn.Click += (_, _) =>
-        {
-            // Hide ourselves first, or the screenshot is mostly this dialog.
-            // The delay lets the compositor actually remove the window before
-            // the grab; without it the frame still contains a ghost of it.
-            form.Visible = false;
-            var timer = new WinForms.Timer { Interval = CaptureHideDelayMs };
-            timer.Tick += (_, _) =>
-            {
-                timer.Stop();
-                timer.Dispose();
-                try
-                {
-                    using var shot = CaptureScreen();
-                    using var scaled = Downscale(shot, CaptureMaxDimension);
-                    // Reuse the paste path: it already writes the temp PNG the
-                    // multipart upload streams from, refreshes the preview, and
-                    // wires up Clear.
-                    LoadScreenshotFromImage(scaled, "Captured screenshot");
-                }
-                catch (Exception ex)
-                {
-                    SetStatus($"Could not capture the screen: {ex.Message}", Theme.ErrorRed);
-                }
-                finally
-                {
-                    form.Visible = true;
-                    form.Activate();
-                }
-            };
-            timer.Start();
-        };
-        cancelBtn.Click += (_, _) => form.Close();
-
-        // Submit
-        submitBtn.Click += async (_, _) =>
-        {
-            var description = descBox.Text?.Trim() ?? "";
-            if (!BugReportService.IsDescriptionValid(description))
-            {
-                SetStatus("Please describe the bug in at least 10 characters.", Theme.ErrorRed);
-                descBox.Focus();
+                SetStatus("Screenshot exceeds 5 MB. Please attach a smaller image.", Theme.ErrorRed);
                 return;
             }
-
-            var email = emailBox?.Text?.Trim();
-            string? authToken = null;
-            try { authToken = App.Auth?.AccessToken; } catch { authToken = null; }
-
-            // Lock UI
-            submitBtn.Enabled = false;
-            cancelBtn.Enabled = false;
-            descBox.ReadOnly = true;
-            if (emailBox != null) emailBox.ReadOnly = true;
-            progress.Visible = true;
-            SetStatus("Sending…", Theme.TextMuted);
-
-            var ctx = new Dictionary<string, object?>
-            {
-                ["app_mode"] = SafeRead(() => App.Settings?.AppMode.ToString()),
-                ["backend_url"] = SafeRead(() => App.Settings?.BackendUrl),
-                ["signed_in"] = isSignedIn,
-            };
-
-            try
-            {
-                var result = await BugReportService.SubmitAsync(
-                    description: description,
-                    screenshotPath: selectedScreenshotPath,
-                    userEmail: !string.IsNullOrWhiteSpace(email) ? email : null,
-                    authToken: authToken,
-                    context: ctx);
-
-                if (result.Success)
-                {
-                    DRLogger.Log($"Bug report submitted (id={result.Id ?? "?"})", DRLogger.Category.APP);
-                    SetStatus("Thanks! Your report was submitted.", Theme.SuccessGreen);
-                    // Brief flash of success, then close.
-                    var t = new WinForms.Timer { Interval = 900 };
-                    t.Tick += (_, _) =>
-                    {
-                        t.Stop();
-                        t.Dispose();
-                        form.Close();
-                    };
-                    t.Start();
-                }
-                else
-                {
-                    SetStatus(result.ErrorMessage ?? "Submit failed.", Theme.ErrorRed);
-                    submitBtn.Enabled = true;
-                    cancelBtn.Enabled = true;
-                    descBox.ReadOnly = false;
-                    if (emailBox != null) emailBox.ReadOnly = false;
-                    progress.Visible = false;
-                }
-            }
-            catch (Exception ex)
-            {
-                DRLogger.Log($"Bug report submit threw: {ex}", DRLogger.Category.APP);
-                SetStatus(ex.Message, Theme.ErrorRed);
-                submitBtn.Enabled = true;
-                cancelBtn.Enabled = true;
-                descBox.ReadOnly = false;
-                if (emailBox != null) emailBox.ReadOnly = false;
-                progress.Visible = false;
-            }
-        };
-
-        // Cleanup on close
-        form.FormClosed += (_, _) =>
+            _tempScreenshotPath?.SafeDelete();
+            _tempScreenshotPath = null;
+            _selectedScreenshotPath = path;
+            ShowPreview(LoadUnlockedBitmap(path), Path.GetFileName(path));
+        }
+        catch (Exception ex)
         {
-            preview.Image?.Dispose();
-            tempScreenshotPath?.SafeDelete();
+            SetStatus($"Could not load image: {ex.Message}", Theme.ErrorRed);
+        }
+    }
+
+    // Paste / drag-bitmap: persist the bitmap to a temp PNG we own, then attach.
+    private void LoadScreenshotFromBitmap(BitmapSource bmp, string label)
+    {
+        try
+        {
+            var tmp = Path.Combine(Path.GetTempPath(), $"draftright-bugreport-{Guid.NewGuid():N}.png");
+            using (var fs = File.Create(tmp))
+            {
+                var enc = new PngBitmapEncoder();
+                enc.Frames.Add(BitmapFrame.Create(bmp));
+                enc.Save(fs);
+            }
+            AttachTempFile(tmp, label);
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"Could not attach image: {ex.Message}", Theme.ErrorRed);
+        }
+    }
+
+    // Capture / paste land here: a temp PNG we own becomes the attachment.
+    private void AttachTempFile(string tmpPath, string label)
+    {
+        _tempScreenshotPath?.SafeDelete();
+        _tempScreenshotPath = tmpPath;
+        _selectedScreenshotPath = tmpPath;
+        ShowPreview(LoadUnlockedBitmap(tmpPath), label);
+    }
+
+    private void ShowPreview(BitmapImage img, string label)
+    {
+        _preview.Source = img;
+        _preview.Visibility = Visibility.Visible;
+        _dropHint.Visibility = Visibility.Collapsed;
+        _fileLabel.Text = label;
+        _clearBtn.Visibility = Visibility.Visible;
+        SetStatus("", Theme.ErrorRed);
+    }
+
+    // OnLoad reads the whole file up front so it is not left locked on disk —
+    // important because capture/paste temp files are deleted on close.
+    private static BitmapImage LoadUnlockedBitmap(string path)
+    {
+        var bmp = new BitmapImage();
+        bmp.BeginInit();
+        bmp.CacheOption = BitmapCacheOption.OnLoad;
+        bmp.UriSource = new Uri(path);
+        bmp.EndInit();
+        bmp.Freeze();
+        return bmp;
+    }
+
+    private void ClearScreenshot()
+    {
+        _selectedScreenshotPath = null;
+        _tempScreenshotPath?.SafeDelete();
+        _tempScreenshotPath = null;
+        _preview.Source = null;
+        _preview.Visibility = Visibility.Collapsed;
+        _dropHint.Visibility = Visibility.Visible;
+        _fileLabel.Text = "";
+        _clearBtn.Visibility = Visibility.Collapsed;
+    }
+
+    // ── Submit ──────────────────────────────────────────────────────────────
+
+    private async Task SubmitAsync()
+    {
+        var description = _descBox.Text?.Trim() ?? "";
+        if (!BugReportService.IsDescriptionValid(description))
+        {
+            SetStatus("Please describe the bug in at least 10 characters.", Theme.ErrorRed);
+            _descBox.Focus();
+            return;
+        }
+
+        var email = _emailBox?.Text?.Trim();
+        string? authToken = null;
+        try { authToken = App.Auth?.AccessToken; } catch { authToken = null; }
+
+        SetBusy(true);
+        SetStatus("Sending…", Theme.TextMuted);
+
+        var ctx = new Dictionary<string, object?>
+        {
+            ["app_mode"] = SafeRead(() => App.Settings?.AppMode.ToString()),
+            ["backend_url"] = SafeRead(() => App.Settings?.BackendUrl),
+            ["signed_in"] = _isSignedIn,
         };
 
-        form.AcceptButton = submitBtn;
-        form.CancelButton = cancelBtn;
+        try
+        {
+            var result = await BugReportService.SubmitAsync(
+                description: description,
+                screenshotPath: _selectedScreenshotPath,
+                userEmail: !string.IsNullOrWhiteSpace(email) ? email : null,
+                authToken: authToken,
+                context: ctx);
 
-        WinForms.Application.Run(form);
+            if (result.Success)
+            {
+                DRLogger.Log($"Bug report submitted (id={result.Id ?? "?"})", DRLogger.Category.APP);
+                SetStatus("Thanks! Your report was submitted.", Theme.SuccessGreen);
+                var t = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(900) };
+                t.Tick += (_, _) => { t.Stop(); Close(); };
+                t.Start();
+            }
+            else
+            {
+                SetStatus(result.ErrorMessage ?? "Submit failed.", Theme.ErrorRed);
+                SetBusy(false);
+            }
+        }
+        catch (Exception ex)
+        {
+            DRLogger.Log($"Bug report submit threw: {ex}", DRLogger.Category.APP);
+            SetStatus(ex.Message, Theme.ErrorRed);
+            SetBusy(false);
+        }
+    }
+
+    private void SetBusy(bool busy)
+    {
+        _submitBtn.IsEnabled = !busy;
+        _cancelBtn.IsEnabled = !busy;
+        _descBox.IsReadOnly = busy;
+        if (_emailBox != null) _emailBox.IsReadOnly = busy;
+        _progress.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private static string? SafeRead(Func<string?> reader)
     {
         try { return reader(); } catch { return null; }
     }
-
-    /// <summary>
-    /// Grabs the primary display. Matches macOS, which captures the main
-    /// display rather than every monitor — a multi-monitor grab produces an
-    /// enormous, mostly-empty image that is harder to read, not easier.
-    /// </summary>
-    private static Bitmap CaptureScreen()
-    {
-        var bounds = WinForms.Screen.PrimaryScreen?.Bounds
-            ?? throw new InvalidOperationException("No primary display found.");
-        var bmp = new Bitmap(bounds.Width, bounds.Height);
-        try
-        {
-            using var g = Graphics.FromImage(bmp);
-            g.CopyFromScreen(bounds.Location, Point.Empty, bounds.Size);
-            return bmp;
-        }
-        catch
-        {
-            bmp.Dispose();
-            throw;
-        }
-    }
-
-    /// <summary>
-    /// Shrinks <paramref name="src"/> so its longest edge is at most
-    /// <paramref name="maxDimension"/>, preserving aspect ratio. Returns a
-    /// copy either way, so the caller can dispose both without special cases.
-    ///
-    /// A 4K screenshot saves to a PNG several times the upload cap; without
-    /// this the attach would succeed and the submit would fail, which reads as
-    /// the report being lost.
-    /// </summary>
-    private static Bitmap Downscale(Image src, int maxDimension)
-    {
-        var scale = Math.Min(1.0, (double)maxDimension / Math.Max(src.Width, src.Height));
-        var w = Math.Max(1, (int)Math.Round(src.Width * scale));
-        var h = Math.Max(1, (int)Math.Round(src.Height * scale));
-
-        var outBmp = new Bitmap(w, h);
-        try
-        {
-            using var g = Graphics.FromImage(outBmp);
-            g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
-            g.DrawImage(src, 0, 0, w, h);
-            return outBmp;
-        }
-        catch
-        {
-            outBmp.Dispose();
-            throw;
-        }
-    }
 }
 
 internal static class TempPathExtensions
 {
-    public static void SafeDelete(this string path)
+    public static void SafeDelete(this string? path)
     {
         try
         {

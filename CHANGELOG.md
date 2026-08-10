@@ -23,9 +23,9 @@ A Windows-only line under `### Windows` will never appear in the macOS
 If a version needs the user to *do* something after updating, say so
 explicitly under an **Action needed:** line inside the relevant sub-section.
 
-## 2.3.42 — 2026-08-09
+## 2.3.44 — 2026-08-10
 ### Windows
-- Fixed the new rewrite panel showing washed-out, hard-to-read text on some setups (Windows 10, virtual machines, or with transparency effects turned off). The panel now uses a solid dark background so the text is always legible.
+- The Report a Bug form is rebuilt on the modern Windows (Fluent) UI, matching the rewrite panel. Same four ways to attach a screenshot — browse, drag & drop, paste (Ctrl+V), and Capture screen — with cleaner spacing and a solid dark background.
 
 ## 2.3.43 — 2026-08-09
 ### Windows
