@@ -43,29 +43,14 @@ internal sealed class SettingsWindow : FluentWindowBase
             }
         }
 
-        var thread = new Thread(() =>
+        Services.StaWindowHost.Run("settings", () =>
         {
-            Services.CrashLog.InstallForCurrentDispatcher("settings");
-            SettingsWindow win;
-            try { win = new SettingsWindow(); }
-            catch (Exception ex)
-            {
-                DRLogger.Error($"SettingsWindow: EXCEPTION {ex.GetType().Name}: {ex.Message}", DRLogger.Category.APP);
-                return;
-            }
+            var win = new SettingsWindow();
             lock (_lock) { _instance = win; }
-            win.Closed += (_, _) =>
-            {
-                lock (_lock) { if (ReferenceEquals(_instance, win)) _instance = null; }
-                Dispatcher.CurrentDispatcher.InvokeShutdown();
-            };
-            win.Show();
-            win.Activate();
-            Dispatcher.Run();
+            // Clear the singleton on close; StaWindowHost adds the dispatcher shutdown.
+            win.Closed += (_, _) => { lock (_lock) { if (ReferenceEquals(_instance, win)) _instance = null; } };
+            return win;
         });
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.IsBackground = true;
-        thread.Start();
     }
 
     /// <summary>Closes the window if open (used on app quit).</summary>
