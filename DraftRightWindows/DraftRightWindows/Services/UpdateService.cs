@@ -330,12 +330,7 @@ public class UpdateService : IUpdateService
         catch (Exception ex)
         {
             ui?.Close();
-            System.Windows.Forms.MessageBox.Show(
-                $"Update failed: {ex.Message}",
-                "Update Error",
-                System.Windows.Forms.MessageBoxButtons.OK,
-                System.Windows.Forms.MessageBoxIcon.Error
-            );
+            ShowInstallLaunchError(ex);
         }
     }
 
@@ -550,13 +545,55 @@ public class UpdateService : IUpdateService
         catch (Exception ex)
         {
             ui?.Close();
-            System.Windows.Forms.MessageBox.Show(
-                $"Update failed: {ex.Message}",
-                "Update Error",
-                System.Windows.Forms.MessageBoxButtons.OK,
-                System.Windows.Forms.MessageBoxIcon.Error
-            );
+            ShowInstallLaunchError(ex);
         }
+    }
+
+    // Substring that identifies the Smart App Control / WDAC block. The OS
+    // reports "An Application Control policy has blocked this file." when
+    // launching our unsigned installer (#154). One source of truth.
+    private const string AppControlBlockMarker = "Application Control policy";
+
+    /// <summary>
+    /// Turns an install-launch failure into a useful message. The common cause
+    /// is Smart App Control blocking the unsigned installer (#154): rather than
+    /// the raw "Update failed: …", explain it and offer to open Windows Security
+    /// so the user can turn Smart App Control off and retry. Shared by every
+    /// install path's catch block.
+    /// </summary>
+    private static void ShowInstallLaunchError(Exception ex)
+    {
+        if (ex.Message.Contains(AppControlBlockMarker, StringComparison.OrdinalIgnoreCase))
+        {
+            var choice = System.Windows.Forms.MessageBox.Show(
+                "Windows Smart App Control blocked this update because DraftRight isn't code-signed yet.\n\n"
+                + "To install updates, turn Smart App Control off:\n"
+                + "  Windows Security → App & browser control → Smart App Control → Off\n\n"
+                + "then check for updates again. Open Windows Security now?",
+                "Update blocked by Smart App Control",
+                System.Windows.Forms.MessageBoxButtons.YesNo,
+                System.Windows.Forms.MessageBoxIcon.Warning);
+
+            if (choice == System.Windows.Forms.DialogResult.Yes)
+            {
+                try
+                {
+                    System.Diagnostics.Process.Start(
+                        new System.Diagnostics.ProcessStartInfo("windowsdefender://") { UseShellExecute = true });
+                }
+                catch (Exception openEx)
+                {
+                    DRLogger.Warn($"Could not open Windows Security: {openEx.Message}", DRLogger.Category.APP);
+                }
+            }
+            return;
+        }
+
+        System.Windows.Forms.MessageBox.Show(
+            $"Update failed: {ex.Message}",
+            "Update Error",
+            System.Windows.Forms.MessageBoxButtons.OK,
+            System.Windows.Forms.MessageBoxIcon.Error);
     }
 
     /// <summary>
@@ -693,12 +730,7 @@ public class UpdateService : IUpdateService
         catch (Exception ex)
         {
             ui?.Close();
-            System.Windows.Forms.MessageBox.Show(
-                $"Update failed: {ex.Message}",
-                "Update Error",
-                System.Windows.Forms.MessageBoxButtons.OK,
-                System.Windows.Forms.MessageBoxIcon.Error
-            );
+            ShowInstallLaunchError(ex);
         }
     }
 
