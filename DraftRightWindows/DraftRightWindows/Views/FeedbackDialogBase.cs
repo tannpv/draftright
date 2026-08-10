@@ -50,28 +50,8 @@ internal abstract class FeedbackDialogBase : FluentWindowBase
 
     /// <summary>Runs <paramref name="factory"/>'s window on its own STA thread
     /// with a WPF dispatcher — the launcher every feedback dialog shares.</summary>
-    internal static void RunOnStaThread(Func<FeedbackDialogBase> factory)
-    {
-        var thread = new Thread(() =>
-        {
-            try
-            {
-                CrashLog.InstallForCurrentDispatcher("feedback-dialog");
-                var win = factory();
-                win.Closed += (_, _) => Dispatcher.CurrentDispatcher.InvokeShutdown();
-                win.Show();
-                win.Activate();
-                Dispatcher.Run();
-            }
-            catch (Exception ex)
-            {
-                DRLogger.Error($"FeedbackDialog: EXCEPTION {ex.GetType().Name}: {ex.Message}", DRLogger.Category.APP);
-            }
-        });
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.IsBackground = true;
-        thread.Start();
-    }
+    internal static void RunOnStaThread(Func<FeedbackDialogBase> factory) =>
+        StaWindowHost.Run("feedback-dialog", factory);
 
     /// <summary>The status InfoBar — add it to the layout where the subclass wants it.</summary>
     protected InfoBar StatusBar => _status;

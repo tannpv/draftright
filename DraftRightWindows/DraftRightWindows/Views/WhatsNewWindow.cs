@@ -22,22 +22,7 @@ public static class WhatsNewWindow
     /// backend; displayed verbatim.</summary>
     public static void Show(string version, string notes)
     {
-        var thread = new Thread(() =>
-        {
-            try
-            {
-                Services.CrashLog.InstallForCurrentDispatcher("whats-new");
-                var win = new WhatsNewNotice(version, notes);
-                win.Closed += (_, _) => Dispatcher.CurrentDispatcher.InvokeShutdown();
-                win.Show();
-                win.Activate();
-                Dispatcher.Run();
-            }
-            catch { /* never let a notice window crash the app */ }
-        });
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.IsBackground = true;
-        thread.Start();
+        Services.StaWindowHost.Run("whats-new", () => new WhatsNewNotice(version, notes));
     }
 }
 
