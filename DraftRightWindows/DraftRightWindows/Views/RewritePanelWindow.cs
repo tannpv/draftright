@@ -228,16 +228,13 @@ public sealed class RewritePanelWindow : FluentWindowBase
         return grid;
     }
 
-    private WpfButton MakeAction(string label, ControlAppearance appearance, Action onClick)
+    // One button factory for the app: FluentFormControls.Button. The panel's
+    // action buttons only add the left-margin spacing between them (RULE #1 —
+    // no second `new WpfButton {…}` here).
+    private static WpfButton MakeAction(string label, ControlAppearance appearance, Action onClick)
     {
-        var btn = new WpfButton
-        {
-            Content = label,
-            Appearance = appearance,
-            MinWidth = 88,
-            Margin = new Thickness(6, 0, 0, 0),
-        };
-        btn.Click += (_, _) => onClick();
+        var btn = FluentFormControls.Button(label, appearance, onClick);
+        btn.Margin = new Thickness(6, 0, 0, 0);
         return btn;
     }
 
