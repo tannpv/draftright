@@ -23,6 +23,10 @@ A Windows-only line under `### Windows` will never appear in the macOS
 If a version needs the user to *do* something after updating, say so
 explicitly under an **Action needed:** line inside the relevant sub-section.
 
+## 2.3.45 — 2026-08-10
+### Windows
+- Settings is rebuilt on the modern Windows (Fluent) UI. All six tabs — General, Rewrite, Trigger, Account, Subscription and Advanced — are refreshed with cleaner spacing and a solid dark background, and the window now resizes cleanly. Every setting works as before.
+
 ## 2.3.44 — 2026-08-10
 ### Windows
 - The Report a Bug form is rebuilt on the modern Windows (Fluent) UI, matching the rewrite panel. Same four ways to attach a screenshot — browse, drag & drop, paste (Ctrl+V), and Capture screen — with cleaner spacing and a solid dark background.
