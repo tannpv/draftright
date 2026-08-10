@@ -28,7 +28,6 @@ public class App : Application
 
     private Window? _hiddenWindow;
     private IntPtr _hwnd = IntPtr.Zero;
-    private WinForms.Form? _settingsForm;
     private System.Threading.Timer? _healthTimer;
     // Owns the tray icon, menu, update badge, and its STA pump thread.
     private TrayIconController? _tray;
@@ -693,15 +692,10 @@ public class App : Application
 
     private void OpenSettings()
     {
-        if (_settingsForm != null && !_settingsForm.IsDisposed)
-        {
-            _settingsForm.BringToFront();
-            _settingsForm.Activate();
-            return;
-        }
-
-        _settingsForm = SettingsFormBuilder.Create();
-        _settingsForm.Show();
+        // WPF SettingsWindow (#159) — runs on its own STA thread and manages its
+        // own single-instance / bring-to-front, same pattern as the rewrite
+        // panel and bug dialog.
+        Views.SettingsWindow.Open();
     }
 
     private void DoQuit()
@@ -714,7 +708,7 @@ public class App : Application
             Win32Interop.RemoveWindowSubclass(_hwnd, _subclassProc, (UIntPtr)1);
 
         _tray?.Dispose();
-        _settingsForm?.Close();
+        Views.SettingsWindow.CloseIfOpen();
         WinForms.Application.ExitThread();
         Environment.Exit(0);
     }
