@@ -60,6 +60,6 @@ public sealed class BankTransferDialog : FluentWindowBase
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             Content = panel,
         });
-        Content = outer;
+        SetBody(outer);
     }
 }

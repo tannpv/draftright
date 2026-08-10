@@ -88,7 +88,7 @@ public sealed class QrCheckoutDialog : FluentWindowBase
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             Content = panel,
         });
-        Content = outer;
+        SetBody(outer);
     }
 
     private static async Task LoadQrAsync(WpfImage image, Border host, string url)

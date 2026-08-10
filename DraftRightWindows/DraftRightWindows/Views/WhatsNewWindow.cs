@@ -75,6 +75,6 @@ internal sealed class WhatsNewNotice : FluentWindowBase
         gotIt.HorizontalAlignment = HorizontalAlignment.Right;
         panel.Children.Add(gotIt);
 
-        Content = panel;
+        SetBody(panel);
     }
 }
