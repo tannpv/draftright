@@ -477,6 +477,27 @@ jobs:
           (Get-Content $src -Raw).Replace("REPLACE_ME", $env:GOOGLE_OAUTH_CLIENT_SECRET_WINDOWS) | Set-Content -Path $dst -Encoding UTF8
           Write-Host "Wrote $dst from template"
 
+      # Stamp the MSIX package version from the csproj <Version> so csproj is
+      # the single source of truth and the manifest can never drift (it drifted
+      # to 2.3.40 while the app was 2.3.49 and Partner Center rejected the
+      # upload — #170). Scope the replace to the <Identity> element so it can't
+      # touch TargetDeviceFamily Min/MaxVersion. Package version is X.Y.Z.0.
+      - name: Stamp MSIX version from csproj
+        shell: pwsh
+        run: |
+          $csproj = Get-Content DraftRightWindows.csproj -Raw
+          $m = [regex]::Match($csproj, '<Version>(\d+\.\d+\.\d+)</Version>')
+          if (-not $m.Success) { throw "No <Version>X.Y.Z</Version> found in csproj" }
+          $pkgVersion = "$($m.Groups[1].Value).0"
+
+          $manifestPath = 'Package.appxmanifest'
+          $xml = Get-Content $manifestPath -Raw
+          $pattern = '(<Identity\b[^>]*?\bVersion=")[^"]*(")'
+          $updated = [regex]::Replace($xml, $pattern, "`${1}$pkgVersion`${2}")
+          if ($updated -eq $xml) { throw "Could not find <Identity ... Version> to stamp" }
+          Set-Content -Path $manifestPath -Value $updated -Encoding UTF8 -NoNewline
+          Write-Host "Stamped MSIX package version = $pkgVersion"
+
       - name: Restore
         run: msbuild /t:Restore /p:Configuration=Release /p:Platform=x64
 
