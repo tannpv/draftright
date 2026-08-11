@@ -1,7 +1,8 @@
 # DraftRight Windows
 
-WinUI 3 application shell (WindowsAppSDK) whose panels are **WPF UI**, migrating
-off WinForms. C# 12 / .NET 8, MSIX for the Store, Inno Setup for direct download.
+WinUI 3 application shell (WindowsAppSDK) whose windows are **WPF UI** — the
+WinForms→WPF migration (#156) is complete. A few surfaces stay WinForms by
+design (below). C# 12 / .NET 8, MSIX for the Store, Inno Setup for direct download.
 
 ## UI toolkit — decided 2026-08-08, do not relitigate
 
@@ -9,7 +10,7 @@ off WinForms. C# 12 / .NET 8, MSIX for the Store, Inno Setup for direct download
 |---|---|
 | **WPF UI** (lepoco `WPF-UI` 4.3.0) | ✅ **adopted** — renders, themes, runs in-process with WindowsAppSDK |
 | WinUI 3 XAML | ❌ cannot render on unpackaged builds |
-| WinForms | legacy, being replaced (#156) |
+| WinForms | retained only for the app message loop, tray, screen capture, clipboard, MessageBox, and `LoadingIndicator` |
 
 **WinUI 3 was tried twice and failed both times.** Unpackaged builds have no
 usable `resources.pri`, so XAML theme lookups fail:
@@ -35,21 +36,24 @@ Resources.MergedDictionaries.Add(
 Resources.MergedDictionaries.Add(new Wpf.Ui.Markup.ControlsDictionary());
 ```
 
-Per-window rather than app-wide is deliberate: it keeps the remaining WinForms
-surfaces unstyled by it during the migration.
+Per-window rather than app-wide is deliberate: it keeps the WinForms surfaces
+that stay (LoadingIndicator, tray) unstyled by it. This is now centralised in
+`FluentWindowBase` — every WPF window derives it and gets the dictionaries, the
+opaque dark background, backdrop-off, and a draggable title bar; new windows do
+not re-merge them.
 
-### Migration state (#156)
+### Migration history (#156) — all shipped to prod
 
-| Phase | Surface | Status |
+| Phase | Surface | Shipped |
 |---|---|---|
-| 1 | Rewrite panel + grammar + diff | built, **unrun** |
-| 2 | `ReportBugDialog` | not started |
-| 3 | `SettingsFormBuilder` + `SubscriptionTab` | not started |
-| 4 | `SuggestFeatureDialog` + payment/info dialogs | not started |
-| 5 | Delete WinForms leftovers | not started |
+| 1 | Rewrite panel + grammar + diff | 2.3.41–43 |
+| 2 | `ReportBugDialog` (#158) | 2.3.44 |
+| 3 | Settings + Subscription (#159) | 2.3.45 |
+| 4 | Suggest / What's New / QR / Bank / status banner (#160) | 2.3.46 |
+| 5 | WinForms leftovers removed (#161) | — nothing left to delete; only the by-design WinForms below remains |
 
-**Before writing a line of any phase, do the RULE #1 pass** — clean, reusable,
-extendable, no hardcoding. For a panel migration that means, concretely:
+**When adding a NEW WPF window, do the RULE #1 pass first** — clean, reusable,
+extendable, no hardcoding. Concretely:
 
 1. What does this view **restate** that a model or service already owns? Icons,
    labels, colours, size limits, lists of things. Read from the source instead.
@@ -119,12 +123,10 @@ Vietnam (individual = US/CA only; org list excludes VN). Use an **OV** cert
 (Sectigo/GlobalSign, ~$200-400/yr, issues to VN; Tan has a hộ kinh doanh) or EV.
 MS Store (MS-signed) sidesteps signing but abandons direct download (#3).
 
-## WPF migration (done)
+## New WPF windows — conventions
 
-WinForms→WPF (#156) is complete in prod: rewrite panel (#156), bug dialog (#158),
-Settings+Subscription (#159), remaining dialogs (#160). Only `LoadingIndicator`
-(Win32 click-through) + tray icon stay WinForms by design. Conventions for any
-new window:
+(The migration is done — see "Migration history" above. These are the rules
+every shipped window follows; apply them to any new one.)
 - derive **`FluentWindowBase`** (owns theme dictionaries #58 + opaque dark bg +
   `WindowBackdropType.None` #163 — never set a Mica backdrop);
 - set content via **`FluentWindowBase.SetBody(body, showMaximize)`**, never
