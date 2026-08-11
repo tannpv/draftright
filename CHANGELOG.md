@@ -23,6 +23,10 @@ A Windows-only line under `### Windows` will never appear in the macOS
 If a version needs the user to *do* something after updating, say so
 explicitly under an **Action needed:** line inside the relevant sub-section.
 
+## 2.3.51 — 2026-08-11
+### Windows
+- Added an internal self-check that reports if a window ever fails to display correctly, so we can catch and fix display problems faster. No visible change.
+
 ## 2.3.50 — 2026-08-10
 ### Windows
 - The Submit, Sign In and other primary buttons are now brand blue instead of black.
