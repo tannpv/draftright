@@ -1,10 +1,24 @@
 ---
-// Current published versions (mirror /updates/latest).
-const MACOS_VERSION = '2.3.30';
-const WINDOWS_VERSION = '2.3.31';
+// Versions come from /updates/latest at build time — the single source of
+// truth — so the download links can't drift stale (they had: the page showed
+// Windows 2.3.31 long after 2.3.51 shipped). Fallbacks keep the build working
+// if the API is unreachable during a build.
 const BASE = '/downloads';
+const API = import.meta.env.PUBLIC_API_URL ?? 'https://api.draftright.info';
 
-// Microsoft Store listing for the Windows app.
+let MACOS_VERSION = '2.3.30';
+let WINDOWS_VERSION = '2.3.51';
+try {
+  const res = await fetch(`${API}/updates/latest`);
+  if (res.ok) {
+    const j = await res.json();
+    MACOS_VERSION = j?.platforms?.macos?.version ?? MACOS_VERSION;
+    WINDOWS_VERSION = j?.platforms?.windows?.version ?? WINDOWS_VERSION;
+  }
+} catch { /* build offline — use fallbacks */ }
+
+// Microsoft Store listing for the Windows app — the recommended path:
+// Microsoft-signed, so no Smart App Control / SmartScreen warnings.
 const MS_STORE_URL = 'https://apps.microsoft.com/detail/9p5wwdggvcs3';
 ---
 <section class="py-24">
@@ -38,16 +52,15 @@ const MS_STORE_URL = 'https://apps.microsoft.com/detail/9p5wwdggvcs3';
         <div class="text-center">
           <div class="text-4xl mb-3">&#128421;&#65039;</div>
           <h4 class="text-lg font-semibold text-white">Windows <span class="text-xs text-gray-500">v{WINDOWS_VERSION}</span></h4>
-          <p class="text-sm text-gray-400 mt-1">Microsoft Store · Win 10/11</p>
-          {MS_STORE_URL && (
-            <a href={MS_STORE_URL}
-               class="mt-4 block text-brand-400 font-medium text-sm hover:underline">
-              Get it from Microsoft Store &rarr;
-            </a>
-          )}
+          <p class="text-sm text-gray-400 mt-1">Microsoft-signed · Win 10/11</p>
+          <a href={MS_STORE_URL}
+             class="mt-4 inline-flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-400 transition-colors">
+            Get it from Microsoft Store &rarr;
+          </a>
+          <p class="text-xs text-green-400/80 mt-2">Recommended — no security warnings</p>
           <a href={`${BASE}/DraftRight-Setup-Windows-${WINDOWS_VERSION}-x64.exe`}
-             class={`block text-gray-400 text-xs hover:text-brand-400 hover:underline ${MS_STORE_URL ? 'mt-2' : 'mt-4'}`}>
-            Or direct installer (x64) &rarr;
+             class="block text-gray-500 text-xs hover:text-brand-400 hover:underline mt-3">
+            Advanced: direct installer (x64) &rarr;
           </a>
         </div>
       </div>
@@ -105,7 +118,7 @@ const MS_STORE_URL = 'https://apps.microsoft.com/detail/9p5wwdggvcs3';
         </div>
         <div>
           <h5 class="font-semibold text-white mb-1">Windows</h5>
-          <p>Install from the Microsoft Store for automatic updates, or run the direct installer. The app lives in the system tray; press <strong>Ctrl+Shift+R</strong> on selected text to rewrite.</p>
+          <p><strong>Get it from the Microsoft Store</strong> — it's signed by Microsoft, so it installs with no security warnings and updates automatically. The direct installer is available for advanced users; because it isn't code-signed yet, Windows Smart App Control may block it (turn it off in <strong>Windows Security &rarr; App &amp; browser control</strong>, or just use the Store). The app lives in the system tray; press <strong>Ctrl+Shift+R</strong> on selected text to rewrite.</p>
         </div>
         <div>
           <h5 class="font-semibold text-white mb-1">Web</h5>
