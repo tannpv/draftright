@@ -9,9 +9,10 @@
 
   <!-- Identity values must be kept in sync with the Store. Name and Publisher
        are issued by Partner Center for the registered app (do not change).
-       Version MUST be incremented for every Store submission — the Store rejects
-       any package whose full name (Name_Version_arch) collides with an already-
-       published package. Keep this in lockstep with <Version> in the .csproj. -->
+       Version is STAMPED FROM the .csproj <Version> by the "Stamp MSIX version
+       from csproj" step in build-windows.yml (#170) — csproj is the single
+       source, so don't hand-bump it here (the value below is only a placeholder
+       for local builds). It drifted to 2.3.40 once and blocked a Store upload. -->
   <Identity
       Name="SouthernMartin.DraftRight"
       Publisher="CN=D60C776E-6F95-4693-82A9-C924FBF21545"
