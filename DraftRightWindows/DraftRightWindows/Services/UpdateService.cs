@@ -538,7 +538,7 @@ public class UpdateService : IUpdateService
         {
             ui = UpdateProgressUI.ShowOnNewThread(version);
             ui.SetIndeterminate("Installing...");
-            LaunchInstaller(path);
+            LaunchInstallerWithRetry(path);
             ui.Close();
             Environment.Exit(0);
         }
@@ -549,10 +549,35 @@ public class UpdateService : IUpdateService
         }
     }
 
+    // The staged installer occasionally fails to launch on the first attempt —
+    // the previous version's process can still hold a lock in the moment the
+    // update window hands off, which surfaced as a transient error that worked
+    // on a manual retry (#162). Retry once after a short delay so the user never
+    // sees it. Do NOT retry the Smart App Control block (#154) — it is not
+    // transient; let it fall through to the guidance dialog.
+    private const int InstallRetryDelayMs = 1500;
+
+    private static void LaunchInstallerWithRetry(string path)
+    {
+        try
+        {
+            LaunchInstaller(path);
+        }
+        catch (Exception ex) when (!IsAppControlBlock(ex))
+        {
+            DRLogger.Warn($"Install launch failed ({ex.Message}) — retrying once in {InstallRetryDelayMs}ms", DRLogger.Category.APP);
+            System.Threading.Thread.Sleep(InstallRetryDelayMs);
+            LaunchInstaller(path); // second attempt; a repeat failure is handled by the caller's catch
+        }
+    }
+
     // Substring that identifies the Smart App Control / WDAC block. The OS
     // reports "An Application Control policy has blocked this file." when
     // launching our unsigned installer (#154). One source of truth.
     private const string AppControlBlockMarker = "Application Control policy";
+
+    private static bool IsAppControlBlock(Exception ex) =>
+        ex.Message.Contains(AppControlBlockMarker, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Turns an install-launch failure into a useful message. The common cause
@@ -563,7 +588,7 @@ public class UpdateService : IUpdateService
     /// </summary>
     private static void ShowInstallLaunchError(Exception ex)
     {
-        if (ex.Message.Contains(AppControlBlockMarker, StringComparison.OrdinalIgnoreCase))
+        if (IsAppControlBlock(ex))
         {
             var choice = System.Windows.Forms.MessageBox.Show(
                 "Windows Smart App Control blocked this update because DraftRight isn't code-signed yet.\n\n"
