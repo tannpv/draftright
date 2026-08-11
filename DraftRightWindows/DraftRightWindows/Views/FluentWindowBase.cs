@@ -1,5 +1,9 @@
+using System;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using DraftRightWindows.Services;
 using Wpf.Ui.Controls;
 
 namespace DraftRightWindows.Views;
@@ -46,6 +50,68 @@ public abstract class FluentWindowBase : FluentWindow
         // (#163). Deterministic readability beats the translucency effect.
         WindowBackdropType = WindowBackdropType.None;
         Background = Theme.WpfBrush(Theme.BgDark);
+
+        // Render smoke-check (#164): fires once after the first paint. Every
+        // window here is dark-themed, so a light average means the window failed
+        // to render our theme — blank (#58), or washed-out because a backdrop
+        // let the wallpaper through (#163). Report it to /errors so a broken
+        // installed build surfaces from the field immediately, instead of only
+        // via a user bug report. CI can't catch this: it compiles, it doesn't
+        // render.
+        ContentRendered += RenderSmokeCheck;
+    }
+
+    // Mean luminance above this (0–255) on a dark-themed window is treated as a
+    // render failure. Correct windows sit near BgDark (~23); blank/white is ~240
+    // and a washed-out light wallpaper ~150–200, both well above this.
+    private const double LightMeanLuminance = 140;
+
+    private bool _smokeChecked;
+
+    private void RenderSmokeCheck(object? sender, EventArgs e)
+    {
+        if (_smokeChecked) return;
+        _smokeChecked = true;
+        ContentRendered -= RenderSmokeCheck;
+
+        try
+        {
+            if (Content is not FrameworkElement root || root.ActualWidth < 1 || root.ActualHeight < 1)
+            {
+                ErrorReporter.Report(
+                    new InvalidOperationException($"render-check: {GetType().Name} has zero-size content — window did not lay out (possible blank)."),
+                    source: "render-check", severity: "warning");
+                return;
+            }
+
+            // Downscale the window content into a tiny bitmap and average its
+            // luminance — cheap, and enough to tell "dark theme rendered" from
+            // "white/washed-out".
+            const int w = 48, h = 48;
+            var rtb = new RenderTargetBitmap(w, h, 96, 96, PixelFormats.Pbgra32);
+            var dv = new DrawingVisual();
+            using (var dc = dv.RenderOpen())
+                dc.DrawRectangle(new VisualBrush(root), null, new Rect(0, 0, w, h));
+            rtb.Render(dv);
+
+            var px = new byte[w * h * 4];
+            rtb.CopyPixels(px, w * 4, 0);
+            double sum = 0;
+            for (int i = 0; i < px.Length; i += 4) // BGRA
+                sum += 0.299 * px[i + 2] + 0.587 * px[i + 1] + 0.114 * px[i];
+            double meanLum = sum / (w * h);
+
+            if (meanLum > LightMeanLuminance)
+            {
+                ErrorReporter.Report(
+                    new InvalidOperationException($"render-check: {GetType().Name} rendered unexpectedly light (mean luminance {meanLum:F0}/255) — possible blank/unstyled/washed-out window."),
+                    source: "render-check", severity: "warning");
+            }
+        }
+        catch (Exception ex)
+        {
+            DRLogger.Warn($"render-check failed for {GetType().Name}: {ex.Message}", DRLogger.Category.APP);
+        }
     }
 
     /// <summary>
