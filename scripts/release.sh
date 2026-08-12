@@ -204,4 +204,12 @@ case "$PLATFORM" in
   macos)   release_macos ;;
 esac
 
-say "Done. $PLATFORM $VERSION is live on /updates/latest — existing installs will auto-update on their next check."
+# Refresh the marketing site so its download section shows the new version.
+# DownloadCTA fetches versions from /updates/latest at BUILD time, so the static
+# page only updates on redeploy — do it here (now that poll_updates confirmed the
+# new version is live) instead of relying on someone remembering. The Store link
+# itself is stable and needs no change.
+say "Refreshing the website download section (deploy-website.sh)"
+run "bash scripts/deploy-website.sh"
+
+say "Done. $PLATFORM $VERSION is live on /updates/latest, the website reflects it — existing installs auto-update on their next check."
