@@ -51,7 +51,12 @@ const MS_STORE_URL = 'https://apps.microsoft.com/detail/9p5wwdggvcs3';
       <div class="rounded-2xl border border-dark-border bg-dark-card p-6 hover:border-brand-400 transition-all">
         <div class="text-center">
           <div class="text-4xl mb-3">&#128421;&#65039;</div>
-          <h4 class="text-lg font-semibold text-white">Windows <span class="text-xs text-gray-500">v{WINDOWS_VERSION}</span></h4>
+          <!-- No version badge in the header: the Store and direct-download
+               channels are on different versions (the Store lags direct, which
+               auto-updates every release). The Store listing shows its own
+               version; we only state the direct-installer version, which we
+               control and fetch from /updates/latest. -->
+          <h4 class="text-lg font-semibold text-white">Windows</h4>
           <p class="text-sm text-gray-400 mt-1">Microsoft-signed · Win 10/11</p>
           <a href={MS_STORE_URL}
              class="mt-4 inline-flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-400 transition-colors">
@@ -60,7 +65,7 @@ const MS_STORE_URL = 'https://apps.microsoft.com/detail/9p5wwdggvcs3';
           <p class="text-xs text-green-400/80 mt-2">Recommended — no security warnings</p>
           <a href={`${BASE}/DraftRight-Setup-Windows-${WINDOWS_VERSION}-x64.exe`}
              class="block text-gray-500 text-xs hover:text-brand-400 hover:underline mt-3">
-            Advanced: direct installer (x64) &rarr;
+            Advanced: direct installer v{WINDOWS_VERSION} (x64) &rarr;
           </a>
         </div>
       </div>
