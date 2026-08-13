@@ -41,6 +41,7 @@
     <Compile Include="..\DraftRightWindows\Services\UpdateManifest.cs" Link="Source\UpdateManifest.cs" />
     <Compile Include="..\DraftRightWindows\Services\ServerErrorMessage.cs" Link="Source\ServerErrorMessage.cs" />
     <Compile Include="..\DraftRightWindows\Services\Logger.cs" Link="Source\Logger.cs" />
+    <Compile Include="..\DraftRightWindows\Services\ClipboardCaptureDecision.cs" Link="Source\ClipboardCaptureDecision.cs" />
     <Compile Include="..\DraftRightWindows\Services\RewriteCache.cs" Link="Source\RewriteCache.cs" />
     <Compile Include="..\DraftRightWindows\Models\Tone.cs" Link="Source\Tone.cs" />
     <Compile Include="..\DraftRightWindows\Models\ApiModels.cs" Link="Source\ApiModels.cs" />
