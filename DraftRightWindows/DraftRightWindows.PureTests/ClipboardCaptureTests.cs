@@ -1,7 +1,7 @@
 using DraftRightWindows.Services;
 using Xunit;
 
-namespace DraftRightWindows.Tests;
+namespace DraftRightWindows.PureTests;
 
 /// <summary>
 /// Covers <see cref="ClipboardService.DecideCapture"/> — the pure classifier that
