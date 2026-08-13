@@ -1,0 +1,39 @@
+---
+description: DraftRight project rules — canonical docs, RULE #1, git workflow, active plans
+alwaysApply: true
+---
+
+# DraftRight — Cursor rules
+
+Pointer, not a copy — canonical project docs live in-repo so there is one source
+of truth (RULE #1). Read them; do not restate them here.
+
+## Read first
+- `CLAUDE.md` (root) — overview, architecture, tech stack, ports, quick start, git.
+- Subdirectory `CLAUDE.md` — scoped per area: `backend/`, `admin/`, `website/`,
+  `DraftRight/` (macOS), `DraftRightMobile/`, `DraftRightWindows/`, `DraftRightLinux/`.
+  Read the one for the area you edit.
+- `AGENTS.md` — same pointers, for Codex/other agents.
+- `docs/` — specs, plans, release runbook (on-demand).
+
+## RULE #1 (standing first rule — full text in CLAUDE.md)
+Clean, Reusable, Extendable, **No hardcoding**. Any value that carries meaning is
+an enum/const/config with ONE source of truth — never a literal at a call site.
+Duplicated logic counts (two copies drift). Worked example: issue #22 — a
+copy-pasted `app_releases` upsert drifted between manual and CI paths, shipping
+Windows installers with no integrity check to prod for two months.
+
+## Before merging — every task
+1. Clean garbage — delete what the change orphaned (DELETE, never deprecate).
+2. Full review over the diff — correctness, RULE #1, security.
+
+## Git workflow
+GitFlow: branch from `develop` (`feature/<desc>-<YYYYMMDD>`), `--no-ff` merge.
+Never commit directly to `main`/`develop`. Prefixes: `feat:` `fix:` `chore:` `docs:`.
+
+## Active plans (design-approved, not yet built)
+- #173 per-user AI personalization →
+  `docs/superpowers/plans/2026-08-13-user-context-personalization.md`.
+  Central store + server-side prompt injection in `rewrite.service` (NOT
+  fine-tuning; NOT per-platform copies+sync). Privacy-heavy — read the plan's
+  privacy section before any code.
