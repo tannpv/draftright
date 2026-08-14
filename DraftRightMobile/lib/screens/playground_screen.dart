@@ -107,10 +107,13 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
       appBar: AppBar(
         title: const Text('Playground'),
         actions: [
-          IconButton(
-            tooltip: 'Extract info',
-            icon: const Icon(Icons.auto_awesome),
+          // Labeled (not a bare icon) so it's discoverable, and in the app bar
+          // so it adds no body height — a body button overflowed the Column on
+          // shorter screens under the usage-nudge banner.
+          TextButton.icon(
             onPressed: _isLoading ? null : _extract,
+            icon: const Icon(Icons.auto_awesome, size: 18),
+            label: const Text('Extract'),
           ),
         ],
       ),
@@ -130,15 +133,6 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
               decoration: const InputDecoration(
                 labelText: 'Enter text to rewrite',
                 border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: OutlinedButton.icon(
-                onPressed: _isLoading ? null : _extract,
-                icon: const Icon(Icons.auto_awesome, size: 18),
-                label: const Text('Extract info'),
               ),
             ),
             const SizedBox(height: 12),
