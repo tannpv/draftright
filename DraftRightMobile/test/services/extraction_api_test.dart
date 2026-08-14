@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:draftright_mobile/services/extraction_api.dart';
+import 'package:draftright_mobile/services/extraction_cache.dart';
 import 'package:draftright_mobile/models/entity.dart';
 import 'package:http/http.dart' as http;
 
@@ -31,6 +32,7 @@ void main() {
   test('200 returns parsed entities with source=llm', () async {
     final api = ExtractionApi(
       baseUrl: 'https://api.test',
+      cache: ExtractionCache(),
       tokenProvider: () async => 'jwt',
       httpClient: _FakeClient((_) => http.Response(
             '{"entities":[{"kind":"address","value":"123 Lê Lợi","display":"123 Lê Lợi","start":0,"end":10,"confidence":0.8}],"provider":"openai","tokensUsed":50}',
@@ -46,6 +48,7 @@ void main() {
   test('401 throws ExtractionUnavailableException', () async {
     final api = ExtractionApi(
       baseUrl: 'https://api.test',
+      cache: ExtractionCache(),
       tokenProvider: () async => 'jwt',
       httpClient: _FakeClient((_) => http.Response('unauthorized', 401)),
     );
@@ -56,6 +59,7 @@ void main() {
   test('402 throws ExtractionQuotaException', () async {
     final api = ExtractionApi(
       baseUrl: 'https://api.test',
+      cache: ExtractionCache(),
       tokenProvider: () async => 'jwt',
       httpClient: _FakeClient((_) => http.Response('quota', 402)),
     );
@@ -65,6 +69,7 @@ void main() {
   test('500 throws ExtractionUnavailableException', () async {
     final api = ExtractionApi(
       baseUrl: 'https://api.test',
+      cache: ExtractionCache(),
       tokenProvider: () async => 'jwt',
       httpClient: _FakeClient((_) => http.Response('boom', 500)),
     );
@@ -75,6 +80,7 @@ void main() {
   test('null token throws ExtractionUnavailableException', () async {
     final api = ExtractionApi(
       baseUrl: 'https://api.test',
+      cache: ExtractionCache(),
       tokenProvider: () async => null,
       httpClient: _FakeClient((_) => http.Response('{}', 200)),
     );
@@ -85,10 +91,33 @@ void main() {
   test('empty token throws ExtractionUnavailableException', () async {
     final api = ExtractionApi(
       baseUrl: 'https://api.test',
+      cache: ExtractionCache(),
       tokenProvider: () async => '',
       httpClient: _FakeClient((_) => http.Response('{}', 200)),
     );
     expect(api.llmExtract('x'),
         throwsA(isA<ExtractionUnavailableException>()));
+  });
+
+  test('caches a successful extraction — repeat call skips the http round-trip', () async {
+    var calls = 0;
+    final api = ExtractionApi(
+      baseUrl: 'https://api.test',
+      cache: ExtractionCache(),
+      tokenProvider: () async => 'jwt',
+      httpClient: _FakeClient((_) {
+        calls++;
+        return http.Response(
+          '{"entities":[{"kind":"address","value":"A","display":"A","start":0,"end":1,"confidence":0.9}]}',
+          200,
+          headers: const {'content-type': 'application/json'},
+        );
+      }),
+    );
+    final first = await api.llmExtract('same message');
+    final second = await api.llmExtract('same message');
+    expect(calls, 1); // second served from cache, no second POST
+    expect(first.single.value, 'A');
+    expect(second.single.value, 'A');
   });
 }
