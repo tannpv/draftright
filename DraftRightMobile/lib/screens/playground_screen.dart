@@ -5,10 +5,8 @@ import 'package:draftright_mobile/models/tone.dart';
 import 'package:draftright_mobile/services/auth_service.dart';
 import 'package:draftright_mobile/services/backend_client.dart';
 import 'package:draftright_mobile/services/settings_service.dart';
-import 'package:draftright_mobile/services/entity_extractor.dart';
-import 'package:draftright_mobile/services/extraction_api.dart';
+import 'package:draftright_mobile/services/extraction_launcher.dart';
 import 'package:draftright_mobile/screens/subscription_screen.dart';
-import 'package:draftright_mobile/screens/entity_sheet_screen.dart';
 import 'package:draftright_mobile/widgets/nudge_host.dart';
 
 class PlaygroundScreen extends StatefulWidget {
@@ -84,21 +82,7 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
       );
       return;
     }
-    final settings = context.read<SettingsService>();
-    final auth = context.read<AuthService>();
-    final api = ExtractionApi(
-      baseUrl: settings.backendUrl,
-      tokenProvider: () async => auth.accessToken,
-    );
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => EntitySheetScreen(
-          text: text,
-          initial: EntityExtractor.extract(text),
-          smartScan: (t) => api.llmExtract(t),
-        ),
-      ),
-    );
+    openEntitySheet(context, text); // shared launcher (also used by share-intent)
   }
 
   @override
