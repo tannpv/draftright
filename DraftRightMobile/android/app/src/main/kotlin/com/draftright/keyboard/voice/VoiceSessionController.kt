@@ -32,8 +32,10 @@ sealed class VoiceOutcome {
  *   recognizer, returns to IDLE, emits [VoiceOutcome.Nothing_] (VOICE-008).
  *   A `polish` result that arrives after cancellation (it can run on a
  *   worker thread) is dropped — no outcome is emitted for it.
- * - recognizer `onError` → [VoiceOutcome.Nothing_] + IDLE (no transcript ever
- *   existed, so there is nothing to fall back to).
+ * - recognizer `onError` → salvage the last partial as [VoiceOutcome.Raw]
+ *   ([PARTIAL_SALVAGE_HINT]) if any words were heard (golden rule — e.g. a
+ *   SPEECH_TIMEOUT mid-sentence must not discard them); [VoiceOutcome.Nothing_]
+ *   + IDLE only when no transcript ever existed (#65 item 1).
  */
 class VoiceSessionController(
     private val voice: VoiceInput,
@@ -46,6 +48,7 @@ class VoiceSessionController(
 
     private companion object {
         const val RAW_FALLBACK_HINT = "Polish failed — inserted your words as spoken"
+        const val PARTIAL_SALVAGE_HINT = "Recognition interrupted — inserted what was heard"
     }
 
     // Threading contract: startSession/cancelSession are only ever called on
@@ -71,6 +74,10 @@ class VoiceSessionController(
     private var lastPartialForwardedAt: Long = 0L
     private var hasForwardedPartial: Boolean = false
 
+    // Latest partial transcript seen this session — salvaged as Raw if the
+    // recognizer errors mid-sentence (golden rule: never discard heard words).
+    private var lastPartialText: String = ""
+
     /** Registers the live-transcript callback for the candidate bar. */
     fun onPartialText(cb: (String) -> Unit) {
         partialCallback = cb
@@ -79,11 +86,13 @@ class VoiceSessionController(
     fun startSession(localeTag: String, rawMode: Boolean) {
         val sessionGeneration = generation.incrementAndGet()
         hasForwardedPartial = false
+        lastPartialText = ""
         setState(State.LISTENING)
 
         voice.start(localeTag, object : VoiceInput.Listener {
             override fun onPartial(text: String) {
                 if (!isCurrent(sessionGeneration)) return
+                lastPartialText = text // track latest for error-salvage, regardless of forwarding debounce
                 val elapsed = now() - lastPartialForwardedAt
                 if (!hasForwardedPartial || elapsed >= VoiceConfig.PARTIAL_DEBOUNCE_MS) {
                     hasForwardedPartial = true
@@ -99,9 +108,17 @@ class VoiceSessionController(
 
             override fun onError(error: VoiceError) {
                 if (!isCurrent(sessionGeneration)) return
-                // No transcript ever existed — nothing to preserve.
                 setState(State.IDLE)
-                onOutcome(VoiceOutcome.Nothing_)
+                // Golden rule: if we heard words before the error (e.g.
+                // SPEECH_TIMEOUT mid-sentence), commit the last partial as Raw
+                // rather than discarding everything. Only Nothing_ when the
+                // recognizer never produced any transcript.
+                val salvaged = lastPartialText.trim()
+                if (salvaged.isNotEmpty()) {
+                    onOutcome(VoiceOutcome.Raw(salvaged, PARTIAL_SALVAGE_HINT))
+                } else {
+                    onOutcome(VoiceOutcome.Nothing_)
+                }
             }
         })
     }
