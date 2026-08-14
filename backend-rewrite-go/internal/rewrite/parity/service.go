@@ -60,6 +60,16 @@ type rewriteLogger interface {
 	LogRewrite(ctx context.Context, e RewriteLogEntry)
 }
 
+// contextProvider is the consumer-side port for per-user personalization (#173).
+// It returns the system-context preamble to prepend to the rewrite prompt, or ""
+// when the user opted out / has no context. A nil provider disables
+// personalization (empty preamble) — same optional-seam pattern as rewriteLogger.
+// The implementation must never fail the rewrite: on any lookup error it returns
+// "" (mirrors Node's UserContextService.getPreamble catch → null).
+type contextProvider interface {
+	Preamble(ctx context.Context, userID string) string
+}
+
 // entitlements is the consumer-side port for the daily-quota lookup. The real
 // subscription.Service satisfies it via ResolveDailyLimit.
 type entitlements interface {
@@ -85,6 +95,9 @@ type Service struct {
 
 	// Training-data seam (set via WithRewriteLog; nil disables capture).
 	logger rewriteLogger
+
+	// Personalization seam (set via WithUserContext; nil disables — #173).
+	ctxProvider contextProvider
 }
 
 // NewService wires the rewrite dependencies. now defaults to time.Now so the
@@ -113,6 +126,15 @@ func (s *Service) WithTrial(l TrialLimiter, limit int, now func() time.Time) *Se
 // successful rewrite — authenticated AND public-trial — for fine-tuning.
 func (s *Service) WithRewriteLog(l rewriteLogger) *Service {
 	s.logger = l
+	return s
+}
+
+// WithUserContext wires per-user personalization (#173). Kept off the
+// NewService signature (a nil provider simply skips injection) so existing
+// wiring and tests stay untouched. Only the authenticated Rewrite path uses it;
+// the public trial has no user, so it never personalizes.
+func (s *Service) WithUserContext(p contextProvider) *Service {
+	s.ctxProvider = p
 	return s
 }
 
@@ -203,7 +225,14 @@ func (s *Service) Rewrite(ctx context.Context, userID, text, tone, target, sourc
 		return nil, ErrQuotaExceeded
 	}
 
-	out, err := s.callAI(ctx, text, tone, target, source, inputKind)
+	// Per-user personalization (#173): load the caller's context preamble; ""
+	// when opted out / no provider, in which case the rewrite is unchanged.
+	preamble := ""
+	if s.ctxProvider != nil {
+		preamble = s.ctxProvider.Preamble(ctx, userID)
+	}
+
+	out, err := s.callAI(ctx, text, tone, target, source, inputKind, preamble)
 	if err != nil {
 		return nil, err
 	}
@@ -245,7 +274,8 @@ func (s *Service) TrialRewrite(ctx context.Context, text, tone, clientIp, target
 		text = string(r[:500])
 	}
 
-	out, err := s.callAI(ctx, text, tone, target, source, inputKind)
+	// Public trial has no authenticated user → no personalization.
+	out, err := s.callAI(ctx, text, tone, target, source, inputKind, "")
 	if err != nil {
 		return nil, err
 	}
@@ -260,10 +290,15 @@ func (s *Service) TrialRewrite(ctx context.Context, text, tone, clientIp, target
 // and return the raw provider text. Returns *UnknownToneError for an unknown
 // tone or ErrProviderFailed for any provider error. Exposed (lowercase but
 // reusable in-package) so the trial endpoint can share it.
-func (s *Service) callAI(ctx context.Context, text, tone, target, source, inputKind string) (string, error) {
+func (s *Service) callAI(ctx context.Context, text, tone, target, source, inputKind, contextPreamble string) (string, error) {
 	prompt := ResolvePrompt(tone, target, source, inputKind)
 	if prompt == "" {
 		return "", &UnknownToneError{Tone: tone}
+	}
+	// Prepend per-user context (#173) after the unknown-tone check, so an
+	// opted-out user (empty preamble) gets the exact prompt as before.
+	if contextPreamble != "" {
+		prompt = contextPreamble + prompt
 	}
 	comp, err := s.c.Complete(ctx, prompt, text)
 	if err != nil {
