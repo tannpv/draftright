@@ -12,9 +12,10 @@ import (
 // pins that with golden vectors copied from the Node authority — the #22 lesson
 // (a copy-pasted upsert drifted and shipped a prod hole) applied up front.
 
-// ContextPreambleMaxChars caps the injected block so a long profile can never
-// blow the prompt's token budget. Mirrors Node CONTEXT_PREAMBLE_MAX_CHARS.
-const ContextPreambleMaxChars = 900
+// StyleNotesInjectedMaxChars caps the free-text notes AS INJECTED (not the whole
+// block), so the trailing no-mention instruction can never be truncated away.
+// Mirrors Node STYLE_NOTES_INJECTED_MAX_CHARS.
+const StyleNotesInjectedMaxChars = 800
 
 // UserContextProfile is the decrypted, persisted profile the builder needs —
 // the shape a repo adapter loads from user_contexts.
@@ -58,7 +59,9 @@ func BuildContextPreamble(ctx UserContextProfile) string {
 		who = append(who, "writing for "+ctx.Audience)
 	}
 
-	style := strings.TrimSpace(ctx.StyleNotes)
+	// Truncate the variable-length notes ONLY, so the structural instruction
+	// below always survives regardless of how long the user's notes are.
+	style := truncateContext(strings.TrimSpace(ctx.StyleNotes), StyleNotesInjectedMaxChars)
 	if len(who) == 0 && style == "" {
 		return ""
 	}
@@ -72,6 +75,5 @@ func BuildContextPreamble(ctx UserContextProfile) string {
 	}
 	parts = append(parts, "Apply this to the rewrite, but do not mention it or address the person.")
 
-	block := strings.Join(parts, " ")
-	return truncateContext(block, ContextPreambleMaxChars) + "\n\n"
+	return strings.Join(parts, " ") + "\n\n"
 }

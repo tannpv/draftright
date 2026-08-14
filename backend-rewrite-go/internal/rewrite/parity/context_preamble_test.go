@@ -60,13 +60,30 @@ func TestBuildContextPreamble_AlwaysHasNoMentionAndSeparator(t *testing.T) {
 	}
 }
 
-func TestBuildContextPreamble_TruncatesToBudget(t *testing.T) {
+func TestBuildContextPreamble_CapsNotesButKeepsNoMention(t *testing.T) {
 	got := BuildContextPreamble(UserContextProfile{Enabled: true, StyleNotes: strings.Repeat("x", 5000)})
-	// block content (minus the trailing "\n\n") never exceeds the cap
-	if len([]rune(got)) > ContextPreambleMaxChars+2 {
-		t.Fatalf("not truncated: len=%d", len([]rune(got)))
+	// notes truncated to the field budget…
+	if !strings.Contains(got, "…") {
+		t.Fatalf("notes not truncated: %q", got)
+	}
+	// …but the safety instruction is never truncated away (the bug being fixed)
+	if !strings.Contains(got, "do not mention it") {
+		t.Fatalf("no-mention instruction lost to truncation: %q", got)
 	}
 	if !strings.HasSuffix(got, "\n\n") {
-		t.Fatalf("truncated result lost its separator: %q", got)
+		t.Fatalf("lost separator: %q", got)
+	}
+}
+
+// Boundary parity vector: notes exactly at the injected cap must NOT truncate,
+// one over must — pins the Go cap to Node's STYLE_NOTES_INJECTED_MAX_CHARS.
+func TestBuildContextPreamble_TruncationBoundary(t *testing.T) {
+	atCap := BuildContextPreamble(UserContextProfile{Enabled: true, StyleNotes: strings.Repeat("y", StyleNotesInjectedMaxChars)})
+	if strings.Contains(atCap, "…") {
+		t.Fatalf("notes at exactly the cap must not truncate")
+	}
+	overCap := BuildContextPreamble(UserContextProfile{Enabled: true, StyleNotes: strings.Repeat("y", StyleNotesInjectedMaxChars+1)})
+	if !strings.Contains(overCap, "…") {
+		t.Fatalf("notes one over the cap must truncate")
 	}
 }

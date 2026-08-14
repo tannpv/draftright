@@ -1,6 +1,6 @@
 import {
   buildContextPreamble,
-  CONTEXT_PREAMBLE_MAX_CHARS,
+  STYLE_NOTES_INJECTED_MAX_CHARS,
   UserContextProfile,
 } from './user-context.constants';
 
@@ -54,9 +54,15 @@ describe('buildContextPreamble', () => {
     expect(out.endsWith('\n\n')).toBe(true);
   });
 
-  it('caps the block to the token budget so a long profile cannot blow the prompt', () => {
+  it('caps the injected notes but ALWAYS keeps the no-mention instruction (long profile)', () => {
     const out = buildContextPreamble({ ...base, style_notes: 'x'.repeat(5000) })!;
-    // block content (minus the trailing "\n\n") never exceeds the cap
-    expect(out.length).toBeLessThanOrEqual(CONTEXT_PREAMBLE_MAX_CHARS + 2);
+    // notes are truncated to the field budget…
+    expect(out).toContain('…');
+    // …and the safety instruction is never truncated away (the bug being fixed)
+    expect(out).toContain('do not mention it');
+    expect(out.endsWith('\n\n')).toBe(true);
+    // injected notes never exceed the field budget
+    const notes = out.split('Their writing style: ')[1].split('.')[0];
+    expect(notes.length).toBeLessThanOrEqual(STYLE_NOTES_INJECTED_MAX_CHARS);
   });
 });
