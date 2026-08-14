@@ -22,7 +22,6 @@ import { EmailModule } from './email/email.module';
 import { LemonsqueezyModule } from './lemonsqueezy/lemonsqueezy.module';
 import { ErrorsModule } from './errors/errors.module';
 import { BugReportsModule } from './bug-reports/bug-reports.module';
-import { ExtractionModule } from './extraction/extraction.module';
 import { ImePacksModule } from './ime-packs/ime-packs.module';
 import { UserContextModule } from './user-context/user-context.module';
 
@@ -61,7 +60,6 @@ import { UserContextModule } from './user-context/user-context.module';
     LemonsqueezyModule,
     ErrorsModule,
     BugReportsModule,
-    ExtractionModule,
     ImePacksModule,
     UserContextModule,
     MetricsModule,

@@ -134,6 +134,25 @@ class VoiceSessionControllerTest {
         assertEquals(VoiceSessionController.State.IDLE, states.last())
     }
 
+    @Test fun `recognizer error after a partial salvages it as raw`() {  // #65 item 1
+        val fake = FakeVoiceInput()
+        val outcomes = mutableListOf<VoiceOutcome>()
+        val c = VoiceSessionController(fake,
+            polish = { _, _ -> },
+            onState = {}, onOutcome = { outcomes.add(it) })
+
+        c.startSession("vi-VN", rawMode = false)
+        fake.listener!!.onPartial("xin chào")
+        fake.listener!!.onError(VoiceError.NO_SPEECH) // e.g. SPEECH_TIMEOUT mid-sentence
+
+        assertEquals(
+            listOf<VoiceOutcome>(
+                VoiceOutcome.Raw("xin chào", hint = "Recognition interrupted — inserted what was heard"),
+            ),
+            outcomes,
+        )
+    }
+
     @Test fun `cancel during processing drops a late polish success`() {
         val fake = FakeVoiceInput()
         var capturedCallback: ((Result<String>) -> Unit)? = null

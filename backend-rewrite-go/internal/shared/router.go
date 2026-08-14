@@ -116,8 +116,6 @@ type Router struct {
 
 	// Phase 4b LLM-ingest endpoints. All nil-guarded like Phase 4a.
 	//
-	//   ExtractHandler — POST /extract is the ONLY auth-gated one (Node's
-	//     @UseGuards(JwtAuthGuard)); mounted INSIDE the RequireAuth group.
 	//   EmailWebhook   — POST /webhooks/resend is PUBLIC and reads the RAW
 	//     request body for Svix/HMAC verification. Mounted at the top level
 	//     via mux.Method so NO body-consuming middleware runs on it (the
@@ -129,7 +127,6 @@ type Router struct {
 	//   FeedbackVote    — POST /feedback/{id}/vote is PUBLIC at the route
 	//     level; the handler enforces its own JWT (Node: public route,
 	//     UnauthorizedException thrown inside when no user).
-	ExtractHandler  http.Handler // POST /extract           (auth)
 	EmailWebhook    http.Handler // POST /webhooks/resend    (public, raw body)
 	BugReportIngest http.Handler // POST /bug-reports        (public, multipart)
 	FeedbackCreate  http.Handler // POST /feedback           (public)
@@ -402,10 +399,6 @@ func (r *Router) Build() http.Handler {
 		}
 		if r.UserContextDelete != nil {
 			api.Method(http.MethodDelete, "/me/context", r.UserContextDelete)
-		}
-		if r.ExtractHandler != nil {
-			// Node: @Controller('extract') @UseGuards(JwtAuthGuard) @Post().
-			api.Method(http.MethodPost, "/extract", r.ExtractHandler)
 		}
 		if r.ChangePassword != nil {
 			api.Method(http.MethodPost, "/auth/change-password", r.ChangePassword)

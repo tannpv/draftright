@@ -20,7 +20,6 @@ func phase4bRouter() stdhttp.Handler {
 	})
 	rt := &shared.Router{
 		Verifier:        auth.NewVerifier(testJWTSecret),
-		ExtractHandler:  stub,
 		EmailWebhook:    stub,
 		BugReportIngest: stub,
 		FeedbackCreate:  stub,
@@ -59,18 +58,4 @@ func TestRouter_Phase4b_PublicRoutes_NoJWT(t *testing.T) {
 				"%s %s should reach the stub handler", tc.method, tc.path)
 		})
 	}
-}
-
-// TC: Phase4b-router-extract-auth — POST /extract is JWT-gated (Node's
-// @UseGuards(JwtAuthGuard)): no Authorization header → 401, the stub is
-// never reached.
-func TestRouter_Phase4b_Extract_RequiresJWT(t *testing.T) {
-	router := phase4bRouter()
-
-	req := httptest.NewRequest(stdhttp.MethodPost, "/extract", nil)
-	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
-
-	require.Equal(t, stdhttp.StatusUnauthorized, rec.Code,
-		"POST /extract without a JWT must be 401 (auth-gated), got %d", rec.Code)
 }
