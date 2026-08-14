@@ -13,8 +13,18 @@ NestJS API server — auth, rewrite proxy, subscriptions, usage tracking, admin 
 | AI Providers | `src/ai-providers/` | OpenAI/Ollama proxy, provider management |
 | Rewrite | `src/rewrite/` | Core proxy — quota check → AI call → usage log |
 | Usage | `src/usage/` | Daily usage counting, logging |
+| User Context | `src/user-context/` | Per-user personalization (#173): `GET/PUT/DELETE /me/context`; `style_notes` encrypted; `buildContextPreamble` injected in Rewrite. **Mirrored in Go** (`internal/usercontext/`). |
 | Admin | `src/admin/` | Admin CRUD for all resources + analytics |
 | Feedback | `src/bug-reports/` | `POST /feedback` (bug or feature request; JWT optional → user_id), `GET /feedback` (public board: kind=feature & is_public, votes desc, `?status=`/`?target_platform=` filters), `POST /feedback/:id/vote` (toggle upvote, JWT required). `feature_votes` table = one vote per user per feature; `bug_reports.vote_count` is derived. Legacy multipart `POST /bug-reports` (screenshots) unchanged. AI fix-proposal cron only touches `kind='bug'`. Schema migration: `backend/sql/2026-05-12-feedback.sql`. |
+
+## ⚠️ Prod is Go-only — new routes MUST be added to `backend-rewrite-go`
+
+Prod + dev route **all** api traffic to the Go backend (`api.draftright.info`→:3001,
+`api.dev`→:3101); this NestJS server is retired in prod (no prod Node container).
+So a **new endpoint added only here is unreachable in prod** — it 404s. Every new
+route must also be implemented in Go (handler + sqlc query + `shared.Router` field +
+`cmd/server/main.go` wiring). This NestJS impl is kept as **rollback parity** only.
+(#173 `/me/context` was built Node-only first and 404'd until the Go CRUD landed.)
 
 ## Database
 
