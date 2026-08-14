@@ -169,6 +169,7 @@ class _EntitySheetScreenState extends State<EntitySheetScreen> {
         EntityKind.personName => 'Person',
         EntityKind.dateTime => 'Date/time',
         EntityKind.bankAccount => 'Bank account',
+        EntityKind.amount => 'Amount',
       };
 
   IconData _kindIcon(EntityKind k) => switch (k) {
@@ -181,6 +182,7 @@ class _EntitySheetScreenState extends State<EntitySheetScreen> {
         EntityKind.personName => Icons.person,
         EntityKind.dateTime => Icons.calendar_today,
         EntityKind.bankAccount => Icons.account_balance,
+        EntityKind.amount => Icons.payments,
       };
 
   @override
