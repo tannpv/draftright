@@ -56,6 +56,12 @@ type Router struct {
 	Health http.Handler // GET /health
 	Me     http.Handler // GET /auth/me (mounted inside the auth group)
 
+	// Per-user personalization (#173). All JWT-gated; nil-guarded so the
+	// router stays functional without a DB.
+	UserContextGet    http.Handler // GET    /me/context
+	UserContextPut    http.Handler // PUT    /me/context
+	UserContextDelete http.Handler // DELETE /me/context
+
 	// Phase 1a auth endpoints. Public: Login, Refresh. Auth-gated:
 	// ChangePassword, Account, DeleteAccount. All nil-guarded so the
 	// router stays functional when the auth stack is absent (no DB).
@@ -387,6 +393,15 @@ func (r *Router) Build() http.Handler {
 		api.Use(jwtMW)
 		if r.Me != nil {
 			api.Method(http.MethodGet, "/auth/me", r.Me)
+		}
+		if r.UserContextGet != nil {
+			api.Method(http.MethodGet, "/me/context", r.UserContextGet)
+		}
+		if r.UserContextPut != nil {
+			api.Method(http.MethodPut, "/me/context", r.UserContextPut)
+		}
+		if r.UserContextDelete != nil {
+			api.Method(http.MethodDelete, "/me/context", r.UserContextDelete)
 		}
 		if r.ExtractHandler != nil {
 			// Node: @Controller('extract') @UseGuards(JwtAuthGuard) @Post().

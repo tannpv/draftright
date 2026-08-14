@@ -121,6 +121,7 @@ type Querier interface {
 	DeleteEmailTemplate(ctx context.Context, templateKey string) error
 	// Node deleteChannel(): releaseRepo.delete({ platform, channel }).
 	DeleteReleaseChannel(ctx context.Context, arg DeleteReleaseChannelParams) (int64, error)
+	DeleteUserContext(ctx context.Context, userID pgtype.UUID) error
 	DeleteVote(ctx context.Context, arg DeleteVoteParams) error
 	DemoteDefaultAiProviders(ctx context.Context) error
 	ExpireByStoreRef(ctx context.Context, arg ExpireByStoreRefParams) (int64, error)
@@ -260,6 +261,11 @@ type Querier interface {
 	// Minimal user projection for GET /auth/me — id, email, role. Mirrors
 	// the fields Node's /auth/me returns from the JWT-resolved user.
 	GetUserByID(ctx context.Context, id pgtype.UUID) (GetUserByIDRow, error)
+	// Per-user rewrite personalization context (#173). Read-only on the Go side:
+	// the profile is written by the NestJS /me/context endpoints; Go only reads it
+	// to inject the preamble at rewrite time. style_notes comes back encrypted
+	// (enc:v1:) and is decrypted in the adapter via secretcipher.
+	GetUserContext(ctx context.Context, userID pgtype.UUID) (GetUserContextRow, error)
 	// activateSubscription's notify step: the webhook needs the paying user's email
 	// + display name to send the "subscription active" mail. name is NOT NULL
 	// (schema.sql), so sqlc generates a plain string (no pointer).
@@ -438,6 +444,9 @@ type Querier interface {
 	UpdateUserPasswordHash(ctx context.Context, arg UpdateUserPasswordHashParams) error
 	UpdateUserVerification(ctx context.Context, arg UpdateUserVerificationParams) error
 	UpsertEmailTemplate(ctx context.Context, arg UpsertEmailTemplateParams) error
+	// One row per user; INSERT-or-UPDATE so /me/context PUT is idempotent.
+	// style_notes arrives already encrypted (enc:v1:) from the handler.
+	UpsertUserContext(ctx context.Context, arg UpsertUserContextParams) (UpsertUserContextRow, error)
 	// internal/shared/pg/queries_bugreports.sql
 	// Public bug-report ingest (POST /bug-reports, multipart with optional
 	// screenshot). user_id is nulled when the JWT outlives its user.

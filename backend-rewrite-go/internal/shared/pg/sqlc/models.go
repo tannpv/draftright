@@ -556,3 +556,13 @@ type User struct {
 	PasswordResetExpires     pgtype.Timestamptz    `db:"password_reset_expires" json:"password_reset_expires"`
 	PasswordResetAttempts    int32                 `db:"password_reset_attempts" json:"password_reset_attempts"`
 }
+
+type UserContext struct {
+	UserID     pgtype.UUID        `db:"user_id" json:"user_id"`
+	Enabled    bool               `db:"enabled" json:"enabled"`
+	JobTitle   string             `db:"job_title" json:"job_title"`
+	Industry   string             `db:"industry" json:"industry"`
+	Audience   string             `db:"audience" json:"audience"`
+	StyleNotes string             `db:"style_notes" json:"style_notes"`
+	UpdatedAt  pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}

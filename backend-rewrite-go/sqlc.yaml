@@ -35,6 +35,7 @@ sql:
       - "internal/shared/pg/queries_users_admin.sql"
       - "internal/shared/pg/queries_emailtemplates.sql"
       - "internal/shared/pg/queries_rewritelog.sql"
+      - "internal/shared/pg/queries_usercontext.sql"
     engine: "postgresql"
     gen:
       go:

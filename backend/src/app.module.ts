@@ -24,6 +24,7 @@ import { ErrorsModule } from './errors/errors.module';
 import { BugReportsModule } from './bug-reports/bug-reports.module';
 import { ExtractionModule } from './extraction/extraction.module';
 import { ImePacksModule } from './ime-packs/ime-packs.module';
+import { UserContextModule } from './user-context/user-context.module';
 
 @Module({
   imports: [
@@ -62,6 +63,7 @@ import { ImePacksModule } from './ime-packs/ime-packs.module';
     BugReportsModule,
     ExtractionModule,
     ImePacksModule,
+    UserContextModule,
     MetricsModule,
   ],
   providers: [
