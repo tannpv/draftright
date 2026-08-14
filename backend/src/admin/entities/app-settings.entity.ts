@@ -1,21 +1,13 @@
-import { Entity, PrimaryGeneratedColumn, Column, UpdateDateColumn, ValueTransformer } from 'typeorm';
-import { encryptSecret, decryptSecret } from '../../common/crypto/secret-cipher';
+import { Entity, PrimaryGeneratedColumn, Column, UpdateDateColumn } from 'typeorm';
+import { secretTransformer } from '../../common/crypto/secret-transformer';
 
 /**
- * At-rest encryption for the secret columns (#50). `to` encrypts on write,
- * `from` decrypts on read — transparent to every consumer of AppSettings.
- * Null-safe and a no-op without SECRETS_ENCRYPTION_KEY, so legacy plaintext
- * rows keep working. Columns are `text` because ciphertext is longer than the
- * original secret and would overflow the old varchar(100/500) widths.
- *
- * The set of columns carrying this transformer MUST match
+ * The set of AppSettings columns carrying `secretTransformer` MUST match
  * SETTINGS_ENCRYPTED_COLUMNS in admin/mask-settings.util.ts (the backfill
  * script's source of truth) — when adding a secret column, update both.
+ * The transformer itself lives in common/crypto/secret-transformer.ts so
+ * other entities (UserContext, #173) share the one definition.
  */
-const secretTransformer: ValueTransformer = {
-  to: (value?: string | null) => (value == null ? value : encryptSecret(value)),
-  from: (value?: string | null) => (value == null ? value : decryptSecret(value)),
-};
 
 @Entity('app_settings')
 export class AppSettings {

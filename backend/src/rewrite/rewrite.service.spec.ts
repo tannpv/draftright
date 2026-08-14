@@ -31,6 +31,7 @@ describe('RewriteService — provider error sanitization', () => {
       undefined as any, // cache
       undefined as any, // rewriteLog
       undefined as any, // metrics
+      undefined as any, // userContext (unused before the callAI throw)
     );
   }
 
@@ -88,8 +89,9 @@ describe('RewriteService — entitlement gating', () => {
     };
     const rewriteLog: any = { log: async () => undefined };
     const metrics: any = { observe: () => undefined };
+    const userContext: any = { getPreamble: async () => null };
     return new RewriteService(
-      subscriptions, usage, aiProviders, cache, rewriteLog, metrics,
+      subscriptions, usage, aiProviders, cache, rewriteLog, metrics, userContext,
     );
   }
 

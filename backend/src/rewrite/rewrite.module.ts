@@ -11,6 +11,7 @@ import { AiProvidersModule } from '../ai-providers/ai-providers.module';
 import { AuthModule } from '../auth/auth.module';
 import { MetricsModule } from '../common/metrics/metrics.module';
 import { RedisModule } from '../common/redis/redis.module';
+import { UserContextModule } from '../user-context/user-context.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { RedisModule } from '../common/redis/redis.module';
     AuthModule,
     MetricsModule,
     RedisModule,
+    UserContextModule,
   ],
   controllers: [RewriteController],
   providers: [RewriteService, RewriteCacheService, RewriteLogService],
