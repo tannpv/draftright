@@ -8,6 +8,10 @@ enum EntityKind {
   personName,
   dateTime,
   bankAccount,
+  // Client-regex-only (currency amounts). NOT a /extract wire kind — the LLM
+  // never emits it and the client never requests it, so the Node/Go EntityKind
+  // enums deliberately do not include it. Extend AmountDetector for new locales.
+  amount,
 }
 
 extension EntityKindCodec on EntityKind {
@@ -21,6 +25,7 @@ extension EntityKindCodec on EntityKind {
     EntityKind.personName => 'personName',
     EntityKind.dateTime => 'dateTime',
     EntityKind.bankAccount => 'bankAccount',
+    EntityKind.amount => 'amount',
   };
 
   static EntityKind fromWire(String s) =>
