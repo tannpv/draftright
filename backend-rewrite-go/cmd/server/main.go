@@ -37,7 +37,6 @@ import (
 	corepkg "github.com/tannpv/draftright-rewrite/internal/core"
 	emailpkg "github.com/tannpv/draftright-rewrite/internal/email"
 	errreportpkg "github.com/tannpv/draftright-rewrite/internal/errreport"
-	extractionpkg "github.com/tannpv/draftright-rewrite/internal/extraction"
 	exttokenpkg "github.com/tannpv/draftright-rewrite/internal/exttoken"
 	feedbackpkg "github.com/tannpv/draftright-rewrite/internal/feedback"
 	imepackspkg "github.com/tannpv/draftright-rewrite/internal/imepacks"
@@ -200,7 +199,6 @@ func main() {
 		RewriteParity: core.rewriteParity,
 		RewriteTrial:  core.rewriteTrial,
 
-		ExtractHandler:  core.extract,
 		EmailWebhook:    core.emailWebhook,
 		BugReportIngest: core.bugReportIngest,
 		FeedbackCreate:  core.feedbackCreate,
@@ -444,7 +442,6 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 
 		// Phase 4b: POST /extract — DB-resolved default provider per request
 		// (Node ExtractionService.findDefault()), reporting provider.name.
-		core.extract = http.HandlerFunc(extractionpkg.NewHandler(extractionpkg.NewService(dbDefault)).Extract)
 
 		if cfg.JWTRefreshSecret == "" {
 			cleanup()
@@ -959,7 +956,6 @@ type coreHandlers struct {
 	//   feedbackList    — GET  /feedback (public; DB — set when pool != nil).
 	//   feedbackVote    — POST /feedback/{id}/vote (public; DB — set when pool != nil).
 	//   emailWebhook    — POST /webhooks/resend (public, raw body; DB — set when pool != nil).
-	extract         http.Handler
 	bugReportIngest http.Handler
 	feedbackCreate  http.Handler
 	feedbackList    http.Handler
@@ -1065,15 +1061,12 @@ func (paymentMethodValidator) AssertMethodsRegisterable(csv string) error {
 	return paymentpkg.AssertMethodsRegisterable(csv)
 }
 
-// dbDefaultCompleter routes the non-streaming rewrite + extraction use cases
-// through the DB-configured default AI provider, resolved PER REQUEST via
-// aiprovider.Service.DefaultComplete (which reads ai_providers.is_default and
-// reports provider.name). This mirrors Node, where both RewriteService.callAI
-// and ExtractionService.extract call aiProviders.findDefault() at call time —
-// not a process-static ENV provider. It satisfies parity.completer (Complete)
-// and extraction.DefaultProvider (DefaultComplete), translating aiprovider's
-// no-default sentinel into each consumer's own sentinel so the HTTP edges map
-// it to the right status (rewrite/extract → 400 invalid-input).
+// dbDefaultCompleter routes the non-streaming rewrite use case through the
+// DB-configured default AI provider, resolved PER REQUEST via
+// aiprovider.Service.DefaultCompleteFull (which reads ai_providers.is_default and
+// reports provider.name). This mirrors Node, where RewriteService.callAI calls
+// aiProviders.findDefault() at call time — not a process-static ENV provider.
+// It satisfies parity.completer (Complete).
 type dbDefaultCompleter struct{ svc *aiproviderpkg.Service }
 
 func (d dbDefaultCompleter) Complete(ctx context.Context, system, user string) (parity.Completion, error) {
@@ -1142,14 +1135,6 @@ func (s usecaseRewriteLogSink) LogRewrite(ctx context.Context, e usecase.Rewrite
 			s.log.Warn("rewrite_logs insert failed (streaming)", "err", err)
 		}
 	}()
-}
-
-func (d dbDefaultCompleter) DefaultComplete(ctx context.Context, system, user string) (string, string, error) {
-	text, name, _, err := d.svc.DefaultComplete(ctx, system, user)
-	if errors.Is(err, aiproviderpkg.ErrNoDefaultProvider) {
-		return "", "", extractionpkg.ErrNoDefaultProvider
-	}
-	return text, name, err
 }
 
 // stripeSecretResolver adapts the payment SettingsAdapter + env fallback to the

@@ -10,7 +10,6 @@ import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:draftright_mobile/services/api_client.dart';
 import 'package:draftright_mobile/services/extension_token_service.dart';
-import 'package:draftright_mobile/services/extraction_api.dart';
 import 'package:draftright_mobile/services/logger_service.dart';
 
 /// Thrown when the user backs out of a social sign-in (closes the Google/Apple
@@ -247,7 +246,6 @@ class AuthService extends ChangeNotifier {
     _accessToken = null;
     _refreshToken = null;
     _userEmail = null;
-    ExtractionApi.clearCache(); // #143: a new user on this device starts clean
     await _secure.delete(key: _keyAccess);
     await _secure.delete(key: _keyRefresh);
     final prefs = await SharedPreferences.getInstance();

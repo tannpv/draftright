@@ -95,7 +95,6 @@ POST /auth/social
 POST /auth/verify-email
 POST /bug-reports
 POST /errors
-POST /extract
 POST /feedback
 POST /feedback/{id}/vote
 POST /payment/checkout

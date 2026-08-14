@@ -5,7 +5,6 @@ import 'package:draftright_mobile/models/tone.dart';
 import 'package:draftright_mobile/services/auth_service.dart';
 import 'package:draftright_mobile/services/backend_client.dart';
 import 'package:draftright_mobile/services/settings_service.dart';
-import 'package:draftright_mobile/services/extraction_launcher.dart';
 import 'package:draftright_mobile/screens/subscription_screen.dart';
 import 'package:draftright_mobile/widgets/nudge_host.dart';
 
@@ -70,37 +69,10 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
     }
   }
 
-  /// Smart Extract (#143): pull structured entities (bank, phone, email,
-  /// address, date…) out of the entered text. Runs the offline regex layer
-  /// instantly, then hands an optional LLM "smart scan" to the entity sheet.
-  /// Reuses the built EntityExtractor + ExtractionApi + EntitySheetScreen.
-  void _extract() {
-    final text = _textController.text.trim();
-    if (text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter some text to extract from')),
-      );
-      return;
-    }
-    openEntitySheet(context, text); // shared launcher (also used by share-intent)
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Playground'),
-        actions: [
-          // Labeled (not a bare icon) so it's discoverable, and in the app bar
-          // so it adds no body height — a body button overflowed the Column on
-          // shorter screens under the usage-nudge banner.
-          TextButton.icon(
-            onPressed: _isLoading ? null : _extract,
-            icon: const Icon(Icons.auto_awesome, size: 18),
-            label: const Text('Extract'),
-          ),
-        ],
-      ),
+      appBar: AppBar(title: const Text('Playground')),
       body: NudgeHost(
         backend: _backend,
         onUpgrade: () => Navigator.of(context).push(
