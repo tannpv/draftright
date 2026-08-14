@@ -114,14 +114,28 @@ flips itself to enforced and only reverts on a clean Windows reinstall — so
 "updates worked before" was luck, not stable. Per-file Unblock is for SmartScreen
 NOT SAC; the reliable user workaround is turning SAC Off.
 
-CI signing is **wired + dormant**: `installer/sign-file.ps1` + `build-windows.yml`,
-gated on secrets `WINDOWS_SIGNING_PFX_BASE64` + `WINDOWS_SIGNING_PFX_PASSWORD`.
-Set them → next release signs, no code change.
+CI signing is **wired but PFX-shaped and needs rework** — `installer/sign-file.ps1`
++ `build-windows.yml`, gated on `WINDOWS_SIGNING_PFX_BASE64` + `_PASSWORD`. **Since
+June 2023 there is no downloadable PFX** (CA/B Forum — key must be on FIPS hardware
+or a cloud HSM), so this wiring can't sign a modern OV/EV cert as-is. For CI signing,
+buy a **cloud-signing** cert and move the script to its CLI (eSigner/KeyLocker).
 
-**Cert path: OV/EV, not Azure.** Azure Trusted Signing is NOT available for
-Vietnam (individual = US/CA only; org list excludes VN). Use an **OV** cert
-(Sectigo/GlobalSign, ~$200-400/yr, issues to VN; Tan has a hộ kinh doanh) or EV.
-MS Store (MS-signed) sidesteps signing but abandons direct download (#3).
+**Cert path: OV/EV + cloud signing, not Azure.** Azure Trusted Signing is NOT
+available for Vietnam. **OV does NOT guarantee a Smart App Control pass** — it clears
+SmartScreen "unknown publisher" + builds reputation; the Store is the only guaranteed
+clean install (already shipped). Full purchase + wire-up runbook:
+**`docs/windows-code-signing-cert-purchase.md`**.
+
+### Ship a Windows change to the Store (the release trigger)
+Owner just says **"release windows to store"** — no steps to memorize. The flow:
+1. Land the fix/feature on `develop` (feature branch → `--no-ff`).
+2. Bump `DraftRightWindows.csproj` `<Version>` (e.g. 2.3.52 → 2.3.53). **Do not**
+   hand-edit `Package.appxmanifest` — CI stamps it from the csproj (#170).
+3. Tag `v<semver>` on `main` → CI builds x64 + arm64 + **MSIX**.
+4. `scripts/store-package.sh` stages the `.msixupload` → owner uploads it manually
+   in Partner Center (API automation still pending an Azure AD link).
+A re-upload of an unchanged version is rejected by the Store — there must be a real
+change + a version bump. If nothing changed, there is nothing to ship.
 
 ## New WPF windows — conventions
 
