@@ -10,6 +10,7 @@ import {
   REWRITE_OUTCOMES,
 } from '../common/metrics/rewrite-metrics.service';
 import { SPEECH_PREAMBLE, INPUT_KIND_SPEECH } from './tones';
+import { UserContextService } from '../user-context/user-context.service';
 
 // --- Prompt Registry ---
 
@@ -80,15 +81,20 @@ export class RewriteService {
     private readonly rewriteCache: RewriteCacheService,
     private readonly rewriteLogService: RewriteLogService,
     private readonly metrics: RewriteMetricsService,
+    private readonly userContext: UserContextService,
   ) {}
 
   // --- Core: single method that calls AI and logs ---
 
-  private async callAI(text: string, tone: string, targetLanguage?: string, sourceLanguage?: string, inputKind?: string): Promise<RewriteResult> {
-    const prompt = resolvePrompt(tone, targetLanguage, sourceLanguage, inputKind);
-    if (!prompt) {
+  private async callAI(text: string, tone: string, targetLanguage?: string, sourceLanguage?: string, inputKind?: string, contextPreamble?: string | null): Promise<RewriteResult> {
+    const basePrompt = resolvePrompt(tone, targetLanguage, sourceLanguage, inputKind);
+    if (!basePrompt) {
       throw new HttpException({ error: `Unknown tone: ${tone}` }, 400);
     }
+    // Per-user personalization (#173): prepend the caller's context so the
+    // rewrite is tailored to who they are. Null when disabled/empty → the
+    // prompt is unchanged, so an opted-out user pays nothing.
+    const prompt = contextPreamble ? contextPreamble + basePrompt : basePrompt;
 
     const provider = await this.aiProvidersService.findDefault();
 
@@ -160,10 +166,14 @@ export class RewriteService {
       }, 429);
     }
 
+    // Load the caller's personalization context (#173) — null if opted out /
+    // empty, in which case the rewrite is identical to today.
+    const contextPreamble = await this.userContext.getPreamble(userId);
+
     // Call AI — wrap so provider failures land in a typed metric.
     let result: RewriteResult;
     try {
-      result = await this.callAI(text, tone, targetLanguage, sourceLanguage, inputKind);
+      result = await this.callAI(text, tone, targetLanguage, sourceLanguage, inputKind, contextPreamble);
     } catch (err) {
       this.metrics.observe({
         outcome: REWRITE_OUTCOMES.providerFailed,
