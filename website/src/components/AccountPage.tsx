@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import { API_URL as API } from '../lib/api';
+import PersonalizationSection from './PersonalizationSection';
 
 interface Account {
   id: string;
@@ -330,6 +331,8 @@ export default function AccountPage() {
 
         {error && <p className="mt-3 text-sm text-red-400">{error}</p>}
       </div>
+
+      {token && <PersonalizationSection token={token} />}
 
       {extTokens && extTokens.length > 0 && (
         <div className="rounded-2xl border border-dark-border bg-dark-card p-8">
