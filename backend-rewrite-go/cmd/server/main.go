@@ -148,12 +148,15 @@ func main() {
 	defer cleanup()
 
 	rt := &shared.Router{
-		Log:            log,
-		Verifier:       core.accessVerifier, // single shared verifier (also used by errreport)
-		MetricsHandler: metricsHTTP,
-		EnableTracing:  cfg.OtelEndpoint != "",
-		Health:         core.health,
-		Me:             core.me,
+		Log:               log,
+		Verifier:          core.accessVerifier, // single shared verifier (also used by errreport)
+		MetricsHandler:    metricsHTTP,
+		EnableTracing:     cfg.OtelEndpoint != "",
+		Health:            core.health,
+		Me:                core.me,
+		UserContextGet:    core.userContextGet,
+		UserContextPut:    core.userContextPut,
+		UserContextDelete: core.userContextDelete,
 		Rewrite: &transport.RewriteHandler{
 			Deps: deps,
 			Log:  log,
@@ -496,6 +499,11 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 			WithTrial(trialLimiter, trialLimit, time.Now).
 			WithRewriteLog(rewriteLogSink{repo: rewriteLogRepo, log: log}).
 			WithUserContext(usercontextpkg.NewProvider(q)) // #173 per-user personalization
+		// #173 /me/context CRUD (the profile the injection above reads).
+		userCtxHandler := usercontextpkg.NewHandler(q, log)
+		core.userContextGet = http.HandlerFunc(userCtxHandler.Get)
+		core.userContextPut = http.HandlerFunc(userCtxHandler.Put)
+		core.userContextDelete = http.HandlerFunc(userCtxHandler.Delete)
 		// Same DB-backed repo feeds the Go-only streaming /v1/rewrite sink, so a
 		// successful streamed finish captures a training-data row just like the
 		// parity path. Reuses rewriteLogRepo (a thin stateless wrapper).
@@ -896,6 +904,10 @@ type coreHandlers struct {
 	deleteAccount  http.Handler // DELETE /auth/account (set when pool != nil)
 	subscription   http.Handler // GET /subscription (set when pool != nil)
 	verifyReceipt  http.Handler // POST /subscription/verify-receipt (set when pool != nil)
+
+	userContextGet    http.Handler // GET    /me/context (#173, set when pool != nil)
+	userContextPut    http.Handler // PUT    /me/context (#173, set when pool != nil)
+	userContextDelete http.Handler // DELETE /me/context (#173, set when pool != nil)
 
 	// Payment read-side (Phase 3a; set when pool != nil).
 	paymentMethods http.Handler // GET /payment/methods (public)
