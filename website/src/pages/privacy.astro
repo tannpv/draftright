@@ -8,7 +8,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   <div class="pt-12 pb-24">
     <div class="mx-auto max-w-3xl px-6 prose prose-invert prose-gray">
       <h1>Privacy Policy</h1>
-      <p class="text-gray-400">Last updated: July 2026</p>
+      <p class="text-gray-400">Last updated: August 2026</p>
 
       <h2>What We Collect</h2>
       <p>
@@ -33,9 +33,20 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         In addition, the text you submit for rewriting — whether typed or dictated by voice — together with the rewritten result, the selected tone, and the AI model used, is stored to operate, evaluate, and improve the service (including training and quality review). These rewrite records are <strong>not linked to your account or any personal identifier</strong> — they are stored without your name, email, or user ID.
       </p>
 
+      <h2>Personalization</h2>
+      <p>
+        You can optionally give DraftRight a <strong>personalization profile</strong> — your job title, industry, intended audience, and free-text notes about your writing style — from your account page. This is entirely <strong>opt-in</strong>: nothing is collected or used until you fill it in and turn it on.
+      </p>
+      <p>
+        When enabled, this profile is added as context to the rewrite prompt so results better match how you write. It is stored against your account and, for the free-text style notes, <strong>encrypted at rest</strong>. Because it forms part of the rewrite request, your profile is sent to the configured AI provider along with the text you are rewriting (see Third-Party Services). Choosing a locally hosted provider keeps this on the operator's own infrastructure.
+      </p>
+      <p>
+        You are always in control: view, edit, or <strong>permanently delete</strong> your personalization from the account page at any time, and deleting your account removes it. It is used only for your own rewrites and never shared with or derived from other users.
+      </p>
+
       <h2>Third-Party Services</h2>
       <p>
-        DraftRight processes rewrites using a configurable AI provider. By default this may be OpenAI's API or another provider selected by the operator (such as Anthropic, or a locally hosted model). When a cloud provider is used, the text you submit is sent to that provider for processing and their data policies apply. For OpenAI, we recommend reviewing
+        DraftRight processes rewrites using a configurable AI provider. By default this may be OpenAI's API or another provider selected by the operator (such as Anthropic, or a locally hosted model). When a cloud provider is used, the text you submit — and, if enabled, your personalization profile — is sent to that provider for processing and their data policies apply. For OpenAI, we recommend reviewing
         <a href="https://openai.com/policies/privacy-policy" class="text-brand-400 hover:underline">OpenAI's Privacy Policy</a>.
       </p>
 
