@@ -45,6 +45,13 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- Share-sheet entry (#143): text shared from other apps
+                 (Teams / Zalo / SMS / …) opens the app → Smart Extract. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
             <!-- App Link for payment-return.  When Lemon Squeezy
                  redirects the in-app browser to <host>/payment/...
                  after checkout, autoVerify=true tells Android to skip

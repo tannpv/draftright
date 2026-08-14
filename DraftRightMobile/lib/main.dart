@@ -9,6 +9,8 @@ import 'package:draftright_mobile/services/auth_service.dart';
 import 'package:draftright_mobile/services/backend_client.dart';
 import 'package:draftright_mobile/services/logger_service.dart';
 import 'package:draftright_mobile/services/settings_service.dart';
+import 'package:draftright_mobile/services/shared_text_service.dart';
+import 'package:draftright_mobile/services/extraction_launcher.dart';
 import 'package:draftright_mobile/screens/login_screen.dart';
 import 'package:draftright_mobile/screens/onboarding_screen.dart';
 import 'package:draftright_mobile/screens/settings_screen.dart';
@@ -313,8 +315,25 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _checkOnboarding();
     _wireDeepLinks();
+    _wireSharedText();
     // Defer until the tree (and a Navigator) is mounted.
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkWhatsNew());
+  }
+
+  /// Share-sheet entry (#143): text shared from another app (Teams/Zalo/SMS)
+  /// opens Smart Extract. Handles both cold start (initialSharedText) and warm
+  /// pushes. Reuses openEntitySheet — the same launcher the Playground uses.
+  void _wireSharedText() {
+    SharedTextService.onSharedText(_handleSharedText);
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final t = await SharedTextService.initialSharedText();
+      if (t != null) _handleSharedText(t);
+    });
+  }
+
+  void _handleSharedText(String text) {
+    if (!mounted) return;
+    openEntitySheet(context, text);
   }
 
   /// One-time post-update "What's New": if the running version changed since
