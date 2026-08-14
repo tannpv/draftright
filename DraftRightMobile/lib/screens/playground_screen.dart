@@ -132,6 +132,15 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
                 border: OutlineInputBorder(),
               ),
             ),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton.icon(
+                onPressed: _isLoading ? null : _extract,
+                icon: const Icon(Icons.auto_awesome, size: 18),
+                label: const Text('Extract info'),
+              ),
+            ),
             const SizedBox(height: 12),
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
