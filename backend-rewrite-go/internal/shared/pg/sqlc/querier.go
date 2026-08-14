@@ -260,6 +260,11 @@ type Querier interface {
 	// Minimal user projection for GET /auth/me — id, email, role. Mirrors
 	// the fields Node's /auth/me returns from the JWT-resolved user.
 	GetUserByID(ctx context.Context, id pgtype.UUID) (GetUserByIDRow, error)
+	// Per-user rewrite personalization context (#173). Read-only on the Go side:
+	// the profile is written by the NestJS /me/context endpoints; Go only reads it
+	// to inject the preamble at rewrite time. style_notes comes back encrypted
+	// (enc:v1:) and is decrypted in the adapter via secretcipher.
+	GetUserContext(ctx context.Context, userID pgtype.UUID) (GetUserContextRow, error)
 	// activateSubscription's notify step: the webhook needs the paying user's email
 	// + display name to send the "subscription active" mail. name is NOT NULL
 	// (schema.sql), so sqlc generates a plain string (no pointer).

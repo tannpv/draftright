@@ -523,6 +523,22 @@ CREATE TABLE public.users (
 
 
 --
+-- Name: user_contexts; Type: TABLE; Schema: public; Owner: -
+-- Per-user rewrite personalization (#173). Mirror of
+-- backend/sql/2026-08-14-user-contexts.sql — keep in sync.
+--
+CREATE TABLE public.user_contexts (
+    user_id uuid NOT NULL,
+    enabled boolean DEFAULT false NOT NULL,
+    job_title character varying(120) DEFAULT ''::character varying NOT NULL,
+    industry character varying(120) DEFAULT ''::character varying NOT NULL,
+    audience character varying(120) DEFAULT ''::character varying NOT NULL,
+    style_notes text DEFAULT ''::text NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
 -- Name: bug_reports display_no; Type: DEFAULT; Schema: public; Owner: -
 --
 

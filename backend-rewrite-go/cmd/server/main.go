@@ -73,6 +73,7 @@ import (
 	updatespkg "github.com/tannpv/draftright-rewrite/internal/updates"
 	usagepkg "github.com/tannpv/draftright-rewrite/internal/usage"
 	userpkg "github.com/tannpv/draftright-rewrite/internal/user"
+	usercontextpkg "github.com/tannpv/draftright-rewrite/internal/usercontext"
 )
 
 const (
@@ -493,7 +494,8 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 		rewriteLogRepo := rewritelogpkg.NewPgRepo(q)
 		paritySvc := parity.NewService(dbDefault, subSvc, usageCounter).
 			WithTrial(trialLimiter, trialLimit, time.Now).
-			WithRewriteLog(rewriteLogSink{repo: rewriteLogRepo, log: log})
+			WithRewriteLog(rewriteLogSink{repo: rewriteLogRepo, log: log}).
+			WithUserContext(usercontextpkg.NewProvider(q)) // #173 per-user personalization
 		// Same DB-backed repo feeds the Go-only streaming /v1/rewrite sink, so a
 		// successful streamed finish captures a training-data row just like the
 		// parity path. Reuses rewriteLogRepo (a thin stateless wrapper).
