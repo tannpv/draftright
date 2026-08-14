@@ -1,5 +1,10 @@
 # Canonical route inventory — keep in sync with internal/shared/router.go.
 # Format: METHOD /path  (path params as {name}). Drives shadowdiff coverage.
+# POST /v1/rewrite  — go-only streaming path (Node 404s here); excluded from parity gate
+# ── Go-only routes (NO Node parity) — intentionally NOT probed ───────────────
+# GET /admin/admin-user-audit  — #51 audit log. Node returns 404 (route never
+#   existed); listing it here would make the shadow gate diff 200 vs 404 and
+#   fail. Net-new post-cutover Go-only feature; keep it out of the inventory.
 DELETE /admin/admin-users/{id}
 DELETE /admin/ai-providers/{id}
 DELETE /admin/bug-reports/{id}
@@ -9,6 +14,7 @@ DELETE /admin/plans/{id}
 DELETE /admin/releases/{platform}/{channel}
 DELETE /auth/account
 DELETE /auth/extension-tokens/{id}
+DELETE /me/context
 DELETE /payment/subscription
 GET /admin/admin-users
 GET /admin/ai-providers
@@ -43,6 +49,7 @@ GET /auth/me
 GET /feedback
 GET /health
 GET /ime-packs/manifest
+GET /me/context
 GET /metrics
 GET /payment/history
 GET /payment/methods
@@ -67,8 +74,8 @@ POST /admin/ai-providers/{id}/test
 POST /admin/auth/change-password
 POST /admin/auth/login
 POST /admin/bug-reports/{id}/fix-proposal
-POST /admin/errors/{id}/suggest-fix
 POST /admin/errors/run-ai-cron
+POST /admin/errors/{id}/suggest-fix
 POST /admin/payments/{id}/confirm
 POST /admin/payments/{id}/refund
 POST /admin/plans
@@ -100,9 +107,5 @@ POST /payment/webhook/vietqr
 POST /rewrite
 POST /rewrite/trial
 POST /subscription/verify-receipt
-# POST /v1/rewrite  — go-only streaming path (Node 404s here); excluded from parity gate
 POST /webhooks/resend
-# ── Go-only routes (NO Node parity) — intentionally NOT probed ───────────────
-# GET /admin/admin-user-audit  — #51 audit log. Node returns 404 (route never
-#   existed); listing it here would make the shadow gate diff 200 vs 404 and
-#   fail. Net-new post-cutover Go-only feature; keep it out of the inventory.
+PUT /me/context

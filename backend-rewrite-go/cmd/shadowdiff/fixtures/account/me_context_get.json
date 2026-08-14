@@ -1,0 +1,9 @@
+{
+  "name": "account_me_context_get",
+  "method": "GET",
+  "path": "/me/context",
+  "headers": {
+    "Authorization": "Bearer {{user_token}}"
+  },
+  "ignore_value_of": []
+}
