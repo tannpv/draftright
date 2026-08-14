@@ -9,6 +9,14 @@ public enum TelexState {
         "ă", "â", "ê", "ô", "ơ", "ư",
         "Ă", "Â", "Ê", "Ô", "Ơ", "Ư",
     ]
+    /// Vowels that can sit AFTER the nucleus as an offglide (semivowel coda) —
+    /// the trailing i/y/u/o of "day", "tai", "keo", "cau". A modifier typed at
+    /// the end may reach back over these to the nucleus, but not over another
+    /// full nucleus vowel. Mirrors Android's TelexState.GLIDE_CODAS.
+    static let glideCodas: Set<Character> = [
+        "i", "y", "u", "o",
+        "I", "Y", "U", "O",
+    ]
     static let toneMarks: Set<Character> = ["s", "f", "r", "x", "j"]
 
     public static func isVowel(_ c: Character) -> Bool {
@@ -21,6 +29,10 @@ public enum TelexState {
 
     public static func isSpecialVowel(_ c: Character) -> Bool {
         specialVowels.contains(c)
+    }
+
+    public static func isGlideCoda(_ c: Character) -> Bool {
+        glideCodas.contains(c)
     }
 
     public static func isToneMark(_ c: Character) -> Bool {

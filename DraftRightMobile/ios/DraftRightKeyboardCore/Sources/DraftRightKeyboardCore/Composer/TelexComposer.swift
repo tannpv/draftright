@@ -102,11 +102,19 @@ public final class TelexComposer: Composer {
             let mapped: Character = upper ? Character(replacement.uppercased()) : replacement
             return String(buf.dropLast()) + String(mapped)
         }
-        // Lookback through up to maxTrailingCons trailing consonants — lets the
-        // a/e/o doubling apply after the syllable's coda, matching Android:
-        // "nguyen"+e → nguyên, "viet"+e → viêt.
+        // Search the whole trailing vowel cluster, not just its last char —
+        // matches Android's tryCombine (#152).
+        //
+        // Checking only the last vowel meant base-first typing worked when the
+        // syllable ended in a consonant ("canaf" -> cần: skip the 'n', find the
+        // 'a') but failed the moment it ended in a vowel: "day" + a hit the 'y'
+        // — itself a vowel — and gave up, so the 'a' landed as a literal and a
+        // following tone hit the wrong char ("dayaj" -> "daỵa" instead of
+        // "dậy"). Vowel-final syllables (dậy, mấy, cây, này, mới, người) are a
+        // large slice of everyday Vietnamese, so the old behaviour read as the
+        // keyboard being unreliable rather than as a rule.
         let chars = Array(buf)
-        guard let idx = findLastVowelThroughConsonants(chars) else { return nil }
+        guard let idx = findModifierTargetInVowelCluster(chars, low, replacement) else { return nil }
         let target = chars[idx]
         let targetLow = Character(target.lowercased())
         if targetLow == replacement {
@@ -139,6 +147,56 @@ public final class TelexComposer: Composer {
             if cons > maxTrailingCons { return nil }
         }
         return nil
+    }
+
+    /// Index of the char in the trailing vowel cluster that [low] (or its marked
+    /// form [replacement], for cancel-by-retype) should act on, or nil if the
+    /// cluster holds neither. Mirrors Android's findModifierTargetInVowelCluster.
+    ///
+    /// Scans right-to-left from the cluster's end so the RIGHTMOST match wins —
+    /// "oo" + o must cancel the second o, not the first. Only the final cluster
+    /// is considered, and only through at most maxTrailingCons consonants, so a
+    /// modifier can never reach back into the previous syllable.
+    private static func findModifierTargetInVowelCluster(
+        _ chars: [Character], _ low: Character, _ replacement: Character
+    ) -> Int? {
+        guard let last = findLastVowelThroughConsonants(chars) else { return nil }
+        // Walk left while still inside the same vowel run.
+        var firstOfCluster = last
+        var i = last
+        while i >= 0 && TelexState.isVowelLike(chars[i]) {
+            firstOfCluster = i
+            i -= 1
+        }
+        var idx = last
+        while idx >= firstOfCluster {
+            let c = Character(chars[idx].lowercased())
+            if (c == low || c == replacement) && canReachBack(chars, idx) { return idx }
+            idx -= 1
+        }
+        return nil
+    }
+
+    /// True when a modifier typed at the end may act on the vowel at [idx].
+    ///
+    /// It may reach back over trailing consonants and over offglides
+    /// (glide codas) — "day" + a is really a + the offglide y, so the 'a' is
+    /// still the nucleus and takes the circumflex. It may NOT reach back over
+    /// another nucleus vowel: "oeo" (ngoẻo) and "oao" are genuine three-vowel
+    /// clusters where the final letter is a literal vowel, not a modifier for
+    /// the first one; without this guard they became "ôe"/"ôa" — 312 corpus
+    /// regressions on the first attempt at this fix on Android (#152).
+    /// Mirrors Android's canReachBack.
+    private static func canReachBack(_ chars: [Character], _ idx: Int) -> Bool {
+        var j = idx + 1
+        while j < chars.count {
+            let c = chars[j]
+            if TelexState.isVowelLike(c), !TelexState.isGlideCoda(c) {
+                return false                                     // another nucleus
+            }
+            j += 1
+        }
+        return true
     }
 
     private static func bufferHasTonableVowel(_ buf: String) -> Bool {
