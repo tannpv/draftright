@@ -1,10 +1,38 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/entity.dart';
 import '../services/extraction_api.dart';
 
 /// Optional smart-scan callback. If null, the Smart-scan button is hidden.
 typedef SmartScanFn = Future<List<Entity>> Function(String text);
+
+/// The one-tap action for an entity (call/email/map/open), or null for kinds
+/// that are copy-only (OTP, card, bank account, person). Pure + top-level so
+/// the kind→URI mapping is unit-testable without launching anything.
+({IconData icon, String tooltip, Uri uri})? entityActionFor(Entity e) {
+  switch (e.kind) {
+    case EntityKind.phone:
+      return (icon: Icons.call, tooltip: 'Call', uri: Uri(scheme: 'tel', path: e.value));
+    case EntityKind.email:
+      return (icon: Icons.send, tooltip: 'Email', uri: Uri(scheme: 'mailto', path: e.value));
+    case EntityKind.url:
+      final v = e.value.trim();
+      return (
+        icon: Icons.open_in_new,
+        tooltip: 'Open',
+        uri: Uri.parse(v.startsWith('http') ? v : 'https://$v'),
+      );
+    case EntityKind.address:
+      return (
+        icon: Icons.map,
+        tooltip: 'Open in Maps',
+        uri: Uri.parse('https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(e.value)}'),
+      );
+    default:
+      return null; // otp, creditCard, bankAccount, personName, dateTime → copy only
+  }
+}
 
 class EntitySheetScreen extends StatefulWidget {
   const EntitySheetScreen({
@@ -30,9 +58,48 @@ class _EntitySheetScreenState extends State<EntitySheetScreen> {
   @override
   void initState() {
     super.initState();
+    // May be empty when the offline pass found nothing — Smart scan is then the
+    // fill path (the LLM handles messy layouts the regex layer misses).
     entities = List.of(widget.initial);
-    assert(entities.isNotEmpty,
-        'EntitySheetScreen must not be mounted with empty entities');
+  }
+
+  Future<void> _launch(Uri uri) async {
+    try {
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ok && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Nothing can open that')),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open')),
+        );
+      }
+    }
+  }
+
+  Widget _rowActions(EntityKind k, Entity e) {
+    final a = entityActionFor(e);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (a != null)
+          IconButton(
+            key: ValueKey('action-${k.wireName}-${e.value}'),
+            icon: Icon(a.icon),
+            tooltip: a.tooltip,
+            onPressed: () => _launch(a.uri),
+          ),
+        IconButton(
+          key: ValueKey('copy-${k.wireName}-${e.value}'),
+          icon: const Icon(Icons.copy),
+          tooltip: 'Copy',
+          onPressed: () => _copy(e),
+        ),
+      ],
+    );
   }
 
   Map<EntityKind, List<Entity>> get _grouped {
@@ -127,6 +194,14 @@ class _EntitySheetScreenState extends State<EntitySheetScreen> {
       body: ListView(
         padding: const EdgeInsets.all(12),
         children: [
+          if (orderedKinds.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Center(
+                child: Text('No info detected yet.',
+                    style: TextStyle(color: Colors.grey)),
+              ),
+            ),
           ...orderedKinds.map((k) => Card(
                 margin: const EdgeInsets.only(bottom: 10),
                 child: Column(
@@ -153,12 +228,7 @@ class _EntitySheetScreenState extends State<EntitySheetScreen> {
                                   style: TextStyle(
                                       fontSize: 10, color: Colors.purple))
                               : null,
-                          trailing: IconButton(
-                            key: ValueKey('copy-${k.wireName}-${e.value}'),
-                            icon: const Icon(Icons.copy),
-                            tooltip: 'Copy',
-                            onPressed: () => _copy(e),
-                          ),
+                          trailing: _rowActions(k, e),
                         )),
                   ],
                 ),

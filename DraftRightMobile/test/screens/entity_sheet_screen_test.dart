@@ -129,4 +129,38 @@ void main() {
     // Address row now appears
     expect(find.text('123 Lê Lợi'), findsOneWidget);
   });
+
+  group('entityActionFor', () {
+    Entity e(EntityKind k, String v) => Entity(
+        kind: k, value: v, display: v, start: 0, end: v.length, source: 'regex', confidence: 1.0);
+
+    test('phone → tel: URI', () {
+      final a = entityActionFor(e(EntityKind.phone, '+84912345678'));
+      expect(a?.uri, Uri(scheme: 'tel', path: '+84912345678'));
+    });
+    test('email → mailto: URI', () {
+      final a = entityActionFor(e(EntityKind.email, 'tan@x.com'));
+      expect(a?.uri.scheme, 'mailto');
+      expect(a?.uri.path, 'tan@x.com');
+    });
+    test('url without scheme gets https://', () {
+      final a = entityActionFor(e(EntityKind.url, 'draftright.info'));
+      expect(a?.uri.toString(), 'https://draftright.info');
+    });
+    test('url with scheme is unchanged', () {
+      final a = entityActionFor(e(EntityKind.url, 'http://x.com/y'));
+      expect(a?.uri.toString(), 'http://x.com/y');
+    });
+    test('address → google maps search with encoded query', () {
+      final a = entityActionFor(e(EntityKind.address, '123 Lê Lợi'));
+      expect(a?.uri.host, 'www.google.com');
+      expect(a?.uri.toString(), contains(Uri.encodeComponent('123 Lê Lợi')));
+    });
+    test('copy-only kinds have no action', () {
+      expect(entityActionFor(e(EntityKind.otp, '123456')), isNull);
+      expect(entityActionFor(e(EntityKind.bankAccount, '0123')), isNull);
+      expect(entityActionFor(e(EntityKind.creditCard, '4111')), isNull);
+      expect(entityActionFor(e(EntityKind.personName, 'Tan')), isNull);
+    });
+  });
 }
