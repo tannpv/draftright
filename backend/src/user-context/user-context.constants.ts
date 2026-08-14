@@ -11,11 +11,13 @@ export const PROFILE_FIELD_MAX_LEN = 120;
 export const STYLE_NOTES_MAX_LEN = 1000;
 
 /**
- * Hard cap on the injected context block, so a long profile can never blow the
- * prompt's token budget. Style notes are truncated to fit; the structured
- * fields are already length-limited above.
+ * Hard cap on the free-text style notes AS INJECTED, so a long profile can never
+ * blow the prompt's token budget. Applied to the notes field alone — NOT the
+ * whole assembled block — so the trailing "do not mention it" safety instruction
+ * can never be truncated away (a whole-block cap dropped it for long notes,
+ * leaking the profile and losing the apply-instruction).
  */
-export const CONTEXT_PREAMBLE_MAX_CHARS = 900;
+export const STYLE_NOTES_INJECTED_MAX_CHARS = 800;
 
 /** The shape the builder needs — the persisted, decrypted profile. */
 export interface UserContextProfile {
@@ -50,7 +52,9 @@ export function buildContextPreamble(ctx: UserContextProfile): string | null {
   if (ctx.industry) who.push(`in ${ctx.industry}`);
   if (ctx.audience) who.push(`writing for ${ctx.audience}`);
 
-  const style = ctx.style_notes.trim();
+  // Truncate the variable-length notes ONLY, so the structural instruction
+  // below always survives regardless of how long the user's notes are.
+  const style = truncate(ctx.style_notes.trim(), STYLE_NOTES_INJECTED_MAX_CHARS);
   if (who.length === 0 && !style) return null;
 
   const parts: string[] = [];
@@ -58,6 +62,5 @@ export function buildContextPreamble(ctx: UserContextProfile): string | null {
   if (style) parts.push(`Their writing style: ${style}.`);
   parts.push('Apply this to the rewrite, but do not mention it or address the person.');
 
-  const block = parts.join(' ');
-  return truncate(block, CONTEXT_PREAMBLE_MAX_CHARS) + '\n\n';
+  return parts.join(' ') + '\n\n';
 }
