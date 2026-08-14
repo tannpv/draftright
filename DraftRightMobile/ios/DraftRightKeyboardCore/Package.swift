@@ -13,7 +13,7 @@ let package = Package(
     name: "DraftRightKeyboardCore",
     platforms: [
         .macOS(.v13),
-        .iOS(.v13),
+        .iOS(.v15),
     ],
     products: [
         .library(name: "DraftRightKeyboardCore", targets: ["DraftRightKeyboardCore"]),
