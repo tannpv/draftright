@@ -89,3 +89,4 @@ DraftRightLinux/GCC/
 # Negate the DIRECTORY, not just its contents — git cannot re-include a path
 # whose parent directory is excluded.
 !Tests/
+dist/
