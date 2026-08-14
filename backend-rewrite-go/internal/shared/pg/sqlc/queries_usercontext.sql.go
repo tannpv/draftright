@@ -11,6 +11,15 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const deleteUserContext = `-- name: DeleteUserContext :exec
+DELETE FROM user_contexts WHERE user_id = $1
+`
+
+func (q *Queries) DeleteUserContext(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserContext, userID)
+	return err
+}
+
 const getUserContext = `-- name: GetUserContext :one
 
 SELECT enabled, job_title, industry, audience, style_notes
@@ -33,6 +42,58 @@ type GetUserContextRow struct {
 func (q *Queries) GetUserContext(ctx context.Context, userID pgtype.UUID) (GetUserContextRow, error) {
 	row := q.db.QueryRow(ctx, getUserContext, userID)
 	var i GetUserContextRow
+	err := row.Scan(
+		&i.Enabled,
+		&i.JobTitle,
+		&i.Industry,
+		&i.Audience,
+		&i.StyleNotes,
+	)
+	return i, err
+}
+
+const upsertUserContext = `-- name: UpsertUserContext :one
+INSERT INTO user_contexts (user_id, enabled, job_title, industry, audience, style_notes, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6, now())
+ON CONFLICT (user_id) DO UPDATE SET
+    enabled     = EXCLUDED.enabled,
+    job_title   = EXCLUDED.job_title,
+    industry    = EXCLUDED.industry,
+    audience    = EXCLUDED.audience,
+    style_notes = EXCLUDED.style_notes,
+    updated_at  = now()
+RETURNING enabled, job_title, industry, audience, style_notes
+`
+
+type UpsertUserContextParams struct {
+	UserID     pgtype.UUID `db:"user_id" json:"user_id"`
+	Enabled    bool        `db:"enabled" json:"enabled"`
+	JobTitle   string      `db:"job_title" json:"job_title"`
+	Industry   string      `db:"industry" json:"industry"`
+	Audience   string      `db:"audience" json:"audience"`
+	StyleNotes string      `db:"style_notes" json:"style_notes"`
+}
+
+type UpsertUserContextRow struct {
+	Enabled    bool   `db:"enabled" json:"enabled"`
+	JobTitle   string `db:"job_title" json:"job_title"`
+	Industry   string `db:"industry" json:"industry"`
+	Audience   string `db:"audience" json:"audience"`
+	StyleNotes string `db:"style_notes" json:"style_notes"`
+}
+
+// One row per user; INSERT-or-UPDATE so /me/context PUT is idempotent.
+// style_notes arrives already encrypted (enc:v1:) from the handler.
+func (q *Queries) UpsertUserContext(ctx context.Context, arg UpsertUserContextParams) (UpsertUserContextRow, error) {
+	row := q.db.QueryRow(ctx, upsertUserContext,
+		arg.UserID,
+		arg.Enabled,
+		arg.JobTitle,
+		arg.Industry,
+		arg.Audience,
+		arg.StyleNotes,
+	)
+	var i UpsertUserContextRow
 	err := row.Scan(
 		&i.Enabled,
 		&i.JobTitle,

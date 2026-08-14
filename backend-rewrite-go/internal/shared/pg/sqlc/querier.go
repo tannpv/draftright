@@ -121,6 +121,7 @@ type Querier interface {
 	DeleteEmailTemplate(ctx context.Context, templateKey string) error
 	// Node deleteChannel(): releaseRepo.delete({ platform, channel }).
 	DeleteReleaseChannel(ctx context.Context, arg DeleteReleaseChannelParams) (int64, error)
+	DeleteUserContext(ctx context.Context, userID pgtype.UUID) error
 	DeleteVote(ctx context.Context, arg DeleteVoteParams) error
 	DemoteDefaultAiProviders(ctx context.Context) error
 	ExpireByStoreRef(ctx context.Context, arg ExpireByStoreRefParams) (int64, error)
@@ -443,6 +444,9 @@ type Querier interface {
 	UpdateUserPasswordHash(ctx context.Context, arg UpdateUserPasswordHashParams) error
 	UpdateUserVerification(ctx context.Context, arg UpdateUserVerificationParams) error
 	UpsertEmailTemplate(ctx context.Context, arg UpsertEmailTemplateParams) error
+	// One row per user; INSERT-or-UPDATE so /me/context PUT is idempotent.
+	// style_notes arrives already encrypted (enc:v1:) from the handler.
+	UpsertUserContext(ctx context.Context, arg UpsertUserContextParams) (UpsertUserContextRow, error)
 	// internal/shared/pg/queries_bugreports.sql
 	// Public bug-report ingest (POST /bug-reports, multipart with optional
 	// screenshot). user_id is nulled when the JWT outlives its user.
