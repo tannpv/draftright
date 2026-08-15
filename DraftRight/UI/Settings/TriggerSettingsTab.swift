@@ -24,10 +24,17 @@ struct TriggerSettingsTab: View {
                     if appModel.hotkeyEnabled {
                         Button("Change Hotkey") { startRecordingHotkey() }
                         Button("Use Pencil Instead") {
+                            // Remember the hotkey so the switch is reversible (#176).
+                            appModel.lastHotkeyString = appModel.hotkeyString
                             appModel.hotkeyString = ""
                         }
                         .foregroundColor(.red)
                     } else {
+                        if !appModel.lastHotkeyString.isEmpty {
+                            Button("Use Hotkey (\(SelectionMonitor.hotkeyDisplayName(appModel.lastHotkeyString)))") {
+                                appModel.hotkeyString = appModel.lastHotkeyString
+                            }
+                        }
                         Button("Set Hotkey") { startRecordingHotkey() }
                     }
                 }
