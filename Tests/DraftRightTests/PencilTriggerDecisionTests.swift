@@ -1,18 +1,26 @@
 import XCTest
 @testable import DraftRight
 
-/// The mouse-up → show-pencil decision (#177, refined #179/#180). The pencil
-/// appears only when text is highlighted by dragging — never on a click,
-/// including a double/triple click that selects a word or line.
+/// The mouse-up → show-pencil decision (#177 → #181). The pencil appears only
+/// when a drag actually selected text. A click never triggers it; a drag that
+/// selected nothing (Accessibility confirms empty) doesn't either; but an
+/// AX-blind app (selection unknown) still shows on a drag.
 final class PencilTriggerDecisionTests: XCTestCase {
 
-    func testShowsOnDrag() {
-        XCTAssertTrue(SelectionMonitor.shouldShowPencil(wasDragging: true))
+    func testShowsOnDragThatSelectedText() {
+        // selectionKnownEmpty=false covers both "AX reports text" and
+        // "AX can't read it" (Terminal) — either way, show on a drag.
+        XCTAssertTrue(SelectionMonitor.shouldShowPencil(wasDragging: true, selectionKnownEmpty: false))
+    }
+
+    func testHiddenOnDragThatSelectedNothing() {
+        // Drag over empty space: AX positively reports an empty selection.
+        XCTAssertFalse(SelectionMonitor.shouldShowPencil(wasDragging: true, selectionKnownEmpty: true))
     }
 
     func testHiddenWithoutDrag() {
-        // A plain click or a double/triple click (no drag) must not show it,
-        // even though a double-click selects a word that Accessibility reports.
-        XCTAssertFalse(SelectionMonitor.shouldShowPencil(wasDragging: false))
+        // A plain/double/triple click (no drag) never shows it, whatever AX says.
+        XCTAssertFalse(SelectionMonitor.shouldShowPencil(wasDragging: false, selectionKnownEmpty: false))
+        XCTAssertFalse(SelectionMonitor.shouldShowPencil(wasDragging: false, selectionKnownEmpty: true))
     }
 }
