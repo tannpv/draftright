@@ -23,6 +23,11 @@ A Windows-only line under `### Windows` will never appear in the macOS
 If a version needs the user to *do* something after updating, say so
 explicitly under an **Action needed:** line inside the relevant sub-section.
 
+## 2.3.57 — 2026-08-15
+### macOS
+- New trigger option: choose **Pencil**, **Hotkey**, or **Both** in Settings → Trigger. "Both" shows the pencil on selection and keeps your keyboard shortcut working at the same time. Switching modes no longer forgets your shortcut.
+- The rewrite pencil now appears only when you highlight text by dragging, not when you double-click a word.
+
 ## 2.3.56 — 2026-08-15
 ### macOS
 - Fixed: selecting text no longer interferes with Copy (⌘C). The rewrite pencil now only reads your selection when you actually click it, so your own copying works normally.
