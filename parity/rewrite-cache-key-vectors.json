@@ -1,0 +1,12 @@
+{
+  "_comment": "Golden vectors for the client-side RewriteCache key, shared by macOS (Swift), Windows (C#) and Linux (Python). This file is the ONE source of truth; each platform's test asserts its key()/Key()/_key() reproduces every expectedKey below. RULE #1: the three impls are the same logic in three languages and cannot be merged, so a machine — not a comment — must prove they agree. Guards issues #147, #108, #174. Key format: '{language}::{tone}::{text}', with the language prefix omitted when language is null OR empty. No escaping is applied to '::' inside text — that is intentional and identical across platforms; these vectors pin it.",
+  "vectors": [
+    { "text": "hello world", "tone": "polished", "language": null, "expectedKey": "polished::hello world" },
+    { "text": "hello world", "tone": "polished", "language": "", "expectedKey": "polished::hello world" },
+    { "text": "hello world", "tone": "translate", "language": "Vietnamese", "expectedKey": "Vietnamese::translate::hello world" },
+    { "text": "a::b", "tone": "concise", "language": null, "expectedKey": "concise::a::b" },
+    { "text": "café ☕ déjà", "tone": "friendly", "language": "French", "expectedKey": "French::friendly::café ☕ déjà" },
+    { "text": "", "tone": "polished", "language": null, "expectedKey": "polished::" },
+    { "text": "line1\nline2", "tone": "expand", "language": "Japanese", "expectedKey": "Japanese::expand::line1\nline2" }
+  ]
+}
