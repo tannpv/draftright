@@ -149,13 +149,18 @@ a client id is configured** — `config.DEFAULT_GOOGLE_CLIENT_ID` is empty, and
 - No client secret is used or needed: a native app is a public client and PKCE
   is the proof-of-possession.
 
-> ⚠️ **Backend security gap (not fixed here).** `verifyGoogleToken()` in
-> `backend/src/auth/auth.service.ts` calls Google's tokeninfo endpoint and
-> never checks the `aud` claim, so it accepts an id_token minted for **any**
-> Google OAuth client — a token obtained by an unrelated app can be replayed
-> against `POST /auth/social` to sign in as that user. The Apple path already
-> validates audiences (`APPLE_AUDIENCES`); Google needs the same against
-> `google_client_id` plus every per-platform client id.
+> ✅ **Backend Google `aud` validation — FIXED (both backends).** Google
+> `id_token` verification now rejects any token whose `aud` is not an accepted
+> client id, closing the replay/account-takeover hole. Node
+> (`verifyGoogleToken` in `backend/src/auth/auth.service.ts`) and the Go
+> production backend (`verifyGoogle` in
+> `backend-rewrite-go/internal/auth/social_http.go`) both check `aud` + `iss` +
+> `sub` with byte-identical error messages. Accepted set = the shipped
+> per-platform client ids (or `GOOGLE_AUDIENCES` env override); Node also unions
+> `app_settings.google_client_id`. Go is boot-frozen (env-or-defaults), same as
+> its Apple path — so a **custom** admin-set `google_client_id` that is not also
+> in `GOOGLE_AUDIENCES` is honoured by Node but not Go; set `GOOGLE_AUDIENCES`
+> when customising.
 
 ### Wayland global shortcut (#99) — operational requirement
 
