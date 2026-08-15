@@ -307,6 +307,16 @@ final class SelectionMonitor {
         }
     }
 
+    /// Whether a mouse-up should surface the pencil, given what we could learn
+    /// about the selection. When the Accessibility API reports selected text we
+    /// trust it. AX-blind apps (Terminal, some Electron/Java apps) report none,
+    /// so we fall back to the gesture: a drag, or a double/triple click (word or
+    /// line selection). Pure + static so it is unit-testable without event
+    /// plumbing (#177).
+    nonisolated static func shouldShowPencil(hasAXText: Bool, wasDragging: Bool, clickCount: Int) -> Bool {
+        hasAXText || wasDragging || clickCount >= 2
+    }
+
     private func handleMouseEvent(_ event: NSEvent) {
         switch event.type {
         case .leftMouseDown:
@@ -325,27 +335,33 @@ final class SelectionMonitor {
 
         case .leftMouseUp:
             let pos = NSEvent.mouseLocation
+            // Capture the gesture NOW, before it is reset below. The check runs
+            // 0.2s later; reading `isDragging` inside the closure saw the value
+            // already cleared by `isDragging = false`, so the drag fallback was
+            // always dead — the pencil never appeared in AX-blind apps like
+            // Terminal, where AX selection reads fail. (#177)
+            let wasDragging = isDragging
+            let clickCount = event.clickCount
+            isDragging = false
 
-            // After any mouseUp, check if there's actually selected text
-            // This is more reliable than tracking drag distance
+            // After any mouseUp, check if there's actually selected text. This is
+            // more reliable than tracking drag distance where AX works; where it
+            // doesn't (Terminal returns kAXErrorNoValue), fall back to the gesture.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
                 guard let self = self else { return }
 
-                // Only show pencil when AX confirms selected text, or on drag
-                let hasSelection: Bool
-                if let text = self.axService.readSelectedText(), !text.isEmpty {
-                    hasSelection = true
-                } else {
-                    hasSelection = self.isDragging
-                }
+                let axText = self.axService.readSelectedText()
+                let hasAXText = !(axText?.isEmpty ?? true)
+                let hasSelection = Self.shouldShowPencil(hasAXText: hasAXText,
+                                                         wasDragging: wasDragging,
+                                                         clickCount: clickCount)
 
-                DRLogger.log("MouseUp hasSelection=\(hasSelection) clicks=\(event.clickCount) isDrag=\(self.isDragging)", category: .monitor)
+                DRLogger.log("MouseUp hasSelection=\(hasSelection) clicks=\(clickCount) wasDrag=\(wasDragging) axText=\(hasAXText)", category: .monitor)
 
                 if hasSelection {
                     self.showTriggerAt(pos)
                 }
             }
-            isDragging = false
 
         default:
             break
