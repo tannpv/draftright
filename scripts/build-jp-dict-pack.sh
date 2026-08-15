@@ -142,9 +142,5 @@ echo "  sizeBytes: $SIZE, sha256: '$SHA'"
 
 if [ "$PUBLISH" = "--publish" ]; then
   echo "[4/4] Publishing to draftright.info/ime-packs/ ..."
-  SSH_HOST="${DEPLOY_HOST:-draftright}"
-  REMOTE_DIR="/var/www/draftright/ime-packs"
-  ssh "$SSH_HOST" "mkdir -p $REMOTE_DIR"
-  rsync -avz "$PACK_PATH" "$META_PATH" "$SSH_HOST:$REMOTE_DIR/"
-  echo "✅  Published: https://draftright.info/ime-packs/$PACK_NAME"
+  "$(dirname "$0")/lib/publish-ime-pack.sh" "$PACK_PATH" "$META_PATH"
 fi
