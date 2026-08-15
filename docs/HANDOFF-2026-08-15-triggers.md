@@ -45,13 +45,13 @@ macOS bug saga (all shipped): #176 reversible switch, #177 Terminal drag flag,
 3. **Windows pencil — missing vs macOS** — add the #181 "require actual selection" check
    (needs UI Automation `TextPattern.GetSelection`) and the #182 on-screen clamp. Currently
    position = cursor, text grabbed by Ctrl+C on click.
-4. **Windows in-app update click does nothing (NEW, open)** — user on a sideload build sees
-   "Update 2.3.52 available", click no-ops. Server side verified fine (installer 200 + sha).
-   Cause is one of: (a) #154 — SAC blocks launching the unsigned installer after download;
-   (b) version-stamp bug — assembly reads `1.0.0.0` so it offers a false update. Need the
-   Windows log (`Update check`, `StartInstall`, `IsNewer` lines) + the exact Settings version
-   to decide. Real fix for (a) = sign the installer (OV/EV cert, blocked — Azure signing not
-   available in Vietnam, see `docs/windows-code-signing-cert-purchase.md`).
+4. **Windows in-app update click does nothing — FIXED (PR #184, merged).** It was a
+   **Store/MSIX** install, not sideload: `StoreContext` in a WinUI 3 desktop process needs
+   `IInitializeWithWindow` HWND binding or `RequestDownloadAndInstallStorePackageUpdatesAsync`
+   throws `0x80070578`, caught + logged silently. PR binds the HWND + adds a Store fallback,
+   and stops advertising the Store's untrusted package version (that caused "Update 2.3.52
+   available while on 2.3.52"). Needs a Windows Store re-cut to reach users; reconcile the
+   version (PR added CHANGELOG `## 2.3.63 / ### Windows` but csproj is 2.3.61 — bump to match).
 
 ## How to resume
 
