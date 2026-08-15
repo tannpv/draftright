@@ -34,10 +34,10 @@ macOS bug saga (all shipped): #176 reversible switch, #177 Terminal drag flag,
 
 ## OPEN TASKS (the plan)
 
-1. **macOS #182 verify** — user re-tests the pencil in Terminal on 2.3.62 (should now be
-   visible below the selection). If still hidden, the log line `pencil panel frame=… visible=…`
-   pinpoints it.
-2. **Windows pencil debug loop** — the engine has never run. Test via the sideload build
+0. **macOS pencil — DONE + user-verified** (2.3.63, works in Terminal; #176-#183 closed).
+   Final fix: raise the pencil `NSPanel` to `.statusBar` so it isn't composited behind
+   the target app (#183). Nothing open here.
+1. **Windows pencil debug loop** (tracked in **#180**) — the engine has never run. Test via the sideload build
    (CI run `31874220687` → artifact `DraftRight-Setup-win-x64`, unsigned → SmartScreen/SAC
    bypass). Read `%LOCALAPPDATA%\DraftRight\Logs\draftright.log` (`Pencil:` lines) → fix →
    rebuild. Risk: a buggy `WH_MOUSE_LL` hook can freeze system input. **Do NOT ship the
