@@ -23,6 +23,10 @@ A Windows-only line under `### Windows` will never appear in the macOS
 If a version needs the user to *do* something after updating, say so
 explicitly under an **Action needed:** line inside the relevant sub-section.
 
+## 2.3.59 — 2026-08-15
+### macOS
+- Simplified the trigger setting to **Pencil** or **Hotkey** — pick one. The "Both" option has been removed.
+
 ## 2.3.58 — 2026-08-15
 ### macOS
 - The rewrite pencil now appears only when you highlight text by dragging — no longer when you double-click a word.
