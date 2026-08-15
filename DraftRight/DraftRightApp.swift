@@ -199,13 +199,19 @@ struct DraftRightApp: App {
 
         let monitor = SelectionMonitor()
         monitor.hotkeyString = appModel.hotkeyString
+        monitor.triggerMode = appModel.triggerMode
         let aiClient = appModel.backendClient
         let diffWindow = DiffWindow.shared
 
-        // Sync hotkey changes from settings to monitor
+        // Sync hotkey + trigger-mode changes from settings to monitor
         appModel.$hotkeyString.sink { newValue in
             Task { @MainActor in
                 monitor.hotkeyString = newValue
+            }
+        }.store(in: &appModel.cancellables)
+        appModel.$triggerMode.sink { newValue in
+            Task { @MainActor in
+                monitor.triggerMode = newValue
             }
         }.store(in: &appModel.cancellables)
 

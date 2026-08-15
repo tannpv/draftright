@@ -48,19 +48,16 @@ final class AppModel: ObservableObject {
     @Published var translateLanguage: String {
         didSet { defaults.set(translateLanguage, forKey: Keys.translateLanguage) }
     }
-    /// Hotkey stored as "modifiers:keyCode" e.g. "cmd+shift:15" (15 = R key). Empty = hotkey disabled.
+    /// Hotkey combo stored as "modifiers:keyCode" e.g. "cmd+shift:15" (15 = R key).
+    /// Pure data — it is NOT the mode selector; `triggerMode` decides whether the
+    /// hotkey is active, so the combo survives switching to the pencil (#179).
     @Published var hotkeyString: String {
         didSet { defaults.set(hotkeyString, forKey: Keys.hotkey) }
     }
-    /// The most recent hotkey, remembered when the user switches to the pencil
-    /// trigger. Switching to pencil clears `hotkeyString`; keeping the old value
-    /// here lets the user switch back in one click instead of re-recording it
-    /// (the switch used to be one-way, #176).
-    @Published var lastHotkeyString: String {
-        didSet { defaults.set(lastHotkeyString, forKey: Keys.lastHotkey) }
+    /// Which trigger mechanisms are active — pencil, hotkey, or both (#179).
+    @Published var triggerMode: TriggerMode {
+        didSet { defaults.set(triggerMode.rawValue, forKey: Keys.triggerMode) }
     }
-    /// True when a hotkey is configured — pencil trigger is disabled, hotkey is active
-    var hotkeyEnabled: Bool { !hotkeyString.isEmpty }
     /// Which tones are enabled in the panel
     @Published var enabledTones: Set<Tone> {
         didSet { defaults.set(enabledTones.map { $0.rawValue }, forKey: Keys.enabledTones) }
@@ -147,7 +144,7 @@ final class AppModel: ObservableObject {
         static let launchAtLogin = "draftright.launchAtLogin"
         static let translateLanguage = "draftright.translateLanguage"
         static let hotkey = "draftright.hotkey"
-        static let lastHotkey = "draftright.lastHotkey"
+        static let triggerMode = "draftright.triggerMode"
         static let enabledTones = "draftright.enabledTones"
         static let defaultTab = "draftright.defaultTab"
         static let appMode = "draftright.appMode"
@@ -177,7 +174,14 @@ final class AppModel: ObservableObject {
         self.launchAtLogin = UserDefaults.standard.bool(forKey: Keys.launchAtLogin)
         self.translateLanguage = UserDefaults.standard.string(forKey: Keys.translateLanguage) ?? "Vietnamese"
         self.hotkeyString = UserDefaults.standard.string(forKey: Keys.hotkey) ?? ""
-        self.lastHotkeyString = UserDefaults.standard.string(forKey: Keys.lastHotkey) ?? ""
+        // Migrate existing users: with no stored mode, derive it from the hotkey
+        // (empty → pencil, set → hotkey) so behavior is unchanged on upgrade.
+        if let rawMode = UserDefaults.standard.string(forKey: Keys.triggerMode),
+           let mode = TriggerMode(rawValue: rawMode) {
+            self.triggerMode = mode
+        } else {
+            self.triggerMode = (UserDefaults.standard.string(forKey: Keys.hotkey) ?? "").isEmpty ? .pencil : .hotkey
+        }
         let allTones = Set(Tone.allCases)
         let savedToneStrings = UserDefaults.standard.stringArray(forKey: Keys.enabledTones)
         if let strings = savedToneStrings {
