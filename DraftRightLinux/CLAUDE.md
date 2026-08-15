@@ -173,7 +173,7 @@ The hotkey uses `org.freedesktop.portal.GlobalShortcuts`. The portal **refuses a
 
 **Cross-platform (Win+Linux, not under #93):** #107 Grammar-check + Diff view (macOS-only) · #108 Rewrite cache (macOS-only). `models/payment.py` is the Rule#1 reference (enum + `from_wire` + `display_name`) — bring UI/services up to it.
 
-**Partial:** #22 desktop updater — Linux DONE (version 2.4.1, 401 refresh wired, sha256 integrity in `update_service.py`); macOS `UpdateService.swift` still has NO integrity check → stays open.
+**Partial:** #22 desktop updater — Linux DONE (version 2.4.1, 401 refresh wired, sha256 integrity in `update_service.py`); macOS `UpdateService.swift` HAS the integrity check in code + tests (`verifyIntegrity`, commit `73112702`, on main; `UpdateServiceTests`) but it is **NOT in the shipped binary** — macOS 2.3.30 (shipped 2026-07-23) predates the check (2026-07-30), so deployed macOS still auto-updates unverified. Closing #22's macOS half needs the **next macOS notarized release** (manual, Developer ID) to carry `73112702`, not more code.
 
 ## Hard-won gotchas
 
