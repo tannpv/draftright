@@ -10,26 +10,44 @@ final class AXTextService {
         return AXIsProcessTrustedWithOptions(options)
     }
 
-    func readSelectedText() -> String? {
+    /// The selection as seen through Accessibility. Distinguishes an empty
+    /// selection (the app exposes selection and there is none) from an
+    /// unreadable one (the app doesn't expose selection at all, e.g. Terminal) —
+    /// the pencil needs that difference to avoid appearing on a drag that
+    /// selected nothing, without breaking AX-blind apps (#181).
+    enum AXSelectionState {
+        case text(String)
+        case empty
+        case unavailable
+
+        /// True only when AX positively reported an empty selection.
+        var isConfirmedEmpty: Bool { if case .empty = self { return true }; return false }
+    }
+
+    /// Single source for reading the focused element's selected text via AX.
+    func selectionState() -> AXSelectionState {
         var focused: CFTypeRef?
         let errorFocused = AXUIElementCopyAttributeValue(systemWideElement, kAXFocusedUIElementAttribute as CFString, &focused)
-
         if errorFocused != .success {
             DRLogger.warn("focusedElement err=\(errorFocused.rawValue)", category: .ax)
-            return nil
+            return .unavailable
         }
-
-        guard let element = focused else { return nil }
+        guard let element = focused else { return .unavailable }
 
         var selected: CFTypeRef?
         let errorSelected = AXUIElementCopyAttributeValue(element as! AXUIElement, kAXSelectedTextAttribute as CFString, &selected)
         if errorSelected != .success {
             DRLogger.warn("selectedText err=\(errorSelected.rawValue)", category: .ax)
-            return nil
+            return .unavailable
         }
-        guard let value = selected as? String else { return nil }
+        guard let value = selected as? String else { return .unavailable }
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
+        return trimmed.isEmpty ? .empty : .text(trimmed)
+    }
+
+    func readSelectedText() -> String? {
+        if case .text(let t) = selectionState() { return t }
+        return nil
     }
 
     /// Returns the screen frame of the currently focused text field, or nil.
