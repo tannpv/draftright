@@ -24,6 +24,8 @@ If a version needs the user to *do* something after updating, say so
 explicitly under an **Action needed:** line inside the relevant sub-section.
 
 ## 2.3.63 — 2026-08-15
+### macOS
+- The rewrite pencil is now drawn above other windows so it can't hide behind the app you're rewriting in.
 ### Windows
 - Fixed: on Microsoft Store installs, clicking "Update … available" in the tray menu or Settings did nothing. It now downloads and installs the update as intended, and opens the Store page if the install can't be started.
 - Fixed: on Microsoft Store installs, that notice advertised the version you were already running (e.g. "Update 2.3.52 available" while on 2.3.52). It now reads simply "Update available" — the Store doesn't tell the app which version is waiting.
@@ -31,10 +33,6 @@ explicitly under an **Action needed:** line inside the relevant sub-section.
 ## 2.3.61 — 2026-08-15
 ### Windows
 - New trigger option: choose **Pencil** or **Hotkey** in Settings → Trigger. In Pencil mode, highlight text by dragging and a pencil button appears next to it — click it to rewrite. Hotkey mode (Ctrl+Shift+R) still works as before.
-
-## 2.3.63 — 2026-08-15
-### macOS
-- The rewrite pencil is now drawn above other windows so it can't hide behind the app you're rewriting in.
 
 ## 2.3.62 — 2026-08-15
 ### macOS
