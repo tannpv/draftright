@@ -154,9 +154,7 @@ internal sealed class SettingsWindow : FluentWindowBase
             if (u != null)
             {
                 var staged = App.UpdateService?.UpdateStaged ?? false;
-                updateLink.Content = staged
-                    ? $"Update {u.Version} downloaded — click to restart and install"
-                    : $"Update {u.Version} available — click to download and install";
+                updateLink.Content = UpdateLabel.Settings(u.Version, staged);
                 updateLink.Visibility = Visibility.Visible;
             }
             else updateLink.Visibility = Visibility.Collapsed;

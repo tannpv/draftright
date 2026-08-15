@@ -139,9 +139,7 @@ internal sealed class TrayIconController : IDisposable
         DRLogger.Log($"RefreshUpdateMenuItem: ran (u={u?.Version ?? "(null)"} staged={staged})", DRLogger.Category.APP);
         if (u != null)
         {
-            _updateMenuItem.Text = staged
-                ? $"Update {u.Version} ready — restart & install"
-                : $"Update {u.Version} available — install now";
+            _updateMenuItem.Text = UpdateLabel.Tray(u.Version, staged);
             _updateMenuItem.Visible = true;
         }
         else
