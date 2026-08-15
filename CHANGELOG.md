@@ -23,6 +23,10 @@ A Windows-only line under `### Windows` will never appear in the macOS
 If a version needs the user to *do* something after updating, say so
 explicitly under an **Action needed:** line inside the relevant sub-section.
 
+## 2.3.54 — 2026-08-15
+### macOS
+- Switching the rewrite trigger to the pencil button no longer forgets your keyboard shortcut. Pencil mode now shows a one-click button to switch back to your previous shortcut, instead of making you set it up again.
+
 ## 2.3.53 — 2026-08-15
 ### macOS
 - Secure auto-updates: a downloaded update is now verified against a published checksum before it installs, and a corrupt or tampered download is refused instead of run.
