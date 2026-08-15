@@ -432,14 +432,21 @@ final class SelectionMonitor {
         )
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        panel.level = .floating
+        // Above normal windows AND above other .floating panels — some apps
+        // (Terminal in certain modes) kept the pencil composited behind them at
+        // .floating even though isVisible was true (#183).
+        panel.level = .statusBar
         panel.hasShadow = true
         panel.isReleasedWhenClosed = false
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         panel.contentView = nsButton
         panel.orderFrontRegardless()
+        panel.displayIfNeeded()
         self.triggerWindow = panel
-        DRLogger.log("pencil panel frame=\(panel.frame) visible=\(panel.isVisible) screen=\(screen?.frame ?? .zero)", category: .monitor)
+        // occlusionState.contains(.visible) is the truth about whether it's
+        // actually composited on-screen — isVisible only means "ordered in".
+        let composited = panel.occlusionState.contains(.visible)
+        DRLogger.log("pencil panel frame=\(panel.frame) visible=\(panel.isVisible) composited=\(composited) level=\(panel.level.rawValue) screen=\(screen?.frame ?? .zero)", category: .monitor)
     }
 
     /// Pre-capture the selection when the pencil appears, so a later click has

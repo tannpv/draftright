@@ -156,4 +156,5 @@ Standard GitFlow — see `~/.claude/CLAUDE.md` for full rules.
 - `DraftRightLinux/CLAUDE.md` — Linux native app
 - `DraftRightWindows/CLAUDE.md` — Windows native app, UI toolkit decision, release + signing
 - `docs/release-runbook.md` — Release & auto-update runbook (all platforms)
+- `docs/HANDOFF-2026-08-15-triggers.md` — Trigger work state + open tasks + resume (transferable handoff)
 - `docs/superpowers/plans/` — Implementation plans for Windows & Linux native apps
