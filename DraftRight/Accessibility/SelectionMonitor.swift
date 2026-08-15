@@ -294,16 +294,16 @@ final class SelectionMonitor {
         }
     }
 
-    /// Whether a mouse-up should surface the pencil. ONLY a **drag** —
-    /// highlighting text by dragging — triggers it. A click, including a
-    /// double/triple click that selects a word or line, is deliberately not a
-    /// trigger: it fires while merely reading. Accessibility-reported text is NOT
-    /// used as a signal because it can't tell a drag-select from a double-click,
-    /// so trusting it surfaced the pencil on every double-click in AX apps like
-    /// Notes (#180). A drag is enough for AX-blind apps (Terminal) too (#177).
-    /// Pure + static so it is unit-testable.
-    nonisolated static func shouldShowPencil(wasDragging: Bool) -> Bool {
-        wasDragging
+    /// Whether a mouse-up should surface the pencil. It requires a **drag** —
+    /// highlighting text by dragging; a click (incl. a double/triple click that
+    /// selects a word/line) is never a trigger (#180). It ALSO requires that the
+    /// drag actually selected something: when Accessibility positively reports an
+    /// empty selection, the drag hit empty space and the pencil stays hidden
+    /// (#181). When AX can't read the selection at all (Terminal and other
+    /// AX-blind apps), we can't confirm, so a drag is enough. Pure + static so it
+    /// is unit-testable.
+    nonisolated static func shouldShowPencil(wasDragging: Bool, selectionKnownEmpty: Bool) -> Bool {
+        wasDragging && !selectionKnownEmpty
     }
 
     private func handleMouseEvent(_ event: NSEvent) {
@@ -333,15 +333,25 @@ final class SelectionMonitor {
             let clickCount = event.clickCount
             isDragging = false
 
-            // Show the pencil only on a drag-highlight, not on a click. Small
-            // delay so the selection/UI settles before the pencil appears. The
-            // actual text is grabbed later, when the pencil is clicked.
+            // Show the pencil only on a drag-highlight that actually selected
+            // text. Small delay so the selection settles first. Reading AX is a
+            // read (no clipboard), so it never disturbs the user's own Copy.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
                 guard let self = self else { return }
 
-                let hasSelection = Self.shouldShowPencil(wasDragging: wasDragging)
+                let selection = self.axService.selectionState()
+                let hasSelection = Self.shouldShowPencil(
+                    wasDragging: wasDragging,
+                    selectionKnownEmpty: selection.isConfirmedEmpty)
 
-                DRLogger.log("MouseUp hasSelection=\(hasSelection) clicks=\(clickCount) wasDrag=\(wasDragging)", category: .monitor)
+                // Log a state TAG, never the selected text (privacy).
+                let selTag: String
+                switch selection {
+                case .text: selTag = "text"
+                case .empty: selTag = "empty"
+                case .unavailable: selTag = "unavailable"
+                }
+                DRLogger.log("MouseUp show=\(hasSelection) wasDrag=\(wasDragging) clicks=\(clickCount) sel=\(selTag)", category: .monitor)
 
                 if hasSelection {
                     self.showTriggerAt(pos)

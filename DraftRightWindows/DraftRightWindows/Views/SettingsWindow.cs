@@ -317,9 +317,30 @@ internal sealed class SettingsWindow : FluentWindowBase
     }
 
     // ── Trigger ──────────────────────────────────────────────────────────────
+    private static readonly TriggerMode[] TriggerModes =
+        { TriggerMode.Pencil, TriggerMode.Hotkey };
+
     private static UIElement BuildTrigger()
     {
         var panel = new StackPanel();
+        panel.Children.Add(F.SectionHeader("Rewrite Trigger"));
+        panel.Children.Add(F.FieldLabel("Trigger"));
+        var modeCombo = F.Dropdown();
+        foreach (var m in TriggerModes) modeCombo.Items.Add(m.DisplayName());
+        modeCombo.SelectedIndex = Math.Max(0, Array.IndexOf(TriggerModes, App.Settings.TriggerMode));
+        modeCombo.Margin = new Thickness(0, 0, 0, F.SectionGap);
+        modeCombo.SelectionChanged += (_, _) =>
+        {
+            if (modeCombo.SelectedIndex is >= 0)
+            {
+                App.Settings.TriggerMode = TriggerModes[modeCombo.SelectedIndex];
+                App.Settings.Save();
+                App.ApplyTriggerMode();
+            }
+        };
+        panel.Children.Add(modeCombo);
+
+        // The hotkey is used by the Hotkey and Both modes.
         panel.Children.Add(F.SectionHeader("Hotkey"));
         panel.Children.Add(F.FieldLabel("Current Hotkey"));
         panel.Children.Add(new WpfTextBlock
@@ -330,7 +351,9 @@ internal sealed class SettingsWindow : FluentWindowBase
             Margin = new Thickness(0, 0, 0, F.SectionGap),
         });
         panel.Children.Add(F.Body(
-            "Select text anywhere, then press the hotkey to rewrite.\n" +
+            "Pencil: highlight text by dragging to show the rewrite button.\n" +
+            "Hotkey: select text, then press the hotkey.\n" +
+            "Both: the pencil and the hotkey both work.\n" +
             "Hotkey editing is not yet available in this build."));
         return panel;
     }

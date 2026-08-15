@@ -27,7 +27,10 @@ public class App : Application
     public static RewriteCache RewriteCache { get; } = new();
 
     private Window? _hiddenWindow;
-    private IntPtr _hwnd = IntPtr.Zero;
+    private static IntPtr _hwnd = IntPtr.Zero;
+    // The on-selection pencil trigger (Pencil mode). Owns a global mouse hook +
+    // overlay on its own thread; enabled/disabled by ApplyTriggerMode.
+    private static PencilTrigger? _pencilTrigger;
     private System.Threading.Timer? _healthTimer;
     // Owns the tray icon, menu, update badge, and its STA pump thread.
     private TrayIconController? _tray;
@@ -225,27 +228,13 @@ public class App : Application
         _subclassProc = HiddenWindowSubclassProc;
         Win32Interop.SetWindowSubclass(_hwnd, _subclassProc, (UIntPtr)1, UIntPtr.Zero);
 
-        // Register the global hotkey using saved settings
-        bool registered = Hotkey.Register(
-            _hwnd,
-            (uint)Settings.HotkeyModifiers,
-            (uint)Settings.HotkeyKey);
-
-        if (!registered)
-        {
-            DRLogger.Error(
-                $"Hotkey registration failed (modifiers=0x{Settings.HotkeyModifiers:X} vk=0x{Settings.HotkeyKey:X})",
-                DRLogger.Category.HOTKEY);
-        }
-        else
-        {
-            DRLogger.Log(
-                $"Hotkey registered (modifiers=0x{Settings.HotkeyModifiers:X} vk=0x{Settings.HotkeyKey:X})",
-                DRLogger.Category.HOTKEY);
-        }
-
-        // Wire up the hotkey handler
-        Hotkey.HotkeyPressed += async (_, _) => await HandleHotkeyAsync();
+        // Wire up both triggers to the SAME rewrite flow, then install whichever
+        // the current mode uses. ApplyTriggerMode can be re-run at runtime from
+        // Settings when the user changes the mode.
+        Hotkey.HotkeyPressed += async (_, _) => await HandleTriggerAsync();
+        _pencilTrigger = new PencilTrigger(onTriggered: () =>
+            _dispatcherQueue?.TryEnqueue(async () => await HandleTriggerAsync()));
+        ApplyTriggerMode();
 
         // Restore saved session; otherwise the user logs in via Settings.
         if (Auth.RestoreSession())
@@ -371,13 +360,47 @@ public class App : Application
         return Win32Interop.DefSubclassProc(hWnd, uMsg, wParam, lParam);
     }
 
+    // ── Trigger configuration ───────────────────────────────
+
+    /// <summary>
+    /// Install the trigger mechanisms for the current <see cref="Models.TriggerMode"/>:
+    /// register the global hotkey when the mode uses it, and start the
+    /// on-selection pencil when the mode uses it. Safe to call again at runtime
+    /// when the user changes the mode in Settings.
+    /// </summary>
+    public static void ApplyTriggerMode()
+    {
+        var mode = Settings.TriggerMode;
+
+        if (mode.UsesHotkey())
+        {
+            bool ok = Hotkey.Register(_hwnd, (uint)Settings.HotkeyModifiers, (uint)Settings.HotkeyKey);
+            DRLogger.Log(
+                ok
+                    ? $"Trigger {mode.ApiValue()}: hotkey registered (modifiers=0x{Settings.HotkeyModifiers:X} vk=0x{Settings.HotkeyKey:X})"
+                    : $"Trigger {mode.ApiValue()}: hotkey registration FAILED",
+                DRLogger.Category.HOTKEY);
+        }
+        else
+        {
+            Hotkey.Unregister();
+            DRLogger.Log($"Trigger {mode.ApiValue()}: hotkey off", DRLogger.Category.HOTKEY);
+        }
+
+        // The on-selection pencil (global mouse hook + overlay) runs only in
+        // Pencil mode. It grabs the selection via Ctrl+C on click, so it shares
+        // the same rewrite flow as the hotkey.
+        _pencilTrigger?.SetEnabled(mode.UsesPencil());
+    }
+
     // ── Hotkey handler ──────────────────────────────────────
 
     /// <summary>
-    /// Called (on the WndProc thread) when the global hotkey fires.
-    /// Captures selected text from the foreground app and opens the rewrite panel.
+    /// The shared rewrite trigger — fired by both the global hotkey and the
+    /// on-selection pencil. Captures selected text from the foreground app
+    /// (Ctrl+C) and opens the rewrite panel / runs One-Click.
     /// </summary>
-    private async Task HandleHotkeyAsync()
+    private async Task HandleTriggerAsync()
     {
         if (!Auth.IsLoggedIn)
         {
