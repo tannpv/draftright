@@ -28,6 +28,9 @@ public class App : Application
 
     private Window? _hiddenWindow;
     private static IntPtr _hwnd = IntPtr.Zero;
+    // The on-selection pencil trigger (Pencil mode). Owns a global mouse hook +
+    // overlay on its own thread; enabled/disabled by ApplyTriggerMode.
+    private static PencilTrigger? _pencilTrigger;
     private System.Threading.Timer? _healthTimer;
     // Owns the tray icon, menu, update badge, and its STA pump thread.
     private TrayIconController? _tray;
@@ -225,10 +228,12 @@ public class App : Application
         _subclassProc = HiddenWindowSubclassProc;
         Win32Interop.SetWindowSubclass(_hwnd, _subclassProc, (UIntPtr)1, UIntPtr.Zero);
 
-        // Wire up the hotkey handler, then install the triggers for the current
-        // mode (hotkey and/or pencil). ApplyTriggerMode can be re-run at runtime
-        // from Settings when the user changes the mode.
-        Hotkey.HotkeyPressed += async (_, _) => await HandleHotkeyAsync();
+        // Wire up both triggers to the SAME rewrite flow, then install whichever
+        // the current mode uses. ApplyTriggerMode can be re-run at runtime from
+        // Settings when the user changes the mode.
+        Hotkey.HotkeyPressed += async (_, _) => await HandleTriggerAsync();
+        _pencilTrigger = new PencilTrigger(onTriggered: () =>
+            _dispatcherQueue?.TryEnqueue(async () => await HandleTriggerAsync()));
         ApplyTriggerMode();
 
         // Restore saved session; otherwise the user logs in via Settings.
@@ -382,20 +387,20 @@ public class App : Application
             DRLogger.Log($"Trigger {mode.ApiValue()}: hotkey off", DRLogger.Category.HOTKEY);
         }
 
-        // Phase 2 wires the on-selection pencil engine here, gated on
-        // mode.UsesPencil(). Until then, selecting Pencil mode disables the
-        // hotkey and shows no pencil — the picker exists but the pencil
-        // mechanism (global mouse hook + UI Automation + overlay) is not built
-        // yet. See DraftRight #180 (Windows pencil trigger).
+        // The on-selection pencil (global mouse hook + overlay) runs only in
+        // Pencil mode. It grabs the selection via Ctrl+C on click, so it shares
+        // the same rewrite flow as the hotkey.
+        _pencilTrigger?.SetEnabled(mode.UsesPencil());
     }
 
     // ── Hotkey handler ──────────────────────────────────────
 
     /// <summary>
-    /// Called (on the WndProc thread) when the global hotkey fires.
-    /// Captures selected text from the foreground app and opens the rewrite panel.
+    /// The shared rewrite trigger — fired by both the global hotkey and the
+    /// on-selection pencil. Captures selected text from the foreground app
+    /// (Ctrl+C) and opens the rewrite panel / runs One-Click.
     /// </summary>
-    private async Task HandleHotkeyAsync()
+    private async Task HandleTriggerAsync()
     {
         if (!Auth.IsLoggedIn)
         {
