@@ -27,6 +27,10 @@ explicitly under an **Action needed:** line inside the relevant sub-section.
 ### Windows
 - New trigger option: choose **Pencil** or **Hotkey** in Settings → Trigger. In Pencil mode, highlight text by dragging and a pencil button appears next to it — click it to rewrite. Hotkey mode (Ctrl+Shift+R) still works as before.
 
+## 2.3.63 — 2026-08-15
+### macOS
+- The rewrite pencil is now drawn above other windows so it can't hide behind the app you're rewriting in.
+
 ## 2.3.62 — 2026-08-15
 ### macOS
 - The rewrite pencil now appears reliably next to your selection — it was sometimes hidden under the cursor or just off-screen (notably in Terminal).
