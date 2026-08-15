@@ -269,7 +269,10 @@ public class App : Application
         {
             DRLogger.Log("Update backend: Microsoft Store (MSIX/packaged install detected)",
                 DRLogger.Category.APP);
-            UpdateService = new StoreUpdateService(currentVersion);
+            // Pass the hidden window's HWND: StoreContext renders its
+            // download/install dialog and needs an owner, or the request dies
+            // with 0x80070578 and the update link appears to do nothing.
+            UpdateService = new StoreUpdateService(_hwnd);
         }
         else
         {

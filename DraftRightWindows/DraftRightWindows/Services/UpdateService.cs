@@ -42,7 +42,6 @@ public class UpdateService : IUpdateService
     // hangs *before* the first byte arrives.
     private readonly HttpClient _downloadHttp;
     private DateTime _lastCheck = DateTime.MinValue;
-    private const int CheckIntervalHours = 24;
 
     /// <summary>
     /// The newest release that is actually applicable to this install
@@ -113,7 +112,7 @@ public class UpdateService : IUpdateService
 
     public async Task CheckIfNeededAsync()
     {
-        if ((DateTime.UtcNow - _lastCheck).TotalHours < CheckIntervalHours) return;
+        if ((DateTime.UtcNow - _lastCheck).TotalHours < UpdatePolicy.CheckIntervalHours) return;
         _lastCheck = DateTime.UtcNow;
 
         var info = await RefreshAvailableUpdateAsync();

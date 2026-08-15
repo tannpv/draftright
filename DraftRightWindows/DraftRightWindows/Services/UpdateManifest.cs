@@ -22,6 +22,58 @@ using System.Text.Json.Serialization;
 
 namespace DraftRightWindows.Services;
 
+/// <summary>
+/// Update cadence shared by every <c>IUpdateService</c> backend.
+/// <para>
+/// Lives in this file rather than in either backend because both need it and a
+/// duplicated tuning number is two sources of truth that drift (RULE #1): the
+/// HTTP and Store pollers previously each declared their own
+/// <c>CheckIntervalHours = 24</c>, so changing the cadence in one silently left
+/// the other behind. Being here also means <c>DraftRightWindows.PureTests</c>
+/// picks it up with no csproj change.
+/// </para>
+/// </summary>
+public static class UpdatePolicy
+{
+    /// <summary>Hours between throttled background update checks. A user-
+    /// initiated "Check for Updates" bypasses this (<c>CheckNowAsync</c>).</summary>
+    public const int CheckIntervalHours = 24;
+}
+
+/// <summary>
+/// The user-facing "an update is waiting" wording, for every surface that
+/// shows it (tray menu, Settings link).
+/// <para>
+/// Centralised because the two surfaces had their own copies of the same
+/// string-building and would drift (RULE #1) — and because the version is not
+/// always known. The Store backend cannot supply a trustworthy version (see
+/// <c>StoreUpdateService.RefreshAvailableUpdateAsync</c>), so it passes none,
+/// and every surface has to degrade the same way instead of rendering
+/// "Update  available" with a hole where the number should be.
+/// </para>
+/// </summary>
+public static class UpdateLabel
+{
+    /// <summary>"Update 2.3.63" when the version is known and trustworthy,
+    /// plain "Update" when it isn't.</summary>
+    private static string Subject(string? version) =>
+        string.IsNullOrWhiteSpace(version) ? "Update" : $"Update {version}";
+
+    /// <summary>Tray menu item. Terser than <see cref="Settings"/> — it sits in
+    /// a context menu, not next to a version field.</summary>
+    public static string Tray(string? version, bool staged) =>
+        staged
+            ? $"{Subject(version)} ready — restart & install"
+            : $"{Subject(version)} available — install now";
+
+    /// <summary>Settings hyperlink. Spells out the click action, since the link
+    /// text is the only affordance telling the user what happens next.</summary>
+    public static string Settings(string? version, bool staged) =>
+        staged
+            ? $"{Subject(version)} downloaded — click to restart and install"
+            : $"{Subject(version)} available — click to download and install";
+}
+
 public class UpdateInfo
 {
     [JsonPropertyName("version")]

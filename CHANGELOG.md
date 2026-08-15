@@ -23,6 +23,11 @@ A Windows-only line under `### Windows` will never appear in the macOS
 If a version needs the user to *do* something after updating, say so
 explicitly under an **Action needed:** line inside the relevant sub-section.
 
+## 2.3.63 — 2026-08-15
+### Windows
+- Fixed: on Microsoft Store installs, clicking "Update … available" in the tray menu or Settings did nothing. It now downloads and installs the update as intended, and opens the Store page if the install can't be started.
+- Fixed: on Microsoft Store installs, that notice advertised the version you were already running (e.g. "Update 2.3.52 available" while on 2.3.52). It now reads simply "Update available" — the Store doesn't tell the app which version is waiting.
+
 ## 2.3.61 — 2026-08-15
 ### Windows
 - New trigger option: choose **Pencil** or **Hotkey** in Settings → Trigger. In Pencil mode, highlight text by dragging and a pencil button appears next to it — click it to rewrite. Hotkey mode (Ctrl+Shift+R) still works as before.
