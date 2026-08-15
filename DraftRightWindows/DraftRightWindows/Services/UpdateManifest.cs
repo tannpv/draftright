@@ -22,6 +22,24 @@ using System.Text.Json.Serialization;
 
 namespace DraftRightWindows.Services;
 
+/// <summary>
+/// Update cadence shared by every <c>IUpdateService</c> backend.
+/// <para>
+/// Lives in this file rather than in either backend because both need it and a
+/// duplicated tuning number is two sources of truth that drift (RULE #1): the
+/// HTTP and Store pollers previously each declared their own
+/// <c>CheckIntervalHours = 24</c>, so changing the cadence in one silently left
+/// the other behind. Being here also means <c>DraftRightWindows.PureTests</c>
+/// picks it up with no csproj change.
+/// </para>
+/// </summary>
+public static class UpdatePolicy
+{
+    /// <summary>Hours between throttled background update checks. A user-
+    /// initiated "Check for Updates" bypasses this (<c>CheckNowAsync</c>).</summary>
+    public const int CheckIntervalHours = 24;
+}
+
 public class UpdateInfo
 {
     [JsonPropertyName("version")]

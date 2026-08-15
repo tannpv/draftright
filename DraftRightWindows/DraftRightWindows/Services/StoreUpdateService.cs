@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using DraftRightWindows.Helpers;
 using Windows.ApplicationModel;
 using Windows.Services.Store;
@@ -19,16 +20,35 @@ namespace DraftRightWindows.Services;
 ///   - StoreContext.GetAppAndOptionalStorePackageUpdatesAsync()
 ///   - StoreContext.RequestDownloadAndInstallStorePackageUpdatesAsync()
 ///
-/// Both calls are no-ops for sideload (.exe) builds — the SignatureKind check
-/// in <see cref="IsStoreInstall"/> gates that, so the App.cs factory only
-/// constructs this service when running as a Store package.
+/// Both calls are no-ops for sideload (.exe) builds — <see cref="IsPackaged"/>
+/// gates that, so the App.cs factory only constructs this service when running
+/// as a packaged (MSIX) app.
+///
+/// IMPORTANT — owner window: <c>StoreContext</c> was designed for UWP, where
+/// the app has an implicit CoreWindow. In a desktop (Win32/WinUI 3) process
+/// there is none, so every StoreContext call that shows UI — which includes
+/// <c>RequestDownloadAndInstallStorePackageUpdatesAsync</c> — fails with
+/// <c>0x80070578 ERROR_INVALID_WINDOW_HANDLE</c> unless the context has first
+/// been associated with an HWND via <c>IInitializeWithWindow</c>. That was the
+/// cause of "clicking the update link does nothing": the check found the
+/// update and the tray/Settings link appeared, but the install call threw
+/// immediately and the failure only ever reached the log.
 /// </summary>
 public class StoreUpdateService : IUpdateService
 {
+    /// <summary>Store deep link to the Downloads &amp; updates pane. Used as
+    /// the escape hatch when the in-app install request fails, so a user is
+    /// never left with a button that does nothing.</summary>
+    private const string StoreUpdatesUri = "ms-windows-store://downloadsandupdates";
+
+    /// <summary>Store deep link to this app's product page. <c>{0}</c> is the
+    /// package family name. The <c>PFN</c> key is required — the <c>ProductId</c>
+    /// key expects a Store id (<c>9Nxxxxxxxxxx</c>) and silently fails when
+    /// handed a family name.</summary>
+    private const string StoreProductPageUriFormat = "ms-windows-store://pdp/?PFN={0}";
+
     private readonly StoreContext _context;
-    private readonly string _currentVersion;
     private DateTime _lastCheck = DateTime.MinValue;
-    private const int CheckIntervalHours = 24;
 
     /// <inheritdoc/>
     public UpdateInfo? AvailableUpdate { get; private set; }
@@ -42,24 +62,36 @@ public class StoreUpdateService : IUpdateService
     /// <inheritdoc/>
     public event Action? AvailableUpdateChanged;
 
-    public StoreUpdateService(string currentVersion)
+    /// <param name="ownerHwnd">Window handle that owns any Store-rendered
+    /// dialog. Must be a live HWND from this process — see the class remarks;
+    /// without it the install request throws 0x80070578.</param>
+    /// <remarks>Deliberately takes no current-version argument: unlike the HTTP
+    /// backend, this one never compares versions itself — the Store agent
+    /// decides which package updates apply to this install.</remarks>
+    public StoreUpdateService(IntPtr ownerHwnd)
     {
-        _currentVersion = currentVersion;
         _context = StoreContext.GetDefault();
-    }
 
-    /// <summary>True iff Package.Current reports a Store-signed identity.
-    /// Wrapped in try/catch because non-packaged sideload .exe builds throw
-    /// InvalidOperationException on Package.Current access.</summary>
-    public static bool IsStoreInstall()
-    {
+        if (ownerHwnd == IntPtr.Zero)
+        {
+            // Not fatal: update *detection* still works, only the install
+            // request will fail. Loud so the log says why if it ever happens.
+            DRLogger.Error(
+                "StoreUpdateService: owner HWND is null — Store install requests will fail with 0x80070578.",
+                DRLogger.Category.APP);
+            return;
+        }
+
         try
         {
-            return Package.Current.SignatureKind == PackageSignatureKind.Store;
+            WinRT.Interop.InitializeWithWindow.Initialize(_context, ownerHwnd);
+            DRLogger.Log($"StoreUpdateService: StoreContext bound to hwnd=0x{ownerHwnd.ToInt64():X}",
+                DRLogger.Category.APP);
         }
-        catch
+        catch (Exception ex)
         {
-            return false;
+            DRLogger.Error($"StoreUpdateService: InitializeWithWindow failed: {ex.Message}",
+                DRLogger.Category.APP);
         }
     }
 
@@ -86,7 +118,7 @@ public class StoreUpdateService : IUpdateService
     /// <inheritdoc/>
     public async Task CheckIfNeededAsync()
     {
-        if ((DateTime.UtcNow - _lastCheck).TotalHours < CheckIntervalHours)
+        if ((DateTime.UtcNow - _lastCheck).TotalHours < UpdatePolicy.CheckIntervalHours)
             return;
         await RefreshAvailableUpdateAsync();
     }
@@ -117,7 +149,7 @@ public class StoreUpdateService : IUpdateService
                 AvailableUpdate = new UpdateInfo
                 {
                     Version = versionString,
-                    WindowsUrl = "ms-windows-store://pdp/?ProductId=" + (Package.Current.Id.FamilyName),
+                    WindowsUrl = string.Format(StoreProductPageUriFormat, Package.Current.Id.FamilyName),
                     ReleaseNotes = string.Empty, // Store does not expose per-update notes via API.
                     Required = first.Mandatory,
                 };
@@ -174,11 +206,46 @@ public class StoreUpdateService : IUpdateService
 
             // Successful install relaunches the app via Store agent — nothing
             // else to do here. On failure, leave AvailableUpdate set so the
-            // user can retry from the same button.
+            // user can retry from the same button, and hand them off to the
+            // Store UI so the click still leads somewhere.
+            if (IsFailure(result.OverallState))
+                OpenStoreFallback(info);
         }
         catch (Exception ex)
         {
             DRLogger.Error($"StoreUpdateService.StartInstall failed: {ex.Message}",
+                DRLogger.Category.APP);
+            OpenStoreFallback(info);
+        }
+    }
+
+    /// <summary>True for the terminal states that mean the update did not and
+    /// will not happen, so the user needs another route. Deliberately excludes
+    /// <c>Canceled</c> — the user declining the Store's own dialog is an answer,
+    /// not a failure, and bouncing them into the Store would override it — and
+    /// the in-progress states (<c>Pending</c>/<c>Downloading</c>/<c>Deploying</c>),
+    /// where the Store agent is still working and will finish on its own.</summary>
+    private static bool IsFailure(StorePackageUpdateState state) => state is
+        StorePackageUpdateState.OtherError or
+        StorePackageUpdateState.ErrorLowBattery or
+        StorePackageUpdateState.ErrorWiFiRecommended or
+        StorePackageUpdateState.ErrorWiFiRequired;
+
+    /// <summary>Last resort when the in-app install request doesn't complete:
+    /// open the Store so the user can finish the update by hand. Tries the
+    /// app's product page first and falls back to Downloads &amp; updates.
+    /// Silent failure here is acceptable — it is already the error path.</summary>
+    private static void OpenStoreFallback(UpdateInfo info)
+    {
+        var uri = !string.IsNullOrEmpty(info.WindowsUrl) ? info.WindowsUrl : StoreUpdatesUri;
+        try
+        {
+            DRLogger.Log($"Store install did not complete — opening {uri}", DRLogger.Category.APP);
+            Process.Start(new ProcessStartInfo(uri) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            DRLogger.Warn($"StoreUpdateService: could not open {uri}: {ex.Message}",
                 DRLogger.Category.APP);
         }
     }
