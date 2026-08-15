@@ -464,7 +464,7 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 			EnvAPIKey: cfg.ResendAPIKey,
 			EnvFrom:   cfg.EmailFrom,
 		})
-		socialVer := authpkg.NewHTTPSocialVerifier(cfg.AppleAudiences)
+		socialVer := authpkg.NewHTTPSocialVerifier(cfg.AppleAudiences, cfg.GoogleAudiences)
 		authSvc := authpkg.NewService(userSvc, subReader, usageCounter, ttlReader, cfg.JWTSecret, cfg.JWTRefreshSecret,
 			plansReader, subWriter, emailSvc, socialVer)
 		authHandler := authpkg.NewHandler(authSvc)

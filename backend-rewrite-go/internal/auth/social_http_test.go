@@ -4,15 +4,24 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 )
 
-func TestVerifyGoogle_OK(t *testing.T) {
+// googleVerifier returns a verifier whose tokeninfo mock replies with body,
+// accepting only aud "aud-ok".
+func googleVerifier(t *testing.T, body string) (*httpVerifier, func()) {
+	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"sub":"g1","email":"g@b.com","name":"G","picture":"p","email_verified":"true"}`))
+		_, _ = w.Write([]byte(body))
 	}))
-	defer srv.Close()
-	v := &httpVerifier{http: srv.Client(), googleURL: srv.URL + "?id_token="}
+	v := &httpVerifier{http: srv.Client(), googleURL: srv.URL + "?id_token=", googleAuds: []string{"aud-ok"}}
+	return v, srv.Close
+}
+
+func TestVerifyGoogle_OK(t *testing.T) {
+	v, done := googleVerifier(t, `{"sub":"g1","aud":"aud-ok","iss":"accounts.google.com","email":"g@b.com","name":"G","picture":"p","email_verified":"true"}`)
+	defer done()
 	p, err := v.verifyGoogle(context.Background(), "tok")
 	if err != nil {
 		t.Fatal(err)
@@ -25,9 +34,62 @@ func TestVerifyGoogle_OK(t *testing.T) {
 func TestVerifyGoogle_BadStatus(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(401) }))
 	defer srv.Close()
-	v := &httpVerifier{http: srv.Client(), googleURL: srv.URL + "?id_token="}
+	v := &httpVerifier{http: srv.Client(), googleURL: srv.URL + "?id_token=", googleAuds: []string{"aud-ok"}}
 	_, err := v.verifyGoogle(context.Background(), "tok")
 	assertAuthErr(t, err, "Invalid Google token")
+}
+
+// A token minted for a different OAuth client (aud not in our allow-list) must
+// be rejected — this is the account-takeover replay the check exists to stop.
+func TestVerifyGoogle_WrongAud_Rejected(t *testing.T) {
+	v, done := googleVerifier(t, `{"sub":"g1","aud":"someone-elses-client.apps.googleusercontent.com","iss":"accounts.google.com"}`)
+	defer done()
+	_, err := v.verifyGoogle(context.Background(), "tok")
+	assertAuthErr(t, err, "Invalid Google token")
+}
+
+// A token with no aud claim at all must be rejected, not treated as a match.
+func TestVerifyGoogle_MissingAud_Rejected(t *testing.T) {
+	v, done := googleVerifier(t, `{"sub":"g1","iss":"accounts.google.com"}`)
+	defer done()
+	_, err := v.verifyGoogle(context.Background(), "tok")
+	assertAuthErr(t, err, "Invalid Google token")
+}
+
+// An empty allow-list must fail closed, never accept everything.
+func TestVerifyGoogle_NoAudiencesConfigured_FailsClosed(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"sub":"g1","aud":"aud-ok","iss":"accounts.google.com"}`))
+	}))
+	defer srv.Close()
+	v := &httpVerifier{http: srv.Client(), googleURL: srv.URL + "?id_token=", googleAuds: nil}
+	_, err := v.verifyGoogle(context.Background(), "tok")
+	assertAuthErr(t, err, "Google sign-in is not configured")
+}
+
+// A token echoing an unexpected issuer must be rejected even with a valid aud.
+func TestVerifyGoogle_WrongIssuer_Rejected(t *testing.T) {
+	v, done := googleVerifier(t, `{"sub":"g1","aud":"aud-ok","iss":"evil.example.com"}`)
+	defer done()
+	_, err := v.verifyGoogle(context.Background(), "tok")
+	assertAuthErr(t, err, "Invalid Google token")
+}
+
+// The https:// issuer spelling is accepted (tokeninfo uses both).
+func TestVerifyGoogle_HttpsIssuer_OK(t *testing.T) {
+	v, done := googleVerifier(t, `{"sub":"g1","aud":"aud-ok","iss":"https://accounts.google.com","email":"g@b.com"}`)
+	defer done()
+	if _, err := v.verifyGoogle(context.Background(), "tok"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// The default allow-list (env unset) accepts the shipped web client id.
+func TestNewHTTPSocialVerifier_DefaultGoogleAuds(t *testing.T) {
+	v := NewHTTPSocialVerifier("", "")
+	if !slices.Contains(v.googleAuds, "22951518033-gf853ftmf4emivffk0su2bik42j7cmai.apps.googleusercontent.com") {
+		t.Fatalf("default google auds missing shipped web client id: %v", v.googleAuds)
+	}
 }
 
 func TestVerifyFacebook_OK(t *testing.T) {

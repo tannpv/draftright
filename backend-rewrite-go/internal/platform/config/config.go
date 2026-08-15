@@ -89,6 +89,13 @@ type Config struct {
 	// verifier. Mirrors the NestJS APPLE_AUDIENCES.
 	AppleAudiences string
 
+	// GOOGLE_AUDIENCES — comma-separated allowed `aud` values for Google
+	// id_token verification. Empty → the shipped-client defaults applied in
+	// the verifier. Mirrors the NestJS GOOGLE_AUDIENCES. Without this check a
+	// token minted for any other Google OAuth client can be replayed to take
+	// over the matching account.
+	GoogleAudiences string
+
 	// AIProviders is an ordered, comma-separated provider priority
 	// list — used by the failover chain in composeDeps. Example:
 	//   AI_PROVIDERS=openai,anthropic,ollama
@@ -193,6 +200,7 @@ func Load() (*Config, error) {
 		ResendAPIKey:              os.Getenv("RESEND_API_KEY"),
 		EmailFrom:                 os.Getenv("EMAIL_FROM"),
 		AppleAudiences:            os.Getenv("APPLE_AUDIENCES"),
+		GoogleAudiences:           os.Getenv("GOOGLE_AUDIENCES"),
 		AIProviders:               os.Getenv("AI_PROVIDERS"),
 		PaymentEnabledMethods:     os.Getenv("PAYMENT_ENABLED_METHODS"),
 		IMEPackBase:               envOr("IME_PACK_BASE", DefaultIMEPackBase),
