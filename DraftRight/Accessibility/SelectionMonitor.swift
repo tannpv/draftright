@@ -294,15 +294,16 @@ final class SelectionMonitor {
         }
     }
 
-    /// Whether a mouse-up should surface the pencil, given what we could learn
-    /// about the selection. When the Accessibility API reports selected text we
-    /// trust it. AX-blind apps (Terminal, some Electron/Java apps) report none,
-    /// so we fall back to a **drag** — highlighting text by dragging. A
-    /// double/triple click is deliberately NOT a trigger: it fires while merely
-    /// reading (double-click to position, word-select) and surfaced the pencil
-    /// too eagerly (#179). Pure + static so it is unit-testable (#177).
-    nonisolated static func shouldShowPencil(hasAXText: Bool, wasDragging: Bool) -> Bool {
-        hasAXText || wasDragging
+    /// Whether a mouse-up should surface the pencil. ONLY a **drag** —
+    /// highlighting text by dragging — triggers it. A click, including a
+    /// double/triple click that selects a word or line, is deliberately not a
+    /// trigger: it fires while merely reading. Accessibility-reported text is NOT
+    /// used as a signal because it can't tell a drag-select from a double-click,
+    /// so trusting it surfaced the pencil on every double-click in AX apps like
+    /// Notes (#180). A drag is enough for AX-blind apps (Terminal) too (#177).
+    /// Pure + static so it is unit-testable.
+    nonisolated static func shouldShowPencil(wasDragging: Bool) -> Bool {
+        wasDragging
     }
 
     private func handleMouseEvent(_ event: NSEvent) {
@@ -332,18 +333,15 @@ final class SelectionMonitor {
             let clickCount = event.clickCount
             isDragging = false
 
-            // After any mouseUp, check if there's actually selected text. This is
-            // more reliable than tracking drag distance where AX works; where it
-            // doesn't (Terminal returns kAXErrorNoValue), fall back to the gesture.
+            // Show the pencil only on a drag-highlight, not on a click. Small
+            // delay so the selection/UI settles before the pencil appears. The
+            // actual text is grabbed later, when the pencil is clicked.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
                 guard let self = self else { return }
 
-                let axText = self.axService.readSelectedText()
-                let hasAXText = !(axText?.isEmpty ?? true)
-                let hasSelection = Self.shouldShowPencil(hasAXText: hasAXText,
-                                                         wasDragging: wasDragging)
+                let hasSelection = Self.shouldShowPencil(wasDragging: wasDragging)
 
-                DRLogger.log("MouseUp hasSelection=\(hasSelection) clicks=\(clickCount) wasDrag=\(wasDragging) axText=\(hasAXText)", category: .monitor)
+                DRLogger.log("MouseUp hasSelection=\(hasSelection) clicks=\(clickCount) wasDrag=\(wasDragging)", category: .monitor)
 
                 if hasSelection {
                     self.showTriggerAt(pos)
