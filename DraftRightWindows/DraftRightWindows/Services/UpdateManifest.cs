@@ -40,6 +40,40 @@ public static class UpdatePolicy
     public const int CheckIntervalHours = 24;
 }
 
+/// <summary>
+/// The user-facing "an update is waiting" wording, for every surface that
+/// shows it (tray menu, Settings link).
+/// <para>
+/// Centralised because the two surfaces had their own copies of the same
+/// string-building and would drift (RULE #1) — and because the version is not
+/// always known. The Store backend cannot supply a trustworthy version (see
+/// <c>StoreUpdateService.RefreshAvailableUpdateAsync</c>), so it passes none,
+/// and every surface has to degrade the same way instead of rendering
+/// "Update  available" with a hole where the number should be.
+/// </para>
+/// </summary>
+public static class UpdateLabel
+{
+    /// <summary>"Update 2.3.63" when the version is known and trustworthy,
+    /// plain "Update" when it isn't.</summary>
+    private static string Subject(string? version) =>
+        string.IsNullOrWhiteSpace(version) ? "Update" : $"Update {version}";
+
+    /// <summary>Tray menu item. Terser than <see cref="Settings"/> — it sits in
+    /// a context menu, not next to a version field.</summary>
+    public static string Tray(string? version, bool staged) =>
+        staged
+            ? $"{Subject(version)} ready — restart & install"
+            : $"{Subject(version)} available — install now";
+
+    /// <summary>Settings hyperlink. Spells out the click action, since the link
+    /// text is the only affordance telling the user what happens next.</summary>
+    public static string Settings(string? version, bool staged) =>
+        staged
+            ? $"{Subject(version)} downloaded — click to restart and install"
+            : $"{Subject(version)} available — click to download and install";
+}
+
 public class UpdateInfo
 {
     [JsonPropertyName("version")]

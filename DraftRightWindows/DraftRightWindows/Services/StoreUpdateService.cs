@@ -144,24 +144,33 @@ public class StoreUpdateService : IUpdateService
                 // Take the first applicable update — for a single-package app
                 // (DraftRight is one MSIX) there's only ever one entry anyway.
                 var first = updates[0];
-                var v = first.Package.Id.Version;
-                var versionString = $"{v.Major}.{v.Minor}.{v.Build}";
                 AvailableUpdate = new UpdateInfo
                 {
-                    Version = versionString,
+                    // Deliberately blank. StorePackageUpdate.Package.Id.Version
+                    // reports the version of the package being replaced, NOT the
+                    // one being offered, so putting it in the UI told users
+                    // "Update <the version you are already running> available".
+                    // Observed twice on a real Store install: 2.3.25 advertised
+                    // while running 2.3.25, and 2.3.52 advertised while running
+                    // 2.3.52 with 2.3.61 the actual pending package. UpdateLabel
+                    // degrades to a version-less "Update available" for this.
+                    Version = string.Empty,
                     WindowsUrl = string.Format(StoreProductPageUriFormat, Package.Current.Id.FamilyName),
                     ReleaseNotes = string.Empty, // Store does not expose per-update notes via API.
                     Required = first.Mandatory,
                 };
+                LogStoreReportedVersion(first);
             }
 
-            // Only fire if state actually changed (version differs or null↔value)
-            var changed = (previous?.Version ?? "") != (AvailableUpdate?.Version ?? "");
+            // Fire on appearance/disappearance only. This backend has no
+            // trustworthy version to diff, so comparing version strings (as the
+            // HTTP backend does) would compare "" to "" and never fire at all.
+            var changed = (previous == null) != (AvailableUpdate == null);
             if (changed)
             {
                 DRLogger.Log(
                     AvailableUpdate != null
-                        ? $"Store update available: {AvailableUpdate.Version} (mandatory={AvailableUpdate.Required})"
+                        ? $"Store update available (mandatory={AvailableUpdate.Required})"
                         : "Store reports no updates available.",
                     DRLogger.Category.APP);
                 AvailableUpdateChanged?.Invoke();
@@ -177,6 +186,19 @@ public class StoreUpdateService : IUpdateService
         }
     }
 
+    /// <summary>Records what the Store actually reported, for diagnosis only —
+    /// never for display. Keeping it in the log is what made the "advertised
+    /// version equals installed version" pattern visible in the first place, so
+    /// a future reader can re-check the assumption against a live install
+    /// instead of taking this class's word for it.</summary>
+    private static void LogStoreReportedVersion(StorePackageUpdate update)
+    {
+        var v = update.Package.Id.Version;
+        DRLogger.Log(
+            $"Store-reported package version (untrusted, not shown): {v.Major}.{v.Minor}.{v.Build}.{v.Revision}",
+            DRLogger.Category.APP);
+    }
+
     /// <inheritdoc/>
     /// <remarks>The Microsoft Store API does not expose per-update release
     /// notes — Store-installed users see notes in the Store listing page, not
@@ -190,7 +212,7 @@ public class StoreUpdateService : IUpdateService
     {
         try
         {
-            DRLogger.Log($"Requesting Store install of {info.Version}…", DRLogger.Category.APP);
+            DRLogger.Log("Requesting Store install of the pending update…", DRLogger.Category.APP);
             var updates = await _context.GetAppAndOptionalStorePackageUpdatesAsync();
             if (updates == null || updates.Count == 0)
             {

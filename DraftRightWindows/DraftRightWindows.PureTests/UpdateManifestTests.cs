@@ -152,4 +152,44 @@ public class UpdateManifestTests
         var n = UpdateManifest.NormalizeForPlatform(raw, Windows);
         Assert.Equal("deadbeef", n.WindowsSha256);
     }
+
+    // ── UpdateLabel: the wording every surface shows ────────────────────────
+    //
+    // The version is optional. The Store backend has no trustworthy one to
+    // give (StorePackageUpdate.Package.Id.Version reports the package being
+    // replaced, not the one on offer), so it passes none and the label must
+    // degrade cleanly rather than leaving a gap where a number should be.
+
+    [Theory]
+    [InlineData("2.3.63", false, "Update 2.3.63 available — install now")]
+    [InlineData("2.3.63", true, "Update 2.3.63 ready — restart & install")]
+    [InlineData(null, false, "Update available — install now")]
+    [InlineData("", true, "Update ready — restart & install")]
+    [InlineData("   ", false, "Update available — install now")] // whitespace is not a version
+    public void Tray_OmitsVersionWhenUnknown(string? version, bool staged, string expected)
+    {
+        Assert.Equal(expected, UpdateLabel.Tray(version, staged));
+    }
+
+    [Theory]
+    [InlineData("2.3.63", false, "Update 2.3.63 available — click to download and install")]
+    [InlineData("2.3.63", true, "Update 2.3.63 downloaded — click to restart and install")]
+    [InlineData(null, false, "Update available — click to download and install")]
+    [InlineData("", true, "Update downloaded — click to restart and install")]
+    public void Settings_OmitsVersionWhenUnknown(string? version, bool staged, string expected)
+    {
+        Assert.Equal(expected, UpdateLabel.Settings(version, staged));
+    }
+
+    [Fact]
+    public void Labels_NeverContainDoubleSpace()
+    {
+        // The bug this guards: interpolating an empty version straight into
+        // "Update {version} available" rendered "Update  available".
+        foreach (var staged in new[] { true, false })
+        {
+            Assert.DoesNotContain("  ", UpdateLabel.Tray("", staged));
+            Assert.DoesNotContain("  ", UpdateLabel.Settings(null, staged));
+        }
+    }
 }
