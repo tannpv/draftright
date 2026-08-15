@@ -163,3 +163,20 @@ every shipped window follows; apply them to any new one.)
   restated icons and labels the enum already owned, listed six of eight, and
   ignored `Settings.EnabledTones` — so Grammar Check was unreachable and its
   Settings toggle did nothing.
+
+## Rewrite trigger — Pencil / Hotkey (#180)
+
+`Models/TriggerMode.cs` `{Pencil,Hotkey}` (ApiValue `"pencil"/"hotkey"` — parity
+with macOS/Linux settings.json). `App.ApplyTriggerMode()` gates the hotkey +
+`_pencilTrigger` per mode; Settings → Trigger has the picker.
+
+**⚠️ The pencil engine is UNVERIFIED on Windows — never run, compile-only.**
+`Services/PencilTrigger.cs` = a global `WH_MOUSE_LL` hook on its own STA
+`Application.Run` pump thread + `Views/PencilOverlayForm.cs` (NOACTIVATE overlay).
+A buggy low-level mouse hook can **freeze system input**. Do **NOT** ship it to
+the Store live until tested on a real Windows machine. Debug via
+`%LOCALAPPDATA%\DraftRight\Logs\draftright.log` (`Pencil:` lines) — same
+log-driven loop as macOS. Ctrl+C only on the deliberate click, never on
+selection (the macOS #178 rule). Missing vs macOS: the "require actual
+selection" check (needs UI Automation) + the on-screen clamp — add in the debug
+loop. Full state: maintainer's `reference_windows_pencil_engine` memory.
