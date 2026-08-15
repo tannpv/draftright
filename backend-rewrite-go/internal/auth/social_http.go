@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"slices"
 	"time"
 )
 
@@ -16,7 +17,18 @@ type httpVerifier struct {
 	facebookURL string // "...me?fields=...&access_token="
 	appleKeyURL string
 	appleAuds   []string
+	googleAuds  []string
 }
+
+// Shipped Google OAuth client ids — the `aud` values the real apps mint tokens
+// for. These are PUBLIC values embedded in the clients themselves. Kept in sync
+// with the NestJS `googleAudiences()` DEFAULTS in
+// backend/src/auth/auth.service.ts and the per-platform client configs; both
+// lists are the external spec (Google-issued client ids), so a shared literal
+// on each side is acceptable — but they MUST agree, so change both together.
+const googleDefaultAuds = "22951518033-gf853ftmf4emivffk0su2bik42j7cmai.apps.googleusercontent.com," + // web + Flutter mobile (also the app_settings default)
+	"22951518033-dvkn61dhibse9fu83ohh51mlovd7269a.apps.googleusercontent.com," + // macOS — iOS-type client
+	"22951518033-oaf0ptahsjrsnu2v2qr0kpul5tslpgf6.apps.googleusercontent.com" // Linux — Desktop-app client
 
 // Compile-time assertion: httpVerifier satisfies SocialVerifier.
 var _ SocialVerifier = (*httpVerifier)(nil)
@@ -24,10 +36,14 @@ var _ SocialVerifier = (*httpVerifier)(nil)
 // NewHTTPSocialVerifier builds the production verifier with Google/Facebook/
 // Apple endpoints. appleAudsCSV is a comma-separated list of accepted Apple
 // audiences; empty falls back to appleDefaultAuds.
-func NewHTTPSocialVerifier(appleAudsCSV string) *httpVerifier {
+func NewHTTPSocialVerifier(appleAudsCSV, googleAudsCSV string) *httpVerifier {
 	auds := splitAuds(appleAudsCSV)
 	if len(auds) == 0 {
 		auds = splitAuds(appleDefaultAuds)
+	}
+	gauds := splitAuds(googleAudsCSV)
+	if len(gauds) == 0 {
+		gauds = splitAuds(googleDefaultAuds)
 	}
 	return &httpVerifier{
 		http:        &http.Client{Timeout: 10 * time.Second},
@@ -35,6 +51,7 @@ func NewHTTPSocialVerifier(appleAudsCSV string) *httpVerifier {
 		facebookURL: "https://graph.facebook.com/me?fields=id,name,email,picture.type(large)&access_token=",
 		appleKeyURL: "https://appleid.apple.com/auth/keys",
 		appleAuds:   auds,
+		googleAuds:  gauds,
 	}
 }
 
@@ -50,12 +67,35 @@ func (v *httpVerifier) verifyGoogle(ctx context.Context, idToken string) (Social
 	}
 	var d struct {
 		Sub           string `json:"sub"`
+		Aud           string `json:"aud"`
+		Iss           string `json:"iss"`
 		Email         string `json:"email"`
 		Name          string `json:"name"`
 		Picture       string `json:"picture"`
 		EmailVerified any    `json:"email_verified"`
 	}
 	_ = json.NewDecoder(resp.Body).Decode(&d)
+
+	// tokeninfo only proves Google minted the token — NOT that it was minted
+	// for us. Without this check an id_token issued to any other OAuth client
+	// (any app the user has ever signed into with Google) can be replayed here
+	// to take over that user's account. Mirrors the NestJS verifyGoogleToken
+	// aud/iss/sub checks byte-for-byte, including the error messages.
+	if len(v.googleAuds) == 0 {
+		// Fail closed: an empty allow-list must never mean "allow everything".
+		return SocialProfile{}, unauthorized("Google sign-in is not configured")
+	}
+	if d.Aud == "" || !slices.Contains(v.googleAuds, d.Aud) {
+		return SocialProfile{}, unauthorized("Invalid Google token")
+	}
+	// Guard the issuer too; tokeninfo echoes it and both spellings are valid.
+	if d.Iss != "" && d.Iss != "accounts.google.com" && d.Iss != "https://accounts.google.com" {
+		return SocialProfile{}, unauthorized("Invalid Google token")
+	}
+	if d.Sub == "" {
+		return SocialProfile{}, unauthorized("Google token missing sub claim")
+	}
+
 	return SocialProfile{
 		SocialID: d.Sub, Email: d.Email, Name: d.Name, AvatarURL: d.Picture,
 		EmailVerified: truthy(d.EmailVerified),
