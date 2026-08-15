@@ -387,11 +387,27 @@ final class SelectionMonitor {
 
         let buttonSize = CGSize(width: 32, height: 32)
 
-        // Use drag coordinates; try AX selection bounds for better X position
-        var originX = point.x
-        var originY = point.y
+        // Place the pencil just BELOW-right of the drag point so it sits beside
+        // the selection instead of on top of the cursor, then clamp it fully
+        // on-screen. Previously it was pinned at the raw drag point with no
+        // offset: in AX-blind apps like Terminal (where the selection-bounds
+        // refinement below is unavailable) the panel landed under the pointer
+        // or, for a selection near the top of the screen, extended off the top
+        // edge (the panel grows upward in Cocoa's bottom-left coords) and was
+        // never visible (#182).
+        let gap: CGFloat = 6
+        var originX = point.x + gap
+        var originY = point.y - buttonSize.height - gap
         if let selBounds = axService.selectedTextBounds(), selBounds.minX > 0 {
             originX = selBounds.minX
+            originY = selBounds.minY - buttonSize.height - gap
+        }
+        // Keep the whole button inside the screen that contains the point.
+        let anchor = CGPoint(x: originX, y: originY)
+        let screen = NSScreen.screens.first(where: { $0.frame.contains(anchor) }) ?? NSScreen.main
+        if let vf = screen?.frame {
+            originX = min(max(originX, vf.minX + 2), vf.maxX - buttonSize.width - 2)
+            originY = min(max(originY, vf.minY + 2), vf.maxY - buttonSize.height - 2)
         }
         let origin = CGPoint(x: originX, y: originY)
 
@@ -423,6 +439,7 @@ final class SelectionMonitor {
         panel.contentView = nsButton
         panel.orderFrontRegardless()
         self.triggerWindow = panel
+        DRLogger.log("pencil panel frame=\(panel.frame) visible=\(panel.isVisible) screen=\(screen?.frame ?? .zero)", category: .monitor)
     }
 
     /// Pre-capture the selection when the pencil appears, so a later click has
