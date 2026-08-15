@@ -27,7 +27,7 @@ public class App : Application
     public static RewriteCache RewriteCache { get; } = new();
 
     private Window? _hiddenWindow;
-    private IntPtr _hwnd = IntPtr.Zero;
+    private static IntPtr _hwnd = IntPtr.Zero;
     private System.Threading.Timer? _healthTimer;
     // Owns the tray icon, menu, update badge, and its STA pump thread.
     private TrayIconController? _tray;
@@ -225,27 +225,11 @@ public class App : Application
         _subclassProc = HiddenWindowSubclassProc;
         Win32Interop.SetWindowSubclass(_hwnd, _subclassProc, (UIntPtr)1, UIntPtr.Zero);
 
-        // Register the global hotkey using saved settings
-        bool registered = Hotkey.Register(
-            _hwnd,
-            (uint)Settings.HotkeyModifiers,
-            (uint)Settings.HotkeyKey);
-
-        if (!registered)
-        {
-            DRLogger.Error(
-                $"Hotkey registration failed (modifiers=0x{Settings.HotkeyModifiers:X} vk=0x{Settings.HotkeyKey:X})",
-                DRLogger.Category.HOTKEY);
-        }
-        else
-        {
-            DRLogger.Log(
-                $"Hotkey registered (modifiers=0x{Settings.HotkeyModifiers:X} vk=0x{Settings.HotkeyKey:X})",
-                DRLogger.Category.HOTKEY);
-        }
-
-        // Wire up the hotkey handler
+        // Wire up the hotkey handler, then install the triggers for the current
+        // mode (hotkey and/or pencil). ApplyTriggerMode can be re-run at runtime
+        // from Settings when the user changes the mode.
         Hotkey.HotkeyPressed += async (_, _) => await HandleHotkeyAsync();
+        ApplyTriggerMode();
 
         // Restore saved session; otherwise the user logs in via Settings.
         if (Auth.RestoreSession())
@@ -369,6 +353,40 @@ public class App : Application
         }
 
         return Win32Interop.DefSubclassProc(hWnd, uMsg, wParam, lParam);
+    }
+
+    // ── Trigger configuration ───────────────────────────────
+
+    /// <summary>
+    /// Install the trigger mechanisms for the current <see cref="Models.TriggerMode"/>:
+    /// register the global hotkey when the mode uses it, and start the
+    /// on-selection pencil when the mode uses it. Safe to call again at runtime
+    /// when the user changes the mode in Settings.
+    /// </summary>
+    public static void ApplyTriggerMode()
+    {
+        var mode = Settings.TriggerMode;
+
+        if (mode.UsesHotkey())
+        {
+            bool ok = Hotkey.Register(_hwnd, (uint)Settings.HotkeyModifiers, (uint)Settings.HotkeyKey);
+            DRLogger.Log(
+                ok
+                    ? $"Trigger {mode.ApiValue()}: hotkey registered (modifiers=0x{Settings.HotkeyModifiers:X} vk=0x{Settings.HotkeyKey:X})"
+                    : $"Trigger {mode.ApiValue()}: hotkey registration FAILED",
+                DRLogger.Category.HOTKEY);
+        }
+        else
+        {
+            Hotkey.Unregister();
+            DRLogger.Log($"Trigger {mode.ApiValue()}: hotkey off", DRLogger.Category.HOTKEY);
+        }
+
+        // Phase 2 wires the on-selection pencil engine here, gated on
+        // mode.UsesPencil(). Until then, selecting Pencil mode disables the
+        // hotkey and shows no pencil — the picker exists but the pencil
+        // mechanism (global mouse hook + UI Automation + overlay) is not built
+        // yet. See DraftRight #180 (Windows pencil trigger).
     }
 
     // ── Hotkey handler ──────────────────────────────────────

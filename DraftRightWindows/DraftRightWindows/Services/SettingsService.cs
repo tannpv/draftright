@@ -51,6 +51,10 @@ public sealed class SettingsService
     /// <summary>Interaction mode. Defaults to Advanced so existing users see no behavior change.</summary>
     public AppMode AppMode { get; set; } = AppMode.Advanced;
 
+    /// <summary>Which trigger mechanisms are active — pencil, hotkey, or both.
+    /// Defaults to Hotkey so existing users (hotkey-only today) see no change (#180).</summary>
+    public TriggerMode TriggerMode { get; set; } = TriggerMode.Hotkey;
+
     /// <summary>Preset tone used by One-Click mode. Stored as the tone's API value.</summary>
     public string OneClickTone { get; set; } = "polished";
 
@@ -95,6 +99,7 @@ public sealed class SettingsService
                 EnabledTones = loaded.EnabledTones;
             DefaultTone = loaded.DefaultTone ?? DefaultTone;
             AppMode = AppModeExtensions.FromApiValue(loaded.AppMode);
+            TriggerMode = TriggerModeExtensions.FromApiValue(loaded.TriggerMode);
             OneClickTone = loaded.OneClickTone ?? OneClickTone;
             LoggingEnabled = loaded.LoggingEnabled ?? LoggingEnabled;
             LastSeenVersion = loaded.LastSeenVersion ?? LastSeenVersion;
@@ -124,6 +129,7 @@ public sealed class SettingsService
                 EnabledTones = EnabledTones,
                 DefaultTone = DefaultTone,
                 AppMode = AppMode.ApiValue(),
+                TriggerMode = TriggerMode.ApiValue(),
                 OneClickTone = OneClickTone,
                 LoggingEnabled = LoggingEnabled,
                 LastSeenVersion = LastSeenVersion
@@ -153,6 +159,7 @@ public sealed class SettingsService
         public List<string>? EnabledTones { get; set; }
         public string? DefaultTone { get; set; }
         public string? AppMode { get; set; }
+        public string? TriggerMode { get; set; }
         public string? OneClickTone { get; set; }
         public bool? LoggingEnabled { get; set; }
         public string? LastSeenVersion { get; set; }
