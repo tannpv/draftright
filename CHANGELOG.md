@@ -23,6 +23,13 @@ A Windows-only line under `### Windows` will never appear in the macOS
 If a version needs the user to *do* something after updating, say so
 explicitly under an **Action needed:** line inside the relevant sub-section.
 
+## 2.3.53 — 2026-08-15
+### macOS
+- Secure auto-updates: a downloaded update is now verified against a published checksum before it installs, and a corrupt or tampered download is refused instead of run.
+- You can now attach a screenshot to a bug report with one click.
+- Fixed a crash in the diff view that could happen on certain edits.
+- Repeating the same text and tone is now faster — the result is served instantly instead of asking the server again.
+
 ## 2.3.52 — 2026-08-11
 ### Windows
 - Fixed an occasional error when installing an update. The app now retries automatically, so updates install reliably without you having to try again.
