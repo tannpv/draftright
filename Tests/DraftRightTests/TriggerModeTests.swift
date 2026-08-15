@@ -1,7 +1,7 @@
 import XCTest
 @testable import DraftRight
 
-/// The trigger-mode enum that lets pencil and hotkey coexist (#179).
+/// The trigger-mode enum — pencil or hotkey, mutually exclusive (#179, #180).
 final class TriggerModeTests: XCTestCase {
 
     func testPencilUsesPencilOnly() {
@@ -14,9 +14,10 @@ final class TriggerModeTests: XCTestCase {
         XCTAssertTrue(TriggerMode.hotkey.usesHotkey)
     }
 
-    func testBothUsesBoth() {
-        XCTAssertTrue(TriggerMode.both.usesPencil)
-        XCTAssertTrue(TriggerMode.both.usesHotkey)
+    func testModesAreMutuallyExclusive() {
+        for mode in TriggerMode.allCases {
+            XCTAssertNotEqual(mode.usesPencil, mode.usesHotkey, "exactly one mechanism per mode")
+        }
     }
 
     func testRawValuesArePersistenceStable() {
@@ -24,11 +25,12 @@ final class TriggerModeTests: XCTestCase {
         // resets every user's saved mode. Pin them.
         XCTAssertEqual(TriggerMode.pencil.rawValue, "pencil")
         XCTAssertEqual(TriggerMode.hotkey.rawValue, "hotkey")
-        XCTAssertEqual(TriggerMode.both.rawValue, "both")
-        XCTAssertEqual(TriggerMode(rawValue: "both"), .both)
+        XCTAssertEqual(TriggerMode(rawValue: "hotkey"), .hotkey)
+        // A removed mode ("both") no longer decodes — the caller migrates it.
+        XCTAssertNil(TriggerMode(rawValue: "both"))
     }
 
     func testAllCasesCoverEveryMode() {
-        XCTAssertEqual(Set(TriggerMode.allCases), [.pencil, .hotkey, .both])
+        XCTAssertEqual(Set(TriggerMode.allCases), [.pencil, .hotkey])
     }
 }

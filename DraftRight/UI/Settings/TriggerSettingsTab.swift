@@ -53,15 +53,11 @@ struct TriggerSettingsTab: View {
     private var triggerHint: String {
         switch appModel.triggerMode {
         case .pencil:
-            return "Highlight or double-click text to show the pencil button."
+            return "Highlight text by dragging to show the pencil button."
         case .hotkey:
             return appModel.hotkeyString.isEmpty
                 ? "Set a shortcut, then select text and press it to open the rewrite panel."
                 : "Select text, then press the shortcut to open the rewrite panel."
-        case .both:
-            return appModel.hotkeyString.isEmpty
-                ? "Highlight text to show the pencil. Set a shortcut to also trigger by keyboard."
-                : "Highlight text to show the pencil — the shortcut works too, whichever is faster."
         }
     }
 
