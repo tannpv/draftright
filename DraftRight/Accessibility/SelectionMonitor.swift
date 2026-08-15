@@ -195,33 +195,10 @@ final class SelectionMonitor {
             return
         }
 
-        // Fallback: Cmd+C then read clipboard
+        // Fallback: synthesize ⌘C then read the clipboard. Safe here — a hotkey
+        // press is a deliberate action. Shared with the pencil-click path (#178).
         DRLogger.warn("Hotkey AX failed, trying Cmd+C", category: .monitor)
-        let pasteboard = NSPasteboard.general
-        let savedChangeCount = pasteboard.changeCount
-
-        // Snapshot the current clipboard BEFORE synthesizing copy. It's the
-        // last-resort source for apps where AX exposes no selection AND a
-        // synthesized ⌘C is ignored — most notably Terminal on macOS 26, which
-        // hides the mouse selection from AX and blocks injected keystrokes. In
-        // that case the user's own ⌘C (done before the hotkey) is the only way
-        // in, so we reuse whatever they copied.
-        let preClipboard = (pasteboard.string(forType: .string) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-
-        let source = CGEventSource(stateID: .hidSystemState)
-        let keyDown = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_ANSI_C), keyDown: true)
-        keyDown?.flags = .maskCommand
-        let keyUp = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_ANSI_C), keyDown: false)
-        keyUp?.flags = .maskCommand
-        keyDown?.post(tap: .cgSessionEventTap)
-        keyUp?.post(tap: .cgSessionEventTap)
-
-        // Poll the pasteboard a few times instead of a single 0.3s check. A
-        // synthesized Cmd+C can take longer to land in apps that aren't
-        // AX-cooperative (terminals, Console.app) — a fixed one-shot wait
-        // reads too early and reports "no text" for a copy that arrives 0.4s
-        // later. Retry at 0.15 / 0.35 / 0.6s before giving up.
-        pollClipboardForSelection(pasteboard, savedChangeCount: savedChangeCount, preClipboard: preClipboard, delays: [0.15, 0.35, 0.6])
+        captureViaCmdC()
     }
 
     /// Poll the pasteboard at each delay; fire onTextSelected on the first
@@ -430,21 +407,35 @@ final class SelectionMonitor {
         self.triggerWindow = panel
     }
 
-    /// Pre-capture text when selection is detected (before any click can disrupt it)
+    /// Pre-capture the selection when the pencil appears, so a later click has
+    /// the text even if the click disturbs the selection.
+    ///
+    /// AX-ONLY on purpose. This runs on every selection (every pencil-show), so
+    /// it must never synthesize ⌘C — doing that injected a global ⌘C on each
+    /// selection and fought the user's own copy (#178). When AX can't read the
+    /// selection (Terminal and other AX-blind apps), the text is grabbed via the
+    /// ⌘C fallback in `grabTextAndOpen`, i.e. only when the user actually clicks
+    /// the pencil — a deliberate action, exactly like the hotkey path.
     private func preCaptureSelectedText() {
         cachedSelectedText = nil
-
-        // Strategy 1: AX API
         if let text = axService.readSelectedText(), !text.isEmpty {
             DRLogger.log("Pre-capture AX got: \(text.count) chars", category: .monitor)
             cachedSelectedText = text
-            return
+        } else {
+            DRLogger.log("Pre-capture AX unavailable; will Cmd+C on click", category: .monitor)
         }
-        DRLogger.warn("Pre-capture AX failed, trying Cmd+C", category: .monitor)
+    }
 
-        // Strategy 2: Cmd+C to clipboard (selection is still active at this point)
+    /// Synthesize a single ⌘C and read the selection off the clipboard, polling
+    /// for the copy to land. ONLY safe to call on a deliberate user action
+    /// (hotkey press, pencil click) — never on mere selection (#178).
+    private func captureViaCmdC() {
         let pasteboard = NSPasteboard.general
         let savedChangeCount = pasteboard.changeCount
+        // Snapshot the current clipboard first — the last-resort source for apps
+        // where AX exposes no selection AND a synthesized ⌘C is ignored (Terminal
+        // on macOS 26), where the user's own prior ⌘C is the only way in.
+        let preClipboard = (pasteboard.string(forType: .string) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
 
         let source = CGEventSource(stateID: .hidSystemState)
         let keyDown = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_ANSI_C), keyDown: true)
@@ -454,21 +445,7 @@ final class SelectionMonitor {
         keyDown?.post(tap: .cgSessionEventTap)
         keyUp?.post(tap: .cgSessionEventTap)
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-            guard let self = self else { return }
-            // Only read if clipboard actually changed (Cmd+C succeeded)
-            if pasteboard.changeCount != savedChangeCount {
-                let text = (pasteboard.string(forType: .string) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-                if !text.isEmpty {
-                    DRLogger.log("Pre-capture clipboard got: \(text.count) chars", category: .monitor)
-                    self.cachedSelectedText = text
-                } else {
-                    DRLogger.log("Pre-capture clipboard empty", category: .monitor)
-                }
-            } else {
-                DRLogger.warn("Pre-capture clipboard unchanged (Cmd+C may have failed)", category: .monitor)
-            }
-        }
+        pollClipboardForSelection(pasteboard, savedChangeCount: savedChangeCount, preClipboard: preClipboard, delays: [0.15, 0.35, 0.6])
     }
 
     /// Use pre-captured text, or try again as last resort
@@ -483,14 +460,20 @@ final class SelectionMonitor {
             return
         }
 
-        // Last resort: try AX (unlikely to work after click)
+        // Try AX again (unlikely to work after click, but cheap).
         if let text = axService.readSelectedText(), !text.isEmpty {
             DRLogger.log("AX got text (fallback): \(text.count) chars", category: .monitor)
             onTextSelected?(text)
             return
         }
 
-        DRLogger.warn("NO TEXT FOUND (pre-capture missed and AX failed)", category: .monitor)
+        // AX-blind app (Terminal): no pre-captured text. Grab it now via ⌘C.
+        // Safe here because a pencil click is a deliberate action — unlike
+        // pre-capture, which runs on every selection and must not touch ⌘C (#178).
+        // The pencil is a non-activating panel, so the source app keeps its
+        // selection across the click.
+        DRLogger.warn("Pencil click: pre-capture missed + AX failed — Cmd+C fallback", category: .monitor)
+        captureViaCmdC()
     }
 
     @objc private func triggerButtonClicked() {
