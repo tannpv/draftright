@@ -297,11 +297,12 @@ final class SelectionMonitor {
     /// Whether a mouse-up should surface the pencil, given what we could learn
     /// about the selection. When the Accessibility API reports selected text we
     /// trust it. AX-blind apps (Terminal, some Electron/Java apps) report none,
-    /// so we fall back to the gesture: a drag, or a double/triple click (word or
-    /// line selection). Pure + static so it is unit-testable without event
-    /// plumbing (#177).
-    nonisolated static func shouldShowPencil(hasAXText: Bool, wasDragging: Bool, clickCount: Int) -> Bool {
-        hasAXText || wasDragging || clickCount >= 2
+    /// so we fall back to a **drag** — highlighting text by dragging. A
+    /// double/triple click is deliberately NOT a trigger: it fires while merely
+    /// reading (double-click to position, word-select) and surfaced the pencil
+    /// too eagerly (#179). Pure + static so it is unit-testable (#177).
+    nonisolated static func shouldShowPencil(hasAXText: Bool, wasDragging: Bool) -> Bool {
+        hasAXText || wasDragging
     }
 
     private func handleMouseEvent(_ event: NSEvent) {
@@ -340,8 +341,7 @@ final class SelectionMonitor {
                 let axText = self.axService.readSelectedText()
                 let hasAXText = !(axText?.isEmpty ?? true)
                 let hasSelection = Self.shouldShowPencil(hasAXText: hasAXText,
-                                                         wasDragging: wasDragging,
-                                                         clickCount: clickCount)
+                                                         wasDragging: wasDragging)
 
                 DRLogger.log("MouseUp hasSelection=\(hasSelection) clicks=\(clickCount) wasDrag=\(wasDragging) axText=\(hasAXText)", category: .monitor)
 
