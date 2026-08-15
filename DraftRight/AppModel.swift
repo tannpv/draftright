@@ -182,6 +182,10 @@ final class AppModel: ObservableObject {
         } else {
             self.triggerMode = (UserDefaults.standard.string(forKey: Keys.hotkey) ?? "").isEmpty ? .pencil : .hotkey
         }
+        // One-time cleanup: #176's remember-the-hotkey default is superseded by
+        // triggerMode (the combo is no longer cleared on a mode switch). Drop the
+        // orphaned key so it doesn't linger in every user's defaults.
+        UserDefaults.standard.removeObject(forKey: "draftright.lastHotkey")
         let allTones = Set(Tone.allCases)
         let savedToneStrings = UserDefaults.standard.stringArray(forKey: Keys.enabledTones)
         if let strings = savedToneStrings {
