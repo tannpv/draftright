@@ -23,6 +23,10 @@ A Windows-only line under `### Windows` will never appear in the macOS
 If a version needs the user to *do* something after updating, say so
 explicitly under an **Action needed:** line inside the relevant sub-section.
 
+## 2.3.56 — 2026-08-15
+### macOS
+- Fixed: selecting text no longer interferes with Copy (⌘C). The rewrite pencil now only reads your selection when you actually click it, so your own copying works normally.
+
 ## 2.3.55 — 2026-08-15
 ### macOS
 - The rewrite pencil now appears when you select text in more apps — including Terminal — not just apps that hand their selection to macOS. Selecting by drag or by double/triple-click now shows the pencil reliably.
