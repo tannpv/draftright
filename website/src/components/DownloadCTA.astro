@@ -6,13 +6,18 @@
 const BASE = '/downloads';
 const API = import.meta.env.PUBLIC_API_URL ?? 'https://api.draftright.info';
 
-let MACOS_VERSION = '2.3.30';
-let WINDOWS_VERSION = '2.3.51';
+// Fallbacks only for an offline build. The live values come from
+// /updates/latest below; keep these near the shipped versions so a fetch
+// failure degrades to something current rather than months stale.
+let MACOS_VERSION = '2.3.53';
+let WINDOWS_VERSION = '2.3.52';
 try {
   const res = await fetch(`${API}/updates/latest`);
   if (res.ok) {
     const j = await res.json();
-    MACOS_VERSION = j?.platforms?.macos?.version ?? MACOS_VERSION;
+    // Backend key is `mac`, not `macos` — reading `macos` silently fell back
+    // to the stale constant and shipped the old DMG to every visitor.
+    MACOS_VERSION = j?.platforms?.mac?.version ?? MACOS_VERSION;
     WINDOWS_VERSION = j?.platforms?.windows?.version ?? WINDOWS_VERSION;
   }
 } catch { /* build offline — use fallbacks */ }
