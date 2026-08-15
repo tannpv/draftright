@@ -48,5 +48,8 @@
     <Compile Include="..\DraftRightWindows\Models\GrammarIssueType.cs" Link="Source\GrammarIssueType.cs" />
     <Compile Include="..\DraftRightWindows\Services\GrammarFixer.cs" Link="Source\GrammarFixer.cs" />
     <Compile Include="..\DraftRightWindows\Diff\WordDiff.cs" Link="Source\WordDiff.cs" />
+    <Compile Include="..\DraftRightWindows\Models\AppMode.cs" Link="Source\AppMode.cs" />
+    <Compile Include="..\DraftRightWindows\Models\TriggerMode.cs" Link="Source\TriggerMode.cs" />
+    <Compile Include="..\DraftRightWindows\Services\PencilTriggerDecision.cs" Link="Source\PencilTriggerDecision.cs" />
   </ItemGroup>
 </Project>
