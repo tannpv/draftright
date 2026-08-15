@@ -17,8 +17,14 @@ final class SelectionMonitor {
     /// Text captured at selection-detection time, before any click can disrupt it
     private var cachedSelectedText: String?
 
-    /// The current hotkey config — set from AppModel.hotkeyString. Empty = hotkey off, pencil on.
+    /// The hotkey combo — set from AppModel.hotkeyString. Pure data; whether the
+    /// hotkey is active is decided by `triggerMode`, not by this being empty.
     var hotkeyString: String = "" {
+        didSet { reconfigureMode() }
+    }
+
+    /// Which trigger mechanisms are active — set from AppModel.triggerMode (#179).
+    var triggerMode: TriggerMode = .pencil {
         didSet { reconfigureMode() }
     }
 
@@ -30,7 +36,9 @@ final class SelectionMonitor {
         reconfigureMode()
     }
 
-    /// Switch between pencil mode (mouse monitors) and hotkey mode
+    /// (Re)install the trigger mechanisms for the current mode. Pencil and hotkey
+    /// are independent — `.both` turns on both; the two setup paths are reused
+    /// exactly as before, just gated on the mode rather than mutually exclusive.
     private func reconfigureMode() {
         // Remove all existing monitors
         if let mouseMonitor { NSEvent.removeMonitor(mouseMonitor) }
@@ -42,9 +50,10 @@ final class SelectionMonitor {
 
         guard onTextSelected != nil else { return }
 
-        if hotkeyString.isEmpty {
-            // Pencil mode: mouse/keyboard selection triggers pencil button
-            DRLogger.log("Mode: PENCIL (highlight/double-click → pencil button)", category: .monitor)
+        DRLogger.log("Mode: \(triggerMode.rawValue.uppercased()) (pencil=\(triggerMode.usesPencil) hotkey=\(triggerMode.usesHotkey && !hotkeyString.isEmpty))", category: .monitor)
+
+        if triggerMode.usesPencil {
+            // Pencil: mouse/keyboard selection surfaces the pencil button.
             mouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .leftMouseUp, .leftMouseDragged]) { [weak self] event in
                 Task { @MainActor in
                     self?.handleMouseEvent(event)
@@ -55,9 +64,10 @@ final class SelectionMonitor {
                     self?.handleKeyEvent(event)
                 }
             }
-        } else {
-            // Hotkey mode: only global hotkey triggers the panel
-            DRLogger.log("Mode: HOTKEY (\(Self.hotkeyDisplayName(hotkeyString)))", category: .monitor)
+        }
+
+        if triggerMode.usesHotkey, !hotkeyString.isEmpty {
+            // Hotkey: the global shortcut opens the panel.
             reinstallHotkeyMonitor()
         }
     }

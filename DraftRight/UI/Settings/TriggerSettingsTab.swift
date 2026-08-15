@@ -9,51 +9,60 @@ struct TriggerSettingsTab: View {
     var body: some View {
         Form {
             Section(header: Text("Trigger")) {
-                HStack {
-                    Text("Rewrite Trigger")
-                    Spacer()
-                    if appModel.hotkeyEnabled {
-                        Text(SelectionMonitor.hotkeyDisplayName(appModel.hotkeyString))
-                            .foregroundColor(.accentColor)
-                    } else {
-                        Text("Pencil Button")
-                            .foregroundColor(.secondary)
+                Picker("Rewrite Trigger", selection: $appModel.triggerMode) {
+                    ForEach(TriggerMode.allCases) { mode in
+                        Text(mode.displayName).tag(mode)
                     }
                 }
-                HStack {
-                    if appModel.hotkeyEnabled {
-                        Button("Change Hotkey") { startRecordingHotkey() }
-                        Button("Use Pencil Instead") {
-                            // Remember the hotkey so the switch is reversible (#176).
-                            appModel.lastHotkeyString = appModel.hotkeyString
-                            appModel.hotkeyString = ""
-                        }
-                        .foregroundColor(.red)
-                    } else {
-                        if !appModel.lastHotkeyString.isEmpty {
-                            Button("Use Hotkey (\(SelectionMonitor.hotkeyDisplayName(appModel.lastHotkeyString)))") {
-                                appModel.hotkeyString = appModel.lastHotkeyString
-                            }
-                        }
-                        Button("Set Hotkey") { startRecordingHotkey() }
-                    }
-                }
-                if isRecordingHotkey {
+                .pickerStyle(.segmented)
+
+                // The hotkey config only matters when the mode uses the hotkey.
+                if appModel.triggerMode.usesHotkey {
                     HStack {
-                        Text("Press key combo…")
-                            .foregroundColor(.orange)
+                        Text("Keyboard Shortcut")
                         Spacer()
-                        Button("Cancel") { stopRecordingHotkey() }
+                        if appModel.hotkeyString.isEmpty {
+                            Text("Not set")
+                                .foregroundColor(.secondary)
+                        } else {
+                            Text(SelectionMonitor.hotkeyDisplayName(appModel.hotkeyString))
+                                .foregroundColor(.accentColor)
+                        }
+                    }
+                    HStack {
+                        Button(appModel.hotkeyString.isEmpty ? "Set Hotkey" : "Change Hotkey") {
+                            startRecordingHotkey()
+                        }
+                        if isRecordingHotkey {
+                            Text("Press key combo…")
+                                .foregroundColor(.orange)
+                            Spacer()
+                            Button("Cancel") { stopRecordingHotkey() }
+                        }
                     }
                 }
-                Text(appModel.hotkeyEnabled
-                    ? "Select text, then press the hotkey to open the rewrite panel."
-                    : "Highlight or double-click text to show the pencil button.")
+
+                Text(triggerHint)
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
         }
         .formStyle(.grouped)
+    }
+
+    private var triggerHint: String {
+        switch appModel.triggerMode {
+        case .pencil:
+            return "Highlight or double-click text to show the pencil button."
+        case .hotkey:
+            return appModel.hotkeyString.isEmpty
+                ? "Set a shortcut, then select text and press it to open the rewrite panel."
+                : "Select text, then press the shortcut to open the rewrite panel."
+        case .both:
+            return appModel.hotkeyString.isEmpty
+                ? "Highlight text to show the pencil. Set a shortcut to also trigger by keyboard."
+                : "Highlight text to show the pencil — the shortcut works too, whichever is faster."
+        }
     }
 
     private func startRecordingHotkey() {
