@@ -62,7 +62,16 @@ public sealed class HotkeyService : IDisposable
         if (_isRegistered)
         {
             DRLogger.Log("Register: replacing existing registration", DRLogger.Category.HOTKEY);
-            Unregister();
+            if (!Unregister())
+            {
+                // Registering now would only earn ERROR_HOTKEY_ALREADY_REGISTERED.
+                // Report the real reason instead of the downstream symptom.
+                DRLogger.Error(
+                    "Register: aborted — the previous registration could not be released, so the key is still owned. " +
+                    "Both calls must run on the thread that owns the hotkey (see App.OnHotkeyThread).",
+                    DRLogger.Category.HOTKEY);
+                return false;
+            }
         }
 
         _isRegistered = RegisterHotKey(hwnd, HOTKEY_ID, modifiers, vk);
@@ -94,20 +103,41 @@ public sealed class HotkeyService : IDisposable
     /// <summary>
     /// Unregisters the current hotkey.
     /// </summary>
-    public void Unregister()
+    /// <returns>True if the key is no longer held by this process.</returns>
+    /// <remarks>
+    /// The failure path matters. A hotkey belongs to the <em>thread</em> that
+    /// registered it and only that thread can release it, so calling this from
+    /// elsewhere makes UnregisterHotKey return false. The old code ignored that
+    /// and cleared its state anyway, leaving the service convinced it held
+    /// nothing while the OS still held Ctrl+Shift+R — so the next Register
+    /// failed with ERROR_HOTKEY_ALREADY_REGISTERED (1408) and the trigger only
+    /// kept working because the original registration was still alive.
+    /// State is now kept on failure, so a later attempt from the right thread
+    /// still knows there is something to release.
+    /// </remarks>
+    public bool Unregister()
     {
         if (!_isRegistered)
         {
             DRLogger.Log("Unregister: no-op (not registered)", DRLogger.Category.HOTKEY);
-            return;
+            return true;
         }
 
-        var ok = UnregisterHotKey(_registeredHwnd, HOTKEY_ID);
-        DRLogger.Log(
-            $"Unregister: hwnd=0x{_registeredHwnd.ToInt64():X} returned={ok}",
+        if (UnregisterHotKey(_registeredHwnd, HOTKEY_ID))
+        {
+            DRLogger.Log($"Unregister: released hwnd=0x{_registeredHwnd.ToInt64():X}",
+                DRLogger.Category.HOTKEY);
+            _registeredHwnd = IntPtr.Zero;
+            _isRegistered = false;
+            return true;
+        }
+
+        var lastError = Marshal.GetLastWin32Error();
+        DRLogger.Error(
+            $"Unregister: FAILED — UnregisterHotKey returned false for hwnd=0x{_registeredHwnd.ToInt64():X}, " +
+            $"GetLastError=0x{lastError:X} ({lastError}). Keeping registration state; the key is still held.",
             DRLogger.Category.HOTKEY);
-        _registeredHwnd = IntPtr.Zero;
-        _isRegistered = false;
+        return false;
     }
 
     /// <summary>
