@@ -14,7 +14,6 @@ from typing import List
 
 from draftright import config
 from draftright.models.app_mode import AppMode
-from draftright.models.trigger_mode import TriggerMode
 from draftright.models.tone import Tone
 
 log = logging.getLogger(__name__)
@@ -35,7 +34,6 @@ _DEFAULTS: dict[str, object] = {
     "default_tone": "",
     # #96 One-Click: hotkey behaviour + the tone it uses.
     "app_mode": AppMode.ADVANCED.value,
-    "trigger_mode": TriggerMode.HOTKEY.value,
     "one_click_tone": Tone.POLISHED.api_value,
     "last_seen_version": "",  # drives the one-time post-update "What's New"
 }
@@ -168,15 +166,6 @@ class SettingsService:
     @last_seen_version.setter
     def last_seen_version(self, value: str) -> None:
         self._data["last_seen_version"] = value
-
-    @property
-    def trigger_mode(self) -> TriggerMode:
-        """Which mechanism triggers a rewrite — pencil or hotkey (#188)."""
-        return TriggerMode.from_wire(self._data.get("trigger_mode"))
-
-    @trigger_mode.setter
-    def trigger_mode(self, value: TriggerMode) -> None:
-        self._data["trigger_mode"] = value.value
 
     @property
     def app_mode(self) -> AppMode:
