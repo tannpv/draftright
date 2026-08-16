@@ -180,3 +180,16 @@ log-driven loop as macOS. Ctrl+C only on the deliberate click, never on
 selection (the macOS #178 rule). Missing vs macOS: the "require actual
 selection" check (needs UI Automation) + the on-screen clamp — add in the debug
 loop. Full state: maintainer's `reference_windows_pencil_engine` memory.
+
+### Hotkey/hook thread-affinity (learned via #186)
+
+`RegisterHotKey`/`UnregisterHotKey` (and `SetWindowsHookEx`) are **thread-affine** —
+only the thread that registered can unregister, on the thread whose message loop
+owns the HWND. `ApplyTriggerMode` is reachable from the Settings window (its own
+thread), so it MUST marshal register/unregister onto the owner thread — done via
+`App.OnHotkeyThread` (runs inline if already there, else `_dispatcherQueue.TryEnqueue`;
+`_dispatcherQueue` is static = the single hotkey-thread owner). `HotkeyService.Unregister()`
+returns bool and keeps its state on a false result so a later attempt from the right
+thread still knows to release. Skipping this left the OS holding Ctrl+Shift+R while the
+service thought it held nothing → shortcut kept firing in Pencil mode, and re-registering
+gave `ERROR_HOTKEY_ALREADY_REGISTERED (1408)`.
