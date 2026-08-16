@@ -52,7 +52,10 @@ public class App : Application
     private static bool _didPromptForReauth;
 
     // ── Rewrite flow ────────────────────────────────────────
-    private DispatcherQueue? _dispatcherQueue;
+    // Static because the UI thread is a process-wide singleton and the static
+    // trigger plumbing below has to reach it. It is also the one place that
+    // knows which thread owns the hotkey — see OnHotkeyThread.
+    private static DispatcherQueue? _dispatcherQueue;
     // The rewrite UI is WPF (RewritePanelWindow), migrated off WinForms in
     // #156. WinUI 3 was tried twice and cannot render here — unpackaged builds
     // have no usable resources.pri, so the first attempt crashed with
@@ -375,25 +378,58 @@ public class App : Application
     {
         var mode = Settings.TriggerMode;
 
-        if (mode.UsesHotkey())
+        // Settings runs on its own thread, so calling straight through here used
+        // to hand the hotkey APIs the wrong thread — see OnHotkeyThread.
+        OnHotkeyThread(() =>
         {
-            bool ok = Hotkey.Register(_hwnd, (uint)Settings.HotkeyModifiers, (uint)Settings.HotkeyKey);
-            DRLogger.Log(
-                ok
-                    ? $"Trigger {mode.ApiValue()}: hotkey registered (modifiers=0x{Settings.HotkeyModifiers:X} vk=0x{Settings.HotkeyKey:X})"
-                    : $"Trigger {mode.ApiValue()}: hotkey registration FAILED",
-                DRLogger.Category.HOTKEY);
-        }
-        else
-        {
-            Hotkey.Unregister();
-            DRLogger.Log($"Trigger {mode.ApiValue()}: hotkey off", DRLogger.Category.HOTKEY);
-        }
+            if (mode.UsesHotkey())
+            {
+                bool ok = Hotkey.Register(_hwnd, (uint)Settings.HotkeyModifiers, (uint)Settings.HotkeyKey);
+                DRLogger.Log(
+                    ok
+                        ? $"Trigger {mode.ApiValue()}: hotkey registered (modifiers=0x{Settings.HotkeyModifiers:X} vk=0x{Settings.HotkeyKey:X})"
+                        : $"Trigger {mode.ApiValue()}: hotkey registration FAILED",
+                    DRLogger.Category.HOTKEY);
+            }
+            else
+            {
+                Hotkey.Unregister();
+                DRLogger.Log($"Trigger {mode.ApiValue()}: hotkey off", DRLogger.Category.HOTKEY);
+            }
+        });
 
         // The on-selection pencil (global mouse hook + overlay) runs only in
         // Pencil mode. It grabs the selection via Ctrl+C on click, so it shares
         // the same rewrite flow as the hotkey.
         _pencilTrigger?.SetEnabled(mode.UsesPencil());
+    }
+
+    /// <summary>
+    /// Runs <paramref name="action"/> on the thread that owns <see cref="_hwnd"/>'s
+    /// message loop, which is the thread the global hotkey belongs to.
+    /// </summary>
+    /// <remarks>
+    /// RegisterHotKey/UnregisterHotKey are thread-affine: a hotkey is owned by the
+    /// thread that registered it and no other thread can release it. Settings
+    /// calls <see cref="ApplyTriggerMode"/> from its own UI thread, so switching
+    /// Trigger to Pencil ran UnregisterHotKey on the wrong thread — it returned
+    /// false, the key stayed registered, and switching back reported
+    /// ERROR_HOTKEY_ALREADY_REGISTERED (1408). Routing every call through here
+    /// keeps registration and release on one thread.
+    /// Runs inline when already on that thread so start-up ordering is unchanged.
+    /// </remarks>
+    private static void OnHotkeyThread(Action action)
+    {
+        var queue = _dispatcherQueue;
+        if (queue == null || queue.HasThreadAccess)
+        {
+            action();
+            return;
+        }
+
+        if (!queue.TryEnqueue(() => action()))
+            DRLogger.Error("OnHotkeyThread: TryEnqueue failed — hotkey state may be stale.",
+                DRLogger.Category.HOTKEY);
     }
 
     // ── Hotkey handler ──────────────────────────────────────
@@ -745,7 +781,7 @@ public class App : Application
                 if (result == WinForms.DialogResult.OK
                     && Application.Current is App app)
                 {
-                    app._dispatcherQueue?.TryEnqueue(() => app.OpenSettings());
+                    _dispatcherQueue?.TryEnqueue(() => app.OpenSettings());
                 }
             }
             catch (Exception ex)
