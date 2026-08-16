@@ -16,7 +16,6 @@ from pathlib import Path
 from draftright import config
 from draftright.helpers.display_server import is_wayland, is_x11
 from draftright.models.app_mode import AppMode
-from draftright.models.trigger_mode import TriggerMode
 from draftright.models.health import HealthStatus
 from draftright.models.rewrite import RewriteResult
 from draftright.models.tone import Tone

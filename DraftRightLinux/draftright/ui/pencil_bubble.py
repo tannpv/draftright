@@ -17,7 +17,7 @@ from typing import Callable
 import gi
 
 gi.require_version("Gtk", "4.0")
-from gi.repository import GLib, Gtk
+from gi.repository import Gdk, GLib, Gtk
 
 try:
     gi.require_version("GdkX11", "4.0")
@@ -131,8 +131,6 @@ class PencilBubble(Gtk.Window):
         self._on_click()
 
     def _on_key_pressed(self, _controller, keyval, _keycode, _state) -> bool:
-        from gi.repository import Gdk
-
         if keyval == Gdk.KEY_Escape:
             self.dismiss()
             return True

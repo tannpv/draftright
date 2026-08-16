@@ -213,10 +213,16 @@ Design — no synthetic copy, but a real bubble:
   GTK-free and unit-tested (`test/test_pencil_trigger_decision.py`), like the
   macOS/Windows `PencilTriggerDecision`.
 
-**UNVERIFIED — never run on a Linux X11 host** (dev Mac has no `gi`, so the GTK
-paths can't even be compile-checked here; only the pure enum + decision are
-tested — 9 tests). Debug the polling loop + picker via the app log on a real
-X11 session, the same log-driven loop as Windows #180.
+**Verified end-to-end on 2026-08-16** — the "dev Mac has no `gi`" note that
+shipped with this section was never true of the Linux box, which has gi 3.56.2
+and runs the app. Confirmed by running, under `GDK_BACKEND=x11` on XWayland:
+the trigger arms, a highlight raises the bubble at the pointer, clicking it
+opens the `RewritePanel` with the highlighted text (user-confirmed), the panel
+does not stack across polls, and the clipboard is never touched while polling.
+
+Still open: a **native X11 session** (this was XWayland) and multi-monitor
+placement — `xdotool getdisplaygeometry` reports one combined geometry, so the
+edge-flip has only ever been exercised against a single screen.
 
 ## Hard-won gotchas
 
