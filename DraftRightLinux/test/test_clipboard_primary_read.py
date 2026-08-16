@@ -32,30 +32,40 @@ UNSAFE_READ = ClipboardService.get_selected_text.__name__
 
 
 class _SpyService(ClipboardService):
-    """A service whose every side effect is recorded instead of performed."""
+    """A service that records the keystrokes it would synthesise."""
 
-    def __init__(self, primary: str = "", clipboard: str = "") -> None:
+    def __init__(self) -> None:
         # Bypass ClipboardService.__init__: it probes the live display server.
         self._wayland = False
         self._sim = None
         self._injector = None
-        self._primary = primary
-        self._clipboard = clipboard
         self.side_effects: list[str] = []
-
-    def _run_read(self, cmd):
-        # Every tool names the selection in its argv; match on the enum value
-        # rather than a copy of any one tool's flag spelling.
-        return self._primary if Selection.PRIMARY.value in " ".join(cmd) else self._clipboard
 
     def _simulate_copy(self) -> None:
         self.side_effects.append("ctrl+c")
 
-    def set_clipboard(self, text: str) -> None:
-        self.side_effects.append("clipboard-write")
-
 
 class PrimaryReadIsObservationOnlyTest(unittest.TestCase):
+    """Patches the shared tool runner, so no real clipboard is ever touched."""
+
+    def _service(self, primary: str = "", clipboard: str = "") -> _SpyService:
+        svc = _SpyService()
+
+        def fake_read(cmd):
+            # Every tool names the selection in its argv; match on the enum
+            # value rather than a copy of any one tool's flag spelling.
+            return primary if Selection.PRIMARY.value in " ".join(cmd) else clipboard
+
+        def fake_run(cmd, stdin_text=None):
+            svc.side_effects.append(f"wrote {' '.join(cmd)}")
+            return True
+
+        for name, fake in (("read_tool", fake_read), ("run_tool", fake_run)):
+            real = getattr(clipboard_module, name)
+            setattr(clipboard_module, name, fake)
+            self.addCleanup(setattr, clipboard_module, name, real)
+        return svc
+
     def setUp(self):
         # The dev box may have no clipboard tool installed; pretend the
         # preferred one is there so the real dispatch runs into the stub.
@@ -64,21 +74,21 @@ class PrimaryReadIsObservationOnlyTest(unittest.TestCase):
         self.addCleanup(setattr, clipboard_module, "has_command", real_has_command)
 
     def test_returns_the_primary_selection(self):
-        svc = _SpyService(primary="highlighted")
+        svc = self._service(primary="highlighted")
         self.assertEqual(svc.get_primary_selection(), "highlighted")
         self.assertEqual(svc.side_effects, [])
 
     def test_empty_primary_stays_silent(self):
         # The poll-loop case: PRIMARY is empty most of the time on an idle
         # desktop. No synthetic keystroke, no clipboard write, ever.
-        svc = _SpyService(primary="", clipboard="stale clipboard text")
+        svc = self._service(primary="", clipboard="stale clipboard text")
         self.assertEqual(svc.get_primary_selection(), "")
         self.assertEqual(svc.side_effects, [])
 
     def test_get_selected_text_keeps_its_ctrl_c_fallback(self):
         # Not a bug — the hotkey is a deliberate user action, so paying the
         # side effects to recover a selection X11 did not publish is correct.
-        svc = _SpyService(primary="", clipboard="copied")
+        svc = self._service(primary="", clipboard="copied")
         self.assertEqual(svc.get_selected_text(), "copied")
         self.assertIn("ctrl+c", svc.side_effects)
 

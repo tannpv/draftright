@@ -9,18 +9,19 @@ typical Linux desktop already ships.
 from __future__ import annotations
 
 import logging
-import subprocess
 import time
 from enum import Enum
 from typing import Callable, NamedTuple
 
-from draftright import config
 from draftright.helpers.display_server import is_wayland
-from draftright.helpers.system_input import TextInputSimulator, has_command
+from draftright.helpers.system_input import (
+    TextInputSimulator,
+    has_command,
+    read_tool,
+    run_tool,
+)
 
 log = logging.getLogger(__name__)
-
-_TIMEOUT = config.SUBPROCESS_TIMEOUT
 
 
 class Selection(Enum):
@@ -160,13 +161,13 @@ class ClipboardService:
         a single edit and the two can never disagree.
         """
         cmd = self._pick_command(selection, self._READ_COMMANDS)
-        return self._run_read(cmd) if cmd else ""
+        return read_tool(cmd) if cmd else ""
 
     def _write_selection(self, selection: Selection, text: str) -> None:
         """Write *text* into *selection*, mirroring :meth:`_read_selection`."""
         cmd = self._pick_command(selection, self._WRITE_COMMANDS)
         if cmd:
-            self._run_write(cmd, text)
+            run_tool(cmd, stdin_text=text)
 
     def _pick_command(self, selection: Selection, tools: _ToolSet) -> list[str]:
         """Return the argv of the first usable tool, or [] with a warning.
@@ -206,29 +207,3 @@ class ClipboardService:
     def _simulate_copy(self) -> None:
         """Simulate Ctrl+C to copy the current selection to CLIPBOARD."""
         self._sim.copy()
-
-    @staticmethod
-    def _run_read(cmd: list[str]) -> str:
-        try:
-            result = subprocess.run(
-                cmd, capture_output=True, text=True, timeout=_TIMEOUT,
-            )
-            return result.stdout if result.returncode == 0 else ""
-        except FileNotFoundError:
-            return ""
-        except subprocess.TimeoutExpired:
-            return ""
-        except Exception as exc:
-            log.debug("Clipboard read error (%s): %s", cmd[0], exc)
-            return ""
-
-    @staticmethod
-    def _run_write(cmd: list[str], text: str) -> None:
-        try:
-            subprocess.run(
-                cmd, input=text, text=True, timeout=_TIMEOUT, check=False,
-            )
-        except FileNotFoundError:
-            log.warning("Clipboard tool not found: %s", cmd[0])
-        except Exception as exc:
-            log.debug("Clipboard write error (%s): %s", cmd[0], exc)

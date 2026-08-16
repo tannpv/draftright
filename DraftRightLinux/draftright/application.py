@@ -63,6 +63,10 @@ class DraftRightApplication(Adw.Application):
         # X11-only on-selection trigger (#188); None until Pencil mode is active
         # on an X11 session. Mutually exclusive with the hotkey.
         self.pencil_trigger = None
+        # The bubble that offers the rewrite; built on first highlight, then
+        # re-shown, so highlights cannot stack windows.
+        self.pencil_bubble = None
+        self._pending_pencil_text = ""
         self._hotkey_active = False
         # Client-side rewrite cache, shared across panel instances (a fresh
         # RewritePanel is built per hotkey press). Mirrors macOS.
@@ -340,16 +344,46 @@ class DraftRightApplication(Adw.Application):
                     # PRIMARY only — NOT get_selected_text, whose Ctrl+C fallback
                     # would fire into the focused window several times a second.
                     read_selection=self.clipboard_service.get_primary_selection,
-                    on_selection=self._route_captured_text,
+                    # Offer, don't impose: a highlight raises the bubble, and
+                    # only clicking it routes the text on (#188).
+                    on_selection=self._offer_pencil_bubble,
                 )
             if self.pencil_trigger is not None:
                 self.pencil_trigger.start()
         elif self.pencil_trigger is not None:
             self.pencil_trigger.stop()
+            self._dismiss_pencil_bubble()
 
         # The hotkey is the other half of the pair: live only when the pencil is
         # not (i.e. Hotkey mode, or anywhere the pencil can't run — Wayland).
         self._set_hotkey_active(not pencil_wanted)
+
+    def _offer_pencil_bubble(self, text: str) -> None:
+        """Show the pencil bubble at the pointer for *text* (#188).
+
+        The bubble is built once and re-shown: a new one per highlight would
+        stack windows the same way per-press panels used to. Clicking it hands
+        the text to the shared chokepoint, so both triggers still end up in one
+        place — the pencil just gains a confirmation step the hotkey (already an
+        explicit action) does not need.
+        """
+        if not text:
+            return
+        if self.pencil_bubble is None:
+            from draftright.ui.pencil_bubble import PencilBubble
+
+            self.pencil_bubble = PencilBubble(on_click=self._on_pencil_bubble_clicked)
+        self._pending_pencil_text = text
+        self.pencil_bubble.show_at_pointer()
+
+    def _on_pencil_bubble_clicked(self) -> None:
+        """The user accepted the offer — route the text they had highlighted."""
+        self._route_captured_text(self._pending_pencil_text)
+
+    def _dismiss_pencil_bubble(self) -> None:
+        """Take the offer down (mode switch, or quit)."""
+        if self.pencil_bubble is not None:
+            self.pencil_bubble.dismiss()
 
     def _set_hotkey_active(self, active: bool) -> None:
         """Register or release the global hotkey, tracking state to stay idempotent.
@@ -571,6 +605,7 @@ class DraftRightApplication(Adw.Application):
         """Clean up resources and quit the application."""
         if self.pencil_trigger is not None:
             self.pencil_trigger.stop()
+        self._dismiss_pencil_bubble()
         if self.hotkey_service:
             self.hotkey_service.stop()
         if self.input_injector is not None:

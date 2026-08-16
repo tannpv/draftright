@@ -177,6 +177,15 @@ AUTO_RECOVERY_TIMEOUT = 60     # start-server.sh run when the backend is down
 # launched from a desktop entry inherits a minimal PATH.
 SUBPROCESS_PATH_PREFIX = "/usr/local/bin:/usr/bin:/bin"
 
+# ── Pencil bubble (#188) — the button shown at the pointer after a highlight ──
+BUBBLE_SIZE = 40          # square; big enough to click, small enough to ignore
+# Placed down-right of the pointer: that corner is empty for a left-to-right
+# drag-select, which ends with the pointer at the end of the selection.
+BUBBLE_OFFSET_X = 12
+BUBBLE_OFFSET_Y = 12
+# Auto-dismiss if it goes unclicked, so a stray highlight leaves nothing behind.
+BUBBLE_TIMEOUT_SECONDS = 6
+
 # ── Intervals (seconds) ──────────────────────────────────────────────────────
 HEALTH_CHECK_INTERVAL = 30
 UPDATE_CHECK_INTERVAL = 86400    # once per day

@@ -4,6 +4,8 @@ Centralizes the two things that were copy-pasted across
 ``clipboard_service`` and ``text_injector`` (Rule #1: no duplication):
 
   * :func:`has_command` — is a CLI tool on PATH?
+  * :func:`run_tool` / :func:`read_tool` — run one, ignoring or capturing its
+    output, with the app's single error policy.
   * :class:`TextInputSimulator` — simulate copy/paste/type keystrokes via
     ``wtype`` (Wayland) or ``xdotool`` (X11), so callers never re-implement
     the tool-selection ladder.
@@ -33,6 +35,47 @@ def has_command(cmd: str) -> bool:
     return shutil.which(cmd) is not None
 
 
+def run_tool(cmd: list[str], stdin_text: str | None = None) -> bool:
+    """Run *cmd*, optionally feeding it *stdin_text*. True if it ran.
+
+    The one place the app decides what a failing CLI tool means: a missing tool
+    is a warning (the user can install it), anything else is debug noise, and
+    nothing raises — a clipboard or keystroke helper must never crash a rewrite.
+    """
+    try:
+        subprocess.run(
+            cmd,
+            input=stdin_text,
+            text=stdin_text is not None,
+            timeout=config.SUBPROCESS_TIMEOUT,
+            check=False,
+        )
+        return True
+    except FileNotFoundError:
+        log.warning("Tool not found: %s", cmd[0])
+    except Exception as exc:  # noqa: BLE001 — see docstring
+        log.debug("Tool %s failed: %s", cmd[0], exc)
+    return False
+
+
+def read_tool(cmd: list[str]) -> str:
+    """Run *cmd* and return its stdout, or "" if it failed in any way.
+
+    Same policy as :func:`run_tool`; the empty string is the universal "no
+    answer", so callers branch on content rather than on exceptions.
+    """
+    try:
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=config.SUBPROCESS_TIMEOUT,
+        )
+        return result.stdout if result.returncode == 0 else ""
+    except FileNotFoundError:
+        log.warning("Tool not found: %s", cmd[0])
+    except Exception as exc:  # noqa: BLE001 — see run_tool
+        log.debug("Tool %s failed: %s", cmd[0], exc)
+    return ""
+
+
 class TextInputSimulator:
     """Simulate copy/paste/type keystrokes on the active window.
 
@@ -58,7 +101,7 @@ class TextInputSimulator:
         path when no clipboard paste is possible.
         """
         if has_command("xdotool") and len(text) < _TYPE_FALLBACK_MAX_CHARS:
-            return self._run(["xdotool", "type", "--clearmodifiers", text])
+            return run_tool(["xdotool", "type", "--clearmodifiers", text])
         return False
 
     # ------------------------------------------------------------------
@@ -68,24 +111,13 @@ class TextInputSimulator:
     def _send_combo(self, key: str) -> bool:
         """Send Ctrl+*key* via the best available tool for the display server."""
         if self._wayland and has_command("wtype"):
-            if self._run(["wtype", "-M", "ctrl", "-P", key, "-m", "ctrl"]):
+            if run_tool(["wtype", "-M", "ctrl", "-P", key, "-m", "ctrl"]):
                 return True
         # X11, or Wayland without wtype → xdotool (works under XWayland too).
         if has_command("xdotool"):
-            return self._run(["xdotool", "key", "--clearmodifiers", f"ctrl+{key}"])
+            return run_tool(["xdotool", "key", "--clearmodifiers", f"ctrl+{key}"])
         log.error(
             "Cannot simulate Ctrl+%s — install xdotool (X11) or wtype (Wayland).",
             key,
         )
-        return False
-
-    @staticmethod
-    def _run(cmd: list[str]) -> bool:
-        try:
-            subprocess.run(cmd, timeout=config.SUBPROCESS_TIMEOUT, check=False)
-            return True
-        except FileNotFoundError:
-            log.warning("Input tool not found: %s", cmd[0])
-        except Exception as exc:  # noqa: BLE001 — never let input sim crash a rewrite
-            log.debug("Input tool %s failed: %s", cmd[0], exc)
         return False

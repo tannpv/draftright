@@ -187,13 +187,21 @@ cursor-placed affordance; Wayland forbids both (same wall as #103). So on
 Wayland the app stays on the hotkey regardless of the setting —
 `_apply_trigger_mode()` gates the pencil on `display_server.is_x11()`.
 
-Design — no synthetic copy, no floating button (unlike macOS/Windows):
-- X11 already holds highlighted text in the **PRIMARY selection**, and GTK4
-  can't position a window at the cursor anyway (#103). So the pencil
+Design — no synthetic copy, but a real bubble:
+- X11 already holds highlighted text in the **PRIMARY selection**, so the pencil
   (`services/pencil_trigger.py`) **polls PRIMARY** (`GLib.timeout_add`, 400 ms,
   via `ClipboardService.get_primary_selection` — the observation-only read, see
-  the gotcha below) and a new highlight opens the **existing `RewritePanel`** —
-  no new overlay code.
+  the gotcha below).
+- A new highlight raises the **pencil bubble** (`ui/pencil_bubble.py`) at the
+  pointer; clicking it opens the existing `RewritePanel`. The opt-in step is the
+  point: without it every selection anywhere raises a full-size panel and steals
+  focus. Auto-dismisses after `config.BUBBLE_TIMEOUT_SECONDS`.
+- **#103 does not apply here.** It was closed won't-fix because GTK4 dropped
+  client-side positioning *and Wayland forbids self-placement* — but on X11 the
+  WM honours a move on the underlying X window, and this trigger is X11-only.
+  `helpers/x11_placement.py` does it via `xdotool` (already a dependency).
+  Verified on a real session: `XMoveWindow` and `xdotool windowmove` both place
+  a GTK4 `GdkX11Toplevel` exactly.
 - Both triggers funnel through one chokepoint, `application._route_captured_text`
   (RULE #1) — app-mode routing (Advanced panel vs One-Click) lives in one place.
 - Pencil and hotkey are mutually exclusive: `_apply_trigger_mode` runs the
@@ -296,6 +304,21 @@ has focus ~2.5×/second (**Ctrl+C in a terminal is SIGINT**), CLIPBOARD thrashed
 text that the user never highlighted. `test/test_clipboard_primary_read.py`
 pins the contract and asserts the wiring with `ast` (the wiring lives in
 `application.py`, which imports `gi` and so can't be imported in the suite).
+
+### GTK sizes are logical, xdotool pixels are physical
+
+This box runs at 2x: a window asking for 40x40 is reported by `xdotool` and
+`xwininfo` as 80x80. Anything that mixes a GTK size with an xdotool coordinate
+must multiply by `widget.get_scale_factor()` first — `pencil_bubble._place_at`
+does, and without it the bubble hung off the screen edge while every unit test
+passed (they were all in one unit or the other).
+
+Also: **synthetic clicks do not reach GTK4 X11 surfaces** on this XWayland
+session. `xdotool click` on a plain GTK4 button — even targeted with
+`--window` — delivers nothing; a control window with a bare `Gtk.Button`
+reported 0 clicks. Placement, mapping and geometry are all verifiable from a
+script; *clicking* has to be done by a human. Don't read a dead synthetic click
+as a broken handler.
 
 ### Environment traps that fake a bug
 

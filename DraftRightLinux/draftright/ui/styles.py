@@ -35,6 +35,21 @@ PANEL_CSS = f"""
     color: {config.COLOR_MUTED};
     font-size: 13px;
 }}
+.pencil-bubble {{
+    background-color: {config.COLOR_BRAND_BLUE};
+    color: {config.COLOR_WHITE};
+    border: none;
+    /* Half of BUBBLE_SIZE — a circle, so it reads as an affordance floating
+       over another app's text rather than as a window. */
+    border-radius: {config.BUBBLE_SIZE // 2}px;
+    min-width: {config.BUBBLE_SIZE}px;
+    min-height: {config.BUBBLE_SIZE}px;
+    padding: 0;
+    font-size: 18px;
+}}
+.pencil-bubble:hover {{
+    background-color: {config.COLOR_BRAND_BLUE_HOVER};
+}}
 .tone-button {{
     background-color: {config.COLOR_CARD};
     color: {config.COLOR_TEXT};

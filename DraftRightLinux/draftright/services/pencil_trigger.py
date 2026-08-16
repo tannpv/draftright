@@ -2,14 +2,17 @@
 
 Wayland forbids global input monitoring, so this runs on X11 only — the caller
 gates on ``display_server.is_x11()``. Unlike macOS/Windows the Linux pencil
-needs no synthetic copy and no floating overlay button:
+needs no synthetic copy:
 
 - X11 auto-populates the PRIMARY selection whenever text is highlighted, so a
   drag-select is observable by polling PRIMARY — no global mouse hook;
-- GTK4 cannot position a window at the cursor and Wayland forbids self-placement
-  (#103), so there is no floating pencil button. A highlight instead routes
-  straight to the existing ``RewritePanel`` through ``on_selection`` — the app's
-  shared capture chokepoint, the same one the hotkey funnels into. RULE #1: one
+- a highlight raises the pencil bubble at the pointer (``ui/pencil_bubble``) and
+  only a click on it routes the text onward, so a stray selection costs nothing.
+  #103 said GTK4 cannot place a window at the cursor — that holds for Wayland,
+  which forbids self-placement, but **not for X11**, where the WM honours a move
+  on the underlying X window. This trigger is X11-only, so it can.
+- ``on_selection`` is what the bubble's click ultimately reaches: the app's
+  shared routing chokepoint, the same one the hotkey funnels into. RULE #1: one
   routing path, both triggers share it.
 
 ``read_selection`` must be **side-effect free**: this runs on a timer, so it may
