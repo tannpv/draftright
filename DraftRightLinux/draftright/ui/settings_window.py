@@ -12,7 +12,9 @@ from gi.repository import Adw, GLib, Gtk
 from draftright import config
 from draftright.__version__ import __version__
 from draftright.models.app_mode import AppMode
+from draftright.models.trigger_mode import TriggerMode
 from draftright.models.tone import Tone
+from draftright.helpers.display_server import is_x11
 from draftright.ui.subscription_page import SubscriptionPage
 from draftright.ui.report_bug_dialog import open_report_bug_dialog
 from draftright.ui.suggest_feature_dialog import open_suggest_feature_dialog
@@ -97,6 +99,31 @@ class SettingsWindow(Adw.PreferencesWindow):
             icon_name="document-edit-symbolic",
         )
         self.add(page)
+
+        # --- Trigger group: how a rewrite is invoked (#188) ---
+        trigger_desc = "Choose how you start a rewrite"
+        if not is_x11():
+            # Pencil needs global selection monitoring, which Wayland forbids
+            # (#103); say so rather than offer a mode that silently won't run.
+            trigger_desc += " — Pencil needs an X11 session (not this one)"
+        trigger_group = Adw.PreferencesGroup(title="Trigger", description=trigger_desc)
+        page.add(trigger_group)
+
+        # Order follows the enum so the dropdown index maps to a member.
+        self._trigger_modes = list(TriggerMode)
+        self._trigger_row = Adw.ComboRow(
+            title="Rewrite trigger",
+            model=Gtk.StringList.new([m.display_name for m in self._trigger_modes]),
+        )
+        current_trigger = (
+            self.app.settings_service.trigger_mode
+            if self.app.settings_service
+            else TriggerMode.HOTKEY
+        )
+        self._trigger_row.set_selected(self._trigger_modes.index(current_trigger))
+        self._trigger_row.set_subtitle(current_trigger.description)
+        self._trigger_row.connect("notify::selected", self._on_trigger_changed)
+        trigger_group.add(self._trigger_row)
 
         mode_group = Adw.PreferencesGroup(
             title="Mode",
@@ -629,6 +656,16 @@ class SettingsWindow(Adw.PreferencesWindow):
             else None
         )
         open_suggest_feature_dialog(self, bearer_token=token)
+
+    def _on_trigger_changed(self, row, _param):
+        """Persist the rewrite trigger and switch the live mechanism (#188)."""
+        mode = self._trigger_modes[row.get_selected()]
+        if self.app.settings_service:
+            self.app.settings_service.trigger_mode = mode
+            self.app.settings_service.save()
+        row.set_subtitle(mode.description)
+        # Apply immediately so the pencil/hotkey swap without a restart.
+        self.app._apply_trigger_mode()
 
     def _on_mode_changed(self, row, _param):
         """Persist the hotkey mode and reveal the preset-tone row for it (#96)."""

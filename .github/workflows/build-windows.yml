@@ -56,8 +56,33 @@ jobs:
         working-directory: DraftRightWindows/DraftRightWindows.PureTests
         run: dotnet test --logger "console;verbosity=normal"
 
+  # Gate the paid windows-latest builds (2× billing) to release moments only.
+  # Ordinary develop/main pushes previously rebuilt x64 + arm64 + MSIX every
+  # time and threw the artifacts away — publish-to-update-server is tag/release
+  # gated below, so a branch build was never shipped, just billed. That burned
+  # most of the Actions quota. The cheap ubuntu unit-tests still run on every
+  # push; only the windows builds wait for a real release (tag/Release) or a
+  # deliberate manual dispatch. One source of truth for the decision (RULE #1),
+  # consumed by both `build` and `msix`.
+  release-build-gate:
+    name: Gate paid Windows builds to releases
+    runs-on: ubuntu-latest
+    outputs:
+      proceed: ${{ steps.decide.outputs.proceed }}
+    steps:
+      - id: decide
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || \
+             [ "${{ github.event_name }}" = "release" ] || \
+             { [ "${{ github.event_name }}" = "push" ] && [[ "${{ github.ref }}" == refs/tags/v* ]]; }; then
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
-    needs: unit-tests
+    needs: [unit-tests, release-build-gate]
+    if: needs.release-build-gate.outputs.proceed == 'true'
     name: Build ${{ matrix.runtime }}
     runs-on: windows-latest
     timeout-minutes: 25
@@ -436,8 +461,11 @@ jobs:
   # cert required. Independent of the unpackaged Inno-installer build above.
   msix:
     name: Build MSIX bundle for Microsoft Store
-    # Same gate as `build` — a failing unit test must not yield a Store package.
-    needs: unit-tests
+    # Same gates as `build` — a failing unit test must not yield a Store package,
+    # and a branch push must not spend windows-latest minutes on an MSIX nobody
+    # submits (Store upload is manual). Release/dispatch only.
+    needs: [unit-tests, release-build-gate]
+    if: needs.release-build-gate.outputs.proceed == 'true'
     runs-on: windows-latest
     timeout-minutes: 25
 
