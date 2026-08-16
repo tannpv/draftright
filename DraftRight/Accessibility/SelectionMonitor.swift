@@ -14,6 +14,9 @@ final class SelectionMonitor {
     private var hotkeyRef: EventHotKeyRef?
     private var isDragging = false
     private var dragStartPoint: CGPoint = .zero
+    /// Minimum pointer travel (points) from mouse-down to count as a drag rather
+    /// than a jittery click — below this a plain click showed the pencil (#187).
+    private static let dragThresholdPoints: CGFloat = 6
     /// Text captured at selection-detection time, before any click can disrupt it
     private var cachedSelectedText: String?
 
@@ -306,6 +309,13 @@ final class SelectionMonitor {
         wasDragging && !selectionKnownEmpty
     }
 
+    /// Whether the pointer traveled far enough from the mouse-down point to count
+    /// as a drag rather than a jittery click (#187). Manhattan distance is fine —
+    /// it only needs to clear hand tremor. Pure + static so it is unit-testable.
+    nonisolated static func isDragGesture(from start: CGPoint, to current: CGPoint) -> Bool {
+        abs(current.x - start.x) + abs(current.y - start.y) > dragThresholdPoints
+    }
+
     private func handleMouseEvent(_ event: NSEvent) {
         switch event.type {
         case .leftMouseDown:
@@ -320,7 +330,13 @@ final class SelectionMonitor {
             hideTrigger()
 
         case .leftMouseDragged:
-            isDragging = true
+            // Require real travel — a few points of jitter during a click is not
+            // a drag. Without this, a plain click surfaced the pencil in AX-blind
+            // spots (desktop, Terminal) where an empty selection can't be
+            // confirmed, so `wasDrag` alone let it through (#187).
+            if Self.isDragGesture(from: dragStartPoint, to: NSEvent.mouseLocation) {
+                isDragging = true
+            }
 
         case .leftMouseUp:
             let pos = NSEvent.mouseLocation
