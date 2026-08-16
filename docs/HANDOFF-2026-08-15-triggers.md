@@ -4,13 +4,19 @@ Committed to the repo so it transfers to any machine. (Local `~/.claude/projects
 does **not** transfer — the repo-committed knowledge is the scoped `CLAUDE.md`
 files + this doc.)
 
-## State snapshot
+## State snapshot (updated 2026-08-16)
 
 | Area | State |
 |---|---|
-| macOS | **2.3.62 LIVE** (Developer ID signed + notarized). Pencil trigger complete. |
-| Windows | Pencil engine on `develop` + `main`, **compile-verified only, NEVER run on Windows**. Store live = **2.3.52**. |
-| Windows Store MSIX | **2.3.61** built (CI run `31876169928`, commit `6406fa4a`) for manual Partner Center upload. Contains the pencil. |
+| macOS | **2.3.65 LIVE**. Pencil trigger COMPLETE + user-verified: drag-only, requires real selection, drag-distance threshold (no jitter-click), composited above windows. #176-183 + #187 closed. |
+| Windows pencil | On develop+main, **compile-verified only, STILL UNVERIFIED on Windows** (#180). |
+| Windows update fixes | **#184** (Store update-click HWND) + **#186** (hotkey thread-affinity + clipboard diagnostics) merged develop+main, shipped. |
+| Windows Store | **MSIX 2.3.64** (carries #184+#186+pencil) uploaded to Partner Center 2026-08-16 — in pre-processing/cert. HOLD go-live until pencil tested. Store-live was 2.3.52. |
+| Windows sideload/update-server | at **2.3.63** (the `v2.3.63` tag published the pencil to sideload). 2.3.64 NOT tagged (no sideload push of the hotkey fix yet). |
+
+Branches: `develop` = integration, `main` = release. macOS releases tag `macos-vX.Y.Z`
+(do NOT build Windows). Windows Store release tags `vX.Y.Z` (triggers Windows CI publish
+to the update server). A branch push builds artifacts only (no publish).
 
 Branches: `develop` = integration, `main` = release. macOS releases tag `macos-vX.Y.Z`
 (do NOT build Windows). Windows Store release tags `vX.Y.Z` (triggers Windows CI publish).
@@ -34,14 +40,19 @@ macOS bug saga (all shipped): #176 reversible switch, #177 Terminal drag flag,
 
 ## OPEN TASKS (the plan)
 
-0. **macOS pencil — DONE + user-verified** (2.3.63, works in Terminal; #176-#183 closed).
-   Final fix: raise the pencil `NSPanel` to `.statusBar` so it isn't composited behind
-   the target app (#183). Nothing open here.
-1. **Windows pencil debug loop** (tracked in **#180**) — the engine has never run. Test via the sideload build
-   (CI run `31874220687` → artifact `DraftRight-Setup-win-x64`, unsigned → SmartScreen/SAC
-   bypass). Read `%LOCALAPPDATA%\DraftRight\Logs\draftright.log` (`Pencil:` lines) → fix →
-   rebuild. Risk: a buggy `WH_MOUSE_LL` hook can freeze system input. **Do NOT ship the
-   Store version live until tested.**
+0. **macOS pencil — DONE + user-verified** (2.3.65; #176-#183 + #187 closed). Full behavior:
+   drag-only (no click/double-click), requires a real selection, drag-distance threshold
+   (`dragThresholdPoints=6`, no jitter-click), `.statusBar` level so it composites above the
+   target app. Nothing open. Pure decisions unit-tested: `shouldShowPencil` + `isDragGesture`.
+1. **Windows pencil debug loop** (tracked in **#180**) — the engine has never run. Test via the
+   Store MSIX **2.3.64** (uploaded, in cert) or a sideload build. **#186 added clipboard-capture
+   diagnostics** (clipboard sequence number across the synthetic Ctrl+C, capture reason) — read
+   `%LOCALAPPDATA%\DraftRight\Logs\draftright.log` (`Pencil:` + `GetSelectedTextAsync` lines) →
+   fix → rebuild. Risk: a buggy `WH_MOUSE_LL` hook can freeze system input. **Do NOT let the
+   Store build go live until tested.** LESSON: `RegisterHotKey`/`UnregisterHotKey` are
+   **thread-affine** — the pencil work's `ApplyTriggerMode`-from-Settings first ran unregister
+   on the wrong thread (#186 fix routes it via `App.OnHotkeyThread`). Any Win32 register/unregister
+   from a non-owner thread must be marshalled.
 3. **Windows pencil — missing vs macOS** — add the #181 "require actual selection" check
    (needs UI Automation `TextPattern.GetSelection`) and the #182 on-screen clamp. Currently
    position = cursor, text grabbed by Ctrl+C on click.
