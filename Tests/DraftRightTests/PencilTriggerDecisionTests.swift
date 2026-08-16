@@ -23,4 +23,17 @@ final class PencilTriggerDecisionTests: XCTestCase {
         XCTAssertFalse(SelectionMonitor.shouldShowPencil(wasDragging: false, selectionKnownEmpty: false))
         XCTAssertFalse(SelectionMonitor.shouldShowPencil(wasDragging: false, selectionKnownEmpty: true))
     }
+
+    // MARK: - Drag threshold (#187)
+
+    func testJitterIsNotADrag() {
+        // A click with a few points of tremor must not count as a drag.
+        XCTAssertFalse(SelectionMonitor.isDragGesture(from: CGPoint(x: 100, y: 100), to: CGPoint(x: 100, y: 100)))
+        XCTAssertFalse(SelectionMonitor.isDragGesture(from: CGPoint(x: 100, y: 100), to: CGPoint(x: 103, y: 102)))
+    }
+
+    func testRealTravelIsADrag() {
+        XCTAssertTrue(SelectionMonitor.isDragGesture(from: CGPoint(x: 100, y: 100), to: CGPoint(x: 110, y: 100)))
+        XCTAssertTrue(SelectionMonitor.isDragGesture(from: CGPoint(x: 100, y: 100), to: CGPoint(x: 100, y: 120)))
+    }
 }
