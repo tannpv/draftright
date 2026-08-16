@@ -191,8 +191,9 @@ Design — no synthetic copy, no floating button (unlike macOS/Windows):
 - X11 already holds highlighted text in the **PRIMARY selection**, and GTK4
   can't position a window at the cursor anyway (#103). So the pencil
   (`services/pencil_trigger.py`) **polls PRIMARY** (`GLib.timeout_add`, 400 ms,
-  via `ClipboardService`'s existing PRIMARY read) and a new highlight opens the
-  **existing `RewritePanel`** — no new overlay code.
+  via `ClipboardService.get_primary_selection` — the observation-only read, see
+  the gotcha below) and a new highlight opens the **existing `RewritePanel`** —
+  no new overlay code.
 - Both triggers funnel through one chokepoint, `application._route_captured_text`
   (RULE #1) — app-mode routing (Advanced panel vs One-Click) lives in one place.
 - Pencil and hotkey are mutually exclusive: `_apply_trigger_mode` runs the
@@ -276,6 +277,25 @@ using an iOS-type client (reversed scheme, genuinely no secret); Linux and
 Windows use Desktop clients and must send it. Each platform has its **own**
 client id, and the backend validates `aud` — a new id must be added to
 `GOOGLE_AUDIENCES` or sign-in fails with "Invalid Google token".
+
+### Two selection reads, only one of them pollable
+
+`ClipboardService` exposes both, and picking the wrong one is invisible in
+review:
+
+- `get_primary_selection()` — **observes** PRIMARY. No side effects, safe on a
+  timer. This is what the pencil (#188) polls.
+- `get_selected_text()` — capture *for a user action*. Reads PRIMARY, and **if
+  it is empty synthesises Ctrl+C** and round-trips CLIPBOARD to recover the
+  selection.
+
+PRIMARY is empty most of the time on an idle desktop, so polling the second one
+takes the fallback nearly every tick: a keystroke injected into whatever window
+has focus ~2.5×/second (**Ctrl+C in a terminal is SIGINT**), CLIPBOARD thrashed,
+150 ms slept on the GTK main thread, and rewrites fired from stale clipboard
+text that the user never highlighted. `test/test_clipboard_primary_read.py`
+pins the contract and asserts the wiring with `ast` (the wiring lives in
+`application.py`, which imports `gi` and so can't be imported in the suite).
 
 ### Environment traps that fake a bug
 

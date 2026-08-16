@@ -7,11 +7,17 @@ needs no synthetic copy and no floating overlay button:
 - X11 auto-populates the PRIMARY selection whenever text is highlighted, so a
   drag-select is observable by polling PRIMARY — no global mouse hook;
 - GTK4 cannot position a window at the cursor and Wayland forbids self-placement
-  (#103), so there is no floating pencil button. A highlight instead polls
-  straight through to the existing ``RewritePanel`` via the same capture +
-  routing the hotkey uses (``read_selection`` = ``ClipboardService`` PRIMARY
-  read, ``on_selection`` = the app's shared capture chokepoint). RULE #1: one
-  capture path, one routing path, both triggers share them.
+  (#103), so there is no floating pencil button. A highlight instead routes
+  straight to the existing ``RewritePanel`` through ``on_selection`` — the app's
+  shared capture chokepoint, the same one the hotkey funnels into. RULE #1: one
+  routing path, both triggers share it.
+
+``read_selection`` must be **side-effect free**: this runs on a timer, so it may
+only *observe* the selection. ``ClipboardService.get_primary_selection`` is that
+read. Its sibling ``get_selected_text`` is not — when PRIMARY is empty it
+synthesises Ctrl+C and rewrites CLIPBOARD, which on a poll loop means a
+keystroke injected into the focused window every tick (SIGINT in a terminal) and
+a rewrite fired from stale clipboard text.
 
 UNVERIFIED: built without a Linux X11 host (gi/PyGObject is not on the dev Mac).
 The pure decision (``pencil_trigger_decision.should_trigger``) is unit-tested;

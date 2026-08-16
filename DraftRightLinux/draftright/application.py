@@ -339,7 +339,9 @@ class DraftRightApplication(Adw.Application):
         if pencil_wanted:
             if self.pencil_trigger is None and self.clipboard_service is not None:
                 self.pencil_trigger = PencilTrigger(
-                    read_selection=self.clipboard_service.get_selected_text,
+                    # PRIMARY only — NOT get_selected_text, whose Ctrl+C fallback
+                    # would fire into the focused window several times a second.
+                    read_selection=self.clipboard_service.get_primary_selection,
                     on_selection=self._route_captured_text,
                 )
             if self.pencil_trigger is not None:
