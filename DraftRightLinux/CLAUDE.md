@@ -175,6 +175,40 @@ The hotkey uses `org.freedesktop.portal.GlobalShortcuts`. The portal **refuses a
 
 **Partial:** #22 desktop updater — Linux DONE (version 2.4.1, 401 refresh wired, sha256 integrity in `update_service.py`); macOS `UpdateService.swift` HAS the integrity check in code + tests (`verifyIntegrity`, commit `73112702`, on main; `UpdateServiceTests`) but it is **NOT in the shipped binary** — macOS 2.3.30 (shipped 2026-07-23) predates the check (2026-07-30), so deployed macOS still auto-updates unverified. Closing #22's macOS half needs the **next macOS notarized release** (manual, Developer ID) to carry `73112702`, not more code.
 
+## Rewrite trigger — Pencil / Hotkey (#188)
+
+Two mutually-exclusive triggers via `models/trigger_mode.py` `TriggerMode
+{pencil, hotkey}` (wire values `"pencil"/"hotkey"`, byte-identical to
+macOS/Windows so a synced `settings.json` means the same thing everywhere).
+Settings → Rewrite → **Trigger** picker; default **Hotkey**.
+
+**The pencil is X11-only.** It needs global selection monitoring and a
+cursor-placed affordance; Wayland forbids both (same wall as #103). So on
+Wayland the app stays on the hotkey regardless of the setting —
+`_apply_trigger_mode()` gates the pencil on `display_server.is_x11()`.
+
+Design — no synthetic copy, no floating button (unlike macOS/Windows):
+- X11 already holds highlighted text in the **PRIMARY selection**, and GTK4
+  can't position a window at the cursor anyway (#103). So the pencil
+  (`services/pencil_trigger.py`) **polls PRIMARY** (`GLib.timeout_add`, 400 ms,
+  via `ClipboardService`'s existing PRIMARY read) and a new highlight opens the
+  **existing `RewritePanel`** — no new overlay code.
+- Both triggers funnel through one chokepoint, `application._route_captured_text`
+  (RULE #1) — app-mode routing (Advanced panel vs One-Click) lives in one place.
+- Pencil and hotkey are mutually exclusive: `_apply_trigger_mode` runs the
+  pencil **or** the hotkey, never both. Register/unregister is flag-guarded to
+  avoid the Windows #186 ALREADY_REGISTERED trap. Because the pencil only runs
+  on X11, the hotkey is only ever stopped/restarted on X11 (XGrabKey), never the
+  fragile Wayland portal binding.
+- Pure decision `services/pencil_trigger_decision.should_trigger(prev, cur)` is
+  GTK-free and unit-tested (`test/test_pencil_trigger_decision.py`), like the
+  macOS/Windows `PencilTriggerDecision`.
+
+**UNVERIFIED — never run on a Linux X11 host** (dev Mac has no `gi`, so the GTK
+paths can't even be compile-checked here; only the pure enum + decision are
+tested — 9 tests). Debug the polling loop + picker via the app log on a real
+X11 session, the same log-driven loop as Windows #180.
+
 ## Hard-won gotchas
 
 Things that cost real debugging time here. Each one makes correct code look

@@ -13,6 +13,7 @@ files + this doc.)
 | Windows update fixes | **#184** (Store update-click HWND) + **#186** (hotkey thread-affinity + clipboard diagnostics) merged develop+main, shipped. |
 | Windows Store | **MSIX 2.3.64** (carries #184+#186+pencil) uploaded to Partner Center 2026-08-16 — in pre-processing/cert. HOLD go-live until pencil tested. Store-live was 2.3.52. |
 | Windows sideload/update-server | at **2.3.63** (the `v2.3.63` tag published the pencil to sideload). 2.3.64 NOT tagged (no sideload push of the hotkey fix yet). |
+| Linux pencil (#188) | On develop, **UNVERIFIED** (no X11 host; `gi` not on the dev Mac → GTK paths uncompilable here). **X11-only** (Wayland can't). Reuses PRIMARY-selection polling → the existing RewritePanel (no overlay/no synthetic copy). Pure enum + decision unit-tested (9 tests). See `DraftRightLinux/CLAUDE.md` → "Rewrite trigger". |
 
 Branches: `develop` = integration, `main` = release. macOS releases tag `macos-vX.Y.Z`
 (do NOT build Windows). Windows Store release tags `vX.Y.Z` (triggers Windows CI publish
