@@ -665,7 +665,7 @@ class SettingsWindow(Adw.PreferencesWindow):
             self.app.settings_service.save()
         row.set_subtitle(mode.description)
         # Apply immediately so the pencil/hotkey swap without a restart.
-        self.app._apply_trigger_mode()
+        self.app.apply_trigger_mode()
 
     def _on_mode_changed(self, row, _param):
         """Persist the hotkey mode and reveal the preset-tone row for it (#96)."""

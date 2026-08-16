@@ -154,7 +154,7 @@ class DraftRightApplication(Adw.Application):
 
         # Wire the trigger — the hotkey and, on X11 in Pencil mode, the
         # selection-polling pencil. Idempotent on re-activate.
-        self._apply_trigger_mode()
+        self.apply_trigger_mode()
 
         # Restore auth session
         self._restore_session()
@@ -323,7 +323,7 @@ class DraftRightApplication(Adw.Application):
         except Exception as exc:
             logger.warning("Failed to register hotkey %s: %s", keystring, exc)
 
-    def _apply_trigger_mode(self):
+    def apply_trigger_mode(self):
         """Start the mechanism the user chose — pencil or hotkey — and only it.
 
         The two are mutually exclusive (matching macOS/Windows). The pencil is
@@ -331,6 +331,10 @@ class DraftRightApplication(Adw.Application):
         so Pencil mode on Wayland falls back to the hotkey — the enum's safe
         default. Idempotent: safe to call again on every re-activate or when the
         Settings picker changes the mode.
+
+        Public because Settings calls it: saving ``trigger_mode`` only records
+        the choice, and the live mechanism has to be swapped for it to take
+        effect without a restart.
         """
         if self.settings_service is None:
             return
