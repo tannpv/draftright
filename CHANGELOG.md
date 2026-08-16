@@ -23,6 +23,10 @@ A Windows-only line under `### Windows` will never appear in the macOS
 If a version needs the user to *do* something after updating, say so
 explicitly under an **Action needed:** line inside the relevant sub-section.
 
+## 2.3.64 — 2026-08-16
+### Windows
+- Fixed: switching Trigger to **Pencil** now actually turns the keyboard shortcut off. It kept firing in Pencil mode, and switching back to Hotkey silently failed to re-register it.
+
 ## 2.3.63 — 2026-08-15
 ### macOS
 - The rewrite pencil is now drawn above other windows so it can't hide behind the app you're rewriting in.

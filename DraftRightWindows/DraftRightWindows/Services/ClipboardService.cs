@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -18,8 +19,25 @@ public sealed partial class ClipboardService
     [DllImport("user32.dll", SetLastError = true)]
     private static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
 
-    [DllImport("user32.dll")]
+    [DllImport("user32.dll", SetLastError = true)]
     private static extern bool OpenClipboard(IntPtr hWndNewOwner);
+
+    /// <summary>Which window currently holds the clipboard open. Names the
+    /// culprit when OpenClipboard fails instead of leaving it anonymous.</summary>
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetOpenClipboardWindow();
+
+    /// <summary>Bumped by the OS on every clipboard change, by anyone. Comparing
+    /// it across the synthetic Ctrl+C says whether the target app wrote anything
+    /// at all — which "no text came back" alone cannot tell us.</summary>
+    [DllImport("user32.dll")]
+    private static extern uint GetClipboardSequenceNumber();
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern uint EnumClipboardFormats(uint format);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern int GetClipboardFormatNameW(uint format, System.Text.StringBuilder lpszFormatName, int cchMaxCount);
 
     [DllImport("user32.dll")]
     private static extern bool CloseClipboard();
@@ -135,9 +153,15 @@ public sealed partial class ClipboardService
         DRLogger.Log($"GetSelectedTextAsync start fg=0x{fg0:X}", DRLogger.Category.HOTKEY);
 
         // 1. Save current clipboard content
-        string? originalClipboard = ReadClipboardText();
-        DRLogger.Log($"  step1: originalClipboard len={(originalClipboard?.Length ?? -1)}",
-            DRLogger.Category.HOTKEY);
+        var original = ReadClipboard();
+        string? originalClipboard = original.Text;
+        DRLogger.Log($"  step1: originalClipboard {original}", DRLogger.Category.HOTKEY);
+
+        // Sequence number rises on every clipboard write by any process. Captured
+        // here and compared after the Ctrl+C so the log can say whether the target
+        // app wrote anything at all — the difference between "nothing was
+        // selected" and "it copied, but we could not read it".
+        var seqBefore = GetClipboardSequenceNumber();
 
         // 2. Clear clipboard so we can detect new content
         ClearClipboard();
@@ -164,11 +188,23 @@ public sealed partial class ClipboardService
         for (int attempt = 1; attempt <= 8; attempt++)
         {
             await Task.Delay(100);
-            selectedText = ReadClipboardText();
-            DRLogger.Log($"  step5 attempt {attempt}: clipboard len={(selectedText?.Length ?? -1)}",
-                DRLogger.Category.HOTKEY);
+            var read = ReadClipboard();
+            selectedText = read.Text;
+            DRLogger.Log($"  step5 attempt {attempt}: clipboard {read}", DRLogger.Category.HOTKEY);
             if (!string.IsNullOrEmpty(selectedText))
                 break;
+        }
+
+        // 5b. Nothing came back — say why, while the clipboard still holds
+        //     whatever the target app left there (before step 6 overwrites it).
+        if (string.IsNullOrEmpty(selectedText))
+        {
+            var seqAfter = GetClipboardSequenceNumber();
+            DRLogger.Warn(
+                $"  step5: no text captured. clipboard sequence {seqBefore}->{seqAfter} " +
+                $"({(seqAfter == seqBefore ? "UNCHANGED — the app never wrote to the clipboard, so Ctrl+C did not copy" : "changed — something was written")}); " +
+                $"formats now: {DescribeClipboard()}",
+                DRLogger.Category.HOTKEY);
         }
 
         // 6. Restore original clipboard
@@ -285,24 +321,52 @@ public sealed partial class ClipboardService
 
     // ── Private helpers ─────────────────────────────────────
 
-    private static string? ReadClipboardText()
+    /// <summary>Why a clipboard read produced no text. The old code returned a
+    /// bare null for all four outcomes, so a log line of "len=-1" could equally
+    /// mean "the user selected nothing" or "we were never able to look" — the
+    /// two diagnoses that matter most, and the one distinction it could not
+    /// make.</summary>
+    private enum ClipboardReadStatus
+    {
+        /// <summary>Text was read.</summary>
+        Ok,
+        /// <summary>Another process holds the clipboard open.</summary>
+        OpenFailed,
+        /// <summary>Clipboard opened, but carries no CF_UNICODETEXT — either
+        /// empty, or the app published only non-text formats.</summary>
+        NoTextFormat,
+        /// <summary>The handle exists but could not be locked.</summary>
+        LockFailed,
+    }
+
+    /// <summary>A clipboard read plus the reason it produced what it did.</summary>
+    private readonly record struct ClipboardRead(string? Text, ClipboardReadStatus Status, int LastError)
+    {
+        /// <summary>Log form: the length when there is text, else the failure
+        /// and its Win32 error.</summary>
+        public override string ToString() => Status == ClipboardReadStatus.Ok
+            ? $"len={Text?.Length ?? 0}"
+            : $"{Status} (err={LastError})";
+    }
+
+    private static ClipboardRead ReadClipboard()
     {
         if (!OpenClipboard(IntPtr.Zero))
-            return null;
+            return new ClipboardRead(null, ClipboardReadStatus.OpenFailed, Marshal.GetLastWin32Error());
 
         try
         {
             var hData = GetClipboardData(CF_UNICODETEXT);
             if (hData == IntPtr.Zero)
-                return null;
+                return new ClipboardRead(null, ClipboardReadStatus.NoTextFormat, Marshal.GetLastWin32Error());
 
             var ptr = GlobalLock(hData);
             if (ptr == IntPtr.Zero)
-                return null;
+                return new ClipboardRead(null, ClipboardReadStatus.LockFailed, Marshal.GetLastWin32Error());
 
             try
             {
-                return Marshal.PtrToStringUni(ptr);
+                return new ClipboardRead(Marshal.PtrToStringUni(ptr), ClipboardReadStatus.Ok, 0);
             }
             finally
             {
@@ -313,6 +377,46 @@ public sealed partial class ClipboardService
         {
             CloseClipboard();
         }
+    }
+
+    /// <summary>
+    /// Everything on the clipboard right now, by format name. Logged only when a
+    /// capture comes back empty, to separate "the app copied nothing" from "the
+    /// app copied something we don't read" (HTML-only, RTF-only, a private
+    /// format) from "someone else has it locked".
+    /// </summary>
+    private static string DescribeClipboard()
+    {
+        if (!OpenClipboard(IntPtr.Zero))
+        {
+            return $"locked by hwnd=0x{GetOpenClipboardWindow().ToInt64():X} " +
+                   $"(OpenClipboard err={Marshal.GetLastWin32Error()})";
+        }
+
+        try
+        {
+            var formats = new List<string>();
+            uint format = 0;
+            while ((format = EnumClipboardFormats(format)) != 0)
+                formats.Add(DescribeFormat(format));
+
+            return formats.Count == 0 ? "empty — no formats at all" : string.Join(", ", formats);
+        }
+        finally
+        {
+            CloseClipboard();
+        }
+    }
+
+    /// <summary>Human-readable name for a clipboard format id. Registered
+    /// formats carry a name; the built-in ones don't, so those fall back to the
+    /// id (13 = CF_UNICODETEXT, the one we read).</summary>
+    private static string DescribeFormat(uint format)
+    {
+        var name = new System.Text.StringBuilder(256);
+        return GetClipboardFormatNameW(format, name, name.Capacity) > 0
+            ? $"{name} ({format})"
+            : $"#{format}";
     }
 
     private static void ClearClipboard()
