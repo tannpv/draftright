@@ -10,7 +10,6 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, GLib, Gtk
 
 from draftright import config
-from draftright.__version__ import __version__
 from draftright.models.app_mode import AppMode
 from draftright.models.trigger_mode import TriggerMode
 from draftright.models.tone import Tone
@@ -612,23 +611,17 @@ class SettingsWindow(Adw.PreferencesWindow):
             self.app.settings_service.save()
 
     def _on_check_updates(self, row):
-        """Handle Check for Updates click — reuses the app's UpdateService."""
+        """Handle Check for Updates click — reuses the app's UpdateService.
+
+        Through ``app.update_service``, never a locally built one: this used to
+        construct its own on the app's behalf, re-deciding the backend URL and
+        the version to compare, which is the #22 drift in miniature.
+        """
         app = self.app
-        svc = getattr(app, "_update_service", None)
-        if svc is None:
-            # Fallback: create one if the app hasn't initialised it yet
-            from draftright.services.update_service import UpdateService
-            backend_url = config.LOCALHOST_BACKEND_URL
-            if app.settings_service:
-                backend_url = app.settings_service.backend_url
-            # Must be the real version: a hardcoded one made this fallback
-            # path compare the wrong version against the update manifest.
-            svc = UpdateService(__version__, backend_url)
+        has_update, result = app.update_service.check_now()
 
-        has_update, result = svc.check_now()
-
-        if has_update and hasattr(app, '_show_update_dialog'):
-            app._show_update_dialog(result)
+        if has_update:
+            app.show_update_dialog(result)
         else:
             dialog = Gtk.MessageDialog(
                 transient_for=self,

@@ -317,4 +317,8 @@ pins the contract and asserts the wiring with `ast` (the wiring lives in
 - Display server detection in `helpers/display_server.py` drives X11 vs Wayland code paths
 - Tray icon gracefully degrades if AppIndicator3 is unavailable
 - Settings window uses Adw.PreferencesWindow with two pages (Account, Preferences)
+- `ui/` may only call **public** `Application` methods — if the UI needs it, it
+  is API, so make it public and say why in the docstring rather than reaching
+  into `app._thing`. Enforced by `test/test_ui_uses_public_app_api.py` (an `ast`
+  scan; these modules need GTK, so nothing can import them together to check)
 - Rewrite panel is an undecorated always-on-top Gtk.Window

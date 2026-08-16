@@ -180,12 +180,6 @@ class DraftRightApplication(Adw.Application):
         GLib.timeout_add_seconds(config.HEALTH_CHECK_INTERVAL, self._trigger_health_check)
 
         # Start update check — shortly after launch
-        backend_url = (
-            self.settings_service.backend_url
-            if self.settings_service
-            else config.LOCALHOST_BACKEND_URL
-        )
-        self._update_service = UpdateService(__version__, backend_url)
         GLib.timeout_add_seconds(10, self._trigger_update_check)
 
         # Post-update "What's New" — shortly after the window is up.
@@ -661,11 +655,27 @@ class DraftRightApplication(Adw.Application):
         thread.start()
         return False  # Don't repeat — health check timer handles periodic checks
 
+    @property
+    def update_service(self) -> UpdateService:
+        """The app's one UpdateService, built on first use.
+
+        The single construction site: Settings' "Check for Updates" goes through
+        this too, so the version and backend URL it checks against cannot drift
+        from the automatic check. Issue #22 is what a second, hand-rolled copy
+        of this construction costs.
+        """
+        if self._update_service is None:
+            backend_url = (
+                self.settings_service.backend_url
+                if self.settings_service
+                else config.LOCALHOST_BACKEND_URL
+            )
+            self._update_service = UpdateService(__version__, backend_url)
+        return self._update_service
+
     def _do_update_check(self):
         """Run update check on background thread, show dialog via GLib.idle_add."""
-        if self._update_service is None:
-            return
-        info = self._update_service.check_if_needed()
+        info = self.update_service.check_if_needed()
         if info is not None:
             GLib.idle_add(self._on_update_available, info)
 
@@ -673,7 +683,7 @@ class DraftRightApplication(Adw.Application):
         """Badge the tray, then offer the update (#22)."""
         if self._tray_icon is not None:
             self._tray_icon.set_update_available(True)
-        self._show_update_dialog(info)
+        self.show_update_dialog(info)
         return False
 
     def _trigger_whats_new_check(self) -> bool:
@@ -684,7 +694,7 @@ class DraftRightApplication(Adw.Application):
     def _do_whats_new_check(self):
         """Background thread: if the running version changed since last launch,
         fetch its release notes and show them once."""
-        if self._update_service is None or self.settings_service is None:
+        if self.settings_service is None:
             return
         current = __version__
         last_seen = self.settings_service.last_seen_version
@@ -695,7 +705,7 @@ class DraftRightApplication(Adw.Application):
         self.settings_service.save()
         if not last_seen:
             return
-        notes = self._update_service.release_notes_for_version(current)
+        notes = self.update_service.release_notes_for_version(current)
         if notes:
             GLib.idle_add(self._show_whats_new_dialog, current, notes)
 
@@ -713,8 +723,12 @@ class DraftRightApplication(Adw.Application):
         dialog.present()
         return False
 
-    def _show_update_dialog(self, info) -> bool:
-        """Show update dialog on the GTK main thread."""
+    def show_update_dialog(self, info) -> bool:
+        """Show update dialog on the GTK main thread.
+
+        Public because Settings' "Check for Updates" offers the same dialog for
+        a manual check — one dialog, whichever check found the update.
+        """
         dialog = Gtk.MessageDialog(
             transient_for=self.props.active_window,
             modal=True,
@@ -769,10 +783,7 @@ class DraftRightApplication(Adw.Application):
             GLib.idle_add(self._update_progress_ui, progress_bar, status_label, fraction, status)
 
         def do_download():
-            if self._update_service is None:
-                GLib.idle_add(progress_win.destroy)
-                return
-            success = self._update_service.download_and_install(info, progress_callback=on_progress)
+            success = self.update_service.download_and_install(info, progress_callback=on_progress)
             if success:
                 GLib.idle_add(progress_win.destroy)
                 GLib.idle_add(self._relaunch_after_update)
@@ -805,14 +816,11 @@ class DraftRightApplication(Adw.Application):
 
     def _install_update(self, info):
         """Download and install update in background thread."""
-        if self._update_service is None:
-            return
-        success = self._update_service.download_and_install(info)
+        success = self.update_service.download_and_install(info)
         if success:
             GLib.idle_add(self._relaunch_after_update)
 
     def _relaunch_after_update(self) -> bool:
         """Relaunch the app after update."""
-        if self._update_service:
-            self._update_service.relaunch()
+        self.update_service.relaunch()
         return False
