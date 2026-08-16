@@ -14,8 +14,9 @@ import logging
 from pathlib import Path
 
 from draftright import config
-from draftright.helpers.display_server import is_wayland
+from draftright.helpers.display_server import is_wayland, is_x11
 from draftright.models.app_mode import AppMode
+from draftright.models.trigger_mode import TriggerMode
 from draftright.models.health import HealthStatus
 from draftright.models.rewrite import RewriteResult
 from draftright.models.tone import Tone
@@ -29,6 +30,7 @@ from draftright.services.auth_service import AuthService
 from draftright.services.clipboard_service import ClipboardService
 from draftright.services.hotkey_service import HotkeyService
 from draftright.services.input_portal import RemoteDesktopInjector
+from draftright.services.pencil_trigger import PencilTrigger
 from draftright.services.rewrite_cache import RewriteCache
 from draftright.services.settings_service import SettingsService
 from draftright.ui import styles
@@ -58,6 +60,10 @@ class DraftRightApplication(Adw.Application):
         self.hotkey_service = None
         self.clipboard_service = None
         self.input_injector = None
+        # X11-only on-selection trigger (#188); None until Pencil mode is active
+        # on an X11 session. Mutually exclusive with the hotkey.
+        self.pencil_trigger = None
+        self._hotkey_active = False
         # Client-side rewrite cache, shared across panel instances (a fresh
         # RewritePanel is built per hotkey press). Mirrors macOS.
         self.rewrite_cache = RewriteCache()
@@ -146,8 +152,9 @@ class DraftRightApplication(Adw.Application):
         # Set up tray icon
         self._setup_tray()
 
-        # Register global hotkey
-        self._register_hotkey()
+        # Wire the trigger — the hotkey and, on X11 in Pencil mode, the
+        # selection-polling pencil. Idempotent on re-activate.
+        self._apply_trigger_mode()
 
         # Restore auth session
         self._restore_session()
@@ -316,6 +323,49 @@ class DraftRightApplication(Adw.Application):
         except Exception as exc:
             logger.warning("Failed to register hotkey %s: %s", keystring, exc)
 
+    def _apply_trigger_mode(self):
+        """Start the mechanism the user chose — pencil or hotkey — and only it.
+
+        The two are mutually exclusive (matching macOS/Windows). The pencil is
+        X11-only (Wayland forbids the global selection monitoring it needs, #103),
+        so Pencil mode on Wayland falls back to the hotkey — the enum's safe
+        default. Idempotent: safe to call again on every re-activate or when the
+        Settings picker changes the mode.
+        """
+        if self.settings_service is None:
+            return
+        pencil_wanted = self.settings_service.trigger_mode.uses_pencil and is_x11()
+
+        if pencil_wanted:
+            if self.pencil_trigger is None and self.clipboard_service is not None:
+                self.pencil_trigger = PencilTrigger(
+                    read_selection=self.clipboard_service.get_selected_text,
+                    on_selection=self._route_captured_text,
+                )
+            if self.pencil_trigger is not None:
+                self.pencil_trigger.start()
+        elif self.pencil_trigger is not None:
+            self.pencil_trigger.stop()
+
+        # The hotkey is the other half of the pair: live only when the pencil is
+        # not (i.e. Hotkey mode, or anywhere the pencil can't run — Wayland).
+        self._set_hotkey_active(not pencil_wanted)
+
+    def _set_hotkey_active(self, active: bool) -> None:
+        """Register or release the global hotkey, tracking state to stay idempotent.
+
+        Register/unregister must be balanced — re-registering an already-bound
+        shortcut is the Windows 1408 ALREADY_REGISTERED trap (#186) — so a flag
+        guards against double start/stop across re-activates.
+        """
+        if active and not self._hotkey_active:
+            self._register_hotkey()
+            self._hotkey_active = True
+        elif not active and self._hotkey_active:
+            if self.hotkey_service is not None:
+                self.hotkey_service.stop()
+            self._hotkey_active = False
+
     def _on_hotkey_trigger_changed(self, trigger):
         """Reflect the trigger the compositor actually bound (Wayland, #99)."""
         if trigger:
@@ -339,18 +389,23 @@ class DraftRightApplication(Adw.Application):
     # ------------------------------------------------------------------
 
     def on_hotkey_pressed(self):
-        """Handle a global hotkey press.
-
-        Advanced mode opens the panel so the user picks a tone; One-Click
-        (#96) rewrites immediately with the preset tone and replaces the
-        selection, matching macOS and Windows.
-        """
+        """Handle a global hotkey press — capture the selection and route it."""
         text = ""
         if self.clipboard_service:
             text = self.clipboard_service.get_selected_text()
+        self._route_captured_text(text)
+
+    def _route_captured_text(self, text: str) -> None:
+        """Route captured text to the rewrite flow (RULE #1 chokepoint).
+
+        The single entry point both triggers funnel through — the hotkey and the
+        X11 pencil (#188) — so the app-mode routing lives in exactly one place.
+        Advanced mode opens the panel so the user picks a tone; One-Click (#96)
+        rewrites immediately with the preset tone and replaces the selection,
+        matching macOS and Windows.
+        """
         if not text:
             return
-
         mode = self.settings_service.app_mode if self.settings_service else AppMode.ADVANCED
         if mode is AppMode.ONE_CLICK:
             self.run_one_click_rewrite(text)
@@ -514,6 +569,8 @@ class DraftRightApplication(Adw.Application):
 
     def quit_app(self):
         """Clean up resources and quit the application."""
+        if self.pencil_trigger is not None:
+            self.pencil_trigger.stop()
         if self.hotkey_service:
             self.hotkey_service.stop()
         if self.input_injector is not None:
