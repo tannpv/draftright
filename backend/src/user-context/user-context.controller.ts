@@ -1,4 +1,5 @@
 import { Controller, Get, Put, Delete, Body, UseGuards, Request, HttpCode } from '@nestjs/common';
+import { ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { UserContextService } from './user-context.service';
 import { UpdateUserContextDto } from './dto/update-user-context.dto';
@@ -21,6 +22,10 @@ function toView(ctx: UserContext | null) {
  */
 @Controller('me/context')
 @UseGuards(JwtAuthGuard)
+// Without this the generated spec omits the security requirement, so openapi.json
+// advertised these routes as unauthenticated while the guard rejected every
+// anonymous call — a client generated from the spec would have been built wrong.
+@ApiBearerAuth()
 export class UserContextController {
   constructor(private readonly service: UserContextService) {}
 
