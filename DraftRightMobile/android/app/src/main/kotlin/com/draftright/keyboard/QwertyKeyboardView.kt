@@ -77,6 +77,22 @@ class QwertyKeyboardView(
         buildKeyboard()
     }
 
+    /**
+     * Open the digits (symbols1) layer for a numeric field, or return to alpha
+     * for a text field (#190). No-op when already on the target layer, so
+     * re-focusing a field doesn't cause a rebuild flicker. Reuses the existing
+     * symbols1 layer rather than introducing a separate numeric layout.
+     */
+    fun setNumericLayer(numeric: Boolean) {
+        val target = if (numeric) 1 else 0
+        if (currentLayer == target) return
+        currentLayer = target
+        // A numeric layer has no shift; clear it so a stale shift doesn't linger
+        // when the user later returns to an alpha field.
+        if (numeric) shiftState = ShiftState.OFF
+        buildKeyboard()
+    }
+
     private val keyColor: Int
     private val keyColorSpecial: Int
     private val keyColorPressed: Int
