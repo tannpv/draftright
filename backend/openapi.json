@@ -1829,35 +1829,6 @@
         ]
       }
     },
-    "/extract": {
-      "post": {
-        "operationId": "ExtractionController_extract",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ExtractRequestDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "extraction"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
     "/feedback": {
       "post": {
         "operationId": "FeedbackController_create",
@@ -1989,6 +1960,60 @@
         },
         "tags": [
           "lemonsqueezy"
+        ]
+      }
+    },
+    "/me/context": {
+      "get": {
+        "operationId": "UserContextController_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "put": {
+        "operationId": "UserContextController_update",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserContextDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "UserContextController_clear",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
         ]
       }
     },
@@ -2449,10 +2474,6 @@
         "type": "object",
         "properties": {}
       },
-      "ExtractRequestDto": {
-        "type": "object",
-        "properties": {}
-      },
       "GrantSubscriptionDto": {
         "type": "object",
         "properties": {
@@ -2558,6 +2579,10 @@
           "text",
           "tone"
         ]
+      },
+      "UpdateUserContextDto": {
+        "type": "object",
+        "properties": {}
       },
       "UpdateUserDto": {
         "type": "object",
