@@ -1,5 +1,5 @@
 import { Controller, Post, Body, UseGuards, Request, Get, Delete, HttpCode, HttpStatus } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -73,12 +73,14 @@ export class AuthController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @Post('change-password')
   async changePassword(@Request() req: any, @Body() body: { current_password: string; new_password: string }) {
     return this.authService.changePassword(req.user.id, body.current_password, body.new_password);
   }
 
   @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @Get('me')
   async me(@Request() req: any) {
     // `flags` is the server-controlled rollout state for the calling
@@ -99,6 +101,7 @@ export class AuthController {
   // Permanent, in-app account deletion (App Store Guideline 5.1.1(v)).
   // Removes the user and all data tied to them; no recovery.
   @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @Delete('account')
   @HttpCode(HttpStatus.OK)
   async deleteAccount(@Request() req: any) {
@@ -107,6 +110,7 @@ export class AuthController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @Get('account')
   async account(@Request() req: any) {
     const user = await this.usersService.findById(req.user.id);

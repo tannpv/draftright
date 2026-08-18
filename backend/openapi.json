@@ -258,6 +258,11 @@
         },
         "tags": [
           "admin-auth"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
         ]
       }
     },
@@ -286,6 +291,11 @@
         },
         "tags": [
           "admin-auth"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
         ]
       }
     },
@@ -1530,6 +1540,11 @@
         },
         "tags": [
           "auth"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
         ]
       },
       "get": {
@@ -1542,6 +1557,11 @@
         },
         "tags": [
           "auth"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
         ]
       }
     },
@@ -1556,6 +1576,11 @@
         },
         "tags": [
           "auth"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
         ]
       }
     },
@@ -1682,6 +1707,11 @@
         },
         "tags": [
           "auth"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
         ]
       }
     },
@@ -1932,6 +1962,11 @@
         },
         "tags": [
           "lemonsqueezy"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
         ]
       }
     },
@@ -1946,6 +1981,11 @@
         },
         "tags": [
           "lemonsqueezy"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
         ]
       }
     },

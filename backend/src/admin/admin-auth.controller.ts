@@ -1,5 +1,5 @@
 import { Controller, Post, Get, Body, UseGuards, Request } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AdminAuthService } from './admin-auth.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -16,6 +16,7 @@ export class AdminAuthController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
+  @ApiBearerAuth()
   @Roles('admin')
   @Post('change-password')
   async changePassword(@Request() req: any, @Body() body: { current_password: string; new_password: string }) {
@@ -23,6 +24,7 @@ export class AdminAuthController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
+  @ApiBearerAuth()
   @Roles('admin')
   @Get('me')
   async getProfile(@Request() req: any) {

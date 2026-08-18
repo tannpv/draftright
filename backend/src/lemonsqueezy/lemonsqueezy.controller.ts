@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Headers, Post, Req, UseGuards } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { RawBodyRequest } from '@nestjs/common';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -11,6 +11,7 @@ export class LemonsqueezyController {
   constructor(private readonly svc: LemonsqueezyService) {}
 
   @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @Post('checkout')
   async createCheckout(@Req() req: any) {
     const url = await this.svc.createCheckoutUrl(req.user.id);
@@ -25,6 +26,7 @@ export class LemonsqueezyController {
    * the new path.
    */
   @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @Get('portal')
   async getPortal(@Req() req: any) {
     const url = await this.svc.createCustomerPortalUrl(req.user.id);
