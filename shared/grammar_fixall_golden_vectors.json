@@ -1,0 +1,139 @@
+{
+  "_comment": "RULE #1 golden-vector parity guard for grammar fixAll across macOS / Windows / Linux (#107). Each platform asserts its fixAll output equals these vectors, so the three ports cannot drift. Compares the resulting string (index-unit independent), so unicode is included. Regenerate with tools/gen_grammar_fixall_golden_vectors.py.",
+  "cases": [
+    {
+      "name": "single fix",
+      "text": "teh cat",
+      "issues": [
+        {
+          "original": "teh",
+          "suggestion": "the",
+          "offset": 0
+        }
+      ],
+      "expected": "the cat"
+    },
+    {
+      "name": "two fixes",
+      "text": "teh cat runned",
+      "issues": [
+        {
+          "original": "teh",
+          "suggestion": "the",
+          "offset": 0
+        },
+        {
+          "original": "runned",
+          "suggestion": "ran",
+          "offset": 8
+        }
+      ],
+      "expected": "the cat ran"
+    },
+    {
+      "name": "no issues leaves text unchanged",
+      "text": "already fine",
+      "issues": [],
+      "expected": "already fine"
+    },
+    {
+      "name": "stale issue is a no-op",
+      "text": "the cat",
+      "issues": [
+        {
+          "original": "dog",
+          "suggestion": "hound",
+          "offset": 0
+        }
+      ],
+      "expected": "the cat"
+    },
+    {
+      "name": "duplicate original, offset picks second",
+      "text": "is it is it",
+      "issues": [
+        {
+          "original": "is",
+          "suggestion": "was",
+          "offset": 6
+        }
+      ],
+      "expected": "is it was it"
+    },
+    {
+      "name": "duplicate original, offset picks first",
+      "text": "is it is it",
+      "issues": [
+        {
+          "original": "is",
+          "suggestion": "was",
+          "offset": 0
+        }
+      ],
+      "expected": "was it is it"
+    },
+    {
+      "name": "sequential fixes on evolving text",
+      "text": "a b c",
+      "issues": [
+        {
+          "original": "a",
+          "suggestion": "x",
+          "offset": 0
+        },
+        {
+          "original": "b",
+          "suggestion": "y",
+          "offset": 2
+        },
+        {
+          "original": "c",
+          "suggestion": "z",
+          "offset": 4
+        }
+      ],
+      "expected": "x y z"
+    },
+    {
+      "name": "unicode suggestion",
+      "text": "toi yeu",
+      "issues": [
+        {
+          "original": "toi",
+          "suggestion": "tôi",
+          "offset": 0
+        },
+        {
+          "original": "yeu",
+          "suggestion": "yêu",
+          "offset": 4
+        }
+      ],
+      "expected": "tôi yêu"
+    },
+    {
+      "name": "suggestion shorter than original",
+      "text": "the quick fox",
+      "issues": [
+        {
+          "original": "quick",
+          "suggestion": "sly",
+          "offset": 4
+        }
+      ],
+      "expected": "the sly fox"
+    },
+    {
+      "name": "empty original issue is skipped",
+      "text": "hello",
+      "issues": [
+        {
+          "original": "",
+          "suggestion": "X",
+          "offset": 0
+        }
+      ],
+      "expected": "hello"
+    }
+  ]
+}
