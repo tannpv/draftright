@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Regenerate the WordDiff golden-vector parity file (#107, RULE #1).
 
-`shared/diff_golden_vectors.json` is the single source of truth for the expected
+`parity/word-diff-vectors.json` is the single source of truth for the expected
 word-diff output. The macOS (Swift), Windows (C#) and Linux (Python) WordDiff
 ports each assert their output equals these vectors, so the three copies of one
 LCS algorithm cannot silently drift — the #22 failure mode (a duplicated routine
@@ -64,7 +64,7 @@ def main() -> None:
         ),
         "cases": cases,
     }
-    out = ROOT / "shared" / "diff_golden_vectors.json"
+    out = ROOT / "parity" / "word-diff-vectors.json"
     out.parent.mkdir(exist_ok=True)
     out.write_text(json.dumps(doc, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     print(f"wrote {out} ({len(cases)} cases)")

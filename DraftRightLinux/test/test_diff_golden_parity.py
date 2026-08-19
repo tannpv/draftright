@@ -1,6 +1,6 @@
 """Linux WordDiff must match the shared golden vectors (#107, RULE #1).
 
-The single source of truth is ``shared/diff_golden_vectors.json`` at the repo
+The single source of truth is ``parity/word-diff-vectors.json`` at the repo
 root; the macOS (Swift) and Windows (C#) ports assert against the same file, so
 the three implementations of the LCS word-diff cannot drift apart. GTK-free.
 
@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from draftright.models.diff import word_diff
 
 # test/ -> DraftRightLinux/ -> repo root
-_GOLDEN = Path(__file__).resolve().parents[2] / "shared" / "diff_golden_vectors.json"
+_GOLDEN = Path(__file__).resolve().parents[2] / "parity" / "word-diff-vectors.json"
 
 
 class DiffGoldenParityTest(unittest.TestCase):

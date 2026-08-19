@@ -10,7 +10,7 @@ namespace DraftRightWindows.PureTests;
 /// <summary>
 /// Windows grammar resolveRange must match the shared golden vectors (#107, RULE #1).
 ///
-/// <c>shared/grammar_resolve_golden_vectors.json</c> at the repo root is the
+/// <c>parity/grammar-resolve-vectors.json</c> at the repo root is the
 /// single source of truth; the macOS (Swift) and Linux (Python) ports assert
 /// against the same file, so the three copies of the content-first resolve logic
 /// (LLM-offset gotcha, BR#49) cannot drift.
@@ -20,7 +20,7 @@ public class GrammarResolveGoldenParityTests
     private static string GoldenPath([CallerFilePath] string thisFile = "")
         => Path.GetFullPath(Path.Combine(
             Path.GetDirectoryName(thisFile)!, "..", "..",
-            "shared", "grammar_resolve_golden_vectors.json"));
+            "parity", "grammar-resolve-vectors.json"));
 
     [Fact]
     public void EveryCaseMatchesTheSharedVectors()

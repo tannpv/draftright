@@ -12,7 +12,7 @@ namespace DraftRightWindows.PureTests;
 /// <summary>
 /// Windows WordDiff must match the shared golden vectors (#107, RULE #1).
 ///
-/// <c>shared/diff_golden_vectors.json</c> at the repo root is the single source
+/// <c>parity/word-diff-vectors.json</c> at the repo root is the single source
 /// of truth; the macOS (Swift) and Linux (Python) ports assert against the same
 /// file, so the three LCS word-diff implementations cannot drift apart.
 /// </summary>
@@ -23,7 +23,7 @@ public class WordDiffGoldenParityTests
     // repo checkout the tests were compiled from.
     private static string GoldenPath([CallerFilePath] string thisFile = "")
         => Path.GetFullPath(Path.Combine(
-            Path.GetDirectoryName(thisFile)!, "..", "..", "shared", "diff_golden_vectors.json"));
+            Path.GetDirectoryName(thisFile)!, "..", "..", "parity", "word-diff-vectors.json"));
 
     private static List<string> Encode(IEnumerable<DiffToken> tokens)
         => tokens.Select(t => $"{t.Text}\t{t.Kind.ToString().ToLowerInvariant()}").ToList();
