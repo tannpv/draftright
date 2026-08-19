@@ -867,13 +867,14 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 	}
 
 	return usecase.RewriteDeps{
-		Users:      users,
-		Provider:   provider,
-		RateLimit:  limiter,
-		Metrics:    m,
-		Now:        time.Now,
-		Log:        log,
-		RewriteLog: rewriteLog,
+		Users:         users,
+		Provider:      provider,
+		RateLimit:     limiter,
+		Metrics:       m,
+		Now:           time.Now,
+		Log:           log,
+		RewriteLog:    rewriteLog,
+		ResolvePrompt: parity.ResolvePrompt,
 	}, core, cleanup, nil
 }
 

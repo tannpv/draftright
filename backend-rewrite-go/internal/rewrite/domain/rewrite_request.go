@@ -16,6 +16,10 @@ type RewriteRequest struct {
 	tone      Tone
 	lang      string
 	inputKind InputKind
+	// systemPrompt is the fully-resolved system prompt for this request,
+	// set by the use case via the parity resolver (#192). Empty until then;
+	// providers send it verbatim so prompt policy lives in exactly one place.
+	systemPrompt string
 }
 
 // NewRewriteRequest validates + builds. Trims whitespace from text to
@@ -52,6 +56,17 @@ func (r RewriteRequest) Text() string         { return r.text }
 func (r RewriteRequest) Tone() Tone           { return r.tone }
 func (r RewriteRequest) Lang() string         { return r.lang }
 func (r RewriteRequest) InputKind() InputKind { return r.inputKind }
+
+// SystemPrompt is the resolved system prompt the provider must send. Empty
+// until the use case sets it via WithSystemPrompt (#192).
+func (r RewriteRequest) SystemPrompt() string { return r.systemPrompt }
+
+// WithSystemPrompt returns a copy carrying the resolved system prompt. Value
+// type — the original is unchanged, so callers cannot mutate a shared request.
+func (r RewriteRequest) WithSystemPrompt(p string) RewriteRequest {
+	r.systemPrompt = p
+	return r
+}
 
 // InputLength is the character count the use case logs into usage_logs
 // (NestJS calls it `input_length`).

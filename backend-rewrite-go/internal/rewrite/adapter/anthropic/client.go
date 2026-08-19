@@ -54,7 +54,6 @@ type Client struct {
 	maxTokens  int
 	apiVersion string
 	http       *http.Client
-	systemFmt  func(domain.Tone) string
 }
 
 // Option configures the Client; functional-options pattern matches
@@ -74,11 +73,6 @@ func WithMaxTokens(n int) Option { return func(c *Client) { c.maxTokens = n } }
 // WithHTTPClient injects a custom *http.Client (tests use httptest).
 func WithHTTPClient(h *http.Client) Option { return func(c *Client) { c.http = h } }
 
-// WithSystemPromptFn lets the caller pick the system prompt per Tone.
-func WithSystemPromptFn(fn func(domain.Tone) string) Option {
-	return func(c *Client) { c.systemFmt = fn }
-}
-
 // New builds a Client. id is recorded on every usage_logs row.
 func New(id uuid.UUID, apiKey string, opts ...Option) *Client {
 	c := &Client{
@@ -89,7 +83,6 @@ func New(id uuid.UUID, apiKey string, opts ...Option) *Client {
 		maxTokens:  defaultMaxTokens,
 		apiVersion: defaultAPIVersion,
 		http:       &http.Client{Timeout: defaultRequestTimeout},
-		systemFmt:  DefaultSystemPrompt,
 	}
 	for _, o := range opts {
 		o(c)
@@ -213,7 +206,7 @@ func (c *Client) buildRequest(req domain.RewriteRequest) map[string]any {
 		"model":      c.model,
 		"max_tokens": c.maxTokens,
 		"stream":     true,
-		"system":     domain.ApplySpeechPreamble(c.systemFmt(req.Tone()), req.InputKind()),
+		"system":     req.SystemPrompt(),
 		"messages": []map[string]string{
 			{"role": "user", "content": req.Text()},
 		},
@@ -236,29 +229,4 @@ type deltaChunk struct {
 		Type string `json:"type"`
 		Text string `json:"text"`
 	} `json:"delta"`
-}
-
-// DefaultSystemPrompt mirrors openai's DefaultSystemPrompt so every
-// provider applies the same per-tone instruction. Diverges only when
-// a provider's prompt-engineering needs warrant it (Anthropic prefers
-// XML wrappers — TBD if rewrite quality demands).
-func DefaultSystemPrompt(tone domain.Tone) string {
-	switch tone {
-	case domain.ToneSimple:
-		return "Rewrite the text in simple, clear language."
-	case domain.ToneNatural:
-		return "Rewrite the text to sound natural and conversational."
-	case domain.TonePolished:
-		return "Rewrite the text to be polished and professional."
-	case domain.ToneConcise:
-		return "Rewrite the text to be more concise without losing meaning."
-	case domain.ToneTechnical:
-		return "Rewrite the text using precise technical language."
-	case domain.ToneClaude:
-		return "Rewrite the text in a thoughtful, considered tone."
-	case domain.ToneTranslate:
-		return "Translate the text accurately, preserving tone."
-	default:
-		return "Rewrite the text."
-	}
 }
