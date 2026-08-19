@@ -37,11 +37,10 @@ const (
 
 // Client is the Ollama provider. Safe for concurrent use.
 type Client struct {
-	id        uuid.UUID
-	endpoint  string
-	model     string
-	http      *http.Client
-	systemFmt func(domain.Tone) string
+	id       uuid.UUID
+	endpoint string
+	model    string
+	http     *http.Client
 }
 
 // Option configures the Client.
@@ -56,19 +55,13 @@ func WithModel(m string) Option { return func(c *Client) { c.model = m } }
 // WithHTTPClient injects a custom *http.Client (tests use httptest).
 func WithHTTPClient(h *http.Client) Option { return func(c *Client) { c.http = h } }
 
-// WithSystemPromptFn lets the caller pick the system prompt per Tone.
-func WithSystemPromptFn(fn func(domain.Tone) string) Option {
-	return func(c *Client) { c.systemFmt = fn }
-}
-
 // New builds a Client.
 func New(id uuid.UUID, opts ...Option) *Client {
 	c := &Client{
-		id:        id,
-		endpoint:  defaultEndpoint,
-		model:     defaultModel,
-		http:      &http.Client{Timeout: defaultRequestTimeout},
-		systemFmt: DefaultSystemPrompt,
+		id:       id,
+		endpoint: defaultEndpoint,
+		model:    defaultModel,
+		http:     &http.Client{Timeout: defaultRequestTimeout},
 	}
 	for _, o := range opts {
 		o(c)
@@ -174,7 +167,7 @@ func (c *Client) buildRequest(req domain.RewriteRequest) map[string]any {
 		"model":  c.model,
 		"stream": true,
 		"messages": []map[string]string{
-			{"role": "system", "content": domain.ApplySpeechPreamble(c.systemFmt(req.Tone()), req.InputKind())},
+			{"role": "system", "content": req.SystemPrompt()},
 			{"role": "user", "content": req.Text()},
 		},
 	}
@@ -193,26 +186,4 @@ type ndjsonChunk struct {
 		Content string `json:"content"`
 	} `json:"message"`
 	Done bool `json:"done"`
-}
-
-// DefaultSystemPrompt mirrors the other providers (Rule #1).
-func DefaultSystemPrompt(tone domain.Tone) string {
-	switch tone {
-	case domain.ToneSimple:
-		return "Rewrite the text in simple, clear language."
-	case domain.ToneNatural:
-		return "Rewrite the text to sound natural and conversational."
-	case domain.TonePolished:
-		return "Rewrite the text to be polished and professional."
-	case domain.ToneConcise:
-		return "Rewrite the text to be more concise without losing meaning."
-	case domain.ToneTechnical:
-		return "Rewrite the text using precise technical language."
-	case domain.ToneClaude:
-		return "Rewrite the text in a thoughtful, considered tone."
-	case domain.ToneTranslate:
-		return "Translate the text accurately, preserving tone."
-	default:
-		return "Rewrite the text."
-	}
 }

@@ -58,7 +58,6 @@ type Client struct {
 	temperature string // raw decimal(3,2) string, parsed at body-build (Node Number())
 	isLocal     bool   // ollama type → isLocal message layout
 	http        *http.Client
-	systemFmt   func(domain.Tone) string
 }
 
 // Option configures the Client; canonical functional-options pattern
@@ -84,22 +83,15 @@ func WithLocalLayout(local bool) Option { return func(c *Client) { c.isLocal = l
 // WithHTTPClient injects a custom *http.Client (tests use httptest).
 func WithHTTPClient(h *http.Client) Option { return func(c *Client) { c.http = h } }
 
-// WithSystemPromptFn lets the caller pick the system prompt per Tone.
-// Defaults to nestjs-parity (see DefaultSystemPrompt below).
-func WithSystemPromptFn(fn func(domain.Tone) string) Option {
-	return func(c *Client) { c.systemFmt = fn }
-}
-
 // New builds a Client. id is recorded on every usage_logs row so
 // analytics can attribute load to a provider.
 func New(id uuid.UUID, apiKey string, opts ...Option) *Client {
 	c := &Client{
-		id:        id,
-		apiKey:    apiKey,
-		endpoint:  defaultEndpoint,
-		model:     defaultModel,
-		http:      &http.Client{Timeout: defaultRequestTimeout},
-		systemFmt: DefaultSystemPrompt,
+		id:       id,
+		apiKey:   apiKey,
+		endpoint: defaultEndpoint,
+		model:    defaultModel,
+		http:     &http.Client{Timeout: defaultRequestTimeout},
 	}
 	for _, o := range opts {
 		o(c)
@@ -222,7 +214,7 @@ func (c *Client) buildRequest(req domain.RewriteRequest) map[string]any {
 		"model":  c.model,
 		"stream": true,
 		"messages": []map[string]string{
-			{"role": "system", "content": domain.ApplySpeechPreamble(c.systemFmt(req.Tone()), req.InputKind())},
+			{"role": "system", "content": req.SystemPrompt()},
 			{"role": "user", "content": req.Text()},
 		},
 	}
@@ -246,30 +238,4 @@ type streamChunk struct {
 			Content string `json:"content"`
 		} `json:"delta"`
 	} `json:"choices"`
-}
-
-// DefaultSystemPrompt is the fallback tone → system prompt mapping.
-// Mirrors the prompts in NestJS rewrite.service.ts (tone enum) — keep
-// in sync there + here. Future task: load prompts from the
-// ai_providers row or a config file so they're not duplicated across
-// services.
-func DefaultSystemPrompt(tone domain.Tone) string {
-	switch tone {
-	case domain.ToneSimple:
-		return "Rewrite the text in simple, clear language."
-	case domain.ToneNatural:
-		return "Rewrite the text to sound natural and conversational."
-	case domain.TonePolished:
-		return "Rewrite the text to be polished and professional."
-	case domain.ToneConcise:
-		return "Rewrite the text to be more concise without losing meaning."
-	case domain.ToneTechnical:
-		return "Rewrite the text using precise technical language."
-	case domain.ToneClaude:
-		return "Rewrite the text in a thoughtful, considered tone."
-	case domain.ToneTranslate:
-		return "Translate the text accurately, preserving tone."
-	default:
-		return "Rewrite the text."
-	}
 }
