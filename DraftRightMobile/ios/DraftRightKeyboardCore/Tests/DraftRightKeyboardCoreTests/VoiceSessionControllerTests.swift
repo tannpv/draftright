@@ -39,6 +39,22 @@ final class VoiceSessionControllerTests: XCTestCase {
         XCTAssertEqual(outcomes, [.raw(text: "xin chào ừm thế giới", hint: "Polish failed — inserted your words as spoken")])
     }
 
+    func test_error_after_partials_commits_last_partial_as_raw() { // #65-1
+        let fake = FakeVoiceInput()
+        var outcomes: [VoiceOutcome] = []
+        let c = VoiceSessionController(
+            voice: fake,
+            polish: { _, _ in },
+            onState: { _ in }, onOutcome: { outcomes.append($0) })
+        c.startSession(localeTag: "vi-VN", rawMode: false)
+        fake.listener!.onPartial("xin")
+        fake.listener!.onPartial("xin chào thế")
+        fake.listener!.onError(.other) // e.g. SPEECH_TIMEOUT mid-sentence
+        // Words were spoken — preserve them as raw, don't drop them.
+        XCTAssertEqual(outcomes, [.raw(text: "xin chào thế",
+                                       hint: "Recognition interrupted — inserted what was heard")])
+    }
+
     func test_happy_path_full_state_sequence_and_polished_outcome() { // VOICE-006
         let fake = FakeVoiceInput()
         var states: [VoiceSessionController.State] = []

@@ -38,6 +38,8 @@ public final class VoiceSessionController {
     public enum State { case idle, listening, processing }
 
     private static let rawFallbackHint = "Polish failed — inserted your words as spoken"
+    // Must match Android's PARTIAL_SALVAGE_HINT so the two ports behave identically.
+    private static let partialSalvageHint = "Recognition interrupted — inserted what was heard"
 
     private let voice: VoiceInput
     private let polish: (String, @escaping (Result<String, Error>) -> Void) -> Void
@@ -51,6 +53,9 @@ public final class VoiceSessionController {
     private var partialCallback: ((String) -> Void)?
     private var lastPartialForwardedAt = 0
     private var hasForwardedPartial = false
+    // The most recent partial transcript, kept so a mid-sentence recognizer
+    // error can insert the spoken words rather than dropping them (#65-1).
+    private var lastPartialText = ""
 
     public init(
         voice: VoiceInput,
@@ -77,6 +82,7 @@ public final class VoiceSessionController {
             lock.lock(); defer { lock.unlock() }
             generation += 1
             hasForwardedPartial = false
+            lastPartialText = ""
             return generation
         }()
         setState(.listening)
@@ -114,6 +120,7 @@ public final class VoiceSessionController {
         var cb: ((String) -> Void)?
         lock.lock()
         if sessionGeneration == generation {
+            lastPartialText = text
             let elapsed = now() - lastPartialForwardedAt
             if !hasForwardedPartial || elapsed >= VoiceConfig.partialDebounceMs {
                 hasForwardedPartial = true
@@ -134,9 +141,17 @@ public final class VoiceSessionController {
     private func handleError(_ sessionGeneration: Int) {
         lock.lock(); defer { lock.unlock() }
         guard sessionGeneration == generation else { return }
-        // No transcript ever existed — nothing to preserve.
         setState(.idle)
-        onOutcome(.nothing)
+        // Preserve a mid-sentence transcript: an error after words were spoken
+        // (e.g. SPEECH_TIMEOUT) inserts them as raw rather than dropping them —
+        // the golden rule that we never lose the user's words (#65-1). Nothing
+        // spoken yet means there is genuinely nothing to keep.
+        let salvaged = lastPartialText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if salvaged.isEmpty {
+            onOutcome(.nothing)
+        } else {
+            onOutcome(.raw(text: salvaged, hint: Self.partialSalvageHint))
+        }
     }
 
     private func handleFinal(_ text: String, _ rawMode: Bool, _ sessionGeneration: Int) {
