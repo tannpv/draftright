@@ -3,7 +3,7 @@ import XCTest
 
 /// macOS WordDiff must match the shared golden vectors (#107, RULE #1).
 ///
-/// `shared/diff_golden_vectors.json` at the repo root is the single source of
+/// `parity/word-diff-vectors.json` at the repo root is the single source of
 /// truth; the Windows (C#) and Linux (Python) ports assert against the same
 /// file, so the three LCS word-diff implementations cannot drift apart.
 final class WordDiffGoldenParityTests: XCTestCase {
@@ -29,7 +29,7 @@ final class WordDiffGoldenParityTests: XCTestCase {
             .deletingLastPathComponent()   // DraftRightTests
             .deletingLastPathComponent()   // Tests
             .deletingLastPathComponent()   // repo root
-            .appendingPathComponent("shared/diff_golden_vectors.json")
+            .appendingPathComponent("parity/word-diff-vectors.json")
     }
 
     private func wire(_ kind: DiffKind) -> String {

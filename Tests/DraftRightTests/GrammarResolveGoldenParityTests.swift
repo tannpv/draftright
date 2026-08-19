@@ -3,7 +3,7 @@ import XCTest
 
 /// macOS grammar resolveRange must match the shared golden vectors (#107, RULE #1).
 ///
-/// `shared/grammar_resolve_golden_vectors.json` at the repo root is the single
+/// `parity/grammar-resolve-vectors.json` at the repo root is the single
 /// source of truth; the Windows (C#) and Linux (Python) ports assert against the
 /// same file, so the three copies of the content-first resolve logic (LLM-offset
 /// gotcha, BR#49) cannot drift.
@@ -24,7 +24,7 @@ final class GrammarResolveGoldenParityTests: XCTestCase {
             .deletingLastPathComponent()   // DraftRightTests
             .deletingLastPathComponent()   // Tests
             .deletingLastPathComponent()   // repo root
-            .appendingPathComponent("shared/grammar_resolve_golden_vectors.json")
+            .appendingPathComponent("parity/grammar-resolve-vectors.json")
     }
 
     func testEveryCaseMatchesTheSharedVectors() throws {

@@ -11,7 +11,7 @@ namespace DraftRightWindows.PureTests;
 /// <summary>
 /// Windows grammar fixAll must match the shared golden vectors (#107, RULE #1).
 ///
-/// <c>shared/grammar_fixall_golden_vectors.json</c> at the repo root is the
+/// <c>parity/grammar-fixall-vectors.json</c> at the repo root is the
 /// single source of truth; the macOS (Swift) and Linux (Python) ports assert
 /// against the same file, so the three copies of the apply-all logic cannot
 /// drift.
@@ -21,7 +21,7 @@ public class GrammarFixAllGoldenParityTests
     private static string GoldenPath([CallerFilePath] string thisFile = "")
         => Path.GetFullPath(Path.Combine(
             Path.GetDirectoryName(thisFile)!, "..", "..",
-            "shared", "grammar_fixall_golden_vectors.json"));
+            "parity", "grammar-fixall-vectors.json"));
 
     [Fact]
     public void EveryCaseMatchesTheSharedVectors()

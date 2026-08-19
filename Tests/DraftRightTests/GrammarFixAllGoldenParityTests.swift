@@ -3,7 +3,7 @@ import XCTest
 
 /// macOS grammar fixAll must match the shared golden vectors (#107, RULE #1).
 ///
-/// `shared/grammar_fixall_golden_vectors.json` at the repo root is the single
+/// `parity/grammar-fixall-vectors.json` at the repo root is the single
 /// source of truth; the Windows (C#) and Linux (Python) ports assert against
 /// the same file, so the three copies of the apply-all logic cannot drift.
 final class GrammarFixAllGoldenParityTests: XCTestCase {
@@ -26,7 +26,7 @@ final class GrammarFixAllGoldenParityTests: XCTestCase {
             .deletingLastPathComponent()   // DraftRightTests
             .deletingLastPathComponent()   // Tests
             .deletingLastPathComponent()   // repo root
-            .appendingPathComponent("shared/grammar_fixall_golden_vectors.json")
+            .appendingPathComponent("parity/grammar-fixall-vectors.json")
     }
 
     func testEveryCaseMatchesTheSharedVectors() throws {

@@ -1,6 +1,6 @@
 """Linux grammar resolveRange must match the shared golden vectors (#107, RULE #1).
 
-`shared/grammar_resolve_golden_vectors.json` at the repo root is the single
+`parity/grammar-resolve-vectors.json` at the repo root is the single
 source of truth; the macOS (Swift) and Windows (C#) ports assert against the
 same file, so the three copies of the content-first resolve logic (which the
 LLM-offset gotcha, BR#49, makes easy to get subtly wrong) cannot drift. GTK-free.
@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from draftright.models.grammar import GrammarIssue
 from draftright.services.grammar_fixer import resolve_range
 
-_GOLDEN = Path(__file__).resolve().parents[2] / "shared" / "grammar_resolve_golden_vectors.json"
+_GOLDEN = Path(__file__).resolve().parents[2] / "parity" / "grammar-resolve-vectors.json"
 
 
 class GrammarResolveGoldenParityTest(unittest.TestCase):

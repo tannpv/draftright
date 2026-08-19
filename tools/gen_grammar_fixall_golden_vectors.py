@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Regenerate the grammar fixAll golden-vector parity file (#107, RULE #1).
 
-`shared/grammar_fixall_golden_vectors.json` is the single source of truth for
+`parity/grammar-fixall-vectors.json` is the single source of truth for
 applying a whole set of grammar suggestions to text: each issue is re-resolved
 from content (offset only disambiguates duplicates) and replaced, in order,
 against the evolving text. Ported three ways — GrammarFix.fixAll (Swift, newly
@@ -63,7 +63,7 @@ def main() -> None:
         ),
         "cases": cases,
     }
-    out = ROOT / "shared" / "grammar_fixall_golden_vectors.json"
+    out = ROOT / "parity" / "grammar-fixall-vectors.json"
     out.parent.mkdir(exist_ok=True)
     out.write_text(json.dumps(doc, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     print(f"wrote {out} ({len(cases)} cases)")

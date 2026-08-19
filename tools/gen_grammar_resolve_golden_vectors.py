@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Regenerate the grammar resolveRange golden-vector parity file (#107, RULE #1).
 
-`shared/grammar_resolve_golden_vectors.json` is the single source of truth for
+`parity/grammar-resolve-vectors.json` is the single source of truth for
 how a grammar issue's `original` is located in the text — content-first, with
 the LLM `offset` only breaking ties between duplicate occurrences (nearest wins,
 ties keep the earliest). That subtle rule is ported three ways —
@@ -65,7 +65,7 @@ def main() -> None:
         ),
         "cases": cases,
     }
-    out = ROOT / "shared" / "grammar_resolve_golden_vectors.json"
+    out = ROOT / "parity" / "grammar-resolve-vectors.json"
     out.parent.mkdir(exist_ok=True)
     out.write_text(json.dumps(doc, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     print(f"wrote {out} ({len(cases)} cases)")
