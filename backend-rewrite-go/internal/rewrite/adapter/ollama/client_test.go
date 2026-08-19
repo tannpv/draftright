@@ -179,7 +179,7 @@ func TestClient_IDAndName(t *testing.T) {
 	require.Equal(t, "ollama", c.Name())
 }
 
-func TestClient_Stream_PrependsSpeechPreambleWhenSpeechInput(t *testing.T) {
+func TestClient_Stream_SendsResolvedSystemPromptVerbatim(t *testing.T) {
 	t.Parallel()
 	var gotBody map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -188,36 +188,18 @@ func TestClient_Stream_PrependsSpeechPreambleWhenSpeechInput(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	speechReq, err := domain.NewRewriteRequest("hi", "polished", "", "speech")
+	// The use case resolves the prompt; the adapter sends it unchanged (#192).
+	req, err := domain.NewRewriteRequest("hi", "polished", "", "")
 	require.NoError(t, err)
+	req = req.WithSystemPrompt("RESOLVED SYSTEM PROMPT")
 
 	c := ollama.New(uuid.New(), ollama.WithEndpoint(srv.URL))
-	tokens, errs := c.Stream(context.Background(), speechReq)
+	tokens, errs := c.Stream(context.Background(), req)
 	_, finalErr := drainTokens(t, tokens, errs)
 	require.NoError(t, finalErr)
 
 	messages, _ := gotBody["messages"].([]any)
 	require.NotEmpty(t, messages)
 	system, _ := messages[0].(map[string]any)
-	require.True(t, strings.HasPrefix(system["content"].(string), domain.SpeechPreamble))
-}
-
-func TestClient_Stream_OmitsSpeechPreambleWhenTyped(t *testing.T) {
-	t.Parallel()
-	var gotBody map[string]any
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewDecoder(r.Body).Decode(&gotBody)
-		streamNDJSON(w, nil)
-	}))
-	defer srv.Close()
-
-	c := ollama.New(uuid.New(), ollama.WithEndpoint(srv.URL))
-	tokens, errs := c.Stream(context.Background(), mustReq(t))
-	_, finalErr := drainTokens(t, tokens, errs)
-	require.NoError(t, finalErr)
-
-	messages, _ := gotBody["messages"].([]any)
-	require.NotEmpty(t, messages)
-	system, _ := messages[0].(map[string]any)
-	require.False(t, strings.HasPrefix(system["content"].(string), domain.SpeechPreamble))
+	require.Equal(t, "RESOLVED SYSTEM PROMPT", system["content"].(string))
 }

@@ -52,6 +52,14 @@ type RewriteDeps struct {
 	// CLEAN streamed finish only (never on error/cancel). Nil-safe: a nil
 	// RewriteLog disables capture and the use case must never panic on it.
 	RewriteLog RewriteLogger
+	// ResolvePrompt turns (tone, targetLanguage, sourceLanguage, inputKind)
+	// into the system prompt, the SAME resolver the parity /rewrite path uses
+	// (main.go wires parity.ResolvePrompt). Resolving here — not in each
+	// provider adapter — keeps prompt policy (the anti-injection guard, the
+	// translate target language, the speech preamble) in one place, so the
+	// streaming /v1/rewrite path can no longer drift from Node (#192). Nil-safe:
+	// a nil resolver leaves the request's system prompt empty (test wiring).
+	ResolvePrompt func(tone, targetLanguage, sourceLanguage, inputKind string) string
 }
 
 // Rewrite is the orchestrator. Synchronous pre-flight (rate-limit,
@@ -107,6 +115,17 @@ func Rewrite(
 	if err := user.CheckQuota(); err != nil {
 		metrics.ObserveRewrite(outcomeFromErr(err), req.Tone(), providerName, now().Sub(preflightStart))
 		return nil, nil, err
+	}
+
+	// 3b. Resolve the system prompt once, from the SAME resolver the parity
+	//     /rewrite path uses, and attach it to the request. Providers then send
+	//     it verbatim rather than each computing its own — so /v1/rewrite carries
+	//     the anti-injection guard + the translate target language instead of the
+	//     old short per-adapter prompts (#192). `lang` is the translate target;
+	//     source language is not part of the streaming request (optional upstream).
+	if deps.ResolvePrompt != nil {
+		req = req.WithSystemPrompt(deps.ResolvePrompt(
+			req.Tone().String(), req.Lang(), "", req.InputKind().String()))
 	}
 
 	// 4. Stream from the provider. The provider owns its own

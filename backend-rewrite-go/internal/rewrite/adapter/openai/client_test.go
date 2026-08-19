@@ -211,7 +211,7 @@ func TestNew_TemperatureAndLocalLayoutOptions(t *testing.T) {
 	require.NotNil(t, c)
 }
 
-func TestClient_Stream_PrependsSpeechPreambleWhenSpeechInput(t *testing.T) {
+func TestClient_Stream_SendsResolvedSystemPromptVerbatim(t *testing.T) {
 	t.Parallel()
 	var gotBody map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -220,38 +220,22 @@ func TestClient_Stream_PrependsSpeechPreambleWhenSpeechInput(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	speechReq, err := domain.NewRewriteRequest("hi", "polished", "", "speech")
+	// The use case resolves the prompt (parity.ResolvePrompt, incl. the speech
+	// preamble); the adapter must send it unchanged — prompt policy lives
+	// upstream, not per-adapter (#192).
+	req, err := domain.NewRewriteRequest("hi", "polished", "", "")
 	require.NoError(t, err)
+	req = req.WithSystemPrompt("RESOLVED SYSTEM PROMPT")
 
 	c := openai.New(uuid.New(), "k", openai.WithEndpoint(srv.URL))
-	tokens, errs := c.Stream(context.Background(), speechReq)
+	tokens, errs := c.Stream(context.Background(), req)
 	_, finalErr := drainTokens(t, tokens, errs)
 	require.NoError(t, finalErr)
 
 	messages, _ := gotBody["messages"].([]any)
 	require.NotEmpty(t, messages)
 	system, _ := messages[0].(map[string]any)
-	require.True(t, strings.HasPrefix(system["content"].(string), domain.SpeechPreamble))
-}
-
-func TestClient_Stream_OmitsSpeechPreambleWhenTyped(t *testing.T) {
-	t.Parallel()
-	var gotBody map[string]any
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewDecoder(r.Body).Decode(&gotBody)
-		streamChunks(w, nil, true /* withDone */)
-	}))
-	defer srv.Close()
-
-	c := openai.New(uuid.New(), "k", openai.WithEndpoint(srv.URL))
-	tokens, errs := c.Stream(context.Background(), mustReq(t))
-	_, finalErr := drainTokens(t, tokens, errs)
-	require.NoError(t, finalErr)
-
-	messages, _ := gotBody["messages"].([]any)
-	require.NotEmpty(t, messages)
-	system, _ := messages[0].(map[string]any)
-	require.False(t, strings.HasPrefix(system["content"].(string), domain.SpeechPreamble))
+	require.Equal(t, "RESOLVED SYSTEM PROMPT", system["content"].(string))
 }
 
 func TestClient_IDAndName(t *testing.T) {
