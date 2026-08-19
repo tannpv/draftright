@@ -174,7 +174,7 @@ struct GrammarCheckView: View {
         for issue in remainingIssues {
             // Content-based resolution (see Fix logic below) — LLM offsets
             // drift, so highlighting by raw offset underlined the wrong words.
-            guard let range = Self.resolveRange(of: issue, in: currentText),
+            guard let range = GrammarFix.resolveRange(of: issue, in: currentText),
                   let attrRange = Range(range, in: attr) else { continue }
 
             attr[attrRange].backgroundColor = issue.color.withAlphaComponent(0.15)
@@ -276,42 +276,15 @@ struct GrammarCheckView: View {
     // (nearest wins). Remaining issues need no offset bookkeeping after an
     // apply — they re-resolve on their own next use.
 
-    /// Locates `issue.original` in `text`, preferring the occurrence nearest
-    /// the LLM-claimed offset. Returns nil when the original string no longer
-    /// exists (stale issue — e.g. already fixed by an overlapping apply).
-    static func resolveRange(of issue: GrammarIssue, in text: String) -> Range<String.Index>? {
-        guard !issue.original.isEmpty else { return nil }
-        var candidates: [Range<String.Index>] = []
-        var searchFrom = text.startIndex
-        while let r = text.range(of: issue.original, range: searchFrom..<text.endIndex) {
-            candidates.append(r)
-            searchFrom = r.upperBound
-        }
-        guard !candidates.isEmpty else { return nil }
-        let claimed = max(0, min(issue.offset, text.count))
-        return candidates.min { a, b in
-            abs(text.distance(from: text.startIndex, to: a.lowerBound) - claimed)
-                < abs(text.distance(from: text.startIndex, to: b.lowerBound) - claimed)
-        }
-    }
-
     private func applyFix(_ issue: GrammarIssue) {
-        if let range = Self.resolveRange(of: issue, in: currentText) {
-            currentText.replaceSubrange(range, with: issue.suggestion)
-        }
+        currentText = GrammarFix.applyFix(currentText, issue)
         // Applied or stale either way — drop it. Survivors re-resolve from
         // content on their next render/click, so no offset shifting.
         remainingIssues.removeAll { $0.id == issue.id }
     }
 
     private func fixAll() {
-        // Apply one at a time, re-resolving against the evolving text — order
-        // no longer matters because ranges come from content, not offsets.
-        for issue in remainingIssues {
-            if let range = Self.resolveRange(of: issue, in: currentText) {
-                currentText.replaceSubrange(range, with: issue.suggestion)
-            }
-        }
+        currentText = GrammarFix.fixAll(currentText, remainingIssues)
         remainingIssues = []
     }
 }

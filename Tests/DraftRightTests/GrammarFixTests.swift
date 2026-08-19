@@ -14,7 +14,7 @@ final class GrammarFixTests: XCTestCase {
     }
 
     private func apply(_ text: String, _ i: GrammarIssue) -> String {
-        guard let r = GrammarCheckView.resolveRange(of: i, in: text) else { return text }
+        guard let r = GrammarFix.resolveRange(of: i, in: text) else { return text }
         var out = text
         out.replaceSubrange(r, with: i.suggestion)
         return out
@@ -44,7 +44,7 @@ final class GrammarFixTests: XCTestCase {
     }
 
     func testEmptyOriginalIsNeverResolved() {
-        XCTAssertNil(GrammarCheckView.resolveRange(of: issue("", "x"), in: "some text"))
+        XCTAssertNil(GrammarFix.resolveRange(of: issue("", "x"), in: "some text"))
     }
 
     func testOffsetBeyondTextLengthIsClamped() {

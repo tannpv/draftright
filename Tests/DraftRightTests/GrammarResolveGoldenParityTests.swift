@@ -37,7 +37,7 @@ final class GrammarResolveGoldenParityTests: XCTestCase {
                                      length: c.original.count,
                                      original: c.original, suggestion: "X",
                                      reason: "golden")
-            let range = GrammarCheckView.resolveRange(of: issue, in: c.text)
+            let range = GrammarFix.resolveRange(of: issue, in: c.text)
             if let expected = c.expected {
                 guard let r = range else {
                     XCTFail("\(c.name): expected a match, got nil"); continue
