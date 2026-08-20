@@ -74,6 +74,7 @@ done
 echo "== [5/5] run shadowdiff =="
 go run "$ROOT/cmd/shadowdiff" \
   --node=http://localhost:3200 --go=http://localhost:3201 \
+  --timeout=180s \
   --fixtures="$ROOT/cmd/shadowdiff/fixtures" \
   --routes="$HERE/routes.txt" \
   --maint-dsn="$MAINT_DSN" \
