@@ -77,6 +77,7 @@ func main() {
 	adminEmail := flag.String("admin-email", "", "bootstrap admin email")
 	adminPass := flag.String("admin-pass", "", "bootstrap admin password")
 	warmupPath := flag.String("warmup-path", "/plans", "cheap DB-hard GET hit after each reset to drain dead pool conns")
+	timeout := flag.Duration("timeout", 15*time.Second, "per-request HTTP client timeout; raise it for /rewrite fixtures, which call a live provider whose free-tier bursts (50-120s) otherwise trip a false 'context deadline exceeded' that looks like a diff (#193)")
 	flag.Parse()
 	if *nodeBase == "" || *goBase == "" {
 		fmt.Fprintln(os.Stderr, "both --node and --go are required")
@@ -104,7 +105,7 @@ func main() {
 		}
 	}
 
-	client := &http.Client{Timeout: 15 * time.Second}
+	client := &http.Client{Timeout: *timeout}
 
 	vars := map[string]string{}
 	if *userEmail != "" {
