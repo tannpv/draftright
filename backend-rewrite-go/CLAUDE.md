@@ -136,6 +136,46 @@ sqlc generate             # regen internal/shared/pg/sqlc after SQL changes
 package whose object is cached. After a suspicious edit, prefer
 `go test ./...` (rebuilds for the test binary) or `go clean -cache`.
 
+## Running the live shadow gate
+
+`deploy/shadow/run-gate.sh` — run ON the dev VPS from a `develop` checkout. It
+rebuilds the Go image from the checkout, builds a frozen template DB, creates
+`draftright_shadow_{node,go}` from it, ups isolated shadow backends
+(node:3200 / go:3201), and runs `cmd/shadowdiff`. **Touches ONLY
+`draftright_shadow_*`** — never dev/prod. Target **151/151**; non-zero exit on
+any diff or coverage gap.
+
+```bash
+ssh draftright
+cd /home/deploy/deploys/draftright-dev && git pull --ff-only origin develop
+export PATH=/usr/local/go/bin:$PATH          # ← REQUIRED (see gotcha)
+cd backend-rewrite-go && ./deploy/shadow/run-gate.sh > /tmp/gate.log 2>&1; echo "exit=$?"
+```
+
+- **`go: command not found` gotcha:** the deploy user's non-login ssh shell has
+  no `/usr/local/go/bin` on PATH, so step 5 (`go run ./cmd/shadowdiff`) fails.
+  `export PATH=/usr/local/go/bin:$PATH` first.
+- **Never `run-gate.sh | tail` over ssh** — the pipe makes the ssh exit code =
+  `tail`'s (0), masking a real gate failure. Redirect to a file + `echo $?`.
+- shadowdiff compares the response **envelope** (JSON), not upstream prompts.
+  `ignore_value_of` = key names value-ignored at any nesting (presence +
+  non-emptiness still asserted). Raise `--timeout` (default 15s) for `/rewrite`
+  fixtures — they hit a live provider whose bursts exceed 15s (#193).
+- Tear down after: `docker compose -f deploy/shadow/docker-compose.shadow.yml --env-file .env.shadow down`.
+
+## Promoting the Go backend to prod (no git in /opt/draftright)
+
+Build the dev image, retag to the prod name, recreate. **Anchor the current
+prod image first for one-command rollback.**
+
+```bash
+docker tag draftright-backend-go:latest draftright-backend-go:pre-<tag>   # rollback anchor
+docker tag draftright-dev-backend-go-dev:latest draftright-backend-go:latest
+cd /opt/draftright && docker compose -f docker-compose.prod.yml up -d --force-recreate backend-go
+# verify: docker inspect -f '{{.Image}}' draftright-backend-go-1  == the new sha, healthy, /health 200
+# rollback: docker tag draftright-backend-go:pre-<tag> draftright-backend-go:latest && recreate
+```
+
 ## Gotchas
 
 - Never commit compiled binaries (`/server`, `/shadowdiff`) — both
