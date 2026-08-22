@@ -99,7 +99,12 @@ func TestClient_StampsProvenance(t *testing.T) {
 	_, finalErr := drainTokens(t, tokens, errs)
 	require.NoError(t, finalErr)
 	model, ptype := p.Read()
-	require.Equal(t, "claude-3-5-sonnet-20241022", model)
+	// Golden value, deliberately a literal: asserting anthropic.DefaultModel here
+	// would compare the constant against a value derived from that same constant,
+	// so the test passes for any value and catches nothing. Verified by breaking
+	// the constant and watching this test still pass. Update this literal only
+	// when the default model is changed on purpose.
+	require.Equal(t, "claude-sonnet-5", model)
 	require.Equal(t, "anthropic", ptype)
 }
 
