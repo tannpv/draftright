@@ -71,4 +71,12 @@ struct SharedSettings {
         let raw = defaults?.string(forKey: "draftright.oneTapTone") ?? Tone.polished.apiValue
         return Tone(rawValue: raw) ?? .polished
     }
+
+    /// Whether voice dictation is AI-polished (#197). False = insert the raw
+    /// transcript. The Flutter app writes "true"/"false" into the App Group;
+    /// absent defaults to on (the original behaviour). Fed to the voice session
+    /// as `rawMode = !voicePolishEnabled`.
+    var voicePolishEnabled: Bool {
+        (defaults?.string(forKey: "draftright.voicePolishEnabled") ?? "true") != "false"
+    }
 }

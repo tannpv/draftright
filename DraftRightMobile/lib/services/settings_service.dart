@@ -35,6 +35,7 @@ class SettingsService extends ChangeNotifier {
   List<String> _enabledLanguageIds = const ['en'];
   String _activeLanguageId = 'en';
   String _lastSeenVersion = '';
+  bool _voicePolishEnabled = true;
 
   String get backendUrl => _backendUrl;
   /// App version that last ran — drives the one-time post-update "What's New".
@@ -45,6 +46,10 @@ class SettingsService extends ChangeNotifier {
   String get bubblePresetTone => _bubblePresetTone;
   List<String> get enabledLanguageIds => List.unmodifiable(_enabledLanguageIds);
   String get activeLanguageId => _activeLanguageId;
+  /// Whether voice dictation is AI-polished. False = insert the raw transcript
+  /// (dictate-only, no /rewrite call). The keyboards read this as rawMode's
+  /// inverse (#197). Default on = the original behaviour.
+  bool get voicePolishEnabled => _voicePolishEnabled;
 
   Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
@@ -73,6 +78,7 @@ class SettingsService extends ChangeNotifier {
       _activeLanguageId = _enabledLanguageIds.first;
     }
     _lastSeenVersion = _prefs.getString('draftright.lastSeenVersion') ?? '';
+    _voicePolishEnabled = _prefs.getBool('draftright.voicePolishEnabled') ?? true;
 
     // Sync backend URL to SharedPreferences for keyboard extensions
     await _prefs.setString('draftright.backendUrl', _backendUrl);
@@ -84,6 +90,17 @@ class SettingsService extends ChangeNotifier {
     await AuthService.syncActiveLanguageIdToAppGroup(_activeLanguageId);
     // The iOS keyboard's one-tap rewrite reads this from the App Group.
     await AuthService.syncOneTapToneToAppGroup(_bubblePresetTone);
+    // Android reads the SharedPreferences bool directly; iOS needs it in the
+    // App Group (#197).
+    await AuthService.syncVoicePolishEnabledToAppGroup(_voicePolishEnabled);
+  }
+
+  /// Toggle AI-polish of voice dictation. Off = raw transcript inserted (#197).
+  Future<void> setVoicePolishEnabled(bool enabled) async {
+    _voicePolishEnabled = enabled;
+    await _prefs.setBool('draftright.voicePolishEnabled', enabled);
+    await AuthService.syncVoicePolishEnabledToAppGroup(enabled);
+    notifyListeners();
   }
 
   Future<void> setLastSeenVersion(String version) async {
