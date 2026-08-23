@@ -1,16 +1,31 @@
 # Production compose — the Go drop-in port (Phase 5 cutover, 2026-06-19).
 #
-# Source of truth for what runs on the prod droplet at
-# /opt/draftright/docker-compose.prod.yml. The legacy NestJS `backend`
-# service (:3000) was DECOMMISSIONED at cutover and removed here; Node is
-# rollback-only and kept out of the canonical file. Secrets are NOT in this
-# file — they come from the untracked `.env` next to it (env_file) and the
-# ${POSTGRES_PASSWORD} interpolation.
+# Source of truth for what runs on prod (Contabo, 2026-08-23) at
+# /opt/src/draftright/backend-rewrite-go/docker-compose.prod.yml, compose
+# project `draftright` alongside /opt/stacks/draftright/edge.yml. The legacy
+# NestJS `backend` service (:3000) was DECOMMISSIONED at cutover; Node is
+# rollback-only. Secrets come from the untracked `.env` next to it (env_file)
+# + the ${POSTGRES_PASSWORD} interpolation.
 #
-# Redeploy: build draftright-backend-go:latest from the main checkout, then
-#   cd /opt/draftright && sudo docker compose -f docker-compose.prod.yml up -d backend-go
+# Redeploy: build draftright-backend-go:latest from this dir, then
+#   docker compose -p draftright \
+#     -f docker-compose.prod.yml -f /opt/stacks/draftright/edge.yml \
+#     up -d --force-recreate backend-go
+# (the -p/-f set matters — a bare `docker compose -f docker-compose.prod.yml`
+#  defaults the project to the dir name and spawns a duplicate that crash-loops
+#  on :3001.)
 
 services:
+  # Fixes the #198 screenshot-500: backend-go runs as distroless nonroot
+  # (uid 65532), but the bind-mounted bug-reports dir is root-owned on a fresh
+  # host, so Storage.Save gets EACCES. This one-shot root init chowns it before
+  # backend-go starts — self-healing on any box/rebuild, no manual chown.
+  bug-reports-perms:
+    image: busybox:1.36
+    command: ["sh", "-c", "mkdir -p /d && chown -R 65532:65532 /d"]
+    volumes:
+      - /var/lib/draftright/bug-reports:/d
+    restart: "no"
   # Go drop-in port of the NestJS backend (Phase 5 prod cutover). Same .env +
   # DATABASE_URL/REDIS_URL as the retired `backend`. Listens :3001
   # (LISTEN_ADDR); host 127.0.0.1:3001 — also serves the streaming /v1/rewrite
@@ -37,6 +52,8 @@ services:
     volumes:
       - /var/lib/draftright/bug-reports:/var/lib/draftright/bug-reports
     depends_on:
+      bug-reports-perms:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
