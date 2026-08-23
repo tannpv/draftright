@@ -185,7 +185,12 @@ class ToolbarView(
 
     fun setLoading(tone: Tone) {
         loadingTone = tone
-        isEnabled = false
+        // Disable each tone button individually: a disabled ViewGroup does NOT
+        // block child taps (see [setToneButtonsEnabled]), so the old
+        // `isEnabled = false` on the container let a second tone fire a
+        // concurrent rewrite while the first was still in flight (#65-3). The
+        // voice path already uses this correct pattern.
+        setToneButtonsEnabled(false)
         toneButtons[tone]?.let { btn ->
             btn.visibility = View.INVISIBLE
             val spinner = ProgressBar(context).apply {
@@ -199,7 +204,7 @@ class ToolbarView(
     }
 
     fun clearLoading() {
-        isEnabled = true
+        setToneButtonsEnabled(true)
         spinnerView?.let { (it.parent as? LinearLayout)?.removeView(it) }
         spinnerView = null
         loadingTone?.let { tone ->
