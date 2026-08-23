@@ -93,6 +93,21 @@ class _ReportBugSheetState extends State<_ReportBugSheet> {
 
   static final _emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
 
+  // Guiding template dropped into an EMPTY description once a screenshot is
+  // attached, so the user has a structure to fill in rather than a blank box
+  // next to the image. Editable; never overwrites text they already typed.
+  static const _capturedDescriptionTemplate =
+      'What I did:\n\nWhat I expected:\n\nWhat actually happened:\n';
+
+  /// Seed the description with [_capturedDescriptionTemplate] the first time a
+  /// screenshot is attached, only if the field is still empty. One place both
+  /// the auto-capture and manual-pick paths call (RULE #1).
+  void _seedDescriptionForScreenshot() {
+    if (_descriptionController.text.trim().isEmpty) {
+      _descriptionController.text = _capturedDescriptionTemplate;
+    }
+  }
+
   // Pre-fill the email field once, from the signed-in user's cached address,
   // so logged-in users don't retype it (and can still edit before sending).
   bool _prefilledEmail = false;
@@ -122,6 +137,7 @@ class _ReportBugSheetState extends State<_ReportBugSheet> {
       setState(() {
         _screenshot = file;
         _errorText = null;
+        _seedDescriptionForScreenshot();
       });
     } catch (_) {/* auto-capture is optional — silently skip */}
   }
@@ -176,6 +192,7 @@ class _ReportBugSheetState extends State<_ReportBugSheet> {
       setState(() {
         _screenshot = file;
         _errorText = null;
+        _seedDescriptionForScreenshot();
       });
     } catch (e) {
       if (!mounted) return;

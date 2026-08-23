@@ -93,3 +93,31 @@ func TestValidateRewriteInputKind(t *testing.T) {
 		t.Fatalf("valid speech rejected: kind=%q msg=%q", kind, msg)
 	}
 }
+
+// TestValidateRewrite_ExplicitNullOptional pins the @IsOptional parity contract
+// (#201): class-validator skips ALL validators on an @IsOptional property whose
+// value is null, so an explicit JSON null on input_kind / target_language /
+// source_language must be accepted (200), exactly like an absent key — NOT 400.
+// Regression guard: before the fix, `input_kind:null` reached @IsIn as "" and
+// Go replied 400 where Node returns 200.
+func TestValidateRewrite_ExplicitNullOptional(t *testing.T) {
+	for _, body := range []string{
+		`{"text":"hi","tone":"simple","input_kind":null}`,
+		`{"text":"hi","tone":"simple","target_language":null}`,
+		`{"text":"hi","tone":"simple","source_language":null}`,
+		`{"text":"hi","tone":"simple","target_language":null,"source_language":null,"input_kind":null}`,
+	} {
+		_, _, target, source, kind, msg := validateRewrite([]byte(body))
+		if msg != "" {
+			t.Fatalf("explicit null rejected for %s: msg=%q", body, msg)
+		}
+		if target != "" || source != "" || kind != "" {
+			t.Fatalf("null should leave optionals unset for %s: target=%q source=%q kind=%q", body, target, source, kind)
+		}
+	}
+
+	// A present, invalid input_kind must STILL be rejected (fix must not blanket-skip).
+	if _, _, _, _, _, msg := validateRewrite([]byte(`{"text":"hi","tone":"simple","input_kind":"banana"}`)); msg == "" {
+		t.Fatal("invalid non-null input_kind must still be rejected")
+	}
+}

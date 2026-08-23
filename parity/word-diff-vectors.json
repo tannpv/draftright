@@ -1,0 +1,590 @@
+{
+  "_comment": "RULE #1 golden-vector parity guard for WordDiff across macOS / Windows / Linux (#107). Each platform's WordDiff test asserts its output equals these vectors, so the three ports cannot drift (the #22 failure mode). Regenerate with tools/gen_diff_golden_vectors.py, never hand-edit; kinds are the wire values equal/deleted/inserted.",
+  "cases": [
+    {
+      "name": "identical",
+      "old": "the quick brown fox",
+      "new": "the quick brown fox",
+      "old_tokens": [
+        [
+          "the",
+          "equal"
+        ],
+        [
+          " ",
+          "equal"
+        ],
+        [
+          "quick",
+          "equal"
+        ],
+        [
+          " ",
+          "equal"
+        ],
+        [
+          "brown",
+          "equal"
+        ],
+        [
+          " ",
+          "equal"
+        ],
+        [
+          "fox",
+          "equal"
+        ]
+      ],
+      "new_tokens": [
+        [
+          "the",
+          "equal"
+        ],
+        [
+          " ",
+          "equal"
+        ],
+        [
+          "quick",
+          "equal"
+        ],
+        [
+          " ",
+          "equal"
+        ],
+        [
+          "brown",
+          "equal"
+        ],
+        [
+          " ",
+          "equal"
+        ],
+        [
+          "fox",
+          "equal"
+        ]
+      ]
+    },
+    {
+      "name": "single word replaced",
+      "old": "the quick brown fox",
+      "new": "the slow brown fox",
+      "old_tokens": [
+        [
+          "the",
+          "equal"
+        ],
+        [
+          " ",
+          "equal"
+        ],
+        [
+          "quick",
+          "deleted"
+        ],
+        [
+          " ",
+          "equal"
+        ],
+        [
+          "brown",
+          "equal"
+        ],
+        [
+          " ",
+          "equal"
+        ],
+        [
+          "fox",
+          "equal"
+        ]
+      ],
+      "new_tokens": [
+        [
+          "the",
+          "equal"
+        ],
+        [
+          " ",
+          "equal"
+        ],
+        [
+          "slow",
+          "inserted"
+        ],
+        [
+          " ",
+          "equal"
+        ],
+        [
+          "brown",
+          "equal"
+        ],
+        [
+          " ",
+          "equal"
+        ],
+        [
+          "fox",
+          "equal"
+        ]
+      ]
+    },
+    {
+      "name": "word inserted",
+      "old": "the brown fox",
+      "new": "the quick brown fox",
+      "old_tokens": [
+        [
+          "the",
+          "equal"
+        ],
+        [
+          " ",
+          "equal"
+        ],
+        [
+          "brown",
+          "equal"
+        ],
+        [
+          " ",
+          "equal"
+        ],
+        [
+          "fox",
+          "equal"
+        ]
+      ],
+      "new_tokens": [
+        [
+          "the",
+          "equal"
+        ],
+        [
+          " ",
+          "equal"
+        ],
+        [
+          "quick",
+          "inserted"
+        ],
+        [
+          " ",
+          "inserted"
+        ],
+        [
+          "brown",
+          "equal"
+        ],
+        [
+          " ",
+          "equal"
+        ],
+        [
+          "fox",
+          "equal"
+        ]
+      ]
+    },
+    {
+      "name": "word deleted",
+      "old": "the quick brown fox",
+      "new": "the brown fox",
+      "old_tokens": [
+        [
+          "the",
+          "equal"
+        ],
+        [
+          " ",
+          "equal"
+        ],
+        [
+          "quick",
+          "deleted"
+        ],
+        [
+          " ",
+          "deleted"
+        ],
+        [
+          "brown",
+          "equal"
+        ],
+        [
+          " ",
+          "equal"
+        ],
+        [
+          "fox",
+          "equal"
+        ]
+      ],
+      "new_tokens": [
+        [
+          "the",
+          "equal"
+        ],
+        [
+          " ",
+          "equal"
+        ],
+        [
+          "brown",
+          "equal"
+        ],
+        [
+          " ",
+          "equal"
+        ],
+        [
+          "fox",
+          "equal"
+        ]
+      ]
+    },
+    {
+      "name": "prefix changed",
+      "old": "hello world",
+      "new": "goodbye world",
+      "old_tokens": [
+        [
+          "hello",
+          "deleted"
+        ],
+        [
+          " ",
+          "equal"
+        ],
+        [
+          "world",
+          "equal"
+        ]
+      ],
+      "new_tokens": [
+        [
+          "goodbye",
+          "inserted"
+        ],
+        [
+          " ",
+          "equal"
+        ],
+        [
+          "world",
+          "equal"
+        ]
+      ]
+    },
+    {
+      "name": "suffix changed",
+      "old": "hello world",
+      "new": "hello there",
+      "old_tokens": [
+        [
+          "hello",
+          "equal"
+        ],
+        [
+          " ",
+          "equal"
+        ],
+        [
+          "world",
+          "deleted"
+        ]
+      ],
+      "new_tokens": [
+        [
+          "hello",
+          "equal"
+        ],
+        [
+          " ",
+          "equal"
+        ],
+        [
+          "there",
+          "inserted"
+        ]
+      ]
+    },
+    {
+      "name": "all different",
+      "old": "one two three",
+      "new": "four five six",
+      "old_tokens": [
+        [
+          "one",
+          "deleted"
+        ],
+        [
+          " ",
+          "equal"
+        ],
+        [
+          "two",
+          "deleted"
+        ],
+        [
+          " ",
+          "equal"
+        ],
+        [
+          "three",
+          "deleted"
+        ]
+      ],
+      "new_tokens": [
+        [
+          "four",
+          "inserted"
+        ],
+        [
+          " ",
+          "equal"
+        ],
+        [
+          "five",
+          "inserted"
+        ],
+        [
+          " ",
+          "equal"
+        ],
+        [
+          "six",
+          "inserted"
+        ]
+      ]
+    },
+    {
+      "name": "empty to text",
+      "old": "",
+      "new": "brand new text",
+      "old_tokens": [],
+      "new_tokens": [
+        [
+          "brand",
+          "inserted"
+        ],
+        [
+          " ",
+          "inserted"
+        ],
+        [
+          "new",
+          "inserted"
+        ],
+        [
+          " ",
+          "inserted"
+        ],
+        [
+          "text",
+          "inserted"
+        ]
+      ]
+    },
+    {
+      "name": "text to empty",
+      "old": "old text here",
+      "new": "",
+      "old_tokens": [
+        [
+          "old",
+          "deleted"
+        ],
+        [
+          " ",
+          "deleted"
+        ],
+        [
+          "text",
+          "deleted"
+        ],
+        [
+          " ",
+          "deleted"
+        ],
+        [
+          "here",
+          "deleted"
+        ]
+      ],
+      "new_tokens": []
+    },
+    {
+      "name": "both empty",
+      "old": "",
+      "new": "",
+      "old_tokens": [],
+      "new_tokens": []
+    },
+    {
+      "name": "leading and trailing spaces",
+      "old": "  padded text  ",
+      "new": "  padded prose  ",
+      "old_tokens": [
+        [
+          " ",
+          "equal"
+        ],
+        [
+          " ",
+          "equal"
+        ],
+        [
+          "padded",
+          "equal"
+        ],
+        [
+          " ",
+          "equal"
+        ],
+        [
+          "text",
+          "deleted"
+        ],
+        [
+          " ",
+          "equal"
+        ],
+        [
+          " ",
+          "equal"
+        ]
+      ],
+      "new_tokens": [
+        [
+          " ",
+          "equal"
+        ],
+        [
+          " ",
+          "equal"
+        ],
+        [
+          "padded",
+          "equal"
+        ],
+        [
+          " ",
+          "equal"
+        ],
+        [
+          "prose",
+          "inserted"
+        ],
+        [
+          " ",
+          "equal"
+        ],
+        [
+          " ",
+          "equal"
+        ]
+      ]
+    },
+    {
+      "name": "unicode vietnamese",
+      "old": "toi yeu tieng viet",
+      "new": "tôi yêu tiếng việt",
+      "old_tokens": [
+        [
+          "toi",
+          "deleted"
+        ],
+        [
+          " ",
+          "equal"
+        ],
+        [
+          "yeu",
+          "deleted"
+        ],
+        [
+          " ",
+          "equal"
+        ],
+        [
+          "tieng",
+          "deleted"
+        ],
+        [
+          " ",
+          "equal"
+        ],
+        [
+          "viet",
+          "deleted"
+        ]
+      ],
+      "new_tokens": [
+        [
+          "tôi",
+          "inserted"
+        ],
+        [
+          " ",
+          "equal"
+        ],
+        [
+          "yêu",
+          "inserted"
+        ],
+        [
+          " ",
+          "equal"
+        ],
+        [
+          "tiếng",
+          "inserted"
+        ],
+        [
+          " ",
+          "equal"
+        ],
+        [
+          "việt",
+          "inserted"
+        ]
+      ]
+    },
+    {
+      "name": "punctuation kept as words",
+      "old": "hi, world!",
+      "new": "hi, there!",
+      "old_tokens": [
+        [
+          "hi,",
+          "equal"
+        ],
+        [
+          " ",
+          "equal"
+        ],
+        [
+          "world!",
+          "deleted"
+        ]
+      ],
+      "new_tokens": [
+        [
+          "hi,",
+          "equal"
+        ],
+        [
+          " ",
+          "equal"
+        ],
+        [
+          "there!",
+          "inserted"
+        ]
+      ]
+    }
+  ]
+}

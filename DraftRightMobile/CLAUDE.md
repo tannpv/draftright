@@ -63,6 +63,7 @@ cd android && ./gradlew assembleDebug  # Android build via Gradle
 
 ## Known Patterns
 
+- **Android unit tests:** run scoped to `:app` — `./gradlew :app:testDebugUnitTest --tests '<FQN>'`. The bare `testDebugUnitTest` applies the `--tests` filter to every Flutter plugin subproject too and fails with "No tests found" on the ones lacking the class. Reports land under the **Flutter-redirected** build dir `DraftRightMobile/build/app/test-results/…`, NOT `android/app/build/` (`android/build.gradle.kts` overrides `buildDir`) — look there to confirm `tests="N" failures="0"`.
 - Android keyboard uses programmatic views (no XML layouts)
 - Key labels use emoji for special keys (shift ⬆, backspace ←, enter ↵, globe 🌐)
 - Toolbar tone icons: ✎ 💬 ✨ ⊖ 🔧 🌐

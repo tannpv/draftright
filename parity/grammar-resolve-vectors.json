@@ -1,0 +1,109 @@
+{
+  "_comment": "RULE #1 golden-vector parity guard for grammar resolveRange across macOS / Windows / Linux (#107). Each platform asserts its resolve logic matches these vectors so the three ports cannot drift (BR#49 class bug). Regenerate with tools/gen_grammar_resolve_golden_vectors.py; ASCII-only so (start,length) is index-unit-portable. null = stale/empty.",
+  "cases": [
+    {
+      "name": "exact match, offset correct",
+      "text": "the cat sat",
+      "original": "cat",
+      "offset": 4,
+      "expected": {
+        "start": 4,
+        "length": 3
+      }
+    },
+    {
+      "name": "offset wildly wrong, resolves by content",
+      "text": "the cat sat",
+      "original": "cat",
+      "offset": 999,
+      "expected": {
+        "start": 4,
+        "length": 3
+      }
+    },
+    {
+      "name": "negative offset clamps to start",
+      "text": "the cat sat",
+      "original": "cat",
+      "offset": -50,
+      "expected": {
+        "start": 4,
+        "length": 3
+      }
+    },
+    {
+      "name": "duplicate, offset near second",
+      "text": "is it is it",
+      "original": "is",
+      "offset": 6,
+      "expected": {
+        "start": 6,
+        "length": 2
+      }
+    },
+    {
+      "name": "duplicate, offset near first",
+      "text": "is it is it",
+      "original": "is",
+      "offset": 0,
+      "expected": {
+        "start": 0,
+        "length": 2
+      }
+    },
+    {
+      "name": "duplicate, equidistant tie keeps earliest",
+      "text": "ab xx ab",
+      "original": "ab",
+      "offset": 3,
+      "expected": {
+        "start": 0,
+        "length": 2
+      }
+    },
+    {
+      "name": "three occurrences, pick middle",
+      "text": "no no no",
+      "original": "no",
+      "offset": 3,
+      "expected": {
+        "start": 3,
+        "length": 2
+      }
+    },
+    {
+      "name": "stale original absent -> null",
+      "text": "the cat sat",
+      "original": "dog",
+      "offset": 0,
+      "expected": null
+    },
+    {
+      "name": "empty original -> null",
+      "text": "the cat sat",
+      "original": "",
+      "offset": 0,
+      "expected": null
+    },
+    {
+      "name": "whole-string match",
+      "text": "hello",
+      "original": "hello",
+      "offset": 0,
+      "expected": {
+        "start": 0,
+        "length": 5
+      }
+    },
+    {
+      "name": "overlapping candidates counted non-overlapping",
+      "text": "aaaa",
+      "original": "aa",
+      "offset": 3,
+      "expected": {
+        "start": 2,
+        "length": 2
+      }
+    }
+  ]
+}

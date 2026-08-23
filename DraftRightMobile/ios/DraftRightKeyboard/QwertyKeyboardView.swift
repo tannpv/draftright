@@ -53,6 +53,20 @@ final class QwertyKeyboardView: UIView {
         buildKeyboard()
     }
 
+    /// Open the digits (symbols1) layer for a numeric field, or return to alpha
+    /// for a text field (#190). No-op when already on the target layer, so
+    /// re-focusing a field doesn't rebuild-flicker. Reuses the existing symbols1
+    /// layer rather than adding a separate numeric layout.
+    func setNumericLayer(_ numeric: Bool) {
+        let target = numeric ? 1 : 0
+        guard currentLayer != target else { return }
+        currentLayer = target
+        // A numeric layer has no shift; clear it so a stale shift doesn't linger
+        // when the user later returns to an alpha field.
+        if numeric { shiftState = .off }
+        buildKeyboard()
+    }
+
     private var backspaceTimer: Timer?
 
     // Swipe-space cycle state. Matches Android's 80 dp threshold.

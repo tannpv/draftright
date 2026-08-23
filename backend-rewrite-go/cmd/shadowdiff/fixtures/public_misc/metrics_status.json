@@ -1,8 +1,0 @@
-{
-  "name": "metrics_status",
-  "method": "GET",
-  "path": "/metrics",
-  "headers": { "Accept": "text/plain" },
-  "status_only": true,
-  "ignore_headers": ["content-type"]
-}

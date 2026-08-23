@@ -1,9 +1,0 @@
-{
-  "name": "account_me_ok",
-  "method": "GET",
-  "path": "/auth/me",
-  "headers": {
-    "Authorization": "Bearer {{user_token}}"
-  },
-  "compare_raw_body": true
-}

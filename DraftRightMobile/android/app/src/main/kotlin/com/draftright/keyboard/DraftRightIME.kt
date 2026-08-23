@@ -20,6 +20,7 @@ import android.widget.TextView
 import android.widget.Toast
 import com.draftright.keyboard.ime.CandidateBarView
 import com.draftright.keyboard.ime.ImeContext
+import com.draftright.keyboard.ime.NumericField
 import com.draftright.keyboard.lang.EnglishLanguagePack
 import com.draftright.keyboard.voice.SpeechRecognizerVoiceInput
 import com.draftright.keyboard.voice.VoiceConfig
@@ -188,6 +189,11 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
         // Syncing here ensures the keyboard always matches current settings
         // without destroying and recreating the entire view.
         syncControllerWithSettings()
+        // Numeric fields (OTP/PIN/phone/amount) open on the digits layer so the
+        // user isn't stranded on QWERTY; text fields return to alpha (#190).
+        // Before updateAutoCaps: on the numeric layer applyAutoShift is a no-op,
+        // so ordering keeps auto-caps correct for the alpha case.
+        keyboard?.setNumericLayer(NumericField.isNumeric(info?.inputType ?: 0))
         // Samsung parity: auto-capitalize at the start of the new field.
         updateAutoCaps()
     }
@@ -514,14 +520,14 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
         val locale = controller?.current?.sttLocale ?: return false
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             // Persist the same mode for the permission trampoline's resume path
-            // so a first-grant session behaves identically (VoiceConfig owns
-            // the raw-vs-polish policy).
-            settings.pendingVoiceRawMode = VoiceConfig.HOLD_TO_TALK_RAW_MODE
+            // so a first-grant session behaves identically. rawMode is the
+            // inverse of the user's "Polish dictation" setting (#197).
+            settings.pendingVoiceRawMode = !settings.voicePolishEnabled
             settings.voicePermissionRequested = true
             RequestPermissionActivity.launch(this, Manifest.permission.RECORD_AUDIO)
             return false
         }
-        voiceSession.startSession(locale, rawMode = VoiceConfig.HOLD_TO_TALK_RAW_MODE)
+        voiceSession.startSession(locale, rawMode = !settings.voicePolishEnabled)
         return true
     }
 

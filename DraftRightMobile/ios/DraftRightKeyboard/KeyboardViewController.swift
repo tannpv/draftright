@@ -19,6 +19,12 @@ class KeyboardViewController: UIInputViewController {
     private var voiceSession: VoiceSessionController!
     private var voicePreviewLabel: UILabel?
 
+    // Last field's keyboardType, so the digits-layer switch runs only when the
+    // focused field actually changes (#190) — not on every keystroke, which
+    // would yank a user off a symbols layer they chose on a text field. -1 =
+    // "not yet seen", so the first field is always evaluated.
+    private var lastKeyboardType: Int = -1
+
     // Tier β: language registry + per-language composer routing.
     private let registry = LanguageRegistry.production
     private var controller: KeyboardController!
@@ -61,7 +67,18 @@ class KeyboardViewController: UIInputViewController {
         // appears so a settings change in the main app takes effect on
         // the next invocation without requiring an extension reload.
         rebuildController()
+        updateNumericLayer()
         updateAutoCaps()
+    }
+
+    /// Open the digits layer on numeric fields (OTP/PIN/phone/amount), alpha on
+    /// text fields — only when the focused field's keyboardType changes, so we
+    /// never fight a user who tapped ?123 on a text field (#190).
+    private func updateNumericLayer() {
+        let kind = textDocumentProxy.keyboardType.rawValue
+        guard kind != lastKeyboardType else { return }
+        lastKeyboardType = kind
+        keyboard.setNumericLayer(NumericField.isNumericKeyboard(kind))
     }
 
     override func textDidChange(_ textInput: UITextInput?) {
@@ -84,6 +101,10 @@ class KeyboardViewController: UIInputViewController {
                 }
             }
         }
+        // A field switch while the keyboard stays up surfaces here (not in
+        // viewWillAppear); re-evaluate the digits layer. Guarded on a
+        // keyboardType change, so ordinary keystrokes are a no-op (#190).
+        updateNumericLayer()
         updateAutoCaps()
     }
 
@@ -378,7 +399,7 @@ extension KeyboardViewController: ToolbarViewDelegate {
             return false
         }
         let locale = controller?.current.locale.identifier ?? "en"
-        voiceSession.startSession(localeTag: locale, rawMode: VoiceConfig.holdToTalkRawMode)
+        voiceSession.startSession(localeTag: locale, rawMode: !settings.voicePolishEnabled)
         return true
     }
 

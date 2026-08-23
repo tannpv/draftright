@@ -33,13 +33,9 @@ enum class VoiceError { PERMISSION_DENIED, RECOGNIZER_UNAVAILABLE, NO_SPEECH, NE
 
 /** Tuning constants shared by the controller and the real recognizer adapter. */
 object VoiceConfig {
-    /**
-     * Whether hold-to-talk commits the verbatim transcript (`true`) or runs it
-     * through AI-polish first (`false`). Single source of truth for the policy
-     * — the iOS port mirrors this. `false` = dictate → AI-polish (input_kind
-     * "speech"), with an automatic raw fallback if polish fails (golden rule).
-     */
-    const val HOLD_TO_TALK_RAW_MODE = false
+    // Raw-vs-polish is now a user setting (SharedSettings.voicePolishEnabled,
+    // #197), fed to the session as rawMode = !voicePolishEnabled. The old
+    // HOLD_TO_TALK_RAW_MODE constant was removed with it.
 
     /** Hard stop for a listening session that never produces a result. */
     const val LISTEN_TIMEOUT_MS = 30_000L

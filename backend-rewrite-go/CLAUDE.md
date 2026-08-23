@@ -1,12 +1,15 @@
 # DraftRight Go Backend (backend-rewrite-go)
 
-Go port of the NestJS backend — byte-identical drop-in replacement.
-Goal: collapse the 653MB Node image to a ~40MB Go distroless binary.
-Master design: `docs/superpowers/specs/2026-06-13-go-backend-port-design.md`.
+The DraftRight backend — the **only** backend (NestJS retired 2026-08-23, epic
+#202; this began as a byte-identical Go port of that NestJS service). A ~40MB
+distroless binary, down from the 653MB Node image.
+Original port design: `docs/superpowers/specs/2026-06-13-go-backend-port-design.md`.
 
-**Hard requirement:** identical routes, JSON, status codes, JWT (HS256).
-Shadow-compare against Node before any Caddy path flip. Ship nothing to
-prod without the live shadow gate passing.
+**Behaviour contract:** the wire shape inherited from NestJS is now the spec in
+its own right — keep routes, JSON, status codes, and JWT (HS256) stable. Guarded
+by Go unit tests + the `parity/` golden fixtures. The live Node-vs-Go shadow
+gate was retired with NestJS (no Node left to diff against); `parity/` +
+`go test` is the contract now.
 
 ## Tech Stack
 
@@ -107,20 +110,22 @@ move (no logic change): mv files into sub-packages, keep ports in
    features — extend, don't fork), assign the route fields.
 8. Add the route field to `coreHandlers` + mount in `shared/router.go`.
 
-## Parity invariants (byte-identical port)
+## Wire-contract invariants
 
-- **JWT clock tolerance MUST be zero** — Node `jsonwebtoken` default. Any
-  leeway makes Go accept tokens Node rejects on the expiry boundary = a
-  parity BUG.
+These came from the NestJS original and are now the contract in their own right —
+existing clients depend on them, so keep them stable (Go unit tests pin each):
+
+- **JWT clock tolerance MUST be zero.** Any leeway makes tokens valid past their
+  expiry boundary — a contract regression clients don't expect.
 - **Dual-secret JWT:** access signed `JWT_SECRET`, refresh signed
   `JWT_REFRESH_SECRET`. TTLs from `app_settings` (token_expiry_minutes
   default 15, refresh_token_expiry_days default 90).
 - bcryptjs hashes (`$2a`/`$2b`) verify natively in x/crypto/bcrypt — no
   migration.
-- Error strings are compared byte-for-byte by the shadow gate — match the
-  NestJS `UnauthorizedException` messages exactly (see `auth/errors.go`).
-- POST status codes match Node exactly (e.g. login → 201, refresh → 200).
-  Don't assume REST conventions; mirror the controller.
+- **Error strings are part of the contract** — clients string-match them; keep
+  them stable (see `auth/errors.go`).
+- POST status codes are non-obvious (e.g. login → 201, refresh → 200) — don't
+  "fix" them to REST convention; they're the established contract.
 
 ## Commands
 
@@ -136,10 +141,54 @@ sqlc generate             # regen internal/shared/pg/sqlc after SQL changes
 package whose object is cached. After a suspicious edit, prefer
 `go test ./...` (rebuilds for the test binary) or `go clean -cache`.
 
+## ⚠️ Prod moved to Contabo (2026-08-23)
+
+Prod is no longer the DigitalOcean droplet. Current prod facts (host, layout,
+deploy command, gotchas) are documented once in two authoritative places — do
+not restate them here:
+
+- **Prod host + deploy command:** the header of `docker-compose.prod.yml` in
+  this dir — SSH `deploy@169.58.214.18` (alias `bacnam`), source at
+  `/opt/src/draftright/backend-rewrite-go`, compose project `draftright` merged
+  with `/opt/stacks/draftright/edge.yml`.
+- **Access, container names, gotchas:** memory `reference_prod_moved_to_contabo`.
+
+## Verifying a backend change (shadow gate retired)
+
+The Node-vs-Go shadow gate is gone with NestJS (#202) — there is no Node to diff
+against. The behaviour contract is now:
+
+- **`go test ./... -race`** — unit tests pin the wire contract (status codes,
+  error strings, validation envelopes; e.g. `parity/validate_test.go`).
+- **`parity/` golden fixtures** — cross-check the ported algorithms.
+- **CI:** `backend-go-ci.yml` runs build/vet/gofmt/test on every push + PR.
+
+Promote via the normal flow (develop → testing → verify → main → prod). No
+special gate step.
+
+## Promoting the Go backend to prod (Contabo)
+
+On Contabo the source IS on the box (`/opt/src/draftright/backend-rewrite-go`),
+so prod builds from that checkout rather than retagging a dev image. **Anchor
+the current prod image first for one-command rollback.** The exact
+`-p draftright -f … -f edge.yml` recreate command is documented once in the
+`docker-compose.prod.yml` header (the single source — a bare `docker compose`
+spawns a crash-looping duplicate on :3001).
+
+```bash
+ssh deploy@169.58.214.18            # alias `bacnam`
+cd /opt/src/draftright/backend-rewrite-go
+docker tag draftright-backend-go:latest draftright-backend-go:pre-<tag>   # rollback anchor
+docker build -t draftright-backend-go:latest .
+# recreate: run the exact command from this file's docker-compose.prod.yml header
+# verify:  docker inspect -f '{{.Image}}' draftright-backend-go-1 == the new sha, healthy, /health 200
+# rollback: docker tag draftright-backend-go:pre-<tag> draftright-backend-go:latest && recreate
+```
+
 ## Gotchas
 
-- Never commit compiled binaries (`/server`, `/shadowdiff`) — both
-  gitignored; they fall out of `go build ./...` / `go build ./cmd/...`.
+- Never commit the compiled `/server` binary — gitignored; it falls out of
+  `go build ./...` / `go build ./cmd/...`.
 - Stray non-ASCII / stray chars in `main.go` can be hidden by the build
   cache — `go build ./...` may report OK while `go test ./...` fails the
   package build. Trust the test build.
