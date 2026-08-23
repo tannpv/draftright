@@ -1,8 +1,0 @@
-{
-  "name": "rewrite_tones",
-  "method": "GET",
-  "path": "/rewrite/tones",
-  "headers": {
-    "Accept": "application/json"
-  }
-}

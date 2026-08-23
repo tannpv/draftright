@@ -1,7 +1,0 @@
-{
-  "name": "admin_core_auth_me_ok",
-  "method": "GET",
-  "path": "/admin/auth/me",
-  "headers": { "Authorization": "Bearer {{admin_token}}" },
-  "ignore_value_of": ["request_id"]
-}
