@@ -20,7 +20,7 @@
 #     content-length: 33825                       <-- and this
 #
 #   That is how a nonexistent Linux download sat advertised in
-#   /updates/latest and versions.json without anyone noticing. Checking the
+#   /updates/latest without anyone noticing. Checking the
 #   status code is not enough; check what came back.
 #
 # Checks (cheap, HEAD-only by default):

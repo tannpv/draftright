@@ -399,7 +399,7 @@ extension KeyboardViewController: ToolbarViewDelegate {
             return false
         }
         let locale = controller?.current.locale.identifier ?? "en"
-        voiceSession.startSession(localeTag: locale, rawMode: VoiceConfig.holdToTalkRawMode)
+        voiceSession.startSession(localeTag: locale, rawMode: !settings.voicePolishEnabled)
         return true
     }
 

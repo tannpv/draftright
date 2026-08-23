@@ -368,6 +368,13 @@ class AuthService extends ChangeNotifier {
     await _syncToAppGroup('draftright.activeLanguageId', id);
   }
 
+  /// Sync whether voice dictation is AI-polished to App Group. The App Group
+  /// channel carries strings, so the bool is stored as "true"/"false"; the iOS
+  /// keyboard reads it back and treats absent as polish-on (#197).
+  static Future<void> syncVoicePolishEnabledToAppGroup(bool enabled) async {
+    await _syncToAppGroup('draftright.voicePolishEnabled', enabled ? 'true' : 'false');
+  }
+
   /// Sync the one-tap preset tone (Tone.apiValue) to App Group so the iOS
   /// keyboard's one-tap rewrite button uses the same default as the app's
   /// picker (and the Android bubble). Key is platform-neutral on purpose —
