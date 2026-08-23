@@ -43,7 +43,7 @@ jobs:
   # reintroduces the hang.
   unit-tests:
     name: Unit tests (headless)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, draftright]
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
@@ -66,7 +66,7 @@ jobs:
   # consumed by both `build` and `msix`.
   release-build-gate:
     name: Gate paid Windows builds to releases
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, draftright]
     outputs:
       proceed: ${{ steps.decide.outputs.proceed }}
     steps:
@@ -285,7 +285,7 @@ jobs:
     name: Publish to update server
     needs: build
     if: github.event_name == 'release' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, draftright]
     timeout-minutes: 10
     steps:
       - name: Checkout (for CHANGELOG release notes)

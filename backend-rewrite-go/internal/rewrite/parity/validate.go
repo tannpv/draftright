@@ -87,6 +87,24 @@ func validateRewrite(raw []byte) (text, tone, target, source, inputKind, msg str
 		return nil
 	}
 
+	// optionalField is field() for @IsOptional properties: an explicit JSON
+	// null is treated the same as an absent key. class-validator's @IsOptional
+	// skips ALL validators when the value is null or undefined, so `{"input_kind":
+	// null}` is valid in Node. Without this, null reached @IsIn as "" (Go
+	// unmarshals JSON null into a string as a no-op), "" ∉ INPUT_KIND_IDS, and
+	// Go replied 400 where Node returns 200 — a parity break (#201). One helper,
+	// applied to every @IsOptional property, so the rule lives in one place.
+	optionalField := func(key string) *json.RawMessage {
+		raw := field(key)
+		if raw == nil {
+			return nil
+		}
+		if strings.TrimSpace(string(*raw)) == "null" {
+			return nil
+		}
+		return raw
+	}
+
 	var msgs []string
 
 	// text — @IsString. Missing OR non-string → "text must be a string".
@@ -103,8 +121,9 @@ func validateRewrite(raw []byte) (text, tone, target, source, inputKind, msg str
 		tone = tn
 	}
 
-	// target_language — @IsOptional @IsString. Only present-but-non-string trips.
-	if tl := field("target_language"); tl != nil {
+	// target_language — @IsOptional @IsString. Only present-but-non-string trips
+	// (explicit null is skipped by @IsOptional — see optionalField).
+	if tl := optionalField("target_language"); tl != nil {
 		if v, ok := resolveString(tl); !ok {
 			msgs = append(msgs, "target_language must be a string")
 		} else {
@@ -113,7 +132,7 @@ func validateRewrite(raw []byte) (text, tone, target, source, inputKind, msg str
 	}
 
 	// source_language — @IsOptional @IsString. Only present-but-non-string trips.
-	if sl := field("source_language"); sl != nil {
+	if sl := optionalField("source_language"); sl != nil {
 		if v, ok := resolveString(sl); !ok {
 			msgs = append(msgs, "source_language must be a string")
 		} else {
@@ -121,10 +140,11 @@ func validateRewrite(raw []byte) (text, tone, target, source, inputKind, msg str
 		}
 	}
 
-	// input_kind — @IsOptional @IsIn(INPUT_KIND_IDS). Present and (non-string OR
+	// input_kind — @IsOptional @IsIn(INPUT_KIND_IDS). Present-and-(non-string OR
 	// not one of {typed, speech}) → the IN message, matching class-validator's
-	// @IsIn behavior for a non-string value.
-	if ik := field("input_kind"); ik != nil {
+	// @IsIn behavior for a non-string value. Explicit null is skipped by
+	// @IsOptional (optionalField), matching Node's 200 (#201).
+	if ik := optionalField("input_kind"); ik != nil {
 		if v, ok := resolveString(ik); !ok || !containsString(InputKindIDs, v) {
 			msgs = append(msgs, inputKindInMessage)
 		} else {

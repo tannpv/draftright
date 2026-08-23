@@ -40,12 +40,9 @@ public enum VoiceError {
 /// Tuning + policy constants shared by the controller and the real recognizer
 /// adapter. Mirrors the Android `VoiceConfig`.
 public enum VoiceConfig {
-    /// Whether hold-to-talk commits the verbatim transcript (`true`) or runs it
-    /// through AI-polish first (`false`). Single source of truth for the policy
-    /// — the Android side mirrors this. `false` = dictate → AI-polish
-    /// (`input_kind` "speech"), with an automatic raw fallback if polish fails
-    /// (golden rule).
-    public static let holdToTalkRawMode = false
+    // Raw-vs-polish is now a user setting (SharedSettings.voicePolishEnabled,
+    // #197), fed to the session as rawMode = !voicePolishEnabled. The old
+    // holdToTalkRawMode constant was removed with it.
 
     /// Hard stop for a listening session that never produces a result.
     public static let listenTimeoutMs = 30_000

@@ -9,8 +9,11 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 /// now lives only in the keyboard (⚡ one-tap) and the Process-Text / share
 /// path, both of which are sandbox-safe and work everywhere.
 class ShareService {
-  /// iOS custom keyboard has hold-to-talk voice dictation whose AI-polish tone
-  /// is user-configurable (read from the App Group). Gates the iOS
-  /// "Voice dictation" settings section.
-  static bool get supportsKeyboardVoice => !kIsWeb && Platform.isIOS;
+  /// Both the iOS and Android custom keyboards have hold-to-talk voice dictation
+  /// (#64/#75): the dictation tone + the polish-on/off toggle (#197). Gates the
+  /// "Voice dictation" settings section — it must show wherever the voice
+  /// keyboard runs, not iOS only. iOS reads these from the App Group, Android
+  /// from SharedPreferences.
+  static bool get supportsKeyboardVoice =>
+      !kIsWeb && (Platform.isIOS || Platform.isAndroid);
 }
