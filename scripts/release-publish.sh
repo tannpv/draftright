@@ -10,8 +10,8 @@
 #   release-publish.sh windows 2.1.7 /path/to/Setup.exe --meta "Installer · 132 MB · Win 10/11 x64"
 #
 # What it does:
-#   1. Uploads the file to the droplet at /var/www/draftright/downloads/
-#   2. Updates /var/www/draftright/downloads/versions.json so the website's
+#   1. Uploads the file to the prod download dir ($DR_DOWNLOADS_DIR).
+#   2. Updates $DR_DOWNLOADS_DIR/versions.json so the website's
 #      download cards immediately reflect the new version.
 #   3. Updates the `app_releases` row in the prod database so that
 #      /updates/latest (consumed by every desktop app's "Check for Updates")
@@ -26,8 +26,21 @@
 #   windows  →  DraftRight-Setup-Windows-<version>-x64.exe
 #   linux    →  DraftRight-Linux-<version>.tar.gz
 #
-# Requires: ssh alias `draftright`, jq on the droplet (apt-get install jq).
+# Requires: ssh access to $DR_DEPLOY_SSH, jq on the prod host (apt-get install jq).
 set -euo pipefail
+
+# ── Deploy targets — single source of truth, env-overridable (Rule #1) ──────
+# Defaults point at the Contabo prod box (prod migrated off the DigitalOcean
+# droplet 2026-08-23; the old `ssh draftright` alias → 129.212.208.248 is dead).
+# These were previously literals repeated across the file (host ×4, download dir
+# ×4, public base ×3) — two copies drift, so they live here once. Override any
+# via env to publish to a different host/layout (e.g. a future dev target).
+DR_DEPLOY_SSH="${DR_DEPLOY_SSH:-deploy@169.58.214.18}"              # was ssh alias `draftright`
+DR_DOWNLOADS_DIR="${DR_DOWNLOADS_DIR:-/srv/draftright/downloads}"   # Caddy serves /downloads/* from here (was /var/www/draftright/downloads on DO)
+DR_DOWNLOADS_OWNER="${DR_DOWNLOADS_OWNER:-deploy:deploy}"           # dir is deploy-owned on Contabo (was www-data:www-data on DO)
+DR_PUBLIC_BASE="${DR_PUBLIC_BASE:-https://draftright.info}"         # static /downloads host
+DR_API_BASE="${DR_API_BASE:-https://api.draftright.info}"           # backend /updates/latest
+DR_PG_CONTAINER="${DR_PG_CONTAINER:-draftright-postgres-1}"         # prod Postgres container (unchanged across the move)
 
 if [ $# -lt 3 ]; then
   echo "Usage: $0 <platform> <version> <local-file> [--meta \"<size · runtime>\"]" >&2
@@ -102,21 +115,21 @@ echo "    sha256:   $SHA256"
 echo
 
 # ── 1. Upload artifact ─────────────────────────────────────────────────────
-echo "==> Uploading to droplet..."
-scp "$LOCAL" "draftright:/tmp/${REMOTE_NAME}"
-ssh draftright "
+echo "==> Uploading to $DR_DEPLOY_SSH..."
+scp "$LOCAL" "$DR_DEPLOY_SSH:/tmp/${REMOTE_NAME}"
+ssh "$DR_DEPLOY_SSH" "
   set -e
-  sudo mv /tmp/${REMOTE_NAME} /var/www/draftright/downloads/${REMOTE_NAME}
-  sudo chown www-data:www-data /var/www/draftright/downloads/${REMOTE_NAME}
-  sudo chmod 644 /var/www/draftright/downloads/${REMOTE_NAME}
+  sudo mv /tmp/${REMOTE_NAME} ${DR_DOWNLOADS_DIR}/${REMOTE_NAME}
+  sudo chown ${DR_DOWNLOADS_OWNER} ${DR_DOWNLOADS_DIR}/${REMOTE_NAME}
+  sudo chmod 644 ${DR_DOWNLOADS_DIR}/${REMOTE_NAME}
 "
 
 # ── 2. Update manifest on droplet via jq ───────────────────────────────────
 echo "==> Updating versions.json..."
 TODAY="$(date +%Y-%m-%d)"
-ssh draftright bash <<EOF
+ssh "$DR_DEPLOY_SSH" bash <<EOF
 set -e
-MAN=/var/www/draftright/downloads/versions.json
+MAN=${DR_DOWNLOADS_DIR}/versions.json
 TMP=\$(mktemp)
 sudo jq --arg p "$PLATFORM" --arg v "$VERSION" --arg u "$URL" --arg m "$META" --arg d "$TODAY" '
   ._updated = \$d
@@ -127,7 +140,7 @@ sudo jq --arg p "$PLATFORM" --arg v "$VERSION" --arg u "$URL" --arg m "$META" --
     )
 ' "\$MAN" > "\$TMP"
 sudo mv "\$TMP" "\$MAN"
-sudo chown www-data:www-data "\$MAN"
+sudo chown ${DR_DOWNLOADS_OWNER} "\$MAN"
 sudo chmod 644 "\$MAN"
 EOF
 
@@ -143,7 +156,7 @@ esac
 
 if [ -n "$DB_PLATFORM" ]; then
   echo "==> Updating app_releases.$DB_PLATFORM in prod DB..."
-  SQL_URL="https://draftright.info$URL"
+  SQL_URL="${DR_PUBLIC_BASE}$URL"
 
   # Pull this version's user-facing note from CHANGELOG.md so clients can show
   # a "What's New" notice after updating. Best-effort here (manual path) — a
@@ -170,7 +183,7 @@ if [ -n "$DB_PLATFORM" ]; then
   # header of that script for why that matters (issue #22).
   SQL=$(RELEASE_NOTES="$NOTES" \
     "$SCRIPT_DIR/app-release-upsert-sql.sh" "$DB_PLATFORM" direct "$VERSION" "$SQL_URL" "$SHA256")
-  printf '%s\n' "$SQL" | ssh draftright "sudo docker exec -i draftright-postgres-1 psql -U draftright -d draftright -v ON_ERROR_STOP=1" 2>&1 | tail -2
+  printf '%s\n' "$SQL" | ssh "$DR_DEPLOY_SSH" "sudo docker exec -i ${DR_PG_CONTAINER} psql -U draftright -d draftright -v ON_ERROR_STOP=1" 2>&1 | tail -2
 fi
 
 # ── 4. Verify ──────────────────────────────────────────────────────────────
@@ -182,9 +195,9 @@ echo "==> Verifying..."
 # a missing file answers 200 with HTML (issue #144). The helper checks the
 # status, the content type, and the byte count.
 "$SCRIPT_DIR/verify-published-artifact.sh" \
-  "https://draftright.info${URL}" "$size_bytes" --sha256 "$SHA256"
+  "${DR_PUBLIC_BASE}${URL}" "$size_bytes" --sha256 "$SHA256"
 
-JSON=$(curl -sS "https://draftright.info/downloads/versions.json")
+JSON=$(curl -sS "${DR_PUBLIC_BASE}/downloads/versions.json")
 # Fields are read with .get() and defaults — versions.json entries have been
 # missing 'label' before now, and a KeyError here aborts the whole script
 # (set -e) *after* the artifact and DB row are already published, which reads
@@ -201,7 +214,7 @@ for cat in ('mobile', 'desktop'):
             print(f'    meta:      {p.get(\"meta\", \"(none)\")}')
 "
 if [ -n "$DB_PLATFORM" ]; then
-  DB_JSON=$(curl -sS "https://api.draftright.info/updates/latest")
+  DB_JSON=$(curl -sS "${DR_API_BASE}/updates/latest")
   echo "$DB_JSON" | DB_PLATFORM="$DB_PLATFORM" python3 -c "
 import json, os, sys
 d = json.load(sys.stdin)

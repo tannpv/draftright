@@ -138,11 +138,20 @@ package whose object is cached. After a suspicious edit, prefer
 
 ## ⚠️ Prod moved to Contabo (2026-08-23)
 
-Prod is no longer the DigitalOcean droplet. The two runbooks below still name the
-**old DO** host (`ssh draftright` → `129.212.208.248`) and paths (`/opt/draftright`,
-`/home/deploy/deploys/draftright-dev`) — treat those as the *shape* of the
-procedure, not the current targets. Get the Contabo host/user/paths and update
-this section before running either against prod.
+Prod is no longer the DigitalOcean droplet. Current prod facts (host, layout,
+deploy command, gotchas) are documented once in two authoritative places — do
+not restate them here:
+
+- **Prod host + deploy command:** the header of `docker-compose.prod.yml` in
+  this dir — SSH `deploy@169.58.214.18` (alias `bacnam`), source at
+  `/opt/src/draftright/backend-rewrite-go`, compose project `draftright` merged
+  with `/opt/stacks/draftright/edge.yml`.
+- **Access, container names, gotchas:** memory `reference_prod_moved_to_contabo`.
+
+The **shadow-gate** section below still names the old DO **dev** VPS (`ssh
+draftright`, `/home/deploy/deploys/draftright-dev`). A Contabo dev/shadow box has
+not been located yet — treat that section as the *shape* of the procedure, not a
+live target, until the dev host is confirmed.
 
 ## Running the live shadow gate
 
@@ -171,16 +180,22 @@ cd backend-rewrite-go && ./deploy/shadow/run-gate.sh > /tmp/gate.log 2>&1; echo 
   fixtures — they hit a live provider whose bursts exceed 15s (#193).
 - Tear down after: `docker compose -f deploy/shadow/docker-compose.shadow.yml --env-file .env.shadow down`.
 
-## Promoting the Go backend to prod (no git in /opt/draftright)
+## Promoting the Go backend to prod (Contabo)
 
-Build the dev image, retag to the prod name, recreate. **Anchor the current
-prod image first for one-command rollback.**
+On Contabo the source IS on the box (`/opt/src/draftright/backend-rewrite-go`),
+so prod builds from that checkout rather than retagging a dev image. **Anchor
+the current prod image first for one-command rollback.** The exact
+`-p draftright -f … -f edge.yml` recreate command is documented once in the
+`docker-compose.prod.yml` header (the single source — a bare `docker compose`
+spawns a crash-looping duplicate on :3001).
 
 ```bash
+ssh deploy@169.58.214.18            # alias `bacnam`
+cd /opt/src/draftright/backend-rewrite-go
 docker tag draftright-backend-go:latest draftright-backend-go:pre-<tag>   # rollback anchor
-docker tag draftright-dev-backend-go-dev:latest draftright-backend-go:latest
-cd /opt/draftright && docker compose -f docker-compose.prod.yml up -d --force-recreate backend-go
-# verify: docker inspect -f '{{.Image}}' draftright-backend-go-1  == the new sha, healthy, /health 200
+docker build -t draftright-backend-go:latest .
+# recreate: run the exact command from this file's docker-compose.prod.yml header
+# verify:  docker inspect -f '{{.Image}}' draftright-backend-go-1 == the new sha, healthy, /health 200
 # rollback: docker tag draftright-backend-go:pre-<tag> draftright-backend-go:latest && recreate
 ```
 
