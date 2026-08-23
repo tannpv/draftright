@@ -1,0 +1,51 @@
+name: Backend Go CI (skip)
+
+# Companion to backend-go-ci.yml. Once branch protection on develop/main
+# requires the four Go status contexts (go build, go vet, gofmt, go test
+# (race)), backend-go-ci.yml only triggers on PRs that touch
+# backend-rewrite-go/**, so a PR that changes no Go-backend files never posts
+# those contexts and blocks forever ("Expected — waiting for status").
+#
+# This workflow triggers on the COMPLEMENT (paths-ignore: backend-rewrite-go/**)
+# and reports the same four contexts as trivial successes, so unrelated PRs
+# satisfy protection without running the (irrelevant) Go suite.
+#
+# Exactly one of {backend-go-ci, backend-go-ci-skip} runs per PR:
+#   - PR touches backend-rewrite-go/**  -> backend-go-ci runs the real checks
+#   - PR touches nothing there          -> this posts green stubs
+#
+# SECURITY: no `${{ ... }}` expression references PR/commit-controlled input;
+# every step is a static echo. No injection vector.
+
+on:
+  pull_request:
+    paths-ignore:
+      - 'backend-rewrite-go/**'
+      - '.github/workflows/backend-go-ci.yml'
+
+# Names below MUST match the required status contexts on the protected
+# branches character-for-character, or protection stays unsatisfied.
+jobs:
+  build:
+    name: go build
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "No Go-backend changes — skipping go build."
+
+  vet:
+    name: go vet
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "No Go-backend changes — skipping go vet."
+
+  fmt:
+    name: gofmt
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "No Go-backend changes — skipping gofmt."
+
+  test:
+    name: go test (race)
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "No Go-backend changes — skipping go test."
