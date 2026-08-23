@@ -100,8 +100,9 @@ Existing installs pick it up on their next poll (or Check-now).
 ## Release runbook — macOS / Android / Linux (scripted)
 
 These are not tag-automated; publish with the one script after building the
-artifact. It owns upload + `versions.json` (website cards) + the `app_releases`
-row in one shot:
+artifact. It owns upload + the `app_releases` row in one shot — that row is the
+single source of truth for versions, driving both `/updates/latest` (in-app
+updater) and the website download cards (read at build time):
 
 ```
 scripts/release-publish.sh <platform> <version> <local-file> [--meta "…"]

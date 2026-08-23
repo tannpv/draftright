@@ -21,8 +21,8 @@
 #   macos   : bump Info.plist CFBundleShortVersionString (+ CFBundleVersion) ->
 #             commit -> merge --no-ff into develop then main -> push ->
 #             build-macos-dmg.sh (universal, Developer ID signed, notarized,
-#             stapled) -> release-publish.sh macos (upload + app_releases +
-#             versions.json) -> verify-published-artifact.sh + poll.
+#             stapled) -> release-publish.sh macos (upload + app_releases)
+#             -> verify-published-artifact.sh + poll.
 #             It tags `macos-vX.Y.Z`, NOT `vX.Y.Z`, on purpose: a `v*` tag is
 #             the Windows CI trigger, so a macOS release must never push one.
 #
