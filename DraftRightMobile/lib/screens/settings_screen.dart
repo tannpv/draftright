@@ -391,9 +391,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const Text('Voice dictation',
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                 const SizedBox(height: 8),
-                _oneTapToneCard(settings, 'Dictation tone',
-                    'Hold the mic on the DraftRight keyboard to dictate; your '
-                    'speech is cleaned up and inserted in this tone.'),
+                Card(
+                  child: SwitchListTile(
+                    secondary: const Icon(Icons.auto_fix_high),
+                    title: const Text('Polish dictation'),
+                    subtitle: const Text(
+                        'AI-cleans your speech (filler words, punctuation, casing) '
+                        'before inserting. Off = insert exactly what you said.'),
+                    value: settings.voicePolishEnabled,
+                    onChanged: (v) => settings.setVoicePolishEnabled(v),
+                  ),
+                ),
+                // The dictation tone only applies when polish is on; hide it in
+                // raw mode so the picker isn't a dead control (#197).
+                if (settings.voicePolishEnabled) ...[
+                  const SizedBox(height: 8),
+                  _oneTapToneCard(settings, 'Dictation tone',
+                      'Hold the mic on the DraftRight keyboard to dictate; your '
+                      'speech is cleaned up and inserted in this tone.'),
+                ],
               ],
 
               const SizedBox(height: 24),

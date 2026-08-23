@@ -55,6 +55,13 @@ class SharedSettings(context: Context) {
     val activeLanguageId: String
         get() = prefs.getString("flutter.draftright.activeLanguageId", "en") ?: "en"
 
+    /** Whether voice dictation is AI-polished (#197). False = insert the raw
+     *  transcript. Written by the Flutter app as a SharedPreferences bool;
+     *  default on = the original behaviour. Fed to the voice session as
+     *  `rawMode = !voicePolishEnabled`. */
+    val voicePolishEnabled: Boolean
+        get() = prefs.getBoolean("flutter.draftright.voicePolishEnabled", true)
+
     // --- Voice permission trampoline (VOICE-011) -------------------------
     // These three are IME-internal state, not Flutter-owned prefs — backed by
     // the same SharedPreferences file (not an IME field) because the IME

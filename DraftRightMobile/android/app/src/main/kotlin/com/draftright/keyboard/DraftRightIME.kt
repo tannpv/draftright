@@ -520,14 +520,14 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
         val locale = controller?.current?.sttLocale ?: return false
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             // Persist the same mode for the permission trampoline's resume path
-            // so a first-grant session behaves identically (VoiceConfig owns
-            // the raw-vs-polish policy).
-            settings.pendingVoiceRawMode = VoiceConfig.HOLD_TO_TALK_RAW_MODE
+            // so a first-grant session behaves identically. rawMode is the
+            // inverse of the user's "Polish dictation" setting (#197).
+            settings.pendingVoiceRawMode = !settings.voicePolishEnabled
             settings.voicePermissionRequested = true
             RequestPermissionActivity.launch(this, Manifest.permission.RECORD_AUDIO)
             return false
         }
-        voiceSession.startSession(locale, rawMode = VoiceConfig.HOLD_TO_TALK_RAW_MODE)
+        voiceSession.startSession(locale, rawMode = !settings.voicePolishEnabled)
         return true
     }
 
