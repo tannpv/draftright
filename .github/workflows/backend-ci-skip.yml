@@ -29,24 +29,24 @@ on:
 jobs:
   static:
     name: tsc compile
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, draftright]
     steps:
       - run: echo "No backend changes — skipping tsc compile."
 
   unit:
     name: Unit tests
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, draftright]
     steps:
       - run: echo "No backend changes — skipping unit tests."
 
   openapi-drift:
     name: OpenAPI spec drift check (S26b)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, draftright]
     steps:
       - run: echo "No backend changes — skipping OpenAPI spec drift check."
 
   integration:
     name: Integration tests (PG + Redis containers)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, draftright]
     steps:
       - run: echo "No backend changes — skipping integration tests."

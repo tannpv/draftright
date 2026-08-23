@@ -33,7 +33,7 @@ env:
 jobs:
   static:
     name: tsc compile
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, draftright]
     defaults:
       run:
         working-directory: ${{ env.WORKDIR }}
@@ -49,7 +49,7 @@ jobs:
 
   unit:
     name: Unit tests
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, draftright]
     needs: static
     defaults:
       run:
@@ -66,7 +66,7 @@ jobs:
 
   openapi-drift:
     name: OpenAPI spec drift check (S26b)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, draftright]
     needs: static
     defaults:
       run:
@@ -84,7 +84,7 @@ jobs:
 
   integration:
     name: Integration tests (PG + Redis containers)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, draftright]
     needs: static
     defaults:
       run:
