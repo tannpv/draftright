@@ -136,6 +136,14 @@ sqlc generate             # regen internal/shared/pg/sqlc after SQL changes
 package whose object is cached. After a suspicious edit, prefer
 `go test ./...` (rebuilds for the test binary) or `go clean -cache`.
 
+## ⚠️ Prod moved to Contabo (2026-08-23)
+
+Prod is no longer the DigitalOcean droplet. The two runbooks below still name the
+**old DO** host (`ssh draftright` → `129.212.208.248`) and paths (`/opt/draftright`,
+`/home/deploy/deploys/draftright-dev`) — treat those as the *shape* of the
+procedure, not the current targets. Get the Contabo host/user/paths and update
+this section before running either against prod.
+
 ## Running the live shadow gate
 
 `deploy/shadow/run-gate.sh` — run ON the dev VPS from a `develop` checkout. It
