@@ -693,13 +693,13 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 			}, nil
 		}, cfg.AppName, cfg.WebsiteURL)
 		strategies := map[string]paymentstrategy.Strategy{
-			"stripe":        stripeStrat,
-			"vietqr":        vietqrStrat,
-			"bank_transfer": vietqrStrat,
-			"lemonsqueezy":  lsStrat,
-			"paypal":        paypalStrat,
-			"apple_pay":     stripeStrat,
-			"google_pay":    stripeStrat,
+			string(paymentpkg.MethodStripe):       stripeStrat,
+			string(paymentpkg.MethodVietQR):       vietqrStrat,
+			string(paymentpkg.MethodBankTransfer): vietqrStrat,
+			string(paymentpkg.MethodLemonSqueezy): lsStrat,
+			string(paymentpkg.MethodPayPal):       paypalStrat,
+			string(paymentpkg.MethodApplePay):     stripeStrat,
+			string(paymentpkg.MethodGooglePay):    stripeStrat,
 		}
 		paymentSvc := paymentpkg.NewService(
 			paymentRepo, paymentSettings, cfg.PaymentEnabledMethods,
