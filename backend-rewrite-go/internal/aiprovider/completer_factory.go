@@ -45,7 +45,7 @@ func (Factory) For(p AiProvider) (Completer, error) {
 	}
 
 	switch p.Type {
-	case "openai", "ollama", "custom", "google":
+	case string(ProviderOpenAI), string(ProviderOllama), string(ProviderCustom), string(ProviderGoogle):
 		// Node's OpenAiStrategy.matches = openai || ollama || custom: ONE
 		// OpenAI-compatible wire (POST endpoint_url, choices[0].message.content)
 		// serves all three. An ollama-type provider MUST carry an
@@ -57,9 +57,9 @@ func (Factory) For(p AiProvider) (Completer, error) {
 			opts = append(opts, openai.WithEndpoint(p.EndpointURL))
 		}
 		opts = append(opts, openai.WithTemperature(p.Temperature))
-		opts = append(opts, openai.WithLocalLayout(p.Type == "ollama"))
+		opts = append(opts, openai.WithLocalLayout(p.Type == string(ProviderOllama)))
 		return openai.New(id, apiKey, opts...), nil
-	case "anthropic":
+	case string(ProviderAnthropic):
 		opts := []anthropic.Option{anthropic.WithModel(p.Model)}
 		if p.EndpointURL != "" {
 			opts = append(opts, anthropic.WithEndpoint(p.EndpointURL))
