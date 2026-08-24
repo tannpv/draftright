@@ -10,6 +10,7 @@ import 'package:draftright_mobile/models/tone.dart';
 import 'package:draftright_mobile/services/api_client.dart' show ApiException;
 import 'package:draftright_mobile/services/auth_service.dart';
 import 'package:draftright_mobile/services/backend_client.dart';
+import 'package:draftright_mobile/services/payment/payment_method.dart';
 
 class _FakeAuth extends AuthService {
   final bool refresh;
@@ -117,5 +118,62 @@ void main() {
     expect(sub.status, 'active');
     expect(sub.dailyLimit, 100);
     expect(sub.isFree, false);
+  });
+
+  test('listPlans casts a JSON array; non-array yields empty', () async {
+    final rows =
+        await build(mock(200, '[{"id":"p1"},{"id":"p2"}]')).listPlans();
+    expect(rows.map((r) => r['id']), ['p1', 'p2']);
+    expect(await build(mock(200, '{}')).listPlans(), isEmpty);
+  });
+
+  test('listPaymentMethods maps known wire names, drops unknown', () async {
+    final methods =
+        await build(mock(200, '{"methods":["stripe","vietqr","bogus"]}'))
+            .listPaymentMethods();
+    expect(methods, [PaymentMethodKind.stripe, PaymentMethodKind.vietqr]);
+  });
+
+  test('createCheckout posts plan_id+method with bearer and parses result',
+      () async {
+    http.Request? seen;
+    final result = await build(mock(200, '{"redirect_url":"https://pay"}',
+            capture: (r) => seen = r))
+        .createCheckout(planId: 'plan-1', method: PaymentMethodKind.stripe);
+    expect(result, isNotNull);
+    expect(seen!.url.toString(), 'http://h/payment/checkout');
+    expect(seen!.headers['authorization'], 'Bearer tok');
+    final body = jsonDecode(seen!.body) as Map<String, dynamic>;
+    expect(body['plan_id'], 'plan-1');
+    expect(body['method'], 'stripe');
+  });
+
+  test('getPaymentStatus hits /payment/status/:ref and returns the envelope',
+      () async {
+    http.Request? seen;
+    final data = await build(
+            mock(200, '{"status":"completed"}', capture: (r) => seen = r))
+        .getPaymentStatus('REF123');
+    expect(data['status'], 'completed');
+    expect(seen!.url.toString(), 'http://h/payment/status/REF123');
+  });
+
+  test('getCustomerPortalUrl returns the url, throws when absent', () async {
+    expect(
+      await build(mock(200, '{"url":"https://portal"}')).getCustomerPortalUrl(),
+      'https://portal',
+    );
+    await expectLater(
+      build(mock(200, '{}')).getCustomerPortalUrl(),
+      throwsA(isA<Exception>()),
+    );
+  });
+
+  test('cancelSubscription parses cancelled + accessUntil', () async {
+    final res = await build(
+            mock(200, '{"cancelled":true,"expires_at":"2026-09-01T00:00:00Z"}'))
+        .cancelSubscription();
+    expect(res.cancelled, true);
+    expect(res.accessUntil, isNotNull);
   });
 }
