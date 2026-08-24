@@ -80,7 +80,7 @@ func (s *Service) CreateCheckout(ctx context.Context, userID, planID, method str
 
 	currency := plan.Currency
 	if currency == "" {
-		currency = "USD"
+		currency = DefaultCurrency
 	}
 	ref := s.genRef()
 	expiresAt := s.now().Add(PaymentPendingTTL)

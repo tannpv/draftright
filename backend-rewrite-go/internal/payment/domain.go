@@ -4,6 +4,10 @@
 // strategies, checkout, and webhooks land in Phases 3b/3c.
 package payment
 
+// DefaultCurrency is the fallback when a payment or plan carries no currency —
+// Node's `currency || 'USD'`. One source for the default (#204 finding #7).
+const DefaultCurrency = "USD"
+
 // PaymentMethod mirrors backend/src/payment/entities/payment.entity.ts
 // PaymentMethod. The string values are the DB/wire names — keep them
 // byte-identical to Node (they appear in payments.method and in

@@ -294,10 +294,10 @@ func result(success bool, ref string) WebhookResult {
 	return WebhookResult{Success: success, ReferenceCode: &ref}
 }
 
-// orUSD defaults a blank currency to "USD" (Node's `currency || 'USD'`).
+// orUSD defaults a blank currency to DefaultCurrency (Node's `currency || 'USD'`).
 func orUSD(c string) string {
 	if c == "" {
-		return "USD"
+		return DefaultCurrency
 	}
 	return c
 }
