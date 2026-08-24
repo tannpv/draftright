@@ -12,43 +12,70 @@ type httpError struct {
 	RequestID string `json:"request_id"`
 }
 
-// StatusForCode maps a kebab-case error code to its HTTP status,
-// reconciled byte-for-byte with the Node backend's
-// httpStatusForCode (backend/src/common/error-codes.ts). Codes not
-// listed default to 500 — same as Node.
+// ErrorCode is a kebab-case error code. Naming every code as a constant gives
+// the error contract ONE source of truth: a call site referencing CodeInvalidInput
+// can't silently drift into a typo that StatusForCode then degrades to a 500 with
+// no compile or test failure — the invisible-drift failure mode of #22 (#204).
+type ErrorCode string
+
+const (
+	// CodeInternal is the generic 500 — deliberately NOT in statusByCode; it IS
+	// the default.
+	CodeInternal            ErrorCode = "internal"
+	CodeInvalidInput        ErrorCode = "invalid-input"
+	CodeInvalidToken        ErrorCode = "invalid-token"
+	CodeUserNotFound        ErrorCode = "user-not-found"
+	CodeQuotaExceeded       ErrorCode = "quota-exceeded"
+	CodeForbidden           ErrorCode = "forbidden"
+	CodeNotFound            ErrorCode = "not-found"
+	CodeConflict            ErrorCode = "conflict"
+	CodeRateLimited         ErrorCode = "rate-limited"
+	CodeProviderFailed      ErrorCode = "provider-failed"
+	CodeProviderUnavailable ErrorCode = "provider-unavailable"
+)
+
+// AllErrorCodes is the registry of every declared code. The guard test iterates
+// it to assert each has an explicit status wired below (CodeInternal excepted —
+// it is the default 500). Add a new Code* constant → add it here too.
+var AllErrorCodes = []ErrorCode{
+	CodeInternal, CodeInvalidInput, CodeInvalidToken, CodeUserNotFound,
+	CodeQuotaExceeded, CodeForbidden, CodeNotFound, CodeConflict,
+	CodeRateLimited, CodeProviderFailed, CodeProviderUnavailable,
+}
+
+// statusByCode is the single source for code→HTTP-status, reconciled
+// byte-for-byte with the Node backend's httpStatusForCode. CodeInternal is
+// intentionally absent — it maps to the default 500.
+var statusByCode = map[ErrorCode]int{
+	CodeInvalidInput:        http.StatusBadRequest,         // 400
+	CodeInvalidToken:        http.StatusUnauthorized,       // 401
+	CodeUserNotFound:        http.StatusUnauthorized,       // 401
+	CodeQuotaExceeded:       http.StatusPaymentRequired,    // 402
+	CodeForbidden:           http.StatusForbidden,          // 403
+	CodeNotFound:            http.StatusNotFound,           // 404
+	CodeConflict:            http.StatusConflict,           // 409
+	CodeRateLimited:         http.StatusTooManyRequests,    // 429
+	CodeProviderFailed:      http.StatusBadGateway,         // 502
+	CodeProviderUnavailable: http.StatusServiceUnavailable, // 503
+}
+
+// StatusForCode maps a kebab-case error code to its HTTP status. Unlisted codes
+// (including CodeInternal) default to 500 — same as Node.
 func StatusForCode(code string) int {
-	switch code {
-	case "invalid-input":
-		return http.StatusBadRequest // 400
-	case "invalid-token", "user-not-found":
-		return http.StatusUnauthorized // 401
-	case "quota-exceeded":
-		return http.StatusPaymentRequired // 402
-	case "forbidden":
-		return http.StatusForbidden // 403
-	case "not-found":
-		return http.StatusNotFound // 404
-	case "conflict":
-		return http.StatusConflict // 409
-	case "rate-limited":
-		return http.StatusTooManyRequests // 429
-	case "provider-failed":
-		return http.StatusBadGateway // 502
-	case "provider-unavailable":
-		return http.StatusServiceUnavailable // 503
-	default:
-		return http.StatusInternalServerError // 500
+	if s, ok := statusByCode[ErrorCode(code)]; ok {
+		return s
 	}
+	return http.StatusInternalServerError
 }
 
 // WriteError writes the canonical error envelope. Status is derived
 // from the code via StatusForCode, and request_id is pulled from the
 // request context (set by the RequestID middleware). Every handler —
 // current and future — emits errors through this single function.
-func WriteError(w http.ResponseWriter, r *http.Request, code, message string) {
-	WriteJSON(w, StatusForCode(code), httpError{
+func WriteError(w http.ResponseWriter, r *http.Request, code ErrorCode, message string) {
+	WriteJSON(w, StatusForCode(string(code)), httpError{
 		Error:     message,
-		Code:      code,
+		Code:      string(code),
 		RequestID: RequestIDFromContext(r.Context()),
 	})
 }
@@ -60,10 +87,10 @@ func WriteError(w http.ResponseWriter, r *http.Request, code, message string) {
 // mirror that empty request_id byte-for-byte; the populated context
 // request-id is deliberately NOT used here. Status still derives from the
 // code via StatusForCode.
-func WriteBodyParseError(w http.ResponseWriter, code, message string) {
-	WriteJSON(w, StatusForCode(code), httpError{
+func WriteBodyParseError(w http.ResponseWriter, code ErrorCode, message string) {
+	WriteJSON(w, StatusForCode(string(code)), httpError{
 		Error:     message,
-		Code:      code,
+		Code:      string(code),
 		RequestID: "",
 	})
 }
