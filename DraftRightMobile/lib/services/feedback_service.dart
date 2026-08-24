@@ -7,7 +7,10 @@ import 'package:http/http.dart' as http;
 /// (JSON body, no screenshot). The bug-report counterpart is
 /// [BugReportService.submitBugReport].
 class FeedbackService {
-  /// Production endpoint — mirrors the base used by BugReportService.
+  /// Last-resort fallback endpoint. The suggest-feature sheet now passes the
+  /// configured backend (SettingsService.endpointFor) so a dev build doesn't
+  /// silently post to prod (#205 #3); only hit if a caller supplies no
+  /// [endpointOverride].
   static const String _defaultEndpoint = 'https://api.draftright.info/feedback';
 
   /// Submit a feature request. Returns true on a 2xx response, false otherwise.

@@ -24,7 +24,10 @@ class SubmitBugReportResult {
 /// Auth is optional — anonymous submissions are accepted; if a JWT is
 /// provided the backend records `user_id` on the row.
 class BugReportService {
-  /// Production endpoint. Override in tests via [endpointOverride].
+  /// Last-resort fallback endpoint. The report sheet now passes the configured
+  /// backend (SettingsService.endpointFor) so a dev build doesn't silently post
+  /// to prod (#205 #3); this default is only hit if a caller supplies no
+  /// [endpointOverride] at all.
   static const String _defaultEndpoint =
       'https://api.draftright.info/bug-reports';
 

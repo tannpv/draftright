@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 
 import 'package:draftright_mobile/services/auth_service.dart';
 import 'package:draftright_mobile/services/bug_report_service.dart';
+import 'package:draftright_mobile/services/settings_service.dart';
 import 'package:draftright_mobile/services/screenshot_compressor.dart';
 
 /// Opens the "Report a bug" sheet. Bottom sheet on Android; Cupertino
@@ -229,6 +230,11 @@ class _ReportBugSheetState extends State<_ReportBugSheet> {
     final isLoggedIn = auth?.isLoggedIn ?? false;
 
     final email = _emailController.text.trim();
+    // Default the target to the configured backend so a dev build never posts
+    // to prod (#205 #3); an explicit override (e.g. tests) still wins and skips
+    // the SettingsService read. Resolved before the first await.
+    final endpoint = widget.endpointOverride ??
+        context.read<SettingsService>().endpointFor('/bug-reports');
     final result = await BugReportService.submitBugReport(
       description: _descriptionController.text.trim(),
       screenshot: _screenshot,
@@ -240,7 +246,7 @@ class _ReportBugSheetState extends State<_ReportBugSheet> {
         if (widget.currentRoute != null) 'route': widget.currentRoute,
         'platform': Platform.isIOS ? 'ios' : 'android',
       },
-      endpointOverride: widget.endpointOverride,
+      endpointOverride: endpoint,
     );
 
     if (!mounted) return;

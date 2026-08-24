@@ -424,16 +424,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () {
-                    // Route the bug-report POST through the currently
-                    // configured backend (Settings → Server → Backend
-                    // URL) — otherwise the sheet defaults to prod and
-                    // dev-env testing silently posts to the wrong DB.
+                    // The sheet now defaults to the configured backend
+                    // (SettingsService.endpointFor), so no override is needed
+                    // — dev-env testing posts to the right DB (#205 #3).
                     showReportBugSheet(
                       context,
                       currentRoute: ModalRoute.of(context)?.settings.name ??
                           'SettingsScreen',
-                      endpointOverride:
-                          '${settings.backendUrl.replaceAll(RegExp(r"/+$"), "")}/bug-reports',
                     );
                   },
                 ),
