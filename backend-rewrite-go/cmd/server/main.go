@@ -1216,28 +1216,28 @@ func buildProviderChain(cfg *config.Config, log *slog.Logger) (domain.AiProvider
 		switch name {
 		case "":
 			continue
-		case "openai":
+		case string(aiproviderpkg.ProviderOpenAI):
 			if cfg.OpenAIKey == "" {
 				log.Warn("chain: skipping provider, missing credential", "provider", name, "env", "OPENAI_API_KEY")
 				continue
 			}
-			p := openai.New(resolveProviderID(cfg.OpenAIProviderID, log, "openai"), cfg.OpenAIKey)
+			p := openai.New(resolveProviderID(cfg.OpenAIProviderID, log, string(aiproviderpkg.ProviderOpenAI)), cfg.OpenAIKey)
 			providers = append(providers, p)
 			completers = append(completers, p)
-		case "anthropic":
+		case string(aiproviderpkg.ProviderAnthropic):
 			if cfg.AnthropicKey == "" {
 				log.Warn("chain: skipping provider, missing credential", "provider", name, "env", "ANTHROPIC_API_KEY")
 				continue
 			}
-			p := anthropic.New(resolveProviderID(cfg.AnthropicProviderID, log, "anthropic"), cfg.AnthropicKey)
+			p := anthropic.New(resolveProviderID(cfg.AnthropicProviderID, log, string(aiproviderpkg.ProviderAnthropic)), cfg.AnthropicKey)
 			providers = append(providers, p)
 			completers = append(completers, p)
-		case "ollama":
+		case string(aiproviderpkg.ProviderOllama):
 			if cfg.OllamaURL == "" {
 				log.Warn("chain: skipping provider, missing endpoint", "provider", name, "env", "OLLAMA_URL")
 				continue
 			}
-			p := ollama.New(resolveProviderID(cfg.OllamaProviderID, log, "ollama"), ollama.WithEndpoint(cfg.OllamaURL))
+			p := ollama.New(resolveProviderID(cfg.OllamaProviderID, log, string(aiproviderpkg.ProviderOllama)), ollama.WithEndpoint(cfg.OllamaURL))
 			providers = append(providers, p)
 			completers = append(completers, p)
 		default:

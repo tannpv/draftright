@@ -11,6 +11,23 @@ import (
 // ErrNotFound is returned when an ai_provider row does not exist.
 var ErrNotFound = errors.New("ai provider not found")
 
+// ProviderType is an ai_provider's strategy type. This is the app-level source
+// of truth for the type ids: the sqlc AiProvidersTypeEnum is DB-generated and
+// omits "google" (which routes through the OpenAI-compatible wire), so the
+// canonical set lives here — referenced by the completer factory and the
+// env-provider chain in cmd/server/main.go. The rewrite adapters can't import
+// this package (import cycle), so their Name() strings are guarded against these
+// ids by TestProviderNamesMatchTypes instead (Rule #1 can't-merge → parity test).
+type ProviderType string
+
+const (
+	ProviderOpenAI    ProviderType = "openai"
+	ProviderAnthropic ProviderType = "anthropic"
+	ProviderOllama    ProviderType = "ollama"
+	ProviderCustom    ProviderType = "custom"
+	ProviderGoogle    ProviderType = "google"
+)
+
 // AiProvider mirrors the ai_providers row. api_key is returned in plaintext
 // on every read (Node parity). Field order matches
 // src/ai-providers/entities/ai-provider.entity.ts exactly.
