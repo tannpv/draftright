@@ -30,6 +30,24 @@ func TestStatusForCode_MatchesNodeTable(t *testing.T) {
 	}
 }
 
+// TestAllErrorCodes_HaveExplicitStatus is the #204 guard: every declared error
+// code must have an explicit status wired in statusByCode, so a newly-added
+// Code* constant can never silently ship a 500. CodeInternal is the one
+// exception — it IS the default 500.
+func TestAllErrorCodes_HaveExplicitStatus(t *testing.T) {
+	for _, c := range AllErrorCodes {
+		if c == CodeInternal {
+			if StatusForCode(string(c)) != http.StatusInternalServerError {
+				t.Errorf("CodeInternal must map to 500, got %d", StatusForCode(string(c)))
+			}
+			continue
+		}
+		if _, ok := statusByCode[c]; !ok {
+			t.Errorf("error code %q is declared but has no status wired — it would silently ship 500 (#204)", c)
+		}
+	}
+}
+
 func TestWriteError_EnvelopeShapeWithRequestID(t *testing.T) {
 	rec := httptest.NewRecorder()
 	ctx := context.WithValue(context.Background(), requestIDCtxKey{}, "req-77")

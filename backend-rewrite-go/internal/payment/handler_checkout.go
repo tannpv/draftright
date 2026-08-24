@@ -48,16 +48,16 @@ func writePaymentErr(w http.ResponseWriter, r *http.Request, err error) bool {
 	if !errors.As(err, &derr) {
 		return false
 	}
-	var code string
+	var code shared.ErrorCode
 	switch derr.Status {
 	case 401:
-		code = "invalid-token"
+		code = shared.CodeInvalidToken
 	case 404:
-		code = "not-found"
+		code = shared.CodeNotFound
 	case 400:
-		code = "invalid-input"
+		code = shared.CodeInvalidInput
 	case 500:
-		code = "internal"
+		code = shared.CodeInternal
 	default:
 		return false
 	}
