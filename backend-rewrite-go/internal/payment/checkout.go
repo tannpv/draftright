@@ -84,7 +84,7 @@ func (s *Service) CreateCheckout(ctx context.Context, userID, planID, method str
 	}
 	ref := s.genRef()
 	expiresAt := s.now().Add(PaymentPendingTTL)
-	created, err := s.checkoutRepo.CreatePayment(ctx, userID, planID, plan.PriceCents, currency, method, "pending", ref, expiresAt)
+	created, err := s.checkoutRepo.CreatePayment(ctx, userID, planID, plan.PriceCents, currency, method, string(StatusPending), ref, expiresAt)
 	if err != nil {
 		return nil, err
 	}
@@ -134,7 +134,7 @@ func (s *Service) CreateCheckout(ctx context.Context, userID, planID, method str
 		Amount:        plan.PriceCents,
 		Currency:      currency,
 		Method:        method,
-		Status:        "pending",
+		Status:        string(StatusPending),
 		ReferenceCode: ref,
 		ExpiresAt:     &expiresAt,
 		CreatedAt:     created.CreatedAt,
