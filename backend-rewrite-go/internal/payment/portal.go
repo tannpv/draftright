@@ -15,10 +15,10 @@ import (
 // it has no portal concept).
 func storeTypePortalKey(storeType string) (string, bool) {
 	switch storeType {
-	case "stripe":
-		return "stripe", true
-	case "lemonsqueezy":
-		return "lemonsqueezy", true
+	case string(StoreStripe):
+		return string(MethodStripe), true
+	case string(StoreLemonSqueezy):
+		return string(MethodLemonSqueezy), true
 	default:
 		return "", false
 	}
@@ -29,12 +29,12 @@ func storeTypePortalKey(storeType string) (string, bool) {
 // has no hosted portal but DOES support programmatic cancel.
 func storeTypeCancelKey(storeType string) (string, bool) {
 	switch storeType {
-	case "stripe":
-		return "stripe", true
-	case "lemonsqueezy":
-		return "lemonsqueezy", true
-	case "paypal":
-		return "paypal", true
+	case string(StoreStripe):
+		return string(MethodStripe), true
+	case string(StoreLemonSqueezy):
+		return string(MethodLemonSqueezy), true
+	case string(StorePayPal):
+		return string(MethodPayPal), true
 	default:
 		return "", false
 	}

@@ -12,7 +12,8 @@ import (
 // (@IsIn(PAYMENT_METHODS)). The checkout validator and its humanized message
 // both depend on this order.
 var paymentMethods = []string{
-	"stripe", "paypal", "momo", "vietqr", "bank_transfer", "lemonsqueezy", "apple_pay", "google_pay",
+	string(MethodStripe), string(MethodPayPal), string(MethodMoMo), string(MethodVietQR),
+	string(MethodBankTransfer), string(MethodLemonSqueezy), string(MethodApplePay), string(MethodGooglePay),
 }
 
 // checkoutBody mirrors NestJS CreateCheckoutDto.
