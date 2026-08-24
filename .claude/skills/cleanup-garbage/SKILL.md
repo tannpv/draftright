@@ -46,8 +46,8 @@ grep -rl "<Symbol>" DraftRightWindows/DraftRightWindows | grep -v "bin/\|obj/"
 # Python (Linux)
 grep -rn "from draftright.<module> import\|import <module>" DraftRightLinux/draftright
 
-# Swift (macOS), Dart (mobile), TypeScript (backend/admin/website)
-grep -rn "<Symbol>" DraftRight/ DraftRightMobile/lib/ backend/src/ admin/src/
+# Swift (macOS), Dart (mobile), TypeScript (admin/website)
+grep -rn "<Symbol>" DraftRight/ DraftRightMobile/lib/ admin/src/
 ```
 
 Classify each new symbol as **prod-referenced**, **test-only**, or **unreferenced**.
@@ -61,7 +61,7 @@ their replacement.
 
 ```bash
 # Does anything read this column/table?
-grep -rn "<column_name>" backend/src backend-rewrite-go/internal
+grep -rn "<column_name>" backend-rewrite-go/internal
 ```
 
 Candidates: columns added for a reverted feature, tables no entity maps, rows
@@ -77,7 +77,7 @@ belonging to a deleted feature.
 ## Phase 3 — Dead config / env / secrets
 
 ```bash
-grep -rn "<ENV_VAR>" backend/src backend-rewrite-go docker-compose.yml deploy/
+grep -rn "<ENV_VAR>" backend-rewrite-go docker-compose.yml deploy/
 ```
 
 Env vars outliving their code is a recurring pattern — the `lingua-app`
@@ -110,7 +110,6 @@ cd DraftRightWindows/DraftRightWindows.PureTests && dotnet test
 dotnet build DraftRightWindows/DraftRightWindows/DraftRightWindows.csproj \
   -p:EnableWindowsTargeting=true -p:WindowsAppSDKSelfContained=false
 
-cd backend && npx tsc --noEmit && npm test
 cd backend-rewrite-go && go vet ./... && go test ./...   # vet/test, NOT just build
 python3 DraftRightLinux/test/test_diff_and_grammar.py
 swift build                                              # macOS
