@@ -40,6 +40,12 @@ class SettingsService extends ChangeNotifier {
 
   String get backendUrl => _backendUrl;
 
+  /// Full URL for a backend [path] (must start with '/'), composed from the
+  /// configured backendUrl. Use this instead of hardcoding a host so a dev
+  /// build pointed at api.dev never silently posts to prod (#205 #3).
+  /// backendUrl is already trailing-slash-normalized on load.
+  String endpointFor(String path) => '$backendUrl$path';
+
   /// App version that last ran — drives the one-time post-update "What's New".
   String get lastSeenVersion => _lastSeenVersion;
   String get translateLanguage => _translateLanguage;
