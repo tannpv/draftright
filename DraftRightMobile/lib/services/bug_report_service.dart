@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
+import 'package:draftright_mobile/services/app_source.dart';
 import 'package:draftright_mobile/services/logger_service.dart';
 
 /// Outcome of a bug-report submission. Carries a user-presentable error
@@ -67,7 +68,7 @@ class BugReportService {
     String? endpointOverride,
   }) async {
     final endpoint = endpointOverride ?? _defaultEndpoint;
-    final source = _detectSource();
+    final source = detectAppSource();
     final appVersion = await _appVersion();
     final osInfo = _osInfo();
 
@@ -98,7 +99,8 @@ class BugReportService {
           );
           return const SubmitBugReportResult(
             ok: false,
-            errorMessage: 'Screenshot is larger than 5 MB. Pick a smaller image.',
+            errorMessage:
+                'Screenshot is larger than 5 MB. Pick a smaller image.',
           );
         }
         // Always set an explicit image MIME.  Without this,
@@ -146,12 +148,13 @@ class BugReportService {
       return SubmitBugReportResult(
         ok: false,
         // Fall back to the status code so a failure is never a dead end.
-        errorMessage:
-            _extractServerMessage(body) ?? 'Server error ($status). Please try again.',
+        errorMessage: _extractServerMessage(body) ??
+            'Server error ($status). Please try again.',
       );
     } catch (e) {
       DRLogger.warn('Bug report exception: $e', category: 'BUG_REPORT');
-      return const SubmitBugReportResult(ok: false, errorMessage: _genericFailure);
+      return const SubmitBugReportResult(
+          ok: false, errorMessage: _genericFailure);
     }
   }
 
@@ -170,16 +173,6 @@ class BugReportService {
       }
     } catch (_) {/* body wasn't JSON — fall through */}
     return null;
-  }
-
-  static String _detectSource() {
-    try {
-      if (Platform.isIOS) return 'ios-app';
-      if (Platform.isAndroid) return 'android-app';
-    } catch (_) {/* ignore — non-mobile path */}
-    // Mobile-only feature, but provide a safe fallback string the backend
-    // will accept rather than throwing.
-    return 'android-app';
   }
 
   static Future<String> _appVersion() async {
@@ -210,31 +203,49 @@ class BugReportService {
       final header = await raf.read(12);
       await raf.close();
       if (header.length >= 8 &&
-          header[0] == 0x89 && header[1] == 0x50 &&
-          header[2] == 0x4E && header[3] == 0x47) {
+          header[0] == 0x89 &&
+          header[1] == 0x50 &&
+          header[2] == 0x4E &&
+          header[3] == 0x47) {
         return MediaType('image', 'png');
       }
       if (header.length >= 3 &&
-          header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF) {
+          header[0] == 0xFF &&
+          header[1] == 0xD8 &&
+          header[2] == 0xFF) {
         return MediaType('image', 'jpeg');
       }
       if (header.length >= 12 &&
-          header[0] == 0x52 && header[1] == 0x49 &&
-          header[2] == 0x46 && header[3] == 0x46 &&
-          header[8] == 0x57 && header[9] == 0x45 &&
-          header[10] == 0x42 && header[11] == 0x50) {
+          header[0] == 0x52 &&
+          header[1] == 0x49 &&
+          header[2] == 0x46 &&
+          header[3] == 0x46 &&
+          header[8] == 0x57 &&
+          header[9] == 0x45 &&
+          header[10] == 0x42 &&
+          header[11] == 0x50) {
         return MediaType('image', 'webp');
       }
       if (header.length >= 12 &&
-          header[4] == 0x66 && header[5] == 0x74 &&
-          header[6] == 0x79 && header[7] == 0x70 &&
-          ((header[8] == 0x68 && header[9] == 0x65 && header[10] == 0x69 && header[11] == 0x63) ||
-           (header[8] == 0x68 && header[9] == 0x65 && header[10] == 0x69 && header[11] == 0x66))) {
+          header[4] == 0x66 &&
+          header[5] == 0x74 &&
+          header[6] == 0x79 &&
+          header[7] == 0x70 &&
+          ((header[8] == 0x68 &&
+                  header[9] == 0x65 &&
+                  header[10] == 0x69 &&
+                  header[11] == 0x63) ||
+              (header[8] == 0x68 &&
+                  header[9] == 0x65 &&
+                  header[10] == 0x69 &&
+                  header[11] == 0x66))) {
         return MediaType('image', 'heic');
       }
       if (header.length >= 6 &&
-          header[0] == 0x47 && header[1] == 0x49 &&
-          header[2] == 0x46 && header[3] == 0x38) {
+          header[0] == 0x47 &&
+          header[1] == 0x49 &&
+          header[2] == 0x46 &&
+          header[3] == 0x38) {
         return MediaType('image', 'gif');
       }
     } catch (_) {/* fall through */}

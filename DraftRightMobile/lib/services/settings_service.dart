@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:draftright_mobile/models/tone.dart';
 import 'package:draftright_mobile/services/prefs_keys.dart';
+import 'package:draftright_mobile/services/url_util.dart';
 import 'auth_service.dart';
 
 // Production default. The Settings UI no longer exposes this — developers
@@ -15,15 +16,6 @@ const String _kBuildBackendUrl = String.fromEnvironment(
   defaultValue: 'https://api.draftright.info',
 );
 const String kDefaultBackendUrl = _kBuildBackendUrl;
-
-/// Normalize a URL by trimming trailing slashes.
-String _normalizeUrl(String url) {
-  var u = url;
-  while (u.endsWith('/')) {
-    u = u.substring(0, u.length - 1);
-  }
-  return u;
-}
 
 class SettingsService extends ChangeNotifier {
   late SharedPreferences _prefs;
@@ -68,7 +60,7 @@ class SettingsService extends ChangeNotifier {
     // rebuilding.  An old install that previously wrote a defunct
     // localhost URL will need to clear it manually — acceptable
     // tradeoff for being able to swap envs in the field.
-    _backendUrl = _normalizeUrl(
+    _backendUrl = normalizeBackendUrl(
       _prefs.getString(PrefsKeys.backendUrl) ?? kDefaultBackendUrl,
     );
     _translateLanguage =
@@ -123,7 +115,7 @@ class SettingsService extends ChangeNotifier {
   }
 
   Future<void> setBackendUrl(String value) async {
-    _backendUrl = _normalizeUrl(value);
+    _backendUrl = normalizeBackendUrl(value);
     await _prefs.setString(PrefsKeys.backendUrl, _backendUrl);
     // Sync for keyboard extensions
     await _prefs.setString(PrefsKeys.backendUrl, _backendUrl);
