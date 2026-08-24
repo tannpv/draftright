@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import Toast from '../components/Toast';
 import { apiFetch } from '../api';
+import { PaymentMethodKey } from '../lib/payment';
 
 // The 11 secret-bearing app_settings columns (mirror backend
 // SETTINGS_SECRET_COLUMNS). Sent only when edited so a masked read-value never
@@ -52,10 +53,10 @@ interface Settings {
 }
 
 const PAYMENT_METHODS: { key: string; label: string }[] = [
-  { key: 'stripe', label: 'Card (Stripe)' },
-  { key: 'paypal', label: 'PayPal' },
-  { key: 'vietqr', label: 'VietQR' },
-  { key: 'bank_transfer', label: 'Bank Transfer' },
+  { key: PaymentMethodKey.STRIPE, label: 'Card (Stripe)' },
+  { key: PaymentMethodKey.PAYPAL, label: 'PayPal' },
+  { key: PaymentMethodKey.VIETQR, label: 'VietQR' },
+  { key: PaymentMethodKey.BANK_TRANSFER, label: 'Bank Transfer' },
 ];
 
 const ALL_LANGUAGES = [
@@ -248,14 +249,14 @@ export default function SettingsPage() {
   // needs (PayPal: creds + both plan IDs + webhook, per the #82 runbook order).
   const methodConfigured = (key: string): boolean => {
     switch (key) {
-      case 'stripe':
+      case PaymentMethodKey.STRIPE:
         return !!settings.stripe_secret_key;
-      case 'paypal':
+      case PaymentMethodKey.PAYPAL:
         return !!settings.paypal_client_id && !!settings.paypal_client_secret
           && !!settings.paypal_plan_monthly && !!settings.paypal_plan_yearly
           && !!settings.paypal_webhook_id;
-      case 'vietqr':
-      case 'bank_transfer':
+      case PaymentMethodKey.VIETQR:
+      case PaymentMethodKey.BANK_TRANSFER:
         return !!settings.vietqr_account_number;
       default:
         return true;

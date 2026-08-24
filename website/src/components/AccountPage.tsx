@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import { API_URL as API } from '../lib/api';
+import { StoreTypeKey } from '../lib/payment';
 import PersonalizationSection from './PersonalizationSection';
 
 interface Account {
@@ -209,7 +210,7 @@ export default function AccountPage() {
   const isPro = sub?.plan_name === 'Pro' && isActive;
   const isExpired = !!sub && sub.status !== 'active';
   // Only provider-billed subs can be cancelled / managed in-app.
-  const isCancellable = isActive && (sub?.store_type === 'stripe' || sub?.store_type === 'lemonsqueezy');
+  const isCancellable = isActive && (sub?.store_type === StoreTypeKey.STRIPE || sub?.store_type === StoreTypeKey.LEMONSQUEEZY);
   const accessUntil = sub?.expires_at ? new Date(sub.expires_at).toLocaleDateString() : null;
 
   return (

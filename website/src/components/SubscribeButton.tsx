@@ -1,6 +1,7 @@
 import { useState } from 'react';
 
 import { API_URL as API } from '../lib/api';
+import { PaymentMethodKey } from '../lib/payment';
 
 // GET /plans shape (subset we need). Prices/IDs come from the backend so they
 // never go stale.
@@ -51,7 +52,7 @@ export default function SubscribeButton() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ plan_id: planId, method: 'lemonsqueezy' }),
+        body: JSON.stringify({ plan_id: planId, method: PaymentMethodKey.LEMONSQUEEZY }),
       });
 
       if (res.status === 401) {
