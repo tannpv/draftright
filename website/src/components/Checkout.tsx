@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import GoogleSignInButton from './GoogleSignInButton';
 import { API_URL as API } from '../lib/api';
+import { PaymentMethodKey } from '../lib/payment';
 
 type PlanId = string;
 
@@ -31,20 +32,6 @@ const toPlan = (p: ApiPlan): Plan => ({
   period: p.billing_period === 'yearly' ? 'year' : 'month',
   badge: p.billing_period === 'yearly' ? 'Best value' : null,
 });
-
-/**
- * Single source of truth for payment-method identifiers. Mirrors the Go
- * backend's method ids (backend-rewrite-go/internal/payment/methods.go) and
- * is the canonical key the UI compares against — avoid scattering raw string
- * literals like `methodKey === 'lemonsqueezy'` across the file.
- */
-export const PaymentMethodKey = {
-  STRIPE:        'stripe',
-  VIETQR:        'vietqr',
-  BANK_TRANSFER: 'bank_transfer',
-  LEMONSQUEEZY:  'lemonsqueezy',
-} as const;
-export type PaymentMethodKey = (typeof PaymentMethodKey)[keyof typeof PaymentMethodKey];
 
 interface Method {
   key: PaymentMethodKey;
