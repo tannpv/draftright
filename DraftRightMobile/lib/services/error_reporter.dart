@@ -5,6 +5,8 @@ import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
+
+import 'package:draftright_mobile/services/url_util.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:draftright_mobile/services/prefs_keys.dart';
@@ -67,7 +69,7 @@ class ErrorReporter {
   /// and an App Store rejection. Now `runApp` happens first; this just
   /// wires error capture afterward and warms up in the background.)
   static void attach({required String backendUrl, String? bearerToken}) {
-    _backendUrl = backendUrl.replaceAll(RegExp(r'/+$'), '');
+    _backendUrl = normalizeBackendUrl(backendUrl);
     _bearerToken = bearerToken;
 
     // Synchronous Flutter framework errors (build phase, etc.)
@@ -116,7 +118,7 @@ class ErrorReporter {
   /// stays consistent (`<base>/errors`).
   static void setBackendUrl(String? url) {
     if (url == null || url.isEmpty) return;
-    _backendUrl = url.replaceAll(RegExp(r'/+$'), '');
+    _backendUrl = normalizeBackendUrl(url);
   }
 
   /// Manually report a non-fatal issue (e.g. a caught exception in a

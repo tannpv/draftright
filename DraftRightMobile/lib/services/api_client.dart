@@ -12,6 +12,9 @@ class ApiException implements Exception {
   String toString() => message;
 }
 
+/// Default HTTP request timeout across the app — one source (#205 #11).
+const Duration kRequestTimeout = Duration(seconds: 15);
+
 /// One HTTP path for the whole app: builds the URI, sets JSON + optional Bearer
 /// headers, applies a timeout, throws [ApiException] on non-2xx, and decodes the
 /// JSON body. Token refresh stays in the caller (auth/backend) — this is purely
@@ -20,38 +23,45 @@ class ApiClient {
   ApiClient({
     required this.baseUrl,
     http.Client? client,
-    this.defaultTimeout = const Duration(seconds: 15),
+    this.defaultTimeout = kRequestTimeout,
   }) : _client = client ?? http.Client();
 
   String baseUrl;
   final http.Client _client;
   final Duration defaultTimeout;
 
-  Future<Map<String, dynamic>> getJson(String path, {String? token, Duration? timeout}) async {
+  Future<Map<String, dynamic>> getJson(String path,
+      {String? token, Duration? timeout}) async {
     final raw = await getAny(path, token: token, timeout: timeout);
     return raw is Map<String, dynamic> ? raw : <String, dynamic>{'data': raw};
   }
 
-  Future<Map<String, dynamic>> postJson(String path, {Object? body, String? token, Duration? timeout}) =>
+  Future<Map<String, dynamic>> postJson(String path,
+          {Object? body, String? token, Duration? timeout}) =>
       _send('POST', path, body: body, token: token, timeout: timeout);
 
-  Future<Map<String, dynamic>> deleteJson(String path, {String? token, Duration? timeout}) =>
+  Future<Map<String, dynamic>> deleteJson(String path,
+          {String? token, Duration? timeout}) =>
       _send('DELETE', path, token: token, timeout: timeout);
 
   /// GET that returns whatever shape the server emits — Map, List, scalar.
   /// Use for endpoints whose root response isn't a JSON object
   /// (e.g. `/plans` returns a List). Callers cast as needed.
-  Future<dynamic> getAny(String path, {String? token, Duration? timeout}) async {
+  Future<dynamic> getAny(String path,
+      {String? token, Duration? timeout}) async {
     return _sendAny('GET', path, token: token, timeout: timeout);
   }
 
-  Future<Map<String, dynamic>> _send(String method, String path, {Object? body, String? token, Duration? timeout}) async {
-    final raw = await _sendAny(method, path, body: body, token: token, timeout: timeout);
+  Future<Map<String, dynamic>> _send(String method, String path,
+      {Object? body, String? token, Duration? timeout}) async {
+    final raw = await _sendAny(method, path,
+        body: body, token: token, timeout: timeout);
     if (raw is Map<String, dynamic>) return raw;
     return <String, dynamic>{'data': raw};
   }
 
-  Future<dynamic> _sendAny(String method, String path, {Object? body, String? token, Duration? timeout}) async {
+  Future<dynamic> _sendAny(String method, String path,
+      {Object? body, String? token, Duration? timeout}) async {
     final uri = Uri.parse('$baseUrl$path');
     final headers = <String, String>{
       'Content-Type': 'application/json',
@@ -66,12 +76,14 @@ class ApiClient {
         future = _client.delete(uri, headers: headers);
         break;
       default:
-        future = _client.post(uri, headers: headers, body: body == null ? null : jsonEncode(body));
+        future = _client.post(uri,
+            headers: headers, body: body == null ? null : jsonEncode(body));
     }
     final resp = await future.timeout(timeout ?? defaultTimeout);
 
     if (resp.statusCode >= 400) {
-      throw ApiException(resp.statusCode, _parseError(resp.body, resp.statusCode));
+      throw ApiException(
+          resp.statusCode, _parseError(resp.body, resp.statusCode));
     }
     if (resp.body.isEmpty) return <String, dynamic>{};
     return jsonDecode(resp.body);

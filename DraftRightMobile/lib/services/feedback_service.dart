@@ -1,7 +1,8 @@
 import 'dart:convert';
-import 'dart:io' show Platform;
 
 import 'package:http/http.dart' as http;
+
+import 'package:draftright_mobile/services/app_source.dart';
 
 /// Posts feature requests to the backend `POST /feedback` endpoint
 /// (JSON body, no screenshot). The bug-report counterpart is
@@ -35,7 +36,7 @@ class FeedbackService {
   }) async {
     final client = httpClient ?? http.Client();
     try {
-      final source = _detectSource();
+      final source = detectAppSource();
       final body = <String, dynamic>{
         'kind': 'feature',
         'title': title.trim(),
@@ -70,14 +71,5 @@ class FeedbackService {
     } finally {
       if (httpClient == null) client.close();
     }
-  }
-
-  /// Mirrors BugReportService._detectSource() — safe fallback for tests.
-  static String _detectSource() {
-    try {
-      if (Platform.isIOS) return 'ios-app';
-      if (Platform.isAndroid) return 'android-app';
-    } catch (_) {/* non-mobile (test host) */}
-    return 'android-app';
   }
 }
