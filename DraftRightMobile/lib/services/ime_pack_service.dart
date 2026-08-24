@@ -3,6 +3,8 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
+import 'package:draftright_mobile/services/prefs_keys.dart';
+
 /// Thrown when a downloaded language pack's SHA-256 does not match the manifest.
 /// A mismatch means the bytes are corrupt or tampered with — never installed.
 class PackIntegrityError implements Exception {
@@ -53,9 +55,9 @@ class ImePackService implements PackInstaller {
 
   // Reuses the existing App Group channel (iOS) / share channel (Android),
   // which both answer `sharedPackDir` with a directory the keyboard can read.
-  static const MethodChannel _iosChannel =
-      MethodChannel('com.draftright.v2/app_group');
-  static const MethodChannel _androidChannel = MethodChannel('draftright/share');
+  static const MethodChannel _iosChannel = MethodChannel(appGroupChannelName);
+  static const MethodChannel _androidChannel =
+      MethodChannel('draftright/share');
 
   /// Builds a service rooted at the platform's shared directory (App Group
   /// container on iOS, app files dir on Android) so installed packs are visible

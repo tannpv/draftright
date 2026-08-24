@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:draftright_mobile/models/tone.dart';
+import 'package:draftright_mobile/services/prefs_keys.dart';
 import 'auth_service.dart';
 
 // Production default. The Settings UI no longer exposes this — developers
@@ -31,13 +32,14 @@ class SettingsService extends ChangeNotifier {
   String _translateLanguage = 'Vietnamese';
   List<String> _enabledTones = Tone.values.map((t) => t.apiValue).toList();
   String _defaultTone = '';
-  String _bubblePresetTone = 'polished';
-  List<String> _enabledLanguageIds = const ['en'];
-  String _activeLanguageId = 'en';
+  String _bubblePresetTone = Tone.polished.apiValue;
+  List<String> _enabledLanguageIds = const [kDefaultLanguageId];
+  String _activeLanguageId = kDefaultLanguageId;
   String _lastSeenVersion = '';
   bool _voicePolishEnabled = true;
 
   String get backendUrl => _backendUrl;
+
   /// App version that last ran — drives the one-time post-update "What's New".
   String get lastSeenVersion => _lastSeenVersion;
   String get translateLanguage => _translateLanguage;
@@ -46,6 +48,7 @@ class SettingsService extends ChangeNotifier {
   String get bubblePresetTone => _bubblePresetTone;
   List<String> get enabledLanguageIds => List.unmodifiable(_enabledLanguageIds);
   String get activeLanguageId => _activeLanguageId;
+
   /// Whether voice dictation is AI-polished. False = insert the raw transcript
   /// (dictate-only, no /rewrite call). The keyboards read this as rawMode's
   /// inverse (#197). Default on = the original behaviour.
@@ -60,28 +63,33 @@ class SettingsService extends ChangeNotifier {
     // localhost URL will need to clear it manually — acceptable
     // tradeoff for being able to swap envs in the field.
     _backendUrl = _normalizeUrl(
-      _prefs.getString('draftright.backendUrl') ?? kDefaultBackendUrl,
+      _prefs.getString(PrefsKeys.backendUrl) ?? kDefaultBackendUrl,
     );
-    _translateLanguage = _prefs.getString('draftright.translateLanguage') ?? 'Vietnamese';
-    _enabledTones = _prefs.getStringList('draftright.enabledTones')
-        ?? Tone.values.map((t) => t.apiValue).toList();
-    _defaultTone = _prefs.getString('draftright.defaultTone') ?? '';
-    _bubblePresetTone = _prefs.getString('draftright.bubblePresetTone') ?? 'polished';
+    _translateLanguage =
+        _prefs.getString(PrefsKeys.translateLanguage) ?? 'Vietnamese';
+    _enabledTones = _prefs.getStringList(PrefsKeys.enabledTones) ??
+        Tone.values.map((t) => t.apiValue).toList();
+    _defaultTone = _prefs.getString(PrefsKeys.defaultTone) ?? '';
+    _bubblePresetTone =
+        _prefs.getString(PrefsKeys.bubblePresetTone) ?? Tone.polished.apiValue;
     // The floating bubble was removed; purge its orphaned pref so it doesn't
     // linger in storage on upgraded installs.
-    await _prefs.remove('draftright.floatingBubbleEnabled');
-    _enabledLanguageIds = _prefs.getStringList('draftright.enabledLanguageIds')
-        ?? const ['en'];
-    if (_enabledLanguageIds.isEmpty) _enabledLanguageIds = const ['en'];
-    _activeLanguageId = _prefs.getString('draftright.activeLanguageId') ?? 'en';
+    await _prefs.remove(PrefsKeys.floatingBubbleEnabled);
+    _enabledLanguageIds = _prefs.getStringList(PrefsKeys.enabledLanguageIds) ??
+        const [kDefaultLanguageId];
+    if (_enabledLanguageIds.isEmpty) {
+      _enabledLanguageIds = const [kDefaultLanguageId];
+    }
+    _activeLanguageId =
+        _prefs.getString(PrefsKeys.activeLanguageId) ?? kDefaultLanguageId;
     if (!_enabledLanguageIds.contains(_activeLanguageId)) {
       _activeLanguageId = _enabledLanguageIds.first;
     }
-    _lastSeenVersion = _prefs.getString('draftright.lastSeenVersion') ?? '';
-    _voicePolishEnabled = _prefs.getBool('draftright.voicePolishEnabled') ?? true;
+    _lastSeenVersion = _prefs.getString(PrefsKeys.lastSeenVersion) ?? '';
+    _voicePolishEnabled = _prefs.getBool(PrefsKeys.voicePolishEnabled) ?? true;
 
     // Sync backend URL to SharedPreferences for keyboard extensions
-    await _prefs.setString('draftright.backendUrl', _backendUrl);
+    await _prefs.setString(PrefsKeys.backendUrl, _backendUrl);
     await AuthService.syncBackendUrlToAppGroup(_backendUrl);
     // Sync keyboard language preferences to App Group so the iOS keyboard
     // extension picks them up (Flutter's shared_preferences writes to the
@@ -98,40 +106,40 @@ class SettingsService extends ChangeNotifier {
   /// Toggle AI-polish of voice dictation. Off = raw transcript inserted (#197).
   Future<void> setVoicePolishEnabled(bool enabled) async {
     _voicePolishEnabled = enabled;
-    await _prefs.setBool('draftright.voicePolishEnabled', enabled);
+    await _prefs.setBool(PrefsKeys.voicePolishEnabled, enabled);
     await AuthService.syncVoicePolishEnabledToAppGroup(enabled);
     notifyListeners();
   }
 
   Future<void> setLastSeenVersion(String version) async {
     _lastSeenVersion = version;
-    await _prefs.setString('draftright.lastSeenVersion', version);
+    await _prefs.setString(PrefsKeys.lastSeenVersion, version);
   }
 
   Future<void> setBackendUrl(String value) async {
     _backendUrl = _normalizeUrl(value);
-    await _prefs.setString('draftright.backendUrl', _backendUrl);
+    await _prefs.setString(PrefsKeys.backendUrl, _backendUrl);
     // Sync for keyboard extensions
-    await _prefs.setString('draftright.backendUrl', _backendUrl);
+    await _prefs.setString(PrefsKeys.backendUrl, _backendUrl);
     await AuthService.syncBackendUrlToAppGroup(_backendUrl);
     notifyListeners();
   }
 
   Future<void> setEnabledTones(List<String> tones) async {
     _enabledTones = List.from(tones);
-    await _prefs.setStringList('draftright.enabledTones', _enabledTones);
+    await _prefs.setStringList(PrefsKeys.enabledTones, _enabledTones);
     notifyListeners();
   }
 
   Future<void> setDefaultTone(String tone) async {
     _defaultTone = tone;
-    await _prefs.setString('draftright.defaultTone', tone);
+    await _prefs.setString(PrefsKeys.defaultTone, tone);
     notifyListeners();
   }
 
   Future<void> setTranslateLanguage(String value) async {
     _translateLanguage = value;
-    await _prefs.setString('draftright.translateLanguage', value);
+    await _prefs.setString(PrefsKeys.translateLanguage, value);
     notifyListeners();
   }
 
@@ -143,19 +151,21 @@ class SettingsService extends ChangeNotifier {
   /// Tone.apiValue. (Key name is legacy — kept to avoid an install migration.)
   Future<void> setBubblePresetTone(String apiValue) async {
     _bubblePresetTone = apiValue;
-    await _prefs.setString('draftright.bubblePresetTone', apiValue);
+    await _prefs.setString(PrefsKeys.bubblePresetTone, apiValue);
     // Keep the iOS keyboard's one-tap tone in step with the picker.
     await AuthService.syncOneTapToneToAppGroup(apiValue);
     notifyListeners();
   }
 
   Future<void> setEnabledLanguageIds(List<String> ids) async {
-    _enabledLanguageIds = ids.isEmpty ? const ['en'] : List<String>.from(ids);
-    await _prefs.setStringList('draftright.enabledLanguageIds', _enabledLanguageIds);
+    _enabledLanguageIds =
+        ids.isEmpty ? const [kDefaultLanguageId] : List<String>.from(ids);
+    await _prefs.setStringList(
+        PrefsKeys.enabledLanguageIds, _enabledLanguageIds);
     await AuthService.syncEnabledLanguageIdsToAppGroup(_enabledLanguageIds);
     if (!_enabledLanguageIds.contains(_activeLanguageId)) {
       _activeLanguageId = _enabledLanguageIds.first;
-      await _prefs.setString('draftright.activeLanguageId', _activeLanguageId);
+      await _prefs.setString(PrefsKeys.activeLanguageId, _activeLanguageId);
       await AuthService.syncActiveLanguageIdToAppGroup(_activeLanguageId);
     }
     notifyListeners();
@@ -164,7 +174,7 @@ class SettingsService extends ChangeNotifier {
   Future<void> setActiveLanguageId(String id) async {
     if (!_enabledLanguageIds.contains(id)) return;
     _activeLanguageId = id;
-    await _prefs.setString('draftright.activeLanguageId', id);
+    await _prefs.setString(PrefsKeys.activeLanguageId, id);
     await AuthService.syncActiveLanguageIdToAppGroup(id);
     notifyListeners();
   }
@@ -185,11 +195,35 @@ class SettingsService extends ChangeNotifier {
   };
 
   static const List<String> supportedLanguages = [
-    'Arabic', 'Chinese (Simplified)', 'Chinese (Traditional)',
-    'Czech', 'Danish', 'Dutch', 'English', 'Finnish', 'French',
-    'German', 'Greek', 'Hebrew', 'Hindi', 'Hungarian',
-    'Indonesian', 'Italian', 'Japanese', 'Korean', 'Malay',
-    'Norwegian', 'Polish', 'Portuguese', 'Romanian', 'Russian',
-    'Spanish', 'Swedish', 'Thai', 'Turkish', 'Ukrainian', 'Vietnamese',
+    'Arabic',
+    'Chinese (Simplified)',
+    'Chinese (Traditional)',
+    'Czech',
+    'Danish',
+    'Dutch',
+    'English',
+    'Finnish',
+    'French',
+    'German',
+    'Greek',
+    'Hebrew',
+    'Hindi',
+    'Hungarian',
+    'Indonesian',
+    'Italian',
+    'Japanese',
+    'Korean',
+    'Malay',
+    'Norwegian',
+    'Polish',
+    'Portuguese',
+    'Romanian',
+    'Russian',
+    'Spanish',
+    'Swedish',
+    'Thai',
+    'Turkish',
+    'Ukrainian',
+    'Vietnamese',
   ];
 }

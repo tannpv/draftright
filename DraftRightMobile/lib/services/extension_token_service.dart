@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:draftright_mobile/services/api_client.dart';
 import 'package:draftright_mobile/services/logger_service.dart';
+import 'package:draftright_mobile/services/prefs_keys.dart';
 
 /// Manages the long-lived `dr_ext_*` extension token used by the iOS
 /// keyboard, iOS share extension, and Android keyboard so they can call
@@ -25,17 +26,7 @@ import 'package:draftright_mobile/services/logger_service.dart';
 class ExtensionTokenService {
   ExtensionTokenService({required String baseUrl}) : _baseUrl = baseUrl;
 
-  static const _channel = MethodChannel('com.draftright.v2/app_group');
-
-  /// Stable per-install identifier. Generated once on first call and
-  /// kept thereafter; rotation happens by re-minting the token under the
-  /// same device id.
-  static const _kDeviceId = 'draftright.deviceId';
-
-  /// Key used by SharedKeychain (iOS) and SharedPreferences (Android +
-  /// fallback) for the long-lived token. SharedPreferences auto-prefixes
-  /// 'flutter.' so the on-disk key is `flutter.draftright.extensionToken`.
-  static const _kExtensionToken = 'draftright.extensionToken';
+  static const _channel = MethodChannel(appGroupChannelName);
 
   String _baseUrl;
   late final ApiClient _api = ApiClient(baseUrl: _baseUrl);
@@ -48,10 +39,10 @@ class ExtensionTokenService {
   /// first call. UUID v4 format.
   Future<String> deviceId() async {
     final prefs = await SharedPreferences.getInstance();
-    final existing = prefs.getString(_kDeviceId);
+    final existing = prefs.getString(PrefsKeys.deviceId);
     if (existing != null && existing.isNotEmpty) return existing;
     final id = _uuidv4();
-    await prefs.setString(_kDeviceId, id);
+    await prefs.setString(PrefsKeys.deviceId, id);
     return id;
   }
 
@@ -78,8 +69,8 @@ class ExtensionTokenService {
   /// iOS App Group keychain.
   Future<void> storeToken(String token) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_kExtensionToken, token);
-    await _syncToKeychain(_kExtensionToken, token);
+    await prefs.setString(PrefsKeys.extensionToken, token);
+    await _syncToKeychain(PrefsKeys.extensionToken, token);
   }
 
   /// Clear the token from all storage. Called on logout. Server-side
@@ -87,8 +78,8 @@ class ExtensionTokenService {
   /// the (future) /auth/extension-tokens DELETE call.
   Future<void> clearToken() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_kExtensionToken);
-    await _syncToKeychain(_kExtensionToken, null);
+    await prefs.remove(PrefsKeys.extensionToken);
+    await _syncToKeychain(PrefsKeys.extensionToken, null);
   }
 
   Future<void> _syncToKeychain(String key, String? value) async {
