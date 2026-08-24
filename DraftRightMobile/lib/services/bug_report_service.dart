@@ -73,24 +73,22 @@ class BugReportService {
     final appVersion = await _appVersion();
     final osInfo = _osInfo();
 
+    final fields = <String, String>{
+      'description': description,
+      'source': source,
+      'app_version': appVersion,
+      'os_info': osInfo,
+    };
+    if (userEmail != null && userEmail.isNotEmpty) {
+      fields['user_email'] = userEmail;
+    }
+    if (context != null && context.isNotEmpty) {
+      fields['context'] = jsonEncode(context);
+    }
+
+    final client = http.Client();
     try {
-      final request = http.MultipartRequest('POST', Uri.parse(endpoint));
-      request.fields['description'] = description;
-      request.fields['source'] = source;
-      request.fields['app_version'] = appVersion;
-      request.fields['os_info'] = osInfo;
-
-      if (userEmail != null && userEmail.isNotEmpty) {
-        request.fields['user_email'] = userEmail;
-      }
-      if (context != null && context.isNotEmpty) {
-        request.fields['context'] = jsonEncode(context);
-      }
-
-      if (authToken != null && authToken.isNotEmpty) {
-        request.headers['Authorization'] = 'Bearer $authToken';
-      }
-
+      final files = <http.MultipartFile>[];
       if (screenshot != null) {
         final length = await screenshot.length();
         if (length > maxScreenshotBytes) {
@@ -116,46 +114,50 @@ class BugReportService {
         // else falls through to JPEG since image_picker
         // re-encodes most pickers to JPEG when imageQuality<100.
         final contentType = await _detectImageMime(screenshot);
-        request.files.add(await http.MultipartFile.fromPath(
+        files.add(await http.MultipartFile.fromPath(
           'screenshot',
           screenshot.path,
           contentType: contentType,
         ));
       }
 
-      final streamed =
-          await request.send().timeout(const Duration(seconds: 30));
-      final isOk = streamed.statusCode >= 200 && streamed.statusCode < 300;
-      if (isOk) {
-        DRLogger.log('Bug report submitted ($source)', category: 'BUG_REPORT');
-        return const SubmitBugReportResult(ok: true);
-      }
-      final body = await streamed.stream.bytesToString();
-      final status = streamed.statusCode;
+      // Route the app's one hand-built multipart request through the shared
+      // ApiClient chokepoint (#205 #9). 30s (not the default 15s) — screenshot
+      // uploads on slow links. baseUrl is empty: the endpoint is a full URL.
+      final api = ApiClient(baseUrl: '', client: client);
+      await api.postMultipart(
+        endpoint,
+        fields: fields,
+        files: files,
+        token: authToken,
+        timeout: const Duration(seconds: 30),
+      );
+      DRLogger.log('Bug report submitted ($source)', category: 'BUG_REPORT');
+      return const SubmitBugReportResult(ok: true);
+    } on ApiException catch (e) {
       DRLogger.warn(
-        'Bug report failed: $status $body',
+        'Bug report failed: ${e.statusCode} ${e.message}',
         category: 'BUG_REPORT',
       );
       // 413 = request body over the server's cap. The screenshot is the only
       // large part, so point the user at it (their connection is fine — a
       // generic "check your connection" here is misleading; issue #68).
-      if (status == 413) {
+      if (e.statusCode == 413) {
         return const SubmitBugReportResult(
           ok: false,
           errorMessage:
               'That screenshot is too large to upload. Remove it or attach a smaller image.',
         );
       }
-      return SubmitBugReportResult(
-        ok: false,
-        // Fall back to the status code so a failure is never a dead end.
-        errorMessage: parseServerErrorMessage(body) ??
-            'Server error ($status). Please try again.',
-      );
+      // e.message is the parsed server message, or an 'HTTP <status>' fallback
+      // — never a dead end.
+      return SubmitBugReportResult(ok: false, errorMessage: e.message);
     } catch (e) {
       DRLogger.warn('Bug report exception: $e', category: 'BUG_REPORT');
       return const SubmitBugReportResult(
           ok: false, errorMessage: _genericFailure);
+    } finally {
+      client.close();
     }
   }
 

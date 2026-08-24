@@ -7,15 +7,22 @@ import 'package:http/http.dart' as http;
 import 'package:draftright_mobile/services/api_client.dart';
 
 void main() {
-  http.Client mock(int Function(http.Request) code, String Function(http.Request) body, {void Function(http.Request)? capture}) =>
+  http.Client mock(
+          int Function(http.Request) code, String Function(http.Request) body,
+          {void Function(http.Request)? capture}) =>
       _Mock((req) async {
         capture?.call(req);
-        return http.StreamedResponse(Stream.value(utf8.encode(body(req))), code(req), request: req);
+        return http.StreamedResponse(
+            Stream.value(utf8.encode(body(req))), code(req),
+            request: req);
       });
 
   test('postJson sends bearer + JSON body and decodes the response', () async {
     http.Request? seen;
-    final api = ApiClient(baseUrl: 'http://h', client: mock((_) => 200, (_) => '{"ok":true}', capture: (r) => seen = r));
+    final api = ApiClient(
+        baseUrl: 'http://h',
+        client:
+            mock((_) => 200, (_) => '{"ok":true}', capture: (r) => seen = r));
     final res = await api.postJson('/x', body: {'a': 1}, token: 'TKN');
     expect(res['ok'], true);
     expect(seen!.headers['authorization'], 'Bearer TKN');
@@ -24,7 +31,9 @@ void main() {
   });
 
   test('throws ApiException with parsed message + status on non-2xx', () async {
-    final api = ApiClient(baseUrl: 'http://h', client: mock((_) => 400, (_) => '{"message":"bad email"}'));
+    final api = ApiClient(
+        baseUrl: 'http://h',
+        client: mock((_) => 400, (_) => '{"message":"bad email"}'));
     await expectLater(
       api.postJson('/x', body: {}),
       throwsA(isA<ApiException>()
@@ -33,16 +42,62 @@ void main() {
     );
   });
 
-  test('joins array messages; falls back to HTTP <code> for non-JSON', () async {
-    final api1 = ApiClient(baseUrl: 'http://h', client: mock((_) => 422, (_) => '{"message":["a","b"]}'));
-    await expectLater(api1.postJson('/x'), throwsA(isA<ApiException>().having((e) => e.message, 'm', 'a, b')));
-    final api2 = ApiClient(baseUrl: 'http://h', client: mock((_) => 500, (_) => 'boom'));
-    await expectLater(api2.getJson('/x'), throwsA(isA<ApiException>().having((e) => e.message, 'm', 'HTTP 500')));
+  test('joins array messages; falls back to HTTP <code> for non-JSON',
+      () async {
+    final api1 = ApiClient(
+        baseUrl: 'http://h',
+        client: mock((_) => 422, (_) => '{"message":["a","b"]}'));
+    await expectLater(api1.postJson('/x'),
+        throwsA(isA<ApiException>().having((e) => e.message, 'm', 'a, b')));
+    final api2 =
+        ApiClient(baseUrl: 'http://h', client: mock((_) => 500, (_) => 'boom'));
+    await expectLater(api2.getJson('/x'),
+        throwsA(isA<ApiException>().having((e) => e.message, 'm', 'HTTP 500')));
   });
 
   test('empty 2xx body returns empty map', () async {
-    final api = ApiClient(baseUrl: 'http://h', client: mock((_) => 200, (_) => ''));
+    final api =
+        ApiClient(baseUrl: 'http://h', client: mock((_) => 200, (_) => ''));
     expect(await api.getJson('/x'), <String, dynamic>{});
+  });
+
+  // TC: APICLIENT-004 postMultipart sends fields + bearer, decodes 2xx (#205 #9)
+  test('postMultipart sends fields + bearer and decodes the 2xx body',
+      () async {
+    http.MultipartRequest? seen;
+    final api = ApiClient(
+      baseUrl: 'http://h',
+      client: _MpMock((req) async {
+        seen = req;
+        return http.StreamedResponse(
+            Stream.value(utf8.encode('{"ok":true}')), 200,
+            request: req);
+      }),
+    );
+    final res = await api.postMultipart('/bug-reports',
+        fields: {'description': 'hi', 'source': 'ios-app'}, token: 'TKN');
+    expect(res['ok'], true);
+    expect(seen!.method, 'POST');
+    expect(seen!.url.toString(), 'http://h/bug-reports');
+    expect(seen!.fields['description'], 'hi');
+    expect(seen!.fields['source'], 'ios-app');
+    expect(seen!.headers['authorization'], 'Bearer TKN');
+  });
+
+  // TC: APICLIENT-005 postMultipart throws ApiException on non-2xx
+  test('postMultipart throws ApiException (parsed message + status) on non-2xx',
+      () async {
+    final api = ApiClient(
+      baseUrl: 'http://h',
+      client: _MpMock((_) async => http.StreamedResponse(
+          Stream.value(utf8.encode('{"message":"too big"}')), 413)),
+    );
+    await expectLater(
+      api.postMultipart('/x', fields: {'a': 'b'}),
+      throwsA(isA<ApiException>()
+          .having((e) => e.statusCode, 'statusCode', 413)
+          .having((e) => e.message, 'message', 'too big')),
+    );
   });
 }
 
@@ -50,5 +105,14 @@ class _Mock extends http.BaseClient {
   final Future<http.StreamedResponse> Function(http.Request) handler;
   _Mock(this.handler);
   @override
-  Future<http.StreamedResponse> send(http.BaseRequest request) => handler(request as http.Request);
+  Future<http.StreamedResponse> send(http.BaseRequest request) =>
+      handler(request as http.Request);
+}
+
+class _MpMock extends http.BaseClient {
+  final Future<http.StreamedResponse> Function(http.MultipartRequest) handler;
+  _MpMock(this.handler);
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) =>
+      handler(request as http.MultipartRequest);
 }
