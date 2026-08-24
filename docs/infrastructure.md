@@ -75,8 +75,7 @@ Post-deploy: `docker ps` (all healthy) + `curl https://api.draftright.info/healt
 | Service | How | Port |
 |---|---|---|
 | PostgreSQL | `docker compose up -d postgres` | 5432 |
-| Backend API (Node, parity authority) | `cd backend && npm run start:dev` | 3000 |
-| Go backend | `cd backend-rewrite-go && go run ./cmd/server` | per `LISTEN_ADDR` |
+| Backend API (Go — the only backend, #202) | `cd backend-rewrite-go && go run ./cmd/server` | 3001 (per `LISTEN_ADDR`) |
 | Admin Portal | `cd admin && npm run dev` | 5173 |
 | Website | `cd website && npm run dev` | 4000 |
 
