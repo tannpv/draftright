@@ -44,7 +44,7 @@ DraftRight/            # macOS native app (Swift/SwiftUI)
 DraftRightMobile/      # Flutter app + iOS/Android keyboard & share extensions
 DraftRightWindows/     # Windows native app (WinUI 3 / C# / .NET 8)
 DraftRightLinux/       # Linux native app (GTK4 / libadwaita / Python)
-backend/               # NestJS API + PostgreSQL + Redis
+backend-rewrite-go/    # Go API — the only backend (NestJS retired, #202) + PostgreSQL + Redis
 admin/                 # React admin portal (Tailwind, Vite)
 website/               # Astro marketing site + web playground
 docker-compose.yml     # Backend + Postgres + Redis + Ollama + Website
@@ -60,7 +60,7 @@ docs/                  # Specs, plans (Windows & Linux native app plans)
 | Android app | Flutter 3.x + Kotlin keyboard extension |
 | Windows app | WinUI 3, C# 12, .NET 8, MSIX |
 | Linux app | GTK4, libadwaita, Python 3.11+ |
-| Backend API | NestJS 10+, TypeScript, TypeORM, PostgreSQL 16, Redis |
+| Backend API | Go 1.25 (chi, pgx + sqlc, distroless), PostgreSQL 16, Redis |
 | Admin portal | React 18, Vite, Tailwind CSS (Modernize dark theme) |
 | Marketing site | Astro 5, React 18 (islands), Tailwind CSS |
 | AI providers | OpenAI, Anthropic (Claude), Ollama (local), Custom |
@@ -71,10 +71,10 @@ docs/                  # Specs, plans (Windows & Linux native app plans)
 # Start infrastructure
 docker compose up -d postgres redis
 
-# Start backend
-cd backend && cp .env.example .env  # edit with real values
-ADMIN_PASSWORD=DraftRight2026 npx ts-node src/seed.ts
-npm run start:dev                    # http://localhost:3000
+# Start backend (Go — the only backend since #202)
+cd backend-rewrite-go && cp .env.example .env   # edit with real values
+go run ./cmd/server                             # http://localhost:3001
+# or: docker compose up -d backend-go
 
 # Start admin portal
 cd admin && npm run dev              # http://localhost:5173
@@ -91,13 +91,12 @@ ollama pull llama3.2
 
 | Service | Port |
 |---|---|
-| Backend API | 3000 |
+| Backend API (Go) | 3001 |
 | Admin Portal | 5173 (dev) |
 | Marketing Website | 4000 (dev) |
 | PostgreSQL | 5432 |
 | Redis | 6379 |
 | Ollama | 11434 |
-| Swagger Docs | 3000/api/docs |
 
 ## Admin Credentials (dev)
 
@@ -148,7 +147,7 @@ Standard GitFlow — see `~/.claude/CLAUDE.md` for full rules.
 
 ## Subdirectory Docs
 
-- `backend/CLAUDE.md` — API modules, database, auth
+- `backend-rewrite-go/CLAUDE.md` — Go API modules (clean-arch), database, auth, parity contract
 - `admin/CLAUDE.md` — Admin portal pages, API client
 - `DraftRightMobile/CLAUDE.md` — Flutter app, keyboard extensions
 - `DraftRight/CLAUDE.md` — macOS native app

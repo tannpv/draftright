@@ -38,8 +38,12 @@ import (
 )
 
 const (
-	defaultEndpoint       = "https://api.anthropic.com/v1/messages"
-	defaultModel          = "claude-3-5-sonnet-20241022"
+	defaultEndpoint = "https://api.anthropic.com/v1/messages"
+	// claude-3-5-sonnet-20241022 was retired; the API answers 404
+	// not_found_error for it, so the Anthropic leg of the provider chain could
+	// only ever fail. Confirmed against /v1/models on 2026-08-22.
+	// client_test.go pins this as a golden literal — change both together.
+	defaultModel          = "claude-sonnet-5"
 	defaultMaxTokens      = 1024
 	defaultAPIVersion     = "2023-06-01"
 	defaultRequestTimeout = 120 * time.Second
