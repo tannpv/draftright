@@ -33,8 +33,8 @@ const toPlan = (p: ApiPlan): Plan => ({
 });
 
 /**
- * Single source of truth for payment-method identifiers. Mirrors the backend
- * `PaymentMethod` enum (backend/src/payment/entities/payment.entity.ts) and
+ * Single source of truth for payment-method identifiers. Mirrors the Go
+ * backend's method ids (backend-rewrite-go/internal/payment/methods.go) and
  * is the canonical key the UI compares against — avoid scattering raw string
  * literals like `methodKey === 'lemonsqueezy'` across the file.
  */

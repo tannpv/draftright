@@ -1,7 +1,7 @@
 /// Typed view of the JSON returned by `POST /payment/checkout`.
 ///
 /// The backend's `CheckoutResult` (see
-/// `backend/src/payment/strategies/payment-strategy.interface.ts`) is a
+/// `backend-rewrite-go/internal/payment/strategy/strategy.go`) is a
 /// union of three shapes:
 ///   - `redirect_url` for hosted-checkout providers (Stripe, LS, PayPal)
 ///   - `qr_data`     for VietQR (URL to an img.vietqr.io image)

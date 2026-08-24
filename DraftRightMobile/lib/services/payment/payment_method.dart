@@ -1,7 +1,8 @@
 /// Identity for a payment method advertised by the backend.
 ///
-/// Mirrors `backend/src/payment/entities/payment.entity.ts` `PaymentMethod`
-/// enum.  Adding a new method = add a value here + map its wire name +
+/// Mirrors the Go backend's payment-method ids in
+/// `backend-rewrite-go/internal/payment/methods.go`.  Adding a new method = add
+/// a value here + map its wire name +
 /// (optionally) override the default handler.  Nothing else in the
 /// mobile app should branch on the wire string directly.
 enum PaymentMethodKind {

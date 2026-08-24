@@ -1,6 +1,5 @@
-/// Lifecycle of a single payment, mirrored from the backend
-/// `PaymentStatus` enum in
-/// `backend/src/payment/entities/payment.entity.ts`.
+/// Lifecycle of a single payment, mirrored from the Go backend's payment
+/// status in `backend-rewrite-go/internal/payment/`.
 ///
 /// `/payment/status/:ref` also returns the synthetic `not_found` when
 /// the reference code doesn't match any row — modelled here as a
