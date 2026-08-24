@@ -71,6 +71,39 @@ class ApiClient {
     return _sendAny('GET', path, token: token, timeout: timeout);
   }
 
+  /// POST a multipart/form-data request through the shared client — same
+  /// timeout + error contract as the JSON methods (throws [ApiException] with
+  /// the parsed server message on non-2xx, returns the decoded 2xx body).
+  /// [fields] are text parts, [files] attachments. Centralizes the one
+  /// hand-built multipart request in the app (#205 #9). The Authorization
+  /// header is set from [token] when non-empty; Content-Type is the multipart
+  /// boundary the request sets itself.
+  Future<Map<String, dynamic>> postMultipart(
+    String path, {
+    Map<String, String> fields = const {},
+    List<http.MultipartFile> files = const [],
+    String? token,
+    Duration? timeout,
+  }) async {
+    final req = http.MultipartRequest('POST', Uri.parse('$baseUrl$path'));
+    req.fields.addAll(fields);
+    req.files.addAll(files);
+    if (token != null && token.isNotEmpty) {
+      req.headers['Authorization'] = 'Bearer $token';
+    }
+    final streamed = await _client.send(req).timeout(timeout ?? defaultTimeout);
+    final body = await streamed.stream.bytesToString();
+    if (streamed.statusCode >= 400) {
+      throw ApiException(
+          streamed.statusCode, _parseError(body, streamed.statusCode));
+    }
+    if (body.isEmpty) return <String, dynamic>{};
+    final decoded = jsonDecode(body);
+    return decoded is Map<String, dynamic>
+        ? decoded
+        : <String, dynamic>{'data': decoded};
+  }
+
   Future<Map<String, dynamic>> _send(String method, String path,
       {Object? body, String? token, Duration? timeout}) async {
     final raw = await _sendAny(method, path,
