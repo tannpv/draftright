@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import Modal from '../components/Modal';
 import Toast from '../components/Toast';
 import { apiFetch } from '../api';
+import { SubscriptionStatusKey } from '../lib/payment';
 import { formatCurrency } from '../lib/format';
 
 interface UsageLog {
@@ -294,7 +295,7 @@ export default function UserDetailPage() {
               <InfoRow label="Plan"><span style={{ textTransform: 'capitalize' }}>{sub.plan?.name || '—'}</span></InfoRow>
               <InfoRow label="Daily Limit">{sub.plan?.daily_limit === -1 ? 'Unlimited' : sub.plan?.daily_limit}</InfoRow>
               <InfoRow label="Status">
-                <span className={`badge ${sub.status === 'active' ? 'badge-success' : 'badge-muted'}`}>
+                <span className={`badge ${sub.status === SubscriptionStatusKey.ACTIVE ? 'badge-success' : 'badge-muted'}`}>
                   {sub.status}
                 </span>
               </InfoRow>

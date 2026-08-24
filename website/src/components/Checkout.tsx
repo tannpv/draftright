@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import GoogleSignInButton from './GoogleSignInButton';
 import { API_URL as API } from '../lib/api';
-import { PaymentMethodKey } from '../lib/payment';
+import { PaymentMethodKey, PaymentStatusKey } from '../lib/payment';
 
 type PlanId = string;
 
@@ -218,7 +218,7 @@ export default function Checkout() {
               if (r.ok) {
                 const s = await r.json();
                 setPaymentStatus(s.status);
-                if (s.status === 'completed') {
+                if (s.status === PaymentStatusKey.COMPLETED) {
                   if (pollRef.current) clearInterval(pollRef.current);
                   setStep('success');
                 }
