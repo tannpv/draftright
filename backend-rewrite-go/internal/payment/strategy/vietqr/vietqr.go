@@ -81,7 +81,7 @@ func (s *Strategy) CreateCheckout(_ context.Context, p strategy.Payment, _ strat
 		Reference:     p.ReferenceCode,
 	}
 	// bank_transfer → manual flow, no QR (client renders the table only).
-	if p.Method == "bank_transfer" {
+	if p.Method == strategy.MethodBankTransfer {
 		return strategy.Result{BankInfo: bank}, nil
 	}
 	qr := fmt.Sprintf(

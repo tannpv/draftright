@@ -96,6 +96,17 @@ const (
 	ActionIgnored                = "ignored"
 )
 
+// Payment-method ids the strategies dispatch on (Payment.Method). These are
+// duplicated from payment.Method* on purpose: the payment package imports this
+// one, so `strategy` CANNOT import payment back (import cycle). They are kept in
+// sync by TestStrategyMethodConstsMatchPayment in the payment package — a
+// Rule #1 can't-merge → parity-test guard (#204 finding #5).
+const (
+	MethodBankTransfer = "bank_transfer"
+	MethodApplePay     = "apple_pay"
+	MethodGooglePay    = "google_pay"
+)
+
 // WebhookAction is the verified-webhook outcome the Service dispatches on. It
 // flattens Node's discriminated union: only the fields relevant to Type are
 // populated; the rest stay zero. CurrentPeriodEnd is unix seconds.

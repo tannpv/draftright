@@ -66,7 +66,7 @@ func (s *Strategy) CreateCheckout(ctx context.Context, p strategy.Payment, plan 
 	}
 	sc := s.newClient(s.creds.SecretKey)
 
-	if p.Method == "apple_pay" || p.Method == "google_pay" {
+	if p.Method == strategy.MethodApplePay || p.Method == strategy.MethodGooglePay {
 		return s.walletIntent(ctx, sc, p, plan, opts)
 	}
 
