@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:draftright_mobile/services/auth_service.dart';
 import 'package:draftright_mobile/services/backend_client.dart';
 import 'package:draftright_mobile/services/logger_service.dart';
+import 'package:draftright_mobile/services/prefs_keys.dart';
 import 'package:draftright_mobile/services/settings_service.dart';
 import 'package:draftright_mobile/screens/login_screen.dart';
 import 'package:draftright_mobile/screens/onboarding_screen.dart';
@@ -26,8 +27,8 @@ import 'package:draftright_mobile/desktop/desktop_app.dart'
 bool get isDesktop =>
     !kIsWeb &&
     (defaultTargetPlatform == TargetPlatform.windows ||
-     defaultTargetPlatform == TargetPlatform.linux ||
-     defaultTargetPlatform == TargetPlatform.macOS);
+        defaultTargetPlatform == TargetPlatform.linux ||
+        defaultTargetPlatform == TargetPlatform.macOS);
 
 /// Entry point.
 ///
@@ -112,9 +113,7 @@ class _BootstrapState extends State<_Bootstrap> {
       } catch (_) {}
       try {
         ErrorReporter.reportHandled(e,
-            stack: st,
-            severity: 'warning',
-            context: {'bootstrap_step': label});
+            stack: st, severity: 'warning', context: {'bootstrap_step': label});
       } catch (_) {}
     }
   }
@@ -220,7 +219,8 @@ class _BootstrapState extends State<_Bootstrap> {
                 const Icon(Icons.error_outline, size: 56),
                 const SizedBox(height: 16),
                 const Text("DraftRight couldn't start",
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+                    style:
+                        TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 8),
                 const Text('Please check your connection and try again.',
                     textAlign: TextAlign.center),
@@ -382,7 +382,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _checkOnboarding() async {
     final prefs = await SharedPreferences.getInstance();
-    final complete = prefs.getBool('draftright.onboardingComplete') ?? false;
+    final complete = prefs.getBool(PrefsKeys.onboardingComplete) ?? false;
     setState(() => _onboardingComplete = complete);
   }
 
@@ -394,7 +394,7 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _onboardingComplete = true);
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('draftright.onboardingComplete', true);
+      await prefs.setBool(PrefsKeys.onboardingComplete, true);
     } catch (e) {
       DRLogger.warn('Failed to persist onboardingComplete: $e');
     }
@@ -462,13 +462,11 @@ class _HomeScreenState extends State<HomeScreen> {
       body: screens[_currentIndex],
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
-        onDestinationSelected: (index) =>
-            setState(() => _currentIndex = index),
+        onDestinationSelected: (index) => setState(() => _currentIndex = index),
         destinations: const [
           NavigationDestination(
               icon: Icon(Icons.edit_note), label: 'Playground'),
-          NavigationDestination(
-              icon: Icon(Icons.settings), label: 'Settings'),
+          NavigationDestination(icon: Icon(Icons.settings), label: 'Settings'),
         ],
       ),
     );

@@ -7,6 +7,8 @@ import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:draftright_mobile/services/prefs_keys.dart';
+
 /// One captured error, surfaced to the UI for an on-screen notice. The
 /// reporter publishes the latest of these via [ErrorReporter.lastError] so
 /// any widget can react (banner, snackbar, dev overlay) without depending
@@ -47,7 +49,6 @@ class ErrorReporter {
   static String? _bearerToken;
   static String? _appVersion;
   static final _queue = <Map<String, dynamic>>[];
-  static const _persistKey = 'draftright.error_reporter.queue';
   static bool _flushScheduled = false;
 
   /// Latest captured error, or null if none yet. UI widgets can subscribe to
@@ -149,7 +150,7 @@ class ErrorReporter {
   static Future<void> _loadPersistedQueue() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getStringList(_persistKey);
+      final raw = prefs.getStringList(PrefsKeys.errorReporterQueue);
       if (raw != null) {
         for (final s in raw) {
           try {
@@ -166,7 +167,7 @@ class ErrorReporter {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setStringList(
-        _persistKey,
+        PrefsKeys.errorReporterQueue,
         _queue.map(jsonEncode).toList(),
       );
     } catch (_) {/* ignore */}
