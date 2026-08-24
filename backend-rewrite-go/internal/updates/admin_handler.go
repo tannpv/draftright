@@ -82,7 +82,7 @@ type okResponse struct {
 func (h *AdminHandler) ListReleases(w http.ResponseWriter, r *http.Request) {
 	view, err := h.svc.ListAll(r.Context())
 	if err != nil {
-		shared.WriteError(w, r, "internal", err.Error())
+		shared.WriteError(w, r, shared.CodeInternal, err.Error())
 		return
 	}
 	shared.WriteJSON(w, http.StatusOK, view)
@@ -157,8 +157,8 @@ func (h *AdminHandler) UpsertPolicy(w http.ResponseWriter, r *http.Request) {
 // with its verbatim message (the use cases validate before touching the repo).
 func (h *AdminHandler) writeServiceError(w http.ResponseWriter, r *http.Request, err error) {
 	if errors.Is(err, ErrReleaseNotFound) {
-		shared.WriteError(w, r, "not-found", err.Error())
+		shared.WriteError(w, r, shared.CodeNotFound, err.Error())
 		return
 	}
-	shared.WriteError(w, r, "invalid-input", err.Error())
+	shared.WriteError(w, r, shared.CodeInvalidInput, err.Error())
 }

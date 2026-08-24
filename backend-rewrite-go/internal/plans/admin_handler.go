@@ -95,7 +95,7 @@ func (h *AdminHandler) List(w http.ResponseWriter, r *http.Request) {
 	if !q.Has("page") && !q.Has("search") && !q.Has("status") && !q.Has("sort_by") {
 		plans, err := h.svc.ListAll(r.Context())
 		if err != nil {
-			shared.WriteError(w, r, "internal", "plans failed")
+			shared.WriteError(w, r, shared.CodeInternal, "plans failed")
 			return
 		}
 		if plans == nil {
@@ -108,7 +108,7 @@ func (h *AdminHandler) List(w http.ResponseWriter, r *http.Request) {
 	b := listquery.Build(listquery.Parse(q), planSearchCols, planSortAllow, "created_at", "is_active")
 	rows, total, err := h.svc.ListPaginated(r.Context(), b)
 	if err != nil {
-		shared.WriteError(w, r, "internal", "plans failed")
+		shared.WriteError(w, r, shared.CodeInternal, "plans failed")
 		return
 	}
 	if rows == nil {
@@ -156,7 +156,7 @@ func (h *AdminHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	plan, err := h.svc.Create(r.Context(), in)
 	if err != nil {
-		shared.WriteError(w, r, "internal", "plans failed")
+		shared.WriteError(w, r, shared.CodeInternal, "plans failed")
 		return
 	}
 	shared.WriteJSON(w, http.StatusCreated, plan)
@@ -186,7 +186,7 @@ func (h *AdminHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	plan, err := h.svc.Update(r.Context(), id, patch)
 	if err != nil {
-		shared.WriteError(w, r, "internal", "plans failed")
+		shared.WriteError(w, r, shared.CodeInternal, "plans failed")
 		return
 	}
 	shared.WriteJSON(w, http.StatusOK, plan)
@@ -196,7 +196,7 @@ func (h *AdminHandler) Update(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if err := h.svc.SoftDelete(r.Context(), id); err != nil {
-		shared.WriteError(w, r, "internal", "plans failed")
+		shared.WriteError(w, r, shared.CodeInternal, "plans failed")
 		return
 	}
 	shared.WriteJSON(w, http.StatusOK, struct {

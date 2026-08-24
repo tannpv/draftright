@@ -14,7 +14,7 @@ import (
 func (h *Handler) webhook(w http.ResponseWriter, r *http.Request, method string) {
 	payload, err := io.ReadAll(r.Body)
 	if err != nil {
-		shared.WriteError(w, r, "invalid-input", "Invalid request body")
+		shared.WriteError(w, r, shared.CodeInvalidInput, "Invalid request body")
 		return
 	}
 	res, err := h.svc.HandleWebhook(r.Context(), method, payload, r.Header)
@@ -22,7 +22,7 @@ func (h *Handler) webhook(w http.ResponseWriter, r *http.Request, method string)
 		if writePaymentErr(w, r, err) {
 			return
 		}
-		shared.WriteError(w, r, "internal", "webhook failed")
+		shared.WriteError(w, r, shared.CodeInternal, "webhook failed")
 		return
 	}
 	shared.WriteJSON(w, http.StatusCreated, res)

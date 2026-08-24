@@ -35,7 +35,7 @@ func NewHandler(svc *Service) *Handler { return &Handler{svc: svc} }
 func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	settings, err := h.svc.Get(r.Context())
 	if err != nil {
-		shared.WriteError(w, r, "internal", err.Error())
+		shared.WriteError(w, r, shared.CodeInternal, err.Error())
 		return
 	}
 	shared.WriteJSON(w, http.StatusOK, settings)
@@ -170,10 +170,10 @@ func (h *Handler) Patch(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		var inv InvalidSettingsError
 		if errors.As(err, &inv) {
-			shared.WriteError(w, r, "invalid-input", err.Error())
+			shared.WriteError(w, r, shared.CodeInvalidInput, err.Error())
 			return
 		}
-		shared.WriteError(w, r, "internal", err.Error())
+		shared.WriteError(w, r, shared.CodeInternal, err.Error())
 		return
 	}
 	shared.WriteJSON(w, http.StatusOK, settings)
@@ -199,7 +199,7 @@ func (h *Handler) TestEmail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.svc.SendTestEmail(r.Context(), body.To); err != nil {
-		shared.WriteError(w, r, "internal", err.Error())
+		shared.WriteError(w, r, shared.CodeInternal, err.Error())
 		return
 	}
 	shared.WriteJSON(w, http.StatusCreated, struct {

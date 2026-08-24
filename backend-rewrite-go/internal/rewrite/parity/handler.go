@@ -50,19 +50,19 @@ func (h *Handler) Rewrite(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		// RequireAuth/dual-auth middleware not wired upstream — router misconfig.
 		// 500 loud so a misroute can't silently accept anonymous traffic.
-		shared.WriteError(w, r, "internal", "auth middleware missing")
+		shared.WriteError(w, r, shared.CodeInternal, "auth middleware missing")
 		return
 	}
 
 	raw, err := io.ReadAll(r.Body)
 	if err != nil {
-		shared.WriteError(w, r, "invalid-input", "Invalid request body")
+		shared.WriteError(w, r, shared.CodeInvalidInput, "Invalid request body")
 		return
 	}
 
 	text, tone, target, source, inputKind, msg := validateRewrite(raw)
 	if msg != "" {
-		shared.WriteError(w, r, "invalid-input", msg)
+		shared.WriteError(w, r, shared.CodeInvalidInput, msg)
 		return
 	}
 
@@ -73,16 +73,16 @@ func (h *Handler) Rewrite(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, ErrQuotaExceeded):
 			// AllExceptionsFilter drops the extra usage_today/daily_limit fields;
 			// only the bare message survives. code rate-limited → 429.
-			shared.WriteError(w, r, "rate-limited", "Daily limit reached")
+			shared.WriteError(w, r, shared.CodeRateLimited, "Daily limit reached")
 		case errors.Is(err, ErrNoDefaultProvider):
-			shared.WriteError(w, r, "invalid-input", ErrNoDefaultProvider.Error())
+			shared.WriteError(w, r, shared.CodeInvalidInput, ErrNoDefaultProvider.Error())
 		case errors.Is(err, ErrProviderFailed):
-			shared.WriteError(w, r, "provider-failed", providerUnavailableMsg)
+			shared.WriteError(w, r, shared.CodeProviderFailed, providerUnavailableMsg)
 		case errors.As(err, &ute):
-			shared.WriteError(w, r, "invalid-input", ute.Error())
+			shared.WriteError(w, r, shared.CodeInvalidInput, ute.Error())
 		default:
 			// Opaque message — never leak err.Error() on the generic 500 path.
-			shared.WriteError(w, r, "internal", "rewrite failed")
+			shared.WriteError(w, r, shared.CodeInternal, "rewrite failed")
 		}
 		return
 	}
@@ -110,13 +110,13 @@ func clientIP(r *http.Request) string {
 func (h *Handler) Trial(w http.ResponseWriter, r *http.Request) {
 	raw, err := io.ReadAll(r.Body)
 	if err != nil {
-		shared.WriteError(w, r, "invalid-input", "Invalid request body")
+		shared.WriteError(w, r, shared.CodeInvalidInput, "Invalid request body")
 		return
 	}
 
 	text, tone, target, source, inputKind, msg := validateRewrite(raw)
 	if msg != "" {
-		shared.WriteError(w, r, "invalid-input", msg)
+		shared.WriteError(w, r, shared.CodeInvalidInput, msg)
 		return
 	}
 
@@ -125,15 +125,15 @@ func (h *Handler) Trial(w http.ResponseWriter, r *http.Request) {
 		var ute *UnknownToneError
 		switch {
 		case errors.Is(err, ErrTrialLimit):
-			shared.WriteError(w, r, "rate-limited", ErrTrialLimit.Error())
+			shared.WriteError(w, r, shared.CodeRateLimited, ErrTrialLimit.Error())
 		case errors.Is(err, ErrNoDefaultProvider):
-			shared.WriteError(w, r, "invalid-input", ErrNoDefaultProvider.Error())
+			shared.WriteError(w, r, shared.CodeInvalidInput, ErrNoDefaultProvider.Error())
 		case errors.Is(err, ErrProviderFailed):
-			shared.WriteError(w, r, "provider-failed", providerUnavailableMsg)
+			shared.WriteError(w, r, shared.CodeProviderFailed, providerUnavailableMsg)
 		case errors.As(err, &ute):
-			shared.WriteError(w, r, "invalid-input", ute.Error())
+			shared.WriteError(w, r, shared.CodeInvalidInput, ute.Error())
 		default:
-			shared.WriteError(w, r, "internal", "rewrite failed")
+			shared.WriteError(w, r, shared.CodeInternal, "rewrite failed")
 		}
 		return
 	}
