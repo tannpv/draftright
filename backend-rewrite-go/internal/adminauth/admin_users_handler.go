@@ -94,7 +94,7 @@ func (h *AdminUsersHandler) List(w http.ResponseWriter, r *http.Request) {
 	if !q.Has("page") && !q.Has("search") && !q.Has("status") && !q.Has("sort_by") {
 		users, err := h.svc.ListAll(r.Context())
 		if err != nil {
-			shared.WriteError(w, r, "internal", "admin-users failed")
+			shared.WriteError(w, r, shared.CodeInternal, "admin-users failed")
 			return
 		}
 		if users == nil {
@@ -107,7 +107,7 @@ func (h *AdminUsersHandler) List(w http.ResponseWriter, r *http.Request) {
 	b := listquery.Build(listquery.Parse(q), adminUserSearchCols, adminUserSortAllow, "created_at", "is_active")
 	rows, total, err := h.svc.ListPaginated(r.Context(), b)
 	if err != nil {
-		shared.WriteError(w, r, "internal", "admin-users failed")
+		shared.WriteError(w, r, shared.CodeInternal, "admin-users failed")
 		return
 	}
 	if rows == nil {
@@ -137,11 +137,11 @@ func (h *AdminUsersHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Role:     role,
 	})
 	if errors.Is(err, ErrDuplicateEmail) {
-		shared.WriteError(w, r, "invalid-input", "Email already exists")
+		shared.WriteError(w, r, shared.CodeInvalidInput, "Email already exists")
 		return
 	}
 	if err != nil {
-		shared.WriteError(w, r, "internal", "admin-users failed")
+		shared.WriteError(w, r, shared.CodeInternal, "admin-users failed")
 		return
 	}
 	shared.WriteJSON(w, http.StatusCreated, out)
@@ -166,7 +166,7 @@ func (h *AdminUsersHandler) Update(w http.ResponseWriter, r *http.Request) {
 		Password: body.Password,
 	})
 	if err != nil {
-		shared.WriteError(w, r, "internal", "admin-users failed")
+		shared.WriteError(w, r, shared.CodeInternal, "admin-users failed")
 		return
 	}
 	shared.WriteJSON(w, http.StatusOK, out)
@@ -182,31 +182,31 @@ func (h *AdminUsersHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	claims, ok := shared.ClaimsFromContext(r.Context())
 	if !ok {
-		shared.WriteError(w, r, "internal", "admin-users failed")
+		shared.WriteError(w, r, shared.CodeInternal, "admin-users failed")
 		return
 	}
 	if id == claims.Sub {
-		shared.WriteError(w, r, "invalid-input", "You cannot deactivate your own admin account")
+		shared.WriteError(w, r, shared.CodeInvalidInput, "You cannot deactivate your own admin account")
 		return
 	}
 	active, err := h.svc.IsActiveAdmin(r.Context(), id)
 	if err != nil {
-		shared.WriteError(w, r, "internal", "admin-users failed")
+		shared.WriteError(w, r, shared.CodeInternal, "admin-users failed")
 		return
 	}
 	if active {
 		count, err := h.svc.CountActiveAdmins(r.Context())
 		if err != nil {
-			shared.WriteError(w, r, "internal", "admin-users failed")
+			shared.WriteError(w, r, shared.CodeInternal, "admin-users failed")
 			return
 		}
 		if count <= 1 {
-			shared.WriteError(w, r, "invalid-input", "Cannot deactivate the last active admin")
+			shared.WriteError(w, r, shared.CodeInvalidInput, "Cannot deactivate the last active admin")
 			return
 		}
 	}
 	if err := h.svc.SoftDeleteWithAudit(r.Context(), claims.Sub, id); err != nil {
-		shared.WriteError(w, r, "internal", "admin-users failed")
+		shared.WriteError(w, r, shared.CodeInternal, "admin-users failed")
 		return
 	}
 	shared.WriteJSON(w, http.StatusOK, struct {

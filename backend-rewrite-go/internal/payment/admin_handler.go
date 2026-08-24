@@ -51,7 +51,7 @@ type refundBody struct {
 func (h *AdminHandler) Stats(w http.ResponseWriter, r *http.Request) {
 	stats, err := h.svc.GetStats(r.Context())
 	if err != nil {
-		shared.WriteError(w, r, "internal", "stats failed")
+		shared.WriteError(w, r, shared.CodeInternal, "stats failed")
 		return
 	}
 	shared.WriteJSON(w, http.StatusOK, stats)
@@ -90,7 +90,7 @@ func (h *AdminHandler) ListPayments(w http.ResponseWriter, r *http.Request) {
 		SortOrder: order,
 	})
 	if err != nil {
-		shared.WriteError(w, r, "internal", "payments failed")
+		shared.WriteError(w, r, shared.CodeInternal, "payments failed")
 		return
 	}
 	shared.WriteJSON(w, http.StatusOK, pageOut)
@@ -110,7 +110,7 @@ func (h *AdminHandler) Confirm(w http.ResponseWriter, r *http.Request) {
 		if writePaymentErr(w, r, err) {
 			return
 		}
-		shared.WriteError(w, r, "internal", "confirm failed")
+		shared.WriteError(w, r, shared.CodeInternal, "confirm failed")
 		return
 	}
 	shared.WriteJSON(w, http.StatusCreated, row)
@@ -129,7 +129,7 @@ func (h *AdminHandler) Refund(w http.ResponseWriter, r *http.Request) {
 		if writePaymentErr(w, r, err) {
 			return
 		}
-		shared.WriteError(w, r, "internal", "refund failed")
+		shared.WriteError(w, r, shared.CodeInternal, "refund failed")
 		return
 	}
 	shared.WriteJSON(w, http.StatusCreated, row)

@@ -69,7 +69,7 @@ func writePaymentErr(w http.ResponseWriter, r *http.Request, err error) bool {
 func (h *Handler) Checkout(w http.ResponseWriter, r *http.Request) {
 	claims, ok := shared.ClaimsFromContext(r.Context())
 	if !ok {
-		shared.WriteError(w, r, "internal", "auth context missing")
+		shared.WriteError(w, r, shared.CodeInternal, "auth context missing")
 		return
 	}
 	var body checkoutBody
@@ -77,7 +77,7 @@ func (h *Handler) Checkout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if msg := validateCheckout(body); msg != "" {
-		shared.WriteError(w, r, "invalid-input", msg)
+		shared.WriteError(w, r, shared.CodeInvalidInput, msg)
 		return
 	}
 	resp, err := h.svc.CreateCheckout(r.Context(), claims.Sub, body.PlanID, body.Method, CheckoutOptions{
@@ -87,7 +87,7 @@ func (h *Handler) Checkout(w http.ResponseWriter, r *http.Request) {
 		if writePaymentErr(w, r, err) {
 			return
 		}
-		shared.WriteError(w, r, "internal", "checkout failed")
+		shared.WriteError(w, r, shared.CodeInternal, "checkout failed")
 		return
 	}
 	shared.WriteJSON(w, http.StatusCreated, resp)
@@ -97,7 +97,7 @@ func (h *Handler) Checkout(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Portal(w http.ResponseWriter, r *http.Request) {
 	claims, ok := shared.ClaimsFromContext(r.Context())
 	if !ok {
-		shared.WriteError(w, r, "internal", "auth context missing")
+		shared.WriteError(w, r, shared.CodeInternal, "auth context missing")
 		return
 	}
 	url, err := h.svc.CustomerPortalURL(r.Context(), claims.Sub)
@@ -105,7 +105,7 @@ func (h *Handler) Portal(w http.ResponseWriter, r *http.Request) {
 		if writePaymentErr(w, r, err) {
 			return
 		}
-		shared.WriteError(w, r, "internal", "portal failed")
+		shared.WriteError(w, r, shared.CodeInternal, "portal failed")
 		return
 	}
 	shared.WriteJSON(w, http.StatusOK, map[string]any{"url": url})
@@ -116,7 +116,7 @@ func (h *Handler) Portal(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) CancelSubscription(w http.ResponseWriter, r *http.Request) {
 	claims, ok := shared.ClaimsFromContext(r.Context())
 	if !ok {
-		shared.WriteError(w, r, "internal", "auth context missing")
+		shared.WriteError(w, r, shared.CodeInternal, "auth context missing")
 		return
 	}
 	out, err := h.svc.CancelActiveSubscription(r.Context(), claims.Sub)
@@ -124,7 +124,7 @@ func (h *Handler) CancelSubscription(w http.ResponseWriter, r *http.Request) {
 		if writePaymentErr(w, r, err) {
 			return
 		}
-		shared.WriteError(w, r, "internal", "cancel failed")
+		shared.WriteError(w, r, shared.CodeInternal, "cancel failed")
 		return
 	}
 	shared.WriteJSON(w, http.StatusOK, out)

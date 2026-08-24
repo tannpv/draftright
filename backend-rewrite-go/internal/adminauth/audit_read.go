@@ -134,7 +134,7 @@ func (h *AdminAuditHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	rows, total, err := h.svc.List(r.Context(), limit, offset)
 	if err != nil {
-		shared.WriteError(w, r, "internal", "admin-user-audit failed")
+		shared.WriteError(w, r, shared.CodeInternal, "admin-user-audit failed")
 		return
 	}
 	shared.WriteJSON(w, http.StatusOK, adminAuditPaginatedResponse{Rows: rows, Total: total})

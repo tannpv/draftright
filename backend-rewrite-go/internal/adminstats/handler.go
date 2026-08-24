@@ -43,7 +43,7 @@ func NewHandler(svc *Service) *Handler { return &Handler{svc: svc} }
 func (h *Handler) GetStats(w http.ResponseWriter, r *http.Request) {
 	res, err := h.svc.Stats(r.Context())
 	if err != nil {
-		shared.WriteError(w, r, "internal", "stats failed")
+		shared.WriteError(w, r, shared.CodeInternal, "stats failed")
 		return
 	}
 	shared.WriteJSON(w, http.StatusOK, res)
@@ -58,7 +58,7 @@ func (h *Handler) GetStats(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetAnalytics(w http.ResponseWriter, r *http.Request) {
 	res, err := h.svc.Analytics(r.Context())
 	if err != nil {
-		shared.WriteError(w, r, "internal", "analytics failed")
+		shared.WriteError(w, r, shared.CodeInternal, "analytics failed")
 		return
 	}
 	shared.WriteJSON(w, http.StatusOK, res)

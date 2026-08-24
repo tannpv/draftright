@@ -78,7 +78,7 @@ type reviewSuccessResponse struct {
 func (h *Handler) Stats(w http.ResponseWriter, r *http.Request) {
 	result, err := h.svc.Stats(r.Context())
 	if err != nil {
-		shared.WriteError(w, r, "internal", err.Error())
+		shared.WriteError(w, r, shared.CodeInternal, err.Error())
 		return
 	}
 	shared.WriteJSON(w, http.StatusOK, statsResponse{
@@ -110,7 +110,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 
 	logs, total, err := h.svc.ListPending(r.Context(), page, limit)
 	if err != nil {
-		shared.WriteError(w, r, "internal", err.Error())
+		shared.WriteError(w, r, shared.CodeInternal, err.Error())
 		return
 	}
 	if logs == nil {
@@ -139,7 +139,7 @@ func (h *Handler) Review(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.svc.Review(r.Context(), id, body.Quality); err != nil {
-		shared.WriteError(w, r, "internal", err.Error())
+		shared.WriteError(w, r, shared.CodeInternal, err.Error())
 		return
 	}
 	shared.WriteJSON(w, http.StatusOK, reviewSuccessResponse{Success: true})
@@ -163,7 +163,7 @@ func (h *Handler) Review(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Export(w http.ResponseWriter, r *http.Request) {
 	jsonl, err := h.svc.ExportJSONL(r.Context())
 	if err != nil {
-		shared.WriteError(w, r, "internal", err.Error())
+		shared.WriteError(w, r, shared.CodeInternal, err.Error())
 		return
 	}
 

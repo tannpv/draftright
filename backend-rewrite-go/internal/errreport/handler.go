@@ -84,10 +84,10 @@ func (h *Handler) Ingest(w http.ResponseWriter, r *http.Request) {
 		// PayloadTooLargeError is not a Nest HttpException → AllExceptionsFilter → 500 internal.
 		var maxErr *http.MaxBytesError
 		if errors.As(err, &maxErr) {
-			shared.WriteError(w, r, "internal", "request entity too large")
+			shared.WriteError(w, r, shared.CodeInternal, "request entity too large")
 			return
 		}
-		shared.WriteError(w, r, "invalid-input", "Invalid request body")
+		shared.WriteError(w, r, shared.CodeInvalidInput, "Invalid request body")
 		return
 	}
 	if isNull {
@@ -96,14 +96,14 @@ func (h *Handler) Ingest(w http.ResponseWriter, r *http.Request) {
 	}
 	dec := json.NewDecoder(bytes.NewReader(buf))
 	if err := dec.Decode(&body); err != nil {
-		shared.WriteError(w, r, "invalid-input", "Invalid request body")
+		shared.WriteError(w, r, shared.CodeInvalidInput, "Invalid request body")
 		return
 	}
 
 	// ValidationPipe parity: @MaxLength checks run in the middleware→pipe
 	// stage, BEFORE the controller body — so this precedes the honeypot.
 	if msg := validateErrorReport(body); msg != "" {
-		shared.WriteError(w, r, "invalid-input", msg)
+		shared.WriteError(w, r, shared.CodeInvalidInput, msg)
 		return
 	}
 
@@ -127,11 +127,11 @@ func (h *Handler) Ingest(w http.ResponseWriter, r *http.Request) {
 	}, userID)
 	if err != nil {
 		if errors.Is(err, ErrInvalidPlatform) {
-			shared.WriteError(w, r, "invalid-input", err.Error())
+			shared.WriteError(w, r, shared.CodeInvalidInput, err.Error())
 			return
 		}
 		// Opaque message — never leak err.Error() on the generic 500 path.
-		shared.WriteError(w, r, "internal", "errors failed")
+		shared.WriteError(w, r, shared.CodeInternal, "errors failed")
 		return
 	}
 

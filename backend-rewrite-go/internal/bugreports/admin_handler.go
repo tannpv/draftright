@@ -147,7 +147,7 @@ func (h *AdminHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	items, total, err := h.svc.List(r.Context(), f)
 	if err != nil {
-		shared.WriteError(w, r, "internal", err.Error())
+		shared.WriteError(w, r, shared.CodeInternal, err.Error())
 		return
 	}
 	if items == nil {
@@ -177,12 +177,12 @@ func (h *AdminHandler) Screenshot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if ss == nil {
-		shared.WriteError(w, r, "invalid-input", "no screenshot for this report")
+		shared.WriteError(w, r, shared.CodeInvalidInput, "no screenshot for this report")
 		return
 	}
 	file, err := os.Open(ss.Path)
 	if err != nil {
-		shared.WriteError(w, r, "invalid-input", "screenshot file missing on disk")
+		shared.WriteError(w, r, shared.CodeInvalidInput, "screenshot file missing on disk")
 		return
 	}
 	defer file.Close()
@@ -262,12 +262,12 @@ func (h *AdminHandler) writeServiceError(w http.ResponseWriter, r *http.Request,
 	var ve *BugValidationError
 	switch {
 	case errors.Is(err, ErrNotFound):
-		shared.WriteError(w, r, "not-found", ErrNotFound.Error())
+		shared.WriteError(w, r, shared.CodeNotFound, ErrNotFound.Error())
 	case errors.As(err, &ve):
-		shared.WriteError(w, r, "invalid-input", ve.Msg)
+		shared.WriteError(w, r, shared.CodeInvalidInput, ve.Msg)
 	case errors.Is(err, aiprovider.ErrNoDefaultProvider):
-		shared.WriteError(w, r, "invalid-input", aiprovider.ErrNoDefaultProvider.Error())
+		shared.WriteError(w, r, shared.CodeInvalidInput, aiprovider.ErrNoDefaultProvider.Error())
 	default:
-		shared.WriteError(w, r, "internal", err.Error())
+		shared.WriteError(w, r, shared.CodeInternal, err.Error())
 	}
 }

@@ -45,7 +45,7 @@ func (v StatusView) MarshalJSON() ([]byte, error) {
 func (h *Handler) Methods(w http.ResponseWriter, r *http.Request) {
 	methods, err := h.svc.EnabledMethods(r.Context())
 	if err != nil {
-		shared.WriteError(w, r, "internal", "methods failed")
+		shared.WriteError(w, r, shared.CodeInternal, "methods failed")
 		return
 	}
 	if methods == nil {
@@ -59,7 +59,7 @@ func (h *Handler) Status(w http.ResponseWriter, r *http.Request) {
 	ref := chi.URLParam(r, "ref")
 	v, err := h.svc.Status(r.Context(), ref)
 	if err != nil {
-		shared.WriteError(w, r, "internal", "status failed")
+		shared.WriteError(w, r, shared.CodeInternal, "status failed")
 		return
 	}
 	shared.WriteJSON(w, http.StatusOK, v)
@@ -69,12 +69,12 @@ func (h *Handler) Status(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) History(w http.ResponseWriter, r *http.Request) {
 	claims, ok := shared.ClaimsFromContext(r.Context())
 	if !ok {
-		shared.WriteError(w, r, "internal", "auth context missing")
+		shared.WriteError(w, r, shared.CodeInternal, "auth context missing")
 		return
 	}
 	rows, err := h.svc.History(r.Context(), claims.Sub)
 	if err != nil {
-		shared.WriteError(w, r, "internal", "history failed")
+		shared.WriteError(w, r, shared.CodeInternal, "history failed")
 		return
 	}
 	if rows == nil {

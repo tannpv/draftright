@@ -83,7 +83,7 @@ func (h *AdminHandler) List(w http.ResponseWriter, r *http.Request) {
 		Limit:     limit,
 	})
 	if err != nil {
-		shared.WriteError(w, r, "internal", "users failed")
+		shared.WriteError(w, r, shared.CodeInternal, "users failed")
 		return
 	}
 	if rows == nil {
@@ -100,7 +100,7 @@ func (h *AdminHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	resp, err := h.svc.Get(r.Context(), id)
 	if err != nil {
-		shared.WriteError(w, r, "internal", "users failed")
+		shared.WriteError(w, r, shared.CodeInternal, "users failed")
 		return
 	}
 	shared.WriteJSON(w, http.StatusOK, resp)
@@ -114,7 +114,7 @@ func (h *AdminHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	raw, err := io.ReadAll(r.Body)
 	if err != nil {
-		shared.WriteError(w, r, "invalid-input", "Invalid request body")
+		shared.WriteError(w, r, shared.CodeInvalidInput, "Invalid request body")
 		return
 	}
 	// A malformed or non-object body (parse error, array/scalar, null, empty)
@@ -126,16 +126,16 @@ func (h *AdminHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	// by ". ". Missing key = nil pointer = column untouched (TypeORM partial).
 	patch, malformed, msg := validateUpdateUser(raw)
 	if malformed {
-		shared.WriteError(w, r, "invalid-input", "Invalid request body")
+		shared.WriteError(w, r, shared.CodeInvalidInput, "Invalid request body")
 		return
 	}
 	if msg != "" {
-		shared.WriteError(w, r, "invalid-input", msg)
+		shared.WriteError(w, r, shared.CodeInvalidInput, msg)
 		return
 	}
 	updated, err := h.svc.Update(r.Context(), id, patch)
 	if err != nil {
-		shared.WriteError(w, r, "internal", "users failed")
+		shared.WriteError(w, r, shared.CodeInternal, "users failed")
 		return
 	}
 	// #31: strip the six secret columns from the PATCH response, mirroring Node

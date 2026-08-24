@@ -56,17 +56,17 @@ func writeDomainErr(w http.ResponseWriter, r *http.Request, err error) bool {
 		if msg == "" {
 			msg = "Unauthorized"
 		}
-		shared.WriteError(w, r, "invalid-token", msg)
+		shared.WriteError(w, r, shared.CodeInvalidToken, msg)
 		return true
 	}
 	var be *BadRequestError
 	if errors.As(err, &be) {
-		shared.WriteError(w, r, "invalid-input", be.Message)
+		shared.WriteError(w, r, shared.CodeInvalidInput, be.Message)
 		return true
 	}
 	var ce *ConflictError
 	if errors.As(err, &ce) {
-		shared.WriteError(w, r, "conflict", ce.Message)
+		shared.WriteError(w, r, shared.CodeConflict, ce.Message)
 		return true
 	}
 	return false
@@ -90,7 +90,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		if writeDomainErr(w, r, err) {
 			return
 		}
-		shared.WriteError(w, r, "internal", "login failed")
+		shared.WriteError(w, r, shared.CodeInternal, "login failed")
 		return
 	}
 	shared.WriteJSON(w, http.StatusCreated, authResponse{
@@ -113,7 +113,7 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 		if writeDomainErr(w, r, err) {
 			return
 		}
-		shared.WriteError(w, r, "internal", "refresh failed")
+		shared.WriteError(w, r, shared.CodeInternal, "refresh failed")
 		return
 	}
 	shared.WriteJSON(w, http.StatusOK, map[string]any{
@@ -125,7 +125,7 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	claims, ok := shared.ClaimsFromContext(r.Context())
 	if !ok {
-		shared.WriteError(w, r, "internal", "auth context missing")
+		shared.WriteError(w, r, shared.CodeInternal, "auth context missing")
 		return
 	}
 	var body struct {
@@ -139,7 +139,7 @@ func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		if writeDomainErr(w, r, err) {
 			return
 		}
-		shared.WriteError(w, r, "internal", "change-password failed")
+		shared.WriteError(w, r, shared.CodeInternal, "change-password failed")
 		return
 	}
 	shared.WriteJSON(w, http.StatusCreated, map[string]any{"success": true})
@@ -149,12 +149,12 @@ func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Account(w http.ResponseWriter, r *http.Request) {
 	claims, ok := shared.ClaimsFromContext(r.Context())
 	if !ok {
-		shared.WriteError(w, r, "internal", "auth context missing")
+		shared.WriteError(w, r, shared.CodeInternal, "auth context missing")
 		return
 	}
 	view, err := h.svc.Account(r.Context(), claims.Sub)
 	if err != nil {
-		shared.WriteError(w, r, "internal", "account failed")
+		shared.WriteError(w, r, shared.CodeInternal, "account failed")
 		return
 	}
 	shared.WriteJSON(w, http.StatusOK, view)
@@ -164,11 +164,11 @@ func (h *Handler) Account(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 	claims, ok := shared.ClaimsFromContext(r.Context())
 	if !ok {
-		shared.WriteError(w, r, "internal", "auth context missing")
+		shared.WriteError(w, r, shared.CodeInternal, "auth context missing")
 		return
 	}
 	if err := h.svc.DeleteAccount(r.Context(), claims.Sub); err != nil {
-		shared.WriteError(w, r, "internal", "delete failed")
+		shared.WriteError(w, r, shared.CodeInternal, "delete failed")
 		return
 	}
 	shared.WriteJSON(w, http.StatusOK, map[string]any{"deleted": true})
@@ -188,7 +188,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if msg := validateRegister(body.Email, body.Password, body.Name); msg != "" {
-		shared.WriteError(w, r, "invalid-input", msg)
+		shared.WriteError(w, r, shared.CodeInvalidInput, msg)
 		return
 	}
 	res, err := h.svc.Register(r.Context(), body.Email, body.Password, body.Name)
@@ -196,7 +196,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		if writeDomainErr(w, r, err) {
 			return
 		}
-		shared.WriteError(w, r, "internal", "register failed")
+		shared.WriteError(w, r, shared.CodeInternal, "register failed")
 		return
 	}
 	shared.WriteJSON(w, http.StatusCreated, authResponse{
@@ -230,7 +230,7 @@ func (h *Handler) Social(w http.ResponseWriter, r *http.Request) {
 		if writeDomainErr(w, r, err) {
 			return
 		}
-		shared.WriteError(w, r, "internal", "social login failed")
+		shared.WriteError(w, r, shared.CodeInternal, "social login failed")
 		return
 	}
 	shared.WriteJSON(w, http.StatusCreated, authResponse{
@@ -254,7 +254,7 @@ func (h *Handler) VerifyEmail(w http.ResponseWriter, r *http.Request) {
 		if writeDomainErr(w, r, err) {
 			return
 		}
-		shared.WriteError(w, r, "internal", "verify-email failed")
+		shared.WriteError(w, r, shared.CodeInternal, "verify-email failed")
 		return
 	}
 	shared.WriteJSON(w, http.StatusOK, map[string]any{"success": true})
@@ -271,7 +271,7 @@ func (h *Handler) ResendVerification(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.svc.ResendVerification(r.Context(), body.Email); err != nil {
-		shared.WriteError(w, r, "internal", "resend-verification failed")
+		shared.WriteError(w, r, shared.CodeInternal, "resend-verification failed")
 		return
 	}
 	shared.WriteJSON(w, http.StatusOK, map[string]any{"success": true})
@@ -288,7 +288,7 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.svc.ForgotPassword(r.Context(), body.Email); err != nil {
-		shared.WriteError(w, r, "internal", "forgot-password failed")
+		shared.WriteError(w, r, shared.CodeInternal, "forgot-password failed")
 		return
 	}
 	shared.WriteJSON(w, http.StatusOK, map[string]any{"success": true})
@@ -309,7 +309,7 @@ func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 		if writeDomainErr(w, r, err) {
 			return
 		}
-		shared.WriteError(w, r, "internal", "reset-password failed")
+		shared.WriteError(w, r, shared.CodeInternal, "reset-password failed")
 		return
 	}
 	shared.WriteJSON(w, http.StatusOK, map[string]any{"success": true})

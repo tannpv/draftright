@@ -42,7 +42,7 @@ func isNullBody(buf []byte) bool { return string(bytes.TrimSpace(buf)) == "null"
 // message + its empty request_id so DecodeJSON and the bespoke-decoder sites
 // (RejectNullBody callers) never drift (Rule #1).
 func WriteNullBodyError(w http.ResponseWriter) {
-	WriteBodyParseError(w, "invalid-input", nullBodyMessage)
+	WriteBodyParseError(w, CodeInvalidInput, nullBodyMessage)
 }
 
 // RejectNullBody buffers r.Body so a caller with a BESPOKE json.Decoder
@@ -83,7 +83,7 @@ func DecodeJSON(w http.ResponseWriter, r *http.Request, dst any, mode DecodeMode
 		if mode == DecodeLenient {
 			return true
 		}
-		WriteError(w, r, "invalid-input", "Invalid request body")
+		WriteError(w, r, CodeInvalidInput, "Invalid request body")
 		return false
 	}
 
@@ -101,12 +101,12 @@ func DecodeJSON(w http.ResponseWriter, r *http.Request, dst any, mode DecodeMode
 	switch mode {
 	case DecodeStrict:
 		if err != nil {
-			WriteError(w, r, "invalid-input", "Invalid request body")
+			WriteError(w, r, CodeInvalidInput, "Invalid request body")
 			return false
 		}
 	case DecodeOptional:
 		if err != nil && err != io.EOF {
-			WriteError(w, r, "invalid-input", "Invalid request body")
+			WriteError(w, r, CodeInvalidInput, "Invalid request body")
 			return false
 		}
 	case DecodeLenient:

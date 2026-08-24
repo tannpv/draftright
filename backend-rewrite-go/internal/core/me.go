@@ -27,7 +27,7 @@ func (h *MeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		// Route reached without RequireAuth wrapping it — a router
 		// misconfiguration, not a client error.
-		shared.WriteError(w, r, "internal", "auth context missing")
+		shared.WriteError(w, r, shared.CodeInternal, "auth context missing")
 		return
 	}
 
