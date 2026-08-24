@@ -1,7 +1,6 @@
-import 'dart:convert';
-
 import 'package:http/http.dart' as http;
 
+import 'package:draftright_mobile/services/api_client.dart';
 import 'package:draftright_mobile/services/app_source.dart';
 
 /// Posts feature requests to the backend `POST /feedback` endpoint
@@ -53,19 +52,17 @@ class FeedbackService {
         body['user_email'] = userEmail.trim();
       }
 
-      final headers = <String, String>{
-        'Content-Type': 'application/json',
-      };
-      if (authToken != null && authToken.isNotEmpty) {
-        headers['Authorization'] = 'Bearer $authToken';
-      }
-
-      final resp = await client.post(
-        Uri.parse(endpointOverride ?? _defaultEndpoint),
-        headers: headers,
-        body: jsonEncode(body),
+      // Route through the shared ApiClient chokepoint (JSON + Bearer headers,
+      // timeout, error handling) rather than a hand-built request (#205 #9).
+      // ApiClient throws on non-2xx; returning false in that case preserves the
+      // old bool contract. baseUrl is empty — the endpoint is a full URL.
+      final api = ApiClient(baseUrl: '', client: client);
+      await api.postJson(
+        endpointOverride ?? _defaultEndpoint,
+        body: body,
+        token: (authToken != null && authToken.isNotEmpty) ? authToken : null,
       );
-      return resp.statusCode >= 200 && resp.statusCode < 300;
+      return true;
     } catch (_) {
       return false;
     } finally {
