@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
+import 'package:draftright_mobile/services/api_client.dart';
 import 'package:draftright_mobile/services/app_source.dart';
 import 'package:draftright_mobile/services/logger_service.dart';
 
@@ -148,7 +149,7 @@ class BugReportService {
       return SubmitBugReportResult(
         ok: false,
         // Fall back to the status code so a failure is never a dead end.
-        errorMessage: _extractServerMessage(body) ??
+        errorMessage: parseServerErrorMessage(body) ??
             'Server error ($status). Please try again.',
       );
     } catch (e) {
@@ -156,23 +157,6 @@ class BugReportService {
       return const SubmitBugReportResult(
           ok: false, errorMessage: _genericFailure);
     }
-  }
-
-  /// Pulls a user-friendly reason out of an error body. Handles both the
-  /// NestJS shape `{"message": "…"}` / `{"message": ["…"]}` (class-validator
-  /// returns an array) and the Go backend shape `{"error": "…"}`.
-  static String? _extractServerMessage(String body) {
-    try {
-      final parsed = jsonDecode(body);
-      if (parsed is Map) {
-        final m = parsed['message'];
-        if (m is String && m.isNotEmpty) return m;
-        if (m is List && m.isNotEmpty) return m.first.toString();
-        final e = parsed['error'];
-        if (e is String && e.isNotEmpty) return e;
-      }
-    } catch (_) {/* body wasn't JSON — fall through */}
-    return null;
   }
 
   static Future<String> _appVersion() async {
