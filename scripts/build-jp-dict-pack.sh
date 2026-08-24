@@ -137,7 +137,7 @@ echo "    Lines  : $LINES readings"
 echo "    Size   : $SIZE bytes ($(echo "$SIZE / 1024" | bc) KB)"
 echo "    SHA256 : $SHA"
 echo ""
-echo "Paste into ImePacksService (backend/src/ime-packs/ime-packs.service.ts):"
+echo "Paste into the Go ime-packs catalog (backend-rewrite-go/internal/imepacks/catalog.go):"
 echo "  sizeBytes: $SIZE, sha256: '$SHA'"
 
 if [ "$PUBLISH" = "--publish" ]; then
