@@ -107,6 +107,9 @@ const (
 	MethodGooglePay    = "google_pay"
 )
 
+// CurrencyVND is VietQR's fixed settlement currency (#204 finding #7).
+const CurrencyVND = "VND"
+
 // WebhookAction is the verified-webhook outcome the Service dispatches on. It
 // flattens Node's discriminated union: only the fields relevant to Type are
 // populated; the rest stay zero. CurrentPeriodEnd is unix seconds.
