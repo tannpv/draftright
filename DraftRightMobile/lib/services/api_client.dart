@@ -15,6 +15,25 @@ class ApiException implements Exception {
 /// Default HTTP request timeout across the app — one source (#205 #11).
 const Duration kRequestTimeout = Duration(seconds: 15);
 
+/// Pulls a user-facing reason out of an error-response body. Handles the NestJS
+/// shape `{"message": "…"}` / `{"message": ["…", …]}` (class-validator returns an
+/// array — joined so all validation errors show) and the Go shape
+/// `{"error": "…"}`. Returns null if the body has neither / isn't JSON, so each
+/// caller can supply its own fallback. Single source of truth (#205 #7).
+String? parseServerErrorMessage(String body) {
+  try {
+    final parsed = jsonDecode(body);
+    if (parsed is Map) {
+      final m = parsed['message'];
+      if (m is String && m.isNotEmpty) return m;
+      if (m is List && m.isNotEmpty) return m.join(', ');
+      final e = parsed['error'];
+      if (e is String && e.isNotEmpty) return e;
+    }
+  } catch (_) {/* body wasn't JSON — fall through */}
+  return null;
+}
+
 /// One HTTP path for the whole app: builds the URI, sets JSON + optional Bearer
 /// headers, applies a timeout, throws [ApiException] on non-2xx, and decodes the
 /// JSON body. Token refresh stays in the caller (auth/backend) — this is purely
@@ -91,15 +110,6 @@ class ApiClient {
 
   /// Pulls a useful message out of a NestJS-style error body
   /// (`{message}` string or array, or `{error}`); falls back to the status.
-  static String _parseError(String body, int code) {
-    try {
-      final d = jsonDecode(body);
-      if (d is Map) {
-        final m = d['message'] ?? d['error'];
-        if (m is List && m.isNotEmpty) return m.join(', ');
-        if (m is String && m.isNotEmpty) return m;
-      }
-    } catch (_) {/* non-JSON body */}
-    return 'HTTP $code';
-  }
+  static String _parseError(String body, int code) =>
+      parseServerErrorMessage(body) ?? 'HTTP $code';
 }
