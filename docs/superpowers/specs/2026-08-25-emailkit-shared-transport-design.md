@@ -123,8 +123,27 @@ guarantee is structural:
 - `deliver()` stays **unexported**. `Send` and `SendRaw` are the only exported paths
   and both funnel through it. Skipping the suppression check is not a discipline
   problem — it is unrepresentable.
-- `Sender` is exported so consumers can inject fakes; the concrete `resendClient`
-  is **not**. No project can construct one and bypass logging.
+- `Sender` is exported so consumers can implement it; the concrete `resendClient`
+  is **not**, and **no exported function returns a ready-to-use live client**.
+
+> **Corrected 2026-08-25, after the Task 5 review.** This section originally said
+> that `NewResendSender()` returning the `Sender` interface rather than the
+> concrete struct meant "no project can construct one and bypass logging." **That
+> was wrong.** Returning the interface stops a consumer *naming* the concrete
+> type; it does nothing to stop them calling the exported `Send` on the value
+> they were just handed. Any consumer could write
+> `emailkit.NewResendSender().Send(...)` and mail a hard-bounced address with no
+> suppression check and no audit row — and the Task 7 guard cannot see it,
+> because that guard scans emailkit's own package.
+>
+> The guarantee only holds if emailkit never hands out a live provider client.
+> So the Resend constructor is unexported, `NewService(store, cfg, registry)`
+> builds it internally, and `NewServiceWithSender(...)` is the documented seam
+> for a consumer supplying its own provider — which emailkit still routes
+> through the suppression check.
+>
+> Recorded rather than quietly patched, because the original wording is the kind
+> of claim that reads as settled and gets copied forward.
 - **The machine:** a test in emailkit asserting `deliver` is the sole caller of
   `Sender.Send`, plus a CI import-lint failing any consumer repo that imports a
   Resend SDK directly. Drift fails the build instead of shipping.
