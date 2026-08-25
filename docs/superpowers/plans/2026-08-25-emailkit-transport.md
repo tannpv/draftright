@@ -479,6 +479,27 @@ func TestIsPermanentBounce(t *testing.T) {
 Run: `go test ./... -run TestIsPermanentBounce -v`
 Expected: FAIL — `undefined: isPermanentBounce`.
 
+> **Amended after the Task 4 review, 2026-08-25.** The classifier below matches
+> `strings.ToLower(bounceType + " " + subType)`, inherited from draftright. Review
+> found that concatenating the fields before matching is fragile in the direction
+> that hurts: a future subtype containing "permanent" or "hard" under a
+> **Transient** type would flip the result to `true` and suppress a live user,
+> who then silently stops receiving password resets.
+>
+> Amazon SES — which Resend runs on — carries permanence in `bounceType` alone
+> (`Permanent`, `Transient`, `Undetermined`); no subtype does. So matching
+> `bounceType` only is **behaviourally identical for every bounce Resend emits
+> today** and removes the future failure mode. It is not a change against
+> draftright's production behaviour.
+>
+> `"hard"` is also not SES/Resend vocabulary — it is SendGrid-style wording
+> inherited from the same source. Retained as a defensive guard, but now
+> explicitly commented as uncited, since an uncited literal sitting beside
+> spec-linked siblings reads as an oversight.
+>
+> The shipped code therefore differs from the block below; `events.go` is
+> authoritative.
+
 - [ ] **Step 3: Write events.go**
 
 ```go
