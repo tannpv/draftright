@@ -84,11 +84,23 @@ func TestVerifyGoogle_HttpsIssuer_OK(t *testing.T) {
 	}
 }
 
-// The default allow-list (env unset) accepts the shipped web client id.
+// The default allow-list (env unset) must accept EVERY shipped app's Google
+// client id — a missing one fails that platform's login with "Invalid Google
+// token" (#206: Windows was omitted when the aud check landed). The ids here are
+// the external spec (each platform's Google OAuth client); keep this list in
+// step with the client configs and googleDefaultAuds.
 func TestNewHTTPSocialVerifier_DefaultGoogleAuds(t *testing.T) {
 	v := NewHTTPSocialVerifier("", "")
-	if !slices.Contains(v.googleAuds, "22951518033-gf853ftmf4emivffk0su2bik42j7cmai.apps.googleusercontent.com") {
-		t.Fatalf("default google auds missing shipped web client id: %v", v.googleAuds)
+	shipped := map[string]string{
+		"web + Flutter mobile": "22951518033-gf853ftmf4emivffk0su2bik42j7cmai.apps.googleusercontent.com",
+		"macOS":                "22951518033-dvkn61dhibse9fu83ohh51mlovd7269a.apps.googleusercontent.com",
+		"Linux":                "22951518033-oaf0ptahsjrsnu2v2qr0kpul5tslpgf6.apps.googleusercontent.com",
+		"Windows":              "22951518033-oq7okrvvbb26eqsb7c0avsb1ic165ole.apps.googleusercontent.com",
+	}
+	for platform, aud := range shipped {
+		if !slices.Contains(v.googleAuds, aud) {
+			t.Errorf("default google auds missing %s client id %q — its Google login will 'Invalid Google token'", platform, aud)
+		}
 	}
 }
 

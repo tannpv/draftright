@@ -21,14 +21,15 @@ type httpVerifier struct {
 }
 
 // Shipped Google OAuth client ids — the `aud` values the real apps mint tokens
-// for. These are PUBLIC values embedded in the clients themselves. Kept in sync
-// with the NestJS `googleAudiences()` DEFAULTS in
-// backend/src/auth/auth.service.ts and the per-platform client configs; both
-// lists are the external spec (Google-issued client ids), so a shared literal
-// on each side is acceptable — but they MUST agree, so change both together.
+// for. These are PUBLIC values embedded in the clients themselves; the external
+// spec is the per-platform Google client config. This list MUST include EVERY
+// shipped app's Google client id — a platform whose id is missing fails
+// verifyGoogle with "Invalid Google token" (that was Windows, #206). Add the
+// new id here whenever a platform's Google OAuth client is created.
 const googleDefaultAuds = "22951518033-gf853ftmf4emivffk0su2bik42j7cmai.apps.googleusercontent.com," + // web + Flutter mobile (also the app_settings default)
 	"22951518033-dvkn61dhibse9fu83ohh51mlovd7269a.apps.googleusercontent.com," + // macOS — iOS-type client
-	"22951518033-oaf0ptahsjrsnu2v2qr0kpul5tslpgf6.apps.googleusercontent.com" // Linux — Desktop-app client
+	"22951518033-oaf0ptahsjrsnu2v2qr0kpul5tslpgf6.apps.googleusercontent.com," + // Linux — Desktop-app client
+	"22951518033-oq7okrvvbb26eqsb7c0avsb1ic165ole.apps.googleusercontent.com" // Windows — Desktop-app client
 
 // Compile-time assertion: httpVerifier satisfies SocialVerifier.
 var _ SocialVerifier = (*httpVerifier)(nil)
