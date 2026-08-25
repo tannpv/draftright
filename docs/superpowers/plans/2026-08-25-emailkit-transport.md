@@ -77,11 +77,18 @@ vocabulary all three reference so no literal is retyped.
 - [ ] **Step 1: Create the repo and clone it**
 
 ```bash
-gh repo create tannpv/emailkit --private \
+gh repo create tannpv/emailkit --public \
   --description "Shared transactional email transport (Resend) for tannpv projects"
 cd /opt/openAi && git clone git@github.com:tannpv/emailkit.git && cd emailkit
 git checkout -b feature/extract-transport-20260825
 ```
+
+**Public, deliberately.** A private module would force `GOPRIVATE` plus a fetch
+credential into draftright's, liseuse's and bacnam's CI — three places to wire
+and one more secret to rotate — to protect a generic Resend transport that by
+design holds no secrets, no business logic and no product copy. All of that
+stays in the consuming project, which is the point of the `Store` and `Registry`
+ports. Nothing here is worth the machinery of keeping private.
 
 - [ ] **Step 2: Write go.mod**
 
@@ -839,7 +846,16 @@ own. Each project adapts at its router.
 The seven ported cases (BadSignature, MalformedJSON, Delivered,
 BouncedPermanent, BouncedTransientNoSuppress, Complained, IgnoredEventType)
 come across from draftright's `webhook_test.go` unchanged apart from the
-constructor and the `error` return. These three are new and are the reason this
+constructor and the `error` return.
+
+**Read them from source, not from this plan** — `tannpv/draftright` at
+`5dbfa570`, `backend-rewrite-go/internal/email/webhook_test.go`. This is a
+deliberate exception to the plan's no-placeholders rule, decided 2026-08-25:
+these 230 lines are existing, passing tests whose value is that they arrive
+*unchanged*. Transcribing them into a plan document would create a second copy
+that can differ from the original by a typo, and a regression net that silently
+differs from what it was written against is not a regression net. Apply only the
+two mechanical edits named above. These three are new and are the reason this
 task exists:
 
 ```go
