@@ -48,6 +48,12 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
     private val candidateLimit: Int = 7
 
     /**
+     * How many characters before the cursor to read for n-gram context. A few
+     * short words fit easily; reading more on every keystroke would be wasteful.
+     */
+    private val READ_LOOKBACK: Int = 48
+
+    /**
      * The tone a voice dictation gets AI-polished into. Tracks whichever
      * tone button the user last tapped (see [handleToneSelected]) so voice
      * output matches the same "selected tone" the toolbar already implies —
@@ -626,9 +632,17 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
             return
         }
         val composing = controller?.composer?.currentComposingText().orEmpty()
+        // Feed the words already committed before the cursor as n-gram context so
+        // next-word prediction + bigram boosting fire (the composing word itself
+        // is excluded — see PreviousTokens). READ_LOOKBACK chars is plenty for a
+        // few tokens without pulling the whole field on every keystroke.
+        val previous = PreviousTokens.fromTextBeforeCursor(
+            currentInputConnection?.getTextBeforeCursor(READ_LOOKBACK, 0),
+            composing,
+        )
         val items = engine.suggest(
             composing = composing,
-            previousTokens = emptyList(),  // n-gram context wired in Task 11 step 7
+            previousTokens = previous,
             limit = candidateLimit,
         )
         bar.setCandidates(items)
