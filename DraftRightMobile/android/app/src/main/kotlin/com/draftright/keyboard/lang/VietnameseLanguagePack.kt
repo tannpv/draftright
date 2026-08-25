@@ -50,6 +50,7 @@ object VietnameseLanguagePack : LanguagePack {
                 context = ctx,
                 packIdPrefix = WORDLIST_PACK_PREFIX,
                 fallbackResId = R.raw.wordlist_vi,
+                fallbackBigramsResId = R.raw.wordlist_vi_bigrams,
             )
             val engine = TrigramCandidateEngine(list)
             cachedEngine = engine
