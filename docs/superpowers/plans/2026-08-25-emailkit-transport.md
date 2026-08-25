@@ -314,6 +314,27 @@ shared module."
   - `type Sender interface { Send(ctx context.Context, apiKey, from, to, subject, html string) (providerID string, err error) }`
   - `func NewResendSender() Sender`
 
+> **Amended after the Task 3 review, 2026-08-25.** The port is no longer
+> byte-verbatim. Review found two real bugs in draftright's `resend.go` and the
+> owner authorised fixing them here rather than copying them into three repos —
+> the same reasoning that governs the webhook replay window in Task 6:
+>
+> 1. **Silent success.** On a 2xx whose body is malformed or truncated, `out.Error`
+>    and `out.Data` are both nil, so `Send` returned `"", nil`. The caller then
+>    logs the email as `sent` with no provider ID — and because the delivery
+>    webhook joins on that ID, such an email can never be reconciled. It looks
+>    delivered forever despite never having been sent.
+> 2. **No client timeout.** `&http.Client{}` blocks indefinitely on a hung
+>    response whenever the caller's context carries no deadline.
+>
+> Also corrected: an opaque `"send failed"` error that omitted the status code,
+> and a discarded `json.Marshal` error. A `sender_test.go` using
+> `net/http/httptest` was added — the original plan wrongly asserted this task
+> needed no tests because Task 5's fake `Sender` covers the send path. It does
+> not: a fake never executes `resendClient.Send`, leaving the status and decode
+> logic untestable by omission. That reasoning was wrong and is recorded here so
+> it is not repeated for the next provider.
+
 - [ ] **Step 1: Write sender.go**
 
 Three deliberate changes from the source: `package email` → `package emailkit`;
