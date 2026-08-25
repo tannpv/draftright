@@ -66,7 +66,7 @@ func (s *Strategy) CreateCheckout(ctx context.Context, p strategy.Payment, plan 
 	}
 	sc := s.newClient(s.creds.SecretKey)
 
-	if p.Method == "apple_pay" || p.Method == "google_pay" {
+	if p.Method == strategy.MethodApplePay || p.Method == strategy.MethodGooglePay {
 		return s.walletIntent(ctx, sc, p, plan, opts)
 	}
 
@@ -385,6 +385,9 @@ func firstLine(obj map[string]any) map[string]any {
 	return m
 }
 
+// zeroDecimal is the subset of Stripe's zero-decimal currencies this app can
+// receive (mirrors Node's list; Stripe spec: https://stripe.com/docs/currencies#zero-decimal).
+// An external-spec constant — the literals ARE the definition, not a repeated value.
 var zeroDecimal = map[string]bool{"VND": true, "JPY": true, "KRW": true}
 
 // displayAmount ports the isZeroDecimal block (Node 189-192): zero-decimal

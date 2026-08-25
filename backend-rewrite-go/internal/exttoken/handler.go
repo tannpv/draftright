@@ -44,7 +44,7 @@ type mintResponse struct {
 func (h *Handler) Mint(w http.ResponseWriter, r *http.Request) {
 	claims, ok := shared.ClaimsFromContext(r.Context())
 	if !ok {
-		shared.WriteError(w, r, "internal", "auth context missing")
+		shared.WriteError(w, r, shared.CodeInternal, "auth context missing")
 		return
 	}
 
@@ -59,13 +59,13 @@ func (h *Handler) Mint(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if msg := ValidateMint(req.DeviceID, req.DeviceName); msg != "" {
-		shared.WriteError(w, r, "invalid-input", msg)
+		shared.WriteError(w, r, shared.CodeInvalidInput, msg)
 		return
 	}
 
 	res, err := h.svc.Mint(r.Context(), claims.Sub, req.DeviceID, req.DeviceName)
 	if err != nil {
-		shared.WriteError(w, r, "internal", "mint failed")
+		shared.WriteError(w, r, shared.CodeInternal, "mint failed")
 		return
 	}
 	shared.WriteJSON(w, http.StatusOK, mintResponse{Token: res.Token, ID: res.ID})
@@ -77,12 +77,12 @@ func (h *Handler) Mint(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	claims, ok := shared.ClaimsFromContext(r.Context())
 	if !ok {
-		shared.WriteError(w, r, "internal", "auth context missing")
+		shared.WriteError(w, r, shared.CodeInternal, "auth context missing")
 		return
 	}
 	rows, err := h.svc.List(r.Context(), claims.Sub)
 	if err != nil {
-		shared.WriteError(w, r, "internal", "list failed")
+		shared.WriteError(w, r, shared.CodeInternal, "list failed")
 		return
 	}
 	if rows == nil {
@@ -98,12 +98,12 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Revoke(w http.ResponseWriter, r *http.Request) {
 	claims, ok := shared.ClaimsFromContext(r.Context())
 	if !ok {
-		shared.WriteError(w, r, "internal", "auth context missing")
+		shared.WriteError(w, r, shared.CodeInternal, "auth context missing")
 		return
 	}
 	id := chi.URLParam(r, "id")
 	if err := h.svc.Revoke(r.Context(), id, claims.Sub); err != nil {
-		shared.WriteError(w, r, "internal", "revoke failed")
+		shared.WriteError(w, r, shared.CodeInternal, "revoke failed")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

@@ -151,10 +151,9 @@ a client id is configured** — `config.DEFAULT_GOOGLE_CLIENT_ID` is empty, and
 
 > ✅ **Backend Google `aud` validation — FIXED (both backends).** Google
 > `id_token` verification now rejects any token whose `aud` is not an accepted
-> client id, closing the replay/account-takeover hole. Node
-> (`verifyGoogleToken` in `backend/src/auth/auth.service.ts`) and the Go
-> production backend (`verifyGoogle` in
-> `backend-rewrite-go/internal/auth/social_http.go`) both check `aud` + `iss` +
+> client id, closing the replay/account-takeover hole. The Go backend
+> (`verifyGoogle` in
+> `backend-rewrite-go/internal/auth/social_http.go`) checks `aud` + `iss` +
 > `sub` with byte-identical error messages. Accepted set = the shipped
 > per-platform client ids (or `GOOGLE_AUDIENCES` env override); Node also unions
 > `app_settings.google_client_id`. Go is boot-frozen (env-or-defaults), same as

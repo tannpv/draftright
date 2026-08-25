@@ -17,7 +17,7 @@ func RequireAdmin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		c, ok := ClaimsFromContext(r.Context())
 		if !ok || !(c.IsAdminFlag || c.Role == "admin") {
-			WriteError(w, r, "forbidden", "Admin access required")
+			WriteError(w, r, CodeForbidden, "Admin access required")
 			return
 		}
 		next.ServeHTTP(w, r)

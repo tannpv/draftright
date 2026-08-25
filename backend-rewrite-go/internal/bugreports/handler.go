@@ -87,7 +87,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// Malformed multipart → Node busboy → BadRequestException 400.
-		shared.WriteError(w, r, "invalid-input", "Multipart: Unexpected end of form")
+		shared.WriteError(w, r, shared.CodeInvalidInput, "Multipart: Unexpected end of form")
 		return
 	}
 
@@ -103,12 +103,12 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		mime := fh.Header.Get("Content-Type")
 		// Stage 1 fileFilter: mime allow-list → 400 before validation.
 		if !allowedMimes[mime] {
-			shared.WriteError(w, r, "invalid-input", errMimeNotAllowed)
+			shared.WriteError(w, r, shared.CodeInvalidInput, errMimeNotAllowed)
 			return
 		}
 		f, err := fh.Open()
 		if err != nil {
-			shared.WriteError(w, r, "internal", "bug-reports failed")
+			shared.WriteError(w, r, shared.CodeInternal, "bug-reports failed")
 			return
 		}
 		buf, err := io.ReadAll(f)
@@ -116,7 +116,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			// A partial/failed read of the (size-bounded) part is a
 			// malformed upload → 400, same path as a bad multipart body.
-			shared.WriteError(w, r, "invalid-input", "Multipart: Unexpected end of form")
+			shared.WriteError(w, r, shared.CodeInvalidInput, "Multipart: Unexpected end of form")
 			return
 		}
 		file = &FilePart{Buffer: buf, OriginalName: fh.Filename, Mimetype: mime}
@@ -126,7 +126,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 	// Stage 2 (ValidationPipe): DTO constraints, BEFORE the honeypot.
 	if msg := validateBugReport(flds); msg != "" {
-		shared.WriteError(w, r, "invalid-input", msg)
+		shared.WriteError(w, r, shared.CodeInvalidInput, msg)
 		return
 	}
 
@@ -151,17 +151,17 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrDescriptionRequired), errors.Is(err, ErrSourceRequired):
-			shared.WriteError(w, r, "invalid-input", err.Error())
+			shared.WriteError(w, r, shared.CodeInvalidInput, err.Error())
 		case errors.Is(err, errUnsupportedMime):
 			// Storage.Save rejected a mime the controller allowed (webp/heic/…).
-			shared.WriteError(w, r, "invalid-input", errMimeNotAllowed)
+			shared.WriteError(w, r, shared.CodeInvalidInput, errMimeNotAllowed)
 		default:
 			// Log the real cause — a Storage.Save EACCES (e.g. an env whose
 			// BugReportsDir volume isn't mounted/writable) otherwise vanishes
 			// behind the generic 500, making it invisible in server logs (#67).
 			slog.Default().ErrorContext(r.Context(), "bug-report create failed",
 				"err", err, "has_screenshot", file != nil)
-			shared.WriteError(w, r, "internal", "bug-reports failed")
+			shared.WriteError(w, r, shared.CodeInternal, "bug-reports failed")
 		}
 		return
 	}

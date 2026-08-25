@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react';
 
 import { API_URL as API } from '../lib/api';
 
-// UI-side length hints that mirror the backend DTO (backend/src/user-context/
-// user-context.constants.ts). The backend is the enforcer; these just stop the
-// user typing past the limit. Keep in sync if the backend caps change.
+// UI-side length hints that mirror the backend DTO caps
+// (backend-rewrite-go/internal/usercontext/handler.go — fieldMaxLen/notesMaxLen).
+// The backend is the enforcer; these just stop the user typing past the limit.
+// Keep in sync if the backend caps change.
 const FIELD_MAX = 120;
 const NOTES_MAX = 1000;
 

@@ -4,6 +4,7 @@ import DataTable from '../components/DataTable';
 import Toast from '../components/Toast';
 import { formatCurrency } from '../lib/format';
 import { toneStyle, type Tone } from '../lib/status';
+import { PaymentMethodKey, PaymentStatusKey } from '../lib/payment';
 
 /* ── Types ────────────────────────────────────────────── */
 
@@ -333,7 +334,7 @@ export default function PaymentsPage() {
       key: 'actions',
       render: (row: Payment) => (
         <div style={{ display: 'flex', gap: 6 }}>
-          {row.status === 'pending' && (
+          {row.status === PaymentStatusKey.PENDING && (
             <button
               className="btn btn-primary btn-sm"
               onClick={(e) => {
@@ -345,7 +346,7 @@ export default function PaymentsPage() {
               {isSandbox(row.method) ? '🧪 Simulate paid' : 'Confirm'}
             </button>
           )}
-          {row.status === 'completed' && row.method === 'stripe' && (
+          {row.status === PaymentStatusKey.COMPLETED && row.method === PaymentMethodKey.STRIPE && (
             <button
               className="btn btn-sm"
               onClick={(e) => {

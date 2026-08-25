@@ -68,7 +68,7 @@ func (h *AdminLogsHandler) List(w http.ResponseWriter, r *http.Request) {
 		Limit:  emailLogsLimit(q.Get("limit")),
 	})
 	if err != nil {
-		shared.WriteError(w, r, "internal", "email logs failed")
+		shared.WriteError(w, r, shared.CodeInternal, "email logs failed")
 		return
 	}
 	if rows == nil {

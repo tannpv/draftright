@@ -120,7 +120,7 @@ func (h *AdminHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	items, total, err := h.svc.List(r.Context(), f)
 	if err != nil {
-		shared.WriteError(w, r, "internal", err.Error())
+		shared.WriteError(w, r, shared.CodeInternal, err.Error())
 		return
 	}
 	if items == nil {
@@ -147,7 +147,7 @@ func (h *AdminHandler) Patch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if body.Status == nil {
-		shared.WriteError(w, r, "invalid-input", "status required")
+		shared.WriteError(w, r, shared.CodeInvalidInput, "status required")
 		return
 	}
 	row, err := h.svc.SetStatusRaw(r.Context(), chi.URLParam(r, "id"), body.Status, body.ResolvedBy)
@@ -164,7 +164,7 @@ func (h *AdminHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	deleted, err := h.svc.Delete(r.Context(), id)
 	if err != nil {
-		shared.WriteError(w, r, "internal", err.Error())
+		shared.WriteError(w, r, shared.CodeInternal, err.Error())
 		return
 	}
 	shared.WriteJSON(w, http.StatusOK, deleteResponse{ID: id, Deleted: deleted})
@@ -196,11 +196,11 @@ func (h *AdminHandler) RunCron(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) writeServiceError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, ErrNotFound):
-		shared.WriteError(w, r, "invalid-input", ErrNotFoundMsg)
+		shared.WriteError(w, r, shared.CodeInvalidInput, ErrNotFoundMsg)
 	case errors.Is(err, aiprovider.ErrNoDefaultProvider):
-		shared.WriteError(w, r, "invalid-input", aiprovider.ErrNoDefaultProvider.Error())
+		shared.WriteError(w, r, shared.CodeInvalidInput, aiprovider.ErrNoDefaultProvider.Error())
 	default:
-		shared.WriteError(w, r, "internal", err.Error())
+		shared.WriteError(w, r, shared.CodeInternal, err.Error())
 	}
 }
 

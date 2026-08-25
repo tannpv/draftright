@@ -16,7 +16,7 @@ func NewHandler(svc *Service) *Handler { return &Handler{svc: svc} }
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	list, err := h.svc.ListActive(r.Context())
 	if err != nil {
-		shared.WriteError(w, r, "internal", "plans failed")
+		shared.WriteError(w, r, shared.CodeInternal, "plans failed")
 		return
 	}
 	shared.WriteJSON(w, http.StatusOK, list)

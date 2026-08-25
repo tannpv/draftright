@@ -5,6 +5,8 @@ import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
+import 'package:draftright_mobile/services/api_client.dart';
+import 'package:draftright_mobile/services/app_source.dart';
 import 'package:draftright_mobile/services/logger_service.dart';
 
 /// Outcome of a bug-report submission. Carries a user-presentable error
@@ -24,7 +26,10 @@ class SubmitBugReportResult {
 /// Auth is optional — anonymous submissions are accepted; if a JWT is
 /// provided the backend records `user_id` on the row.
 class BugReportService {
-  /// Production endpoint. Override in tests via [endpointOverride].
+  /// Last-resort fallback endpoint. The report sheet now passes the configured
+  /// backend (SettingsService.endpointFor) so a dev build doesn't silently post
+  /// to prod (#205 #3); this default is only hit if a caller supplies no
+  /// [endpointOverride] at all.
   static const String _defaultEndpoint =
       'https://api.draftright.info/bug-reports';
 
@@ -64,28 +69,26 @@ class BugReportService {
     String? endpointOverride,
   }) async {
     final endpoint = endpointOverride ?? _defaultEndpoint;
-    final source = _detectSource();
+    final source = detectAppSource();
     final appVersion = await _appVersion();
     final osInfo = _osInfo();
 
+    final fields = <String, String>{
+      'description': description,
+      'source': source,
+      'app_version': appVersion,
+      'os_info': osInfo,
+    };
+    if (userEmail != null && userEmail.isNotEmpty) {
+      fields['user_email'] = userEmail;
+    }
+    if (context != null && context.isNotEmpty) {
+      fields['context'] = jsonEncode(context);
+    }
+
+    final client = http.Client();
     try {
-      final request = http.MultipartRequest('POST', Uri.parse(endpoint));
-      request.fields['description'] = description;
-      request.fields['source'] = source;
-      request.fields['app_version'] = appVersion;
-      request.fields['os_info'] = osInfo;
-
-      if (userEmail != null && userEmail.isNotEmpty) {
-        request.fields['user_email'] = userEmail;
-      }
-      if (context != null && context.isNotEmpty) {
-        request.fields['context'] = jsonEncode(context);
-      }
-
-      if (authToken != null && authToken.isNotEmpty) {
-        request.headers['Authorization'] = 'Bearer $authToken';
-      }
-
+      final files = <http.MultipartFile>[];
       if (screenshot != null) {
         final length = await screenshot.length();
         if (length > maxScreenshotBytes) {
@@ -95,7 +98,8 @@ class BugReportService {
           );
           return const SubmitBugReportResult(
             ok: false,
-            errorMessage: 'Screenshot is larger than 5 MB. Pick a smaller image.',
+            errorMessage:
+                'Screenshot is larger than 5 MB. Pick a smaller image.',
           );
         }
         // Always set an explicit image MIME.  Without this,
@@ -110,73 +114,51 @@ class BugReportService {
         // else falls through to JPEG since image_picker
         // re-encodes most pickers to JPEG when imageQuality<100.
         final contentType = await _detectImageMime(screenshot);
-        request.files.add(await http.MultipartFile.fromPath(
+        files.add(await http.MultipartFile.fromPath(
           'screenshot',
           screenshot.path,
           contentType: contentType,
         ));
       }
 
-      final streamed =
-          await request.send().timeout(const Duration(seconds: 30));
-      final isOk = streamed.statusCode >= 200 && streamed.statusCode < 300;
-      if (isOk) {
-        DRLogger.log('Bug report submitted ($source)', category: 'BUG_REPORT');
-        return const SubmitBugReportResult(ok: true);
-      }
-      final body = await streamed.stream.bytesToString();
-      final status = streamed.statusCode;
+      // Route the app's one hand-built multipart request through the shared
+      // ApiClient chokepoint (#205 #9). 30s (not the default 15s) — screenshot
+      // uploads on slow links. baseUrl is empty: the endpoint is a full URL.
+      final api = ApiClient(baseUrl: '', client: client);
+      await api.postMultipart(
+        endpoint,
+        fields: fields,
+        files: files,
+        token: authToken,
+        timeout: const Duration(seconds: 30),
+      );
+      DRLogger.log('Bug report submitted ($source)', category: 'BUG_REPORT');
+      return const SubmitBugReportResult(ok: true);
+    } on ApiException catch (e) {
       DRLogger.warn(
-        'Bug report failed: $status $body',
+        'Bug report failed: ${e.statusCode} ${e.message}',
         category: 'BUG_REPORT',
       );
       // 413 = request body over the server's cap. The screenshot is the only
       // large part, so point the user at it (their connection is fine — a
       // generic "check your connection" here is misleading; issue #68).
-      if (status == 413) {
+      if (e.statusCode == 413) {
         return const SubmitBugReportResult(
           ok: false,
           errorMessage:
               'That screenshot is too large to upload. Remove it or attach a smaller image.',
         );
       }
-      return SubmitBugReportResult(
-        ok: false,
-        // Fall back to the status code so a failure is never a dead end.
-        errorMessage:
-            _extractServerMessage(body) ?? 'Server error ($status). Please try again.',
-      );
+      // e.message is the parsed server message, or an 'HTTP <status>' fallback
+      // — never a dead end.
+      return SubmitBugReportResult(ok: false, errorMessage: e.message);
     } catch (e) {
       DRLogger.warn('Bug report exception: $e', category: 'BUG_REPORT');
-      return const SubmitBugReportResult(ok: false, errorMessage: _genericFailure);
+      return const SubmitBugReportResult(
+          ok: false, errorMessage: _genericFailure);
+    } finally {
+      client.close();
     }
-  }
-
-  /// Pulls a user-friendly reason out of an error body. Handles both the
-  /// NestJS shape `{"message": "…"}` / `{"message": ["…"]}` (class-validator
-  /// returns an array) and the Go backend shape `{"error": "…"}`.
-  static String? _extractServerMessage(String body) {
-    try {
-      final parsed = jsonDecode(body);
-      if (parsed is Map) {
-        final m = parsed['message'];
-        if (m is String && m.isNotEmpty) return m;
-        if (m is List && m.isNotEmpty) return m.first.toString();
-        final e = parsed['error'];
-        if (e is String && e.isNotEmpty) return e;
-      }
-    } catch (_) {/* body wasn't JSON — fall through */}
-    return null;
-  }
-
-  static String _detectSource() {
-    try {
-      if (Platform.isIOS) return 'ios-app';
-      if (Platform.isAndroid) return 'android-app';
-    } catch (_) {/* ignore — non-mobile path */}
-    // Mobile-only feature, but provide a safe fallback string the backend
-    // will accept rather than throwing.
-    return 'android-app';
   }
 
   static Future<String> _appVersion() async {
@@ -207,31 +189,49 @@ class BugReportService {
       final header = await raf.read(12);
       await raf.close();
       if (header.length >= 8 &&
-          header[0] == 0x89 && header[1] == 0x50 &&
-          header[2] == 0x4E && header[3] == 0x47) {
+          header[0] == 0x89 &&
+          header[1] == 0x50 &&
+          header[2] == 0x4E &&
+          header[3] == 0x47) {
         return MediaType('image', 'png');
       }
       if (header.length >= 3 &&
-          header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF) {
+          header[0] == 0xFF &&
+          header[1] == 0xD8 &&
+          header[2] == 0xFF) {
         return MediaType('image', 'jpeg');
       }
       if (header.length >= 12 &&
-          header[0] == 0x52 && header[1] == 0x49 &&
-          header[2] == 0x46 && header[3] == 0x46 &&
-          header[8] == 0x57 && header[9] == 0x45 &&
-          header[10] == 0x42 && header[11] == 0x50) {
+          header[0] == 0x52 &&
+          header[1] == 0x49 &&
+          header[2] == 0x46 &&
+          header[3] == 0x46 &&
+          header[8] == 0x57 &&
+          header[9] == 0x45 &&
+          header[10] == 0x42 &&
+          header[11] == 0x50) {
         return MediaType('image', 'webp');
       }
       if (header.length >= 12 &&
-          header[4] == 0x66 && header[5] == 0x74 &&
-          header[6] == 0x79 && header[7] == 0x70 &&
-          ((header[8] == 0x68 && header[9] == 0x65 && header[10] == 0x69 && header[11] == 0x63) ||
-           (header[8] == 0x68 && header[9] == 0x65 && header[10] == 0x69 && header[11] == 0x66))) {
+          header[4] == 0x66 &&
+          header[5] == 0x74 &&
+          header[6] == 0x79 &&
+          header[7] == 0x70 &&
+          ((header[8] == 0x68 &&
+                  header[9] == 0x65 &&
+                  header[10] == 0x69 &&
+                  header[11] == 0x63) ||
+              (header[8] == 0x68 &&
+                  header[9] == 0x65 &&
+                  header[10] == 0x69 &&
+                  header[11] == 0x66))) {
         return MediaType('image', 'heic');
       }
       if (header.length >= 6 &&
-          header[0] == 0x47 && header[1] == 0x49 &&
-          header[2] == 0x46 && header[3] == 0x38) {
+          header[0] == 0x47 &&
+          header[1] == 0x49 &&
+          header[2] == 0x46 &&
+          header[3] == 0x38) {
         return MediaType('image', 'gif');
       }
     } catch (_) {/* fall through */}

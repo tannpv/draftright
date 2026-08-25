@@ -4,6 +4,7 @@ import 'package:draftright_mobile/models/nudge_state.dart';
 import 'package:draftright_mobile/models/tone.dart';
 import 'package:draftright_mobile/services/api_client.dart';
 import 'package:draftright_mobile/services/auth_service.dart';
+import 'package:draftright_mobile/services/url_util.dart';
 import 'package:draftright_mobile/services/logger_service.dart';
 import 'package:draftright_mobile/services/payment/checkout_result.dart';
 import 'package:draftright_mobile/services/payment/payment_method.dart';
@@ -118,7 +119,9 @@ class SubscriptionInfo {
     }
 
     final nudgeJson = json['nudge'];
-    final nudge = nudgeJson is Map<String, dynamic> ? NudgeState.fromJson(nudgeJson) : null;
+    final nudge = nudgeJson is Map<String, dynamic>
+        ? NudgeState.fromJson(nudgeJson)
+        : null;
 
     return SubscriptionInfo(
       planName: planName,
@@ -135,15 +138,18 @@ class SubscriptionInfo {
 class BackendClient {
   /// Backend caps rewrite input length; truncate client-side to match.
   static const int _maxInputChars = 3000;
+
   /// Timeout for the main rewrite/subscription calls.
-  static const Duration _requestTimeout = Duration(seconds: 15);
+  static const Duration _requestTimeout = kRequestTimeout;
+
   /// Shorter timeout for the best-effort /health probe.
   static const Duration _healthTimeout = Duration(seconds: 5);
 
   final AuthService _auth;
   final String Function() _getBaseUrl;
   final http.Client _http;
-  late final ApiClient _api = ApiClient(baseUrl: '', client: _http, defaultTimeout: _requestTimeout);
+  late final ApiClient _api =
+      ApiClient(baseUrl: '', client: _http, defaultTimeout: _requestTimeout);
 
   BackendClient({
     required AuthService auth,
@@ -154,7 +160,8 @@ class BackendClient {
         _http = httpClient ?? http.Client();
 
   /// Run an authed call, refreshing the token + retrying once on 401.
-  Future<Map<String, dynamic>> _authed(Future<Map<String, dynamic>> Function(String token) call) async {
+  Future<Map<String, dynamic>> _authed(
+      Future<Map<String, dynamic>> Function(String token) call) async {
     _api.baseUrl = _baseUrl;
     final token = await _auth.getAccessToken();
     try {
@@ -173,13 +180,7 @@ class BackendClient {
   }
 
   /// Returns the base URL with trailing slashes removed.
-  String get _baseUrl {
-    var url = _getBaseUrl();
-    while (url.endsWith('/')) {
-      url = url.substring(0, url.length - 1);
-    }
-    return url;
-  }
+  String get _baseUrl => normalizeBackendUrl(_getBaseUrl());
 
   /// Best-effort: fetch `/health` and apply the admin-controlled
   /// `client_log_level` to [DRLogger]. The mobile app doesn't poll /health for
@@ -187,13 +188,9 @@ class BackendClient {
   /// level untouched and never blocks startup.
   static Future<void> applyClientLogLevel(String backendUrl) async {
     try {
-      var base = backendUrl;
-      while (base.endsWith('/')) {
-        base = base.substring(0, base.length - 1);
-      }
-      final resp = await http
-          .get(Uri.parse('$base/health'))
-          .timeout(_healthTimeout);
+      final base = normalizeBackendUrl(backendUrl);
+      final resp =
+          await http.get(Uri.parse('$base/health')).timeout(_healthTimeout);
       if (resp.statusCode != 200) return;
       final data = jsonDecode(resp.body) as Map<String, dynamic>;
       if (data['app'] != 'draftright') return;
@@ -210,10 +207,7 @@ class BackendClient {
   static Future<String?> releaseNotesForVersion(
       String backendUrl, String platform, String version) async {
     try {
-      var base = backendUrl;
-      while (base.endsWith('/')) {
-        base = base.substring(0, base.length - 1);
-      }
+      final base = normalizeBackendUrl(backendUrl);
       final resp = await http
           .get(Uri.parse('$base/updates/latest?platform=$platform'))
           .timeout(_healthTimeout);
@@ -248,7 +242,9 @@ class BackendClient {
     DRLogger.log('Rewrite request: tone=${tone.name}', category: 'API');
 
     final body = <String, dynamic>{
-      'text': text.length > _maxInputChars ? text.substring(0, _maxInputChars) : text,
+      'text': text.length > _maxInputChars
+          ? text.substring(0, _maxInputChars)
+          : text,
       'tone': tone.apiValue,
     };
     if (targetLanguage != null && targetLanguage.isNotEmpty) {
@@ -257,7 +253,8 @@ class BackendClient {
 
     final Map<String, dynamic> data;
     try {
-      data = await _authed((t) => _api.postJson('/rewrite', body: body, token: t));
+      data =
+          await _authed((t) => _api.postJson('/rewrite', body: body, token: t));
     } catch (e) {
       DRLogger.error('Rewrite error: $e', category: 'API');
       rethrow;
@@ -272,7 +269,9 @@ class BackendClient {
         dailyLimit: grammarResult.dailyLimit,
         grammarResult: grammarResult,
       );
-      DRLogger.log('Grammar check: score=${grammarResult.score}, issues=${grammarResult.issues.length}', category: 'API');
+      DRLogger.log(
+          'Grammar check: score=${grammarResult.score}, issues=${grammarResult.issues.length}',
+          category: 'API');
       return result;
     }
 
@@ -281,7 +280,8 @@ class BackendClient {
       usageToday: (data['usage_today'] as num?)?.toInt() ?? 0,
       dailyLimit: (data['daily_limit'] as num?)?.toInt() ?? 10,
     );
-    DRLogger.log('Rewrite success: ${result.rewrittenText.length} chars', category: 'API');
+    DRLogger.log('Rewrite success: ${result.rewrittenText.length} chars',
+        category: 'API');
     return result;
   }
 
@@ -352,7 +352,8 @@ class BackendClient {
   /// VietQR / bank-transfer / admin-granted subscriptions return
   /// 404 (no self-service portal).
   Future<String> getCustomerPortalUrl() async {
-    final data = await _authed((t) => _api.getJson('/payment/portal', token: t));
+    final data =
+        await _authed((t) => _api.getJson('/payment/portal', token: t));
     final url = data['url'] as String?;
     if (url == null || url.isEmpty) {
       throw Exception('Backend did not return a portal URL');
@@ -364,7 +365,8 @@ class BackendClient {
   /// (which calls LS / Stripe APIs directly).  Returns the date Pro
   /// access ends — the user keeps access through that date.
   Future<CancelSubscriptionResult> cancelSubscription() async {
-    final data = await _authed((t) => _api.deleteJson('/payment/subscription', token: t));
+    final data = await _authed(
+        (t) => _api.deleteJson('/payment/subscription', token: t));
     return CancelSubscriptionResult(
       cancelled: data['cancelled'] == true,
       accessUntil: data['expires_at'] != null

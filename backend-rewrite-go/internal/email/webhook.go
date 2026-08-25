@@ -58,18 +58,18 @@ func (h *WebhookHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// Fail closed: an unreadable body can't be signature-verified, so
 		// return the exact same 400 we return for a bad signature.
-		shared.WriteError(w, r, "invalid-input", "Invalid webhook signature")
+		shared.WriteError(w, r, shared.CodeInvalidInput, "Invalid webhook signature")
 		return
 	}
 
 	if h.secret == "" || !verify(h.secret, r.Header, raw) {
-		shared.WriteError(w, r, "invalid-input", "Invalid webhook signature")
+		shared.WriteError(w, r, shared.CodeInvalidInput, "Invalid webhook signature")
 		return
 	}
 
 	var event webhookEvent
 	if err := json.Unmarshal(raw, &event); err != nil {
-		shared.WriteError(w, r, "invalid-input", "Invalid payload")
+		shared.WriteError(w, r, shared.CodeInvalidInput, "Invalid payload")
 		return
 	}
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import GoogleSignInButton from './GoogleSignInButton';
 import { API_URL as API } from '../lib/api';
+import { PaymentMethodKey, PaymentStatusKey } from '../lib/payment';
 
 type PlanId = string;
 
@@ -31,20 +32,6 @@ const toPlan = (p: ApiPlan): Plan => ({
   period: p.billing_period === 'yearly' ? 'year' : 'month',
   badge: p.billing_period === 'yearly' ? 'Best value' : null,
 });
-
-/**
- * Single source of truth for payment-method identifiers. Mirrors the backend
- * `PaymentMethod` enum (backend/src/payment/entities/payment.entity.ts) and
- * is the canonical key the UI compares against — avoid scattering raw string
- * literals like `methodKey === 'lemonsqueezy'` across the file.
- */
-export const PaymentMethodKey = {
-  STRIPE:        'stripe',
-  VIETQR:        'vietqr',
-  BANK_TRANSFER: 'bank_transfer',
-  LEMONSQUEEZY:  'lemonsqueezy',
-} as const;
-export type PaymentMethodKey = (typeof PaymentMethodKey)[keyof typeof PaymentMethodKey];
 
 interface Method {
   key: PaymentMethodKey;
@@ -231,7 +218,7 @@ export default function Checkout() {
               if (r.ok) {
                 const s = await r.json();
                 setPaymentStatus(s.status);
-                if (s.status === 'completed') {
+                if (s.status === PaymentStatusKey.COMPLETED) {
                   if (pollRef.current) clearInterval(pollRef.current);
                   setStep('success');
                 }

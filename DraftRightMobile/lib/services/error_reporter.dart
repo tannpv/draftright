@@ -5,7 +5,11 @@ import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
+
+import 'package:draftright_mobile/services/url_util.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'package:draftright_mobile/services/prefs_keys.dart';
 
 /// One captured error, surfaced to the UI for an on-screen notice. The
 /// reporter publishes the latest of these via [ErrorReporter.lastError] so
@@ -47,7 +51,6 @@ class ErrorReporter {
   static String? _bearerToken;
   static String? _appVersion;
   static final _queue = <Map<String, dynamic>>[];
-  static const _persistKey = 'draftright.error_reporter.queue';
   static bool _flushScheduled = false;
 
   /// Latest captured error, or null if none yet. UI widgets can subscribe to
@@ -66,7 +69,7 @@ class ErrorReporter {
   /// and an App Store rejection. Now `runApp` happens first; this just
   /// wires error capture afterward and warms up in the background.)
   static void attach({required String backendUrl, String? bearerToken}) {
-    _backendUrl = backendUrl.replaceAll(RegExp(r'/+$'), '');
+    _backendUrl = normalizeBackendUrl(backendUrl);
     _bearerToken = bearerToken;
 
     // Synchronous Flutter framework errors (build phase, etc.)
@@ -115,7 +118,7 @@ class ErrorReporter {
   /// stays consistent (`<base>/errors`).
   static void setBackendUrl(String? url) {
     if (url == null || url.isEmpty) return;
-    _backendUrl = url.replaceAll(RegExp(r'/+$'), '');
+    _backendUrl = normalizeBackendUrl(url);
   }
 
   /// Manually report a non-fatal issue (e.g. a caught exception in a
@@ -149,7 +152,7 @@ class ErrorReporter {
   static Future<void> _loadPersistedQueue() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getStringList(_persistKey);
+      final raw = prefs.getStringList(PrefsKeys.errorReporterQueue);
       if (raw != null) {
         for (final s in raw) {
           try {
@@ -166,7 +169,7 @@ class ErrorReporter {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setStringList(
-        _persistKey,
+        PrefsKeys.errorReporterQueue,
         _queue.map(jsonEncode).toList(),
       );
     } catch (_) {/* ignore */}

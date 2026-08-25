@@ -79,7 +79,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	// decoder. RejectNullBody buffers; we feed our own decoder from the buffer.
 	buf, isNull, err := shared.RejectNullBody(r)
 	if err != nil {
-		shared.WriteError(w, r, "invalid-input", "Invalid request body")
+		shared.WriteError(w, r, shared.CodeInvalidInput, "Invalid request body")
 		return
 	}
 	if isNull {
@@ -97,7 +97,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	// whitelisted DTO field clients legitimately send, so it is NOT rejected here.
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&body); err != nil {
-		shared.WriteError(w, r, "invalid-input", "Invalid request body")
+		shared.WriteError(w, r, shared.CodeInvalidInput, "Invalid request body")
 		return
 	}
 
@@ -119,7 +119,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 	// Stage: ValidationPipe (DTO constraints) — BEFORE the honeypot.
 	if msg := validateFeedback(flds); msg != "" {
-		shared.WriteError(w, r, "invalid-input", msg)
+		shared.WriteError(w, r, shared.CodeInvalidInput, msg)
 		return
 	}
 
@@ -147,11 +147,11 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 			errors.Is(err, ErrSourceRequired),
 			errors.Is(err, ErrTitleRequired),
 			errors.Is(err, ErrBadTargetPlatform):
-			shared.WriteError(w, r, "invalid-input", err.Error())
+			shared.WriteError(w, r, shared.CodeInvalidInput, err.Error())
 		case errors.Is(err, ErrFeatureNotFound):
-			shared.WriteError(w, r, "not-found", err.Error())
+			shared.WriteError(w, r, shared.CodeNotFound, err.Error())
 		default:
-			shared.WriteError(w, r, "internal", "feedback failed")
+			shared.WriteError(w, r, shared.CodeInternal, "feedback failed")
 		}
 		return
 	}
@@ -187,7 +187,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	userID := auth.OptionalUserID(h.verifier, r)
 	res, err := h.svc.ListPublicFeatures(r.Context(), params, userID)
 	if err != nil {
-		shared.WriteError(w, r, "internal", "feedback failed")
+		shared.WriteError(w, r, shared.CodeInternal, "feedback failed")
 		return
 	}
 	if res.Rows == nil {
@@ -203,16 +203,16 @@ func (h *Handler) Vote(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	userID := auth.OptionalUserID(h.verifier, r)
 	if userID == "" {
-		shared.WriteError(w, r, "invalid-token", "sign in to vote")
+		shared.WriteError(w, r, shared.CodeInvalidToken, "sign in to vote")
 		return
 	}
 	res, err := h.svc.ToggleVote(r.Context(), id, userID)
 	if err != nil {
 		if errors.Is(err, ErrFeatureNotFound) {
-			shared.WriteError(w, r, "not-found", err.Error())
+			shared.WriteError(w, r, shared.CodeNotFound, err.Error())
 			return
 		}
-		shared.WriteError(w, r, "internal", "feedback failed")
+		shared.WriteError(w, r, shared.CodeInternal, "feedback failed")
 		return
 	}
 	shared.WriteJSON(w, http.StatusOK, res)

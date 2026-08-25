@@ -12,7 +12,8 @@ import (
 // (@IsIn(PAYMENT_METHODS)). The checkout validator and its humanized message
 // both depend on this order.
 var paymentMethods = []string{
-	"stripe", "paypal", "momo", "vietqr", "bank_transfer", "lemonsqueezy", "apple_pay", "google_pay",
+	string(MethodStripe), string(MethodPayPal), string(MethodMoMo), string(MethodVietQR),
+	string(MethodBankTransfer), string(MethodLemonSqueezy), string(MethodApplePay), string(MethodGooglePay),
 }
 
 // checkoutBody mirrors NestJS CreateCheckoutDto.
@@ -47,16 +48,16 @@ func writePaymentErr(w http.ResponseWriter, r *http.Request, err error) bool {
 	if !errors.As(err, &derr) {
 		return false
 	}
-	var code string
+	var code shared.ErrorCode
 	switch derr.Status {
 	case 401:
-		code = "invalid-token"
+		code = shared.CodeInvalidToken
 	case 404:
-		code = "not-found"
+		code = shared.CodeNotFound
 	case 400:
-		code = "invalid-input"
+		code = shared.CodeInvalidInput
 	case 500:
-		code = "internal"
+		code = shared.CodeInternal
 	default:
 		return false
 	}
@@ -68,7 +69,7 @@ func writePaymentErr(w http.ResponseWriter, r *http.Request, err error) bool {
 func (h *Handler) Checkout(w http.ResponseWriter, r *http.Request) {
 	claims, ok := shared.ClaimsFromContext(r.Context())
 	if !ok {
-		shared.WriteError(w, r, "internal", "auth context missing")
+		shared.WriteError(w, r, shared.CodeInternal, "auth context missing")
 		return
 	}
 	var body checkoutBody
@@ -76,7 +77,7 @@ func (h *Handler) Checkout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if msg := validateCheckout(body); msg != "" {
-		shared.WriteError(w, r, "invalid-input", msg)
+		shared.WriteError(w, r, shared.CodeInvalidInput, msg)
 		return
 	}
 	resp, err := h.svc.CreateCheckout(r.Context(), claims.Sub, body.PlanID, body.Method, CheckoutOptions{
@@ -86,7 +87,7 @@ func (h *Handler) Checkout(w http.ResponseWriter, r *http.Request) {
 		if writePaymentErr(w, r, err) {
 			return
 		}
-		shared.WriteError(w, r, "internal", "checkout failed")
+		shared.WriteError(w, r, shared.CodeInternal, "checkout failed")
 		return
 	}
 	shared.WriteJSON(w, http.StatusCreated, resp)
@@ -96,7 +97,7 @@ func (h *Handler) Checkout(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Portal(w http.ResponseWriter, r *http.Request) {
 	claims, ok := shared.ClaimsFromContext(r.Context())
 	if !ok {
-		shared.WriteError(w, r, "internal", "auth context missing")
+		shared.WriteError(w, r, shared.CodeInternal, "auth context missing")
 		return
 	}
 	url, err := h.svc.CustomerPortalURL(r.Context(), claims.Sub)
@@ -104,7 +105,7 @@ func (h *Handler) Portal(w http.ResponseWriter, r *http.Request) {
 		if writePaymentErr(w, r, err) {
 			return
 		}
-		shared.WriteError(w, r, "internal", "portal failed")
+		shared.WriteError(w, r, shared.CodeInternal, "portal failed")
 		return
 	}
 	shared.WriteJSON(w, http.StatusOK, map[string]any{"url": url})
@@ -115,7 +116,7 @@ func (h *Handler) Portal(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) CancelSubscription(w http.ResponseWriter, r *http.Request) {
 	claims, ok := shared.ClaimsFromContext(r.Context())
 	if !ok {
-		shared.WriteError(w, r, "internal", "auth context missing")
+		shared.WriteError(w, r, shared.CodeInternal, "auth context missing")
 		return
 	}
 	out, err := h.svc.CancelActiveSubscription(r.Context(), claims.Sub)
@@ -123,7 +124,7 @@ func (h *Handler) CancelSubscription(w http.ResponseWriter, r *http.Request) {
 		if writePaymentErr(w, r, err) {
 			return
 		}
-		shared.WriteError(w, r, "internal", "cancel failed")
+		shared.WriteError(w, r, shared.CodeInternal, "cancel failed")
 		return
 	}
 	shared.WriteJSON(w, http.StatusOK, out)

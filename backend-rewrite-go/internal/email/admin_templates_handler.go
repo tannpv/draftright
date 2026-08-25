@@ -56,7 +56,7 @@ func NewAdminTemplatesHandler(svc *AdminTemplatesService) *AdminTemplatesHandler
 func (h *AdminTemplatesHandler) List(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.svc.List(r.Context())
 	if err != nil {
-		shared.WriteError(w, r, "internal", err.Error())
+		shared.WriteError(w, r, shared.CodeInternal, err.Error())
 		return
 	}
 	if rows == nil {
@@ -79,10 +79,10 @@ func (h *AdminTemplatesHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := h.svc.Update(r.Context(), key, body.Subject, body.HTML); err != nil {
 		if errors.Is(err, ErrUnknownTemplate) {
-			shared.WriteError(w, r, "not-found", "Unknown template")
+			shared.WriteError(w, r, shared.CodeNotFound, "Unknown template")
 			return
 		}
-		shared.WriteError(w, r, "internal", err.Error())
+		shared.WriteError(w, r, shared.CodeInternal, err.Error())
 		return
 	}
 	shared.WriteJSON(w, http.StatusOK, okResponse{OK: true})
@@ -93,7 +93,7 @@ func (h *AdminTemplatesHandler) Update(w http.ResponseWriter, r *http.Request) {
 func (h *AdminTemplatesHandler) Reset(w http.ResponseWriter, r *http.Request) {
 	key := chi.URLParam(r, "key")
 	if err := h.svc.Reset(r.Context(), key); err != nil {
-		shared.WriteError(w, r, "internal", err.Error())
+		shared.WriteError(w, r, shared.CodeInternal, err.Error())
 		return
 	}
 	shared.WriteJSON(w, http.StatusOK, okResponse{OK: true})
@@ -106,10 +106,10 @@ func (h *AdminTemplatesHandler) Preview(w http.ResponseWriter, r *http.Request) 
 	subject, html, err := h.svc.Preview(r.Context(), key)
 	if err != nil {
 		if errors.Is(err, ErrUnknownTemplate) {
-			shared.WriteError(w, r, "not-found", "Unknown template")
+			shared.WriteError(w, r, shared.CodeNotFound, "Unknown template")
 			return
 		}
-		shared.WriteError(w, r, "internal", err.Error())
+		shared.WriteError(w, r, shared.CodeInternal, err.Error())
 		return
 	}
 	shared.WriteJSON(w, http.StatusOK, previewResponse{Subject: subject, HTML: html})

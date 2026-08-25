@@ -11,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:draftright_mobile/services/api_client.dart';
 import 'package:draftright_mobile/services/extension_token_service.dart';
 import 'package:draftright_mobile/services/logger_service.dart';
+import 'package:draftright_mobile/services/prefs_keys.dart';
 
 /// Thrown when the user backs out of a social sign-in (closes the Google/Apple
 /// sheet). It's normal user behaviour, not a failure — callers should treat it
@@ -22,22 +23,15 @@ class SignInCancelledException implements Exception {
 }
 
 class AuthService extends ChangeNotifier {
-  static const _keyAccess = 'draftright.accessToken';
-  static const _keyRefresh = 'draftright.refreshToken';
   // Android requires the web/server client ID so Google includes the server
   // audience in the ID token — without it, idToken is null on Android.
   // iOS reads its client from GIDClientID in Info.plist; this is harmless there.
   static const _googleServerClientId =
       '22951518033-gf853ftmf4emivffk0su2bik42j7cmai.apps.googleusercontent.com';
   // Note: shared_preferences plugin auto-prefixes 'flutter.' to all keys.
-  // Storing as 'draftright.accessToken' actually persists as 'flutter.draftright.accessToken'
+  // Storing as PrefsKeys.accessToken actually persists as 'flutter.draftright.accessToken'
   // which is exactly what the Android keyboard's SharedSettings reads.
-  static const _sharedKeyAccess = 'draftright.accessToken';
-  // The signed-in user's email, cached so UIs (e.g. the bug-report sheet) can
-  // pre-fill a "follow-up" field without an extra /auth/me round-trip. Not a
-  // secret → SharedPreferences, not secure storage.
-  static const _prefsKeyEmail = 'draftright.userEmail';
-  static const _appGroupChannel = MethodChannel('com.draftright.v2/app_group');
+  static const _appGroupChannel = MethodChannel(appGroupChannelName);
 
   final FlutterSecureStorage _secure = const FlutterSecureStorage();
 
@@ -86,23 +80,23 @@ class AuthService extends ChangeNotifier {
     _baseUrl = baseUrl;
     _api.baseUrl = baseUrl;
     try {
-      _accessToken = await _secure.read(key: _keyAccess);
-      _refreshToken = await _secure.read(key: _keyRefresh);
+      _accessToken = await _secure.read(key: PrefsKeys.accessToken);
+      _refreshToken = await _secure.read(key: PrefsKeys.refreshToken);
     } catch (_) {
       _accessToken = null;
       _refreshToken = null;
     }
     try {
       _userEmail = (await SharedPreferences.getInstance())
-          .getString(_prefsKeyEmail);
+          .getString(PrefsKeys.userEmail);
     } catch (_) {
       _userEmail = null;
     }
     // Sync to SharedPreferences for keyboard extension
     if (_accessToken != null && _accessToken!.isNotEmpty) {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_sharedKeyAccess, _accessToken!);
-      await _syncToAppGroup('draftright.accessToken', _accessToken!);
+      await prefs.setString(PrefsKeys.accessToken, _accessToken!);
+      await _syncToAppGroup(PrefsKeys.accessToken, _accessToken!);
       // Ensure the long-lived extension token exists for the IME / share
       // extension. Users who upgraded into the EXTTOK build without
       // re-logging in won't have one yet — without this, the IME falls
@@ -116,8 +110,10 @@ class AuthService extends ChangeNotifier {
   Future<void> login(String email, String password) async {
     final normalizedEmail = email.trim().toLowerCase();
     try {
-      final data = await _api.postJson('/auth/login', body: {'email': normalizedEmail, 'password': password});
-      await _storeTokens(data['access_token'] as String, data['refresh_token'] as String);
+      final data = await _api.postJson('/auth/login',
+          body: {'email': normalizedEmail, 'password': password});
+      await _storeTokens(
+          data['access_token'] as String, data['refresh_token'] as String);
       await _persistEmail(normalizedEmail);
       DRLogger.log('Login success: $email', category: 'AUTH');
     } catch (e) {
@@ -128,8 +124,10 @@ class AuthService extends ChangeNotifier {
 
   Future<void> register(String name, String email, String password) async {
     try {
-      final data = await _api.postJson('/auth/register', body: {'name': name, 'email': email, 'password': password});
-      await _storeTokens(data['access_token'] as String, data['refresh_token'] as String);
+      final data = await _api.postJson('/auth/register',
+          body: {'name': name, 'email': email, 'password': password});
+      await _storeTokens(
+          data['access_token'] as String, data['refresh_token'] as String);
       await _persistEmail(email.trim().toLowerCase());
       DRLogger.log('Register success: $email', category: 'AUTH');
     } catch (e) {
@@ -152,19 +150,27 @@ class AuthService extends ChangeNotifier {
     final idToken = auth.idToken;
     if (idToken == null) throw Exception('Failed to get Google ID token');
 
-    await _socialLogin('google', idToken, name: account.displayName, email: account.email, avatarUrl: account.photoUrl);
+    await _socialLogin('google', idToken,
+        name: account.displayName,
+        email: account.email,
+        avatarUrl: account.photoUrl);
   }
 
   Future<void> signInWithFacebook() async {
-    final result = await FacebookAuth.instance.login(permissions: ['email', 'public_profile']);
+    final result = await FacebookAuth.instance
+        .login(permissions: ['email', 'public_profile']);
     if (result.status != LoginStatus.success) {
       throw Exception(result.message ?? 'Facebook sign-in failed');
     }
 
     final accessToken = result.accessToken!.tokenString;
-    final userData = await FacebookAuth.instance.getUserData(fields: 'name,email,picture.type(large)');
+    final userData = await FacebookAuth.instance
+        .getUserData(fields: 'name,email,picture.type(large)');
 
-    await _socialLogin('facebook', accessToken, name: userData['name'], email: userData['email'], avatarUrl: userData['picture']?['data']?['url']);
+    await _socialLogin('facebook', accessToken,
+        name: userData['name'],
+        email: userData['email'],
+        avatarUrl: userData['picture']?['data']?['url']);
   }
 
   Future<void> signInWithTikTok() async {
@@ -210,11 +216,12 @@ class AuthService extends ChangeNotifier {
       idToken,
       name: name.isEmpty ? null : name,
       email: credential.email,
-      avatarUrl: null,  // Apple doesn't provide a photo URL
+      avatarUrl: null, // Apple doesn't provide a photo URL
     );
   }
 
-  Future<void> _socialLogin(String provider, String idToken, {String? name, String? email, String? avatarUrl}) async {
+  Future<void> _socialLogin(String provider, String idToken,
+      {String? name, String? email, String? avatarUrl}) async {
     final data = await _api.postJson('/auth/social', body: {
       'provider': provider,
       'id_token': idToken,
@@ -222,7 +229,8 @@ class AuthService extends ChangeNotifier {
       'email': email,
       'avatar_url': avatarUrl,
     });
-    await _storeTokens(data['access_token'] as String, data['refresh_token'] as String);
+    await _storeTokens(
+        data['access_token'] as String, data['refresh_token'] as String);
     // email may be null (Apple withholds it on repeat consents) → _persistEmail
     // no-ops so we keep whatever a prior sign-in captured.
     await _persistEmail(email);
@@ -238,7 +246,7 @@ class AuthService extends ChangeNotifier {
     _userEmail = normalized;
     try {
       await (await SharedPreferences.getInstance())
-          .setString(_prefsKeyEmail, normalized);
+          .setString(PrefsKeys.userEmail, normalized);
     } catch (_) {/* best-effort cache — never block sign-in */}
   }
 
@@ -246,12 +254,12 @@ class AuthService extends ChangeNotifier {
     _accessToken = null;
     _refreshToken = null;
     _userEmail = null;
-    await _secure.delete(key: _keyAccess);
-    await _secure.delete(key: _keyRefresh);
+    await _secure.delete(key: PrefsKeys.accessToken);
+    await _secure.delete(key: PrefsKeys.refreshToken);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_sharedKeyAccess);
-    await prefs.remove(_prefsKeyEmail);
-    await _syncToAppGroup('draftright.accessToken', null);
+    await prefs.remove(PrefsKeys.accessToken);
+    await prefs.remove(PrefsKeys.userEmail);
+    await _syncToAppGroup(PrefsKeys.accessToken, null);
     // Clear the extension token from SharedPreferences and (on iOS) App
     // Group keychain so the extensions can no longer authenticate.
     // Server-side revoke is a follow-up — for now the row stays active
@@ -289,11 +297,13 @@ class AuthService extends ChangeNotifier {
     return _accessToken!;
   }
 
-  Future<void> changePassword(String currentPassword, String newPassword) async {
+  Future<void> changePassword(
+      String currentPassword, String newPassword) async {
     final token = await getAccessToken();
-    await _api.postJson('/auth/change-password',
-        token: token,
-        body: {'current_password': currentPassword, 'new_password': newPassword});
+    await _api.postJson('/auth/change-password', token: token, body: {
+      'current_password': currentPassword,
+      'new_password': newPassword
+    });
   }
 
   /// Permanently delete the signed-in user's account (App Store Guideline
@@ -309,8 +319,10 @@ class AuthService extends ChangeNotifier {
   Future<bool> tryRefresh() async {
     if (_refreshToken == null || _refreshToken!.isEmpty) return false;
     try {
-      final data = await _api.postJson('/auth/refresh', body: {'refresh_token': _refreshToken});
-      await _storeTokens(data['access_token'] as String, data['refresh_token'] as String);
+      final data = await _api
+          .postJson('/auth/refresh', body: {'refresh_token': _refreshToken});
+      await _storeTokens(
+          data['access_token'] as String, data['refresh_token'] as String);
       return true;
     } catch (_) {
       return false;
@@ -320,12 +332,12 @@ class AuthService extends ChangeNotifier {
   Future<void> _storeTokens(String access, String refresh) async {
     _accessToken = access;
     _refreshToken = refresh;
-    await _secure.write(key: _keyAccess, value: access);
-    await _secure.write(key: _keyRefresh, value: refresh);
+    await _secure.write(key: PrefsKeys.accessToken, value: access);
+    await _secure.write(key: PrefsKeys.refreshToken, value: refresh);
     // Sync access token to SharedPreferences for keyboard extension
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_sharedKeyAccess, access);
-    await _syncToAppGroup('draftright.accessToken', access);
+    await prefs.setString(PrefsKeys.accessToken, access);
+    await _syncToAppGroup(PrefsKeys.accessToken, access);
     notifyListeners();
     // Mint or rotate the long-lived extension token in the background.
     // Failures here must not block login — the extensions fall back to
@@ -343,7 +355,8 @@ class AuthService extends ChangeNotifier {
     if (!Platform.isIOS) return true;
     for (var attempt = 0; attempt < 6; attempt++) {
       try {
-        await _appGroupChannel.invokeMethod('set', {'key': key, 'value': value});
+        await _appGroupChannel
+            .invokeMethod('set', {'key': key, 'value': value});
         return true;
       } catch (_) {
         await Future.delayed(const Duration(milliseconds: 500));
@@ -354,25 +367,26 @@ class AuthService extends ChangeNotifier {
 
   /// Sync backend URL to App Group (called from SettingsService).
   static Future<void> syncBackendUrlToAppGroup(String url) async {
-    await _syncToAppGroup('draftright.backendUrl', url);
+    await _syncToAppGroup(PrefsKeys.backendUrl, url);
   }
 
   /// Sync the enabled keyboard language IDs to App Group as a JSON-encoded
   /// string. The iOS keyboard extension decodes via JSONSerialization.
   static Future<void> syncEnabledLanguageIdsToAppGroup(List<String> ids) async {
-    await _syncToAppGroup('draftright.enabledLanguageIds', jsonEncode(ids));
+    await _syncToAppGroup(PrefsKeys.enabledLanguageIds, jsonEncode(ids));
   }
 
   /// Sync the active keyboard language ID to App Group.
   static Future<void> syncActiveLanguageIdToAppGroup(String id) async {
-    await _syncToAppGroup('draftright.activeLanguageId', id);
+    await _syncToAppGroup(PrefsKeys.activeLanguageId, id);
   }
 
   /// Sync whether voice dictation is AI-polished to App Group. The App Group
   /// channel carries strings, so the bool is stored as "true"/"false"; the iOS
   /// keyboard reads it back and treats absent as polish-on (#197).
   static Future<void> syncVoicePolishEnabledToAppGroup(bool enabled) async {
-    await _syncToAppGroup('draftright.voicePolishEnabled', enabled ? 'true' : 'false');
+    await _syncToAppGroup(
+        PrefsKeys.voicePolishEnabled, enabled ? 'true' : 'false');
   }
 
   /// Sync the one-tap preset tone (Tone.apiValue) to App Group so the iOS
@@ -380,7 +394,6 @@ class AuthService extends ChangeNotifier {
   /// picker (and the Android bubble). Key is platform-neutral on purpose —
   /// it drives the keyboard here, the floating bubble on Android.
   static Future<void> syncOneTapToneToAppGroup(String apiValue) async {
-    await _syncToAppGroup('draftright.oneTapTone', apiValue);
+    await _syncToAppGroup(PrefsKeys.oneTapTone, apiValue);
   }
-
 }

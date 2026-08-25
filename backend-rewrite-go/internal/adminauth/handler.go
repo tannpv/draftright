@@ -82,7 +82,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	adminID, ok := adminIDFromCtx(r)
 	if !ok {
-		shared.WriteError(w, r, "internal", "auth context missing")
+		shared.WriteError(w, r, shared.CodeInternal, "auth context missing")
 		return
 	}
 	var body changePwBody
@@ -100,7 +100,7 @@ func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 	adminID, ok := adminIDFromCtx(r)
 	if !ok {
-		shared.WriteError(w, r, "internal", "auth context missing")
+		shared.WriteError(w, r, shared.CodeInternal, "auth context missing")
 		return
 	}
 	a, err := h.svc.GetProfile(r.Context(), adminID)
@@ -133,8 +133,8 @@ func adminIDFromCtx(r *http.Request) (string, bool) {
 func writeAdminErr(w http.ResponseWriter, r *http.Request, err error, internalMsg string) {
 	var ae *Error
 	if errors.As(err, &ae) {
-		shared.WriteError(w, r, "invalid-token", ae.Message)
+		shared.WriteError(w, r, shared.CodeInvalidToken, ae.Message)
 		return
 	}
-	shared.WriteError(w, r, "internal", internalMsg)
+	shared.WriteError(w, r, shared.CodeInternal, internalMsg)
 }

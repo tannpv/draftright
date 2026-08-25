@@ -77,7 +77,7 @@ func (h *AdminHandler) ListTransactions(w http.ResponseWriter, r *http.Request) 
 		Limit:  limit,
 	})
 	if err != nil {
-		shared.WriteError(w, r, "internal", "transactions failed")
+		shared.WriteError(w, r, shared.CodeInternal, "transactions failed")
 		return
 	}
 	txs := res.Transactions
@@ -115,21 +115,21 @@ func NewGrantHandler(svc *Writer) *GrantHandler { return &GrantHandler{svc: svc}
 func (h *GrantHandler) Grant(w http.ResponseWriter, r *http.Request) {
 	raw, err := io.ReadAll(r.Body)
 	if err != nil {
-		shared.WriteError(w, r, "invalid-input", "Invalid request body")
+		shared.WriteError(w, r, shared.CodeInvalidInput, "Invalid request body")
 		return
 	}
 	in, malformed, msg := validateGrant(raw)
 	if malformed {
-		shared.WriteError(w, r, "invalid-input", "Invalid request body")
+		shared.WriteError(w, r, shared.CodeInvalidInput, "Invalid request body")
 		return
 	}
 	if msg != "" {
-		shared.WriteError(w, r, "invalid-input", msg)
+		shared.WriteError(w, r, shared.CodeInvalidInput, msg)
 		return
 	}
 	sub, err := h.svc.Grant(r.Context(), in.UserID, in.PlanID, in.ExpiresAt)
 	if err != nil {
-		shared.WriteError(w, r, "internal", "transactions failed")
+		shared.WriteError(w, r, shared.CodeInternal, "transactions failed")
 		return
 	}
 	shared.WriteJSON(w, http.StatusCreated, sub)

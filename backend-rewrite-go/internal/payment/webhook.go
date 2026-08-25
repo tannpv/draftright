@@ -64,7 +64,7 @@ func (s *Service) HandleWebhook(ctx context.Context, method string, payload []by
 				_ = s.webhookRepo.SetStripeCustomerID(ctx, pay.UserID, action.StripeCustomerID)
 			}
 		}
-		done, ref, err := s.completePayment(ctx, action.ReferenceCode, "completed")
+		done, ref, err := s.completePayment(ctx, action.ReferenceCode, string(StatusCompleted))
 		if err != nil {
 			return WebhookResult{}, err
 		}
@@ -74,7 +74,7 @@ func (s *Service) HandleWebhook(ctx context.Context, method string, payload []by
 		return result(done, ref), nil
 
 	case strategy.ActionPaymentFailed:
-		done, ref, err := s.completePayment(ctx, action.ReferenceCode, "failed")
+		done, ref, err := s.completePayment(ctx, action.ReferenceCode, string(StatusFailed))
 		if err != nil {
 			return WebhookResult{}, err
 		}
@@ -98,13 +98,13 @@ func (s *Service) HandleWebhook(ctx context.Context, method string, payload []by
 		if err != nil {
 			return WebhookResult{}, err
 		}
-		if pay != nil && pay.Status == "pending" {
+		if pay != nil && pay.Status == string(StatusPending) {
 			if action.LSVariantID != "" {
 				if truePlan := s.resolvePlanIDFromLSVariant(ctx, action.LSVariantID, orUSD(pay.Currency)); truePlan != "" && truePlan != pay.PlanID {
 					_ = s.webhookRepo.UpdatePaymentPlan(ctx, pay.ID, truePlan)
 				}
 			}
-			done, ref, err := s.completePayment(ctx, action.ReferenceCode, "completed")
+			done, ref, err := s.completePayment(ctx, action.ReferenceCode, string(StatusCompleted))
 			if err != nil {
 				return WebhookResult{}, err
 			}
@@ -152,12 +152,12 @@ func (s *Service) HandleWebhook(ctx context.Context, method string, payload []by
 			if err != nil {
 				return WebhookResult{}, err
 			}
-			if pay != nil && pay.Status == "pending" {
+			if pay != nil && pay.Status == string(StatusPending) {
 				pending = pay
 			}
 		}
 		if pending != nil {
-			done, ref, err := s.completePayment(ctx, action.ReferenceCode, "completed")
+			done, ref, err := s.completePayment(ctx, action.ReferenceCode, string(StatusCompleted))
 			if err != nil {
 				return WebhookResult{}, err
 			}
@@ -218,10 +218,10 @@ func (s *Service) completePayment(ctx context.Context, ref, status string) (bool
 	if pay == nil {
 		return false, ref, nil
 	}
-	if pay.Status != "pending" {
+	if pay.Status != string(StatusPending) {
 		return true, ref, nil
 	}
-	if status == "completed" {
+	if status == string(StatusCompleted) {
 		if err := s.webhookRepo.MarkPaymentCompleted(ctx, ref); err != nil {
 			return false, ref, err
 		}
@@ -294,10 +294,10 @@ func result(success bool, ref string) WebhookResult {
 	return WebhookResult{Success: success, ReferenceCode: &ref}
 }
 
-// orUSD defaults a blank currency to "USD" (Node's `currency || 'USD'`).
+// orUSD defaults a blank currency to DefaultCurrency (Node's `currency || 'USD'`).
 func orUSD(c string) string {
 	if c == "" {
-		return "USD"
+		return DefaultCurrency
 	}
 	return c
 }

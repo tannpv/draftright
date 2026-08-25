@@ -96,7 +96,7 @@ type patchBody struct {
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	providers, err := h.svc.List(r.Context())
 	if err != nil {
-		shared.WriteError(w, r, "internal", "ai providers failed")
+		shared.WriteError(w, r, shared.CodeInternal, "ai providers failed")
 		return
 	}
 	if providers == nil {
@@ -111,7 +111,7 @@ func (h *Handler) Paginated(w http.ResponseWriter, r *http.Request) {
 	b := listquery.Build(q, aiSearchCols, aiSortAllow, "created_at", "is_active")
 	rows, total, err := h.svc.ListPaginated(r.Context(), b)
 	if err != nil {
-		shared.WriteError(w, r, "internal", "ai providers failed")
+		shared.WriteError(w, r, shared.CodeInternal, "ai providers failed")
 		return
 	}
 	if rows == nil {
@@ -129,7 +129,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	// decoder. RejectNullBody buffers; we feed our own decoder from the buffer.
 	buf, isNull, err := shared.RejectNullBody(r)
 	if err != nil {
-		shared.WriteError(w, r, "invalid-input", "Invalid request body")
+		shared.WriteError(w, r, shared.CodeInvalidInput, "Invalid request body")
 		return
 	}
 	if isNull {
@@ -143,7 +143,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	// DisallowUnknownFields) for parity; only a malformed body 400s.
 	dec.UseNumber()
 	if err := dec.Decode(&body); err != nil {
-		shared.WriteError(w, r, "invalid-input", "Invalid request body")
+		shared.WriteError(w, r, shared.CodeInvalidInput, "Invalid request body")
 		return
 	}
 
@@ -171,7 +171,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 	p, err := h.svc.Create(r.Context(), in)
 	if err != nil {
-		shared.WriteError(w, r, "internal", "ai providers failed")
+		shared.WriteError(w, r, shared.CodeInternal, "ai providers failed")
 		return
 	}
 	shared.WriteJSON(w, http.StatusCreated, p)
@@ -185,7 +185,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	// #59: null-body guard preserving the bespoke UseNumber decoder (see Create).
 	buf, isNull, err := shared.RejectNullBody(r)
 	if err != nil {
-		shared.WriteError(w, r, "invalid-input", "Invalid request body")
+		shared.WriteError(w, r, shared.CodeInvalidInput, "Invalid request body")
 		return
 	}
 	if isNull {
@@ -195,7 +195,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	dec := json.NewDecoder(bytes.NewReader(buf))
 	dec.UseNumber()
 	if err := dec.Decode(&body); err != nil {
-		shared.WriteError(w, r, "invalid-input", "Invalid request body")
+		shared.WriteError(w, r, shared.CodeInvalidInput, "Invalid request body")
 		return
 	}
 
@@ -221,7 +221,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 
 	p, err := h.svc.Update(r.Context(), id, patch)
 	if err != nil {
-		shared.WriteError(w, r, "internal", "ai providers failed")
+		shared.WriteError(w, r, shared.CodeInternal, "ai providers failed")
 		return
 	}
 	shared.WriteJSON(w, http.StatusOK, p)
@@ -231,7 +231,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if err := h.svc.SoftDelete(r.Context(), id); err != nil {
-		shared.WriteError(w, r, "internal", "ai providers failed")
+		shared.WriteError(w, r, shared.CodeInternal, "ai providers failed")
 		return
 	}
 	shared.WriteJSON(w, http.StatusOK, struct {

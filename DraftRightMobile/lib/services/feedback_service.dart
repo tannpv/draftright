@@ -1,13 +1,16 @@
-import 'dart:convert';
-import 'dart:io' show Platform;
-
 import 'package:http/http.dart' as http;
+
+import 'package:draftright_mobile/services/api_client.dart';
+import 'package:draftright_mobile/services/app_source.dart';
 
 /// Posts feature requests to the backend `POST /feedback` endpoint
 /// (JSON body, no screenshot). The bug-report counterpart is
 /// [BugReportService.submitBugReport].
 class FeedbackService {
-  /// Production endpoint — mirrors the base used by BugReportService.
+  /// Last-resort fallback endpoint. The suggest-feature sheet now passes the
+  /// configured backend (SettingsService.endpointFor) so a dev build doesn't
+  /// silently post to prod (#205 #3); only hit if a caller supplies no
+  /// [endpointOverride].
   static const String _defaultEndpoint = 'https://api.draftright.info/feedback';
 
   /// Submit a feature request. Returns true on a 2xx response, false otherwise.
@@ -32,7 +35,7 @@ class FeedbackService {
   }) async {
     final client = httpClient ?? http.Client();
     try {
-      final source = _detectSource();
+      final source = detectAppSource();
       final body = <String, dynamic>{
         'kind': 'feature',
         'title': title.trim(),
@@ -49,32 +52,21 @@ class FeedbackService {
         body['user_email'] = userEmail.trim();
       }
 
-      final headers = <String, String>{
-        'Content-Type': 'application/json',
-      };
-      if (authToken != null && authToken.isNotEmpty) {
-        headers['Authorization'] = 'Bearer $authToken';
-      }
-
-      final resp = await client.post(
-        Uri.parse(endpointOverride ?? _defaultEndpoint),
-        headers: headers,
-        body: jsonEncode(body),
+      // Route through the shared ApiClient chokepoint (JSON + Bearer headers,
+      // timeout, error handling) rather than a hand-built request (#205 #9).
+      // ApiClient throws on non-2xx; returning false in that case preserves the
+      // old bool contract. baseUrl is empty — the endpoint is a full URL.
+      final api = ApiClient(baseUrl: '', client: client);
+      await api.postJson(
+        endpointOverride ?? _defaultEndpoint,
+        body: body,
+        token: (authToken != null && authToken.isNotEmpty) ? authToken : null,
       );
-      return resp.statusCode >= 200 && resp.statusCode < 300;
+      return true;
     } catch (_) {
       return false;
     } finally {
       if (httpClient == null) client.close();
     }
-  }
-
-  /// Mirrors BugReportService._detectSource() — safe fallback for tests.
-  static String _detectSource() {
-    try {
-      if (Platform.isIOS) return 'ios-app';
-      if (Platform.isAndroid) return 'android-app';
-    } catch (_) {/* non-mobile (test host) */}
-    return 'android-app';
   }
 }

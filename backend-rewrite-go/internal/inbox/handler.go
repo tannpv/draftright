@@ -39,7 +39,7 @@ func NewHandler(svc *Service) *Handler {
 func (h *Handler) Counts(w http.ResponseWriter, r *http.Request) {
 	c, err := h.svc.Counts(r.Context())
 	if err != nil {
-		shared.WriteError(w, r, "internal", err.Error())
+		shared.WriteError(w, r, shared.CodeInternal, err.Error())
 		return
 	}
 	shared.WriteJSON(w, http.StatusOK, c)
@@ -55,7 +55,7 @@ func (h *Handler) Feed(w http.ResponseWriter, r *http.Request) {
 		Limit:    inboxLimit(q.Get("limit")),
 	})
 	if err != nil {
-		shared.WriteError(w, r, "internal", err.Error())
+		shared.WriteError(w, r, shared.CodeInternal, err.Error())
 		return
 	}
 	shared.WriteJSON(w, http.StatusOK, feed)

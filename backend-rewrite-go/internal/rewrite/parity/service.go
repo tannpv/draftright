@@ -237,7 +237,7 @@ func (s *Service) Rewrite(ctx context.Context, userID, text, tone, target, sourc
 		return nil, err
 	}
 
-	if tone == "grammar_check" {
+	if tone == ToneGrammarCheck {
 		return grammarEnvelope{
 			Grammar:    parseGrammarResult(out),
 			UsageToday: usageToday + 1,
@@ -280,7 +280,7 @@ func (s *Service) TrialRewrite(ctx context.Context, text, tone, clientIp, target
 		return nil, err
 	}
 
-	if tone == "grammar_check" {
+	if tone == ToneGrammarCheck {
 		return trialGrammarEnvelope{Grammar: parseGrammarResult(out)}, nil
 	}
 	return trialRewriteEnvelope{RewrittenText: out}, nil

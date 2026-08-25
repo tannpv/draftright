@@ -93,5 +93,5 @@ func extractBearer(header string) (string, bool) {
 // through shared.WriteError so every error body stays on one contract
 // (Rule #1).
 func writeUnauthorized(w http.ResponseWriter, r *http.Request) {
-	WriteError(w, r, "invalid-token", "Unauthorized")
+	WriteError(w, r, CodeInvalidToken, "Unauthorized")
 }

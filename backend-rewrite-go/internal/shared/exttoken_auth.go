@@ -80,7 +80,7 @@ func ExtOrJWT(ext ExtVerifier, jwt func(http.Handler) http.Handler, log *slog.Lo
 				// Node: no/!Bearer header → UnauthorizedException
 				// ('Missing bearer token'). code = inferCode(401) =
 				// invalid-token. Match it verbatim.
-				WriteError(w, r, "invalid-token", missingBearerMsg)
+				WriteError(w, r, CodeInvalidToken, missingBearerMsg)
 				return
 			}
 			// RAW remainder after "Bearer " — matches header.slice(7).
@@ -93,7 +93,7 @@ func ExtOrJWT(ext ExtVerifier, jwt func(http.Handler) http.Handler, log *slog.Lo
 					// invalid-token (Node inferCode(401)). Logged at
 					// debug like RequireAuth — auth failures are normal.
 					log.Debug("rewrite-auth: extension token rejected", "err", err.Error())
-					WriteError(w, r, "invalid-token", err.Error())
+					WriteError(w, r, CodeInvalidToken, err.Error())
 					return
 				}
 				// Inject the resolved owner under the SAME key RequireAuth

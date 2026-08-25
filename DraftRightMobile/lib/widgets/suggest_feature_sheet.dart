@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:draftright_mobile/services/auth_service.dart';
 import 'package:draftright_mobile/services/feedback_service.dart';
+import 'package:draftright_mobile/services/settings_service.dart';
 
 /// Opens the "Suggest a feature" sheet.  Bottom sheet on Android;
 /// Cupertino modal popup on iOS — mirroring [showReportBugSheet].
@@ -93,6 +94,10 @@ class _SuggestFeatureSheetState extends State<_SuggestFeatureSheet> {
     final navigator = Navigator.of(context);
 
     final auth = context.read<AuthService>();
+    // Default to the configured backend so a dev build never posts to prod
+    // (#205 #3); an explicit override (tests) still wins and skips the read.
+    final endpoint = widget.endpointOverride ??
+        context.read<SettingsService>().endpointFor('/feedback');
 
     final ok = await FeedbackService.submitFeatureRequest(
       title: _titleController.text.trim(),
@@ -100,7 +105,7 @@ class _SuggestFeatureSheetState extends State<_SuggestFeatureSheet> {
       description: _detailsController.text.trim(),
       userEmail: auth.isLoggedIn ? null : _emailController.text.trim(),
       authToken: auth.accessToken,
-      endpointOverride: widget.endpointOverride,
+      endpointOverride: endpoint,
     );
 
     if (!mounted) return;

@@ -17,12 +17,12 @@ func NewHandler(svc *Service) *Handler { return &Handler{svc: svc} }
 func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	claims, ok := shared.ClaimsFromContext(r.Context())
 	if !ok {
-		shared.WriteError(w, r, "internal", "auth context missing")
+		shared.WriteError(w, r, shared.CodeInternal, "auth context missing")
 		return
 	}
 	view, err := h.svc.GetSubscription(r.Context(), claims.Sub, time.Now())
 	if err != nil {
-		shared.WriteError(w, r, "internal", "subscription failed")
+		shared.WriteError(w, r, shared.CodeInternal, "subscription failed")
 		return
 	}
 	shared.WriteJSON(w, http.StatusOK, view)
@@ -32,12 +32,12 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) VerifyReceipt(w http.ResponseWriter, r *http.Request) {
 	claims, ok := shared.ClaimsFromContext(r.Context())
 	if !ok {
-		shared.WriteError(w, r, "internal", "auth context missing")
+		shared.WriteError(w, r, shared.CodeInternal, "auth context missing")
 		return
 	}
 	view, err := h.svc.VerifyReceipt(r.Context(), claims.Sub)
 	if err != nil {
-		shared.WriteError(w, r, "internal", "verify-receipt failed")
+		shared.WriteError(w, r, shared.CodeInternal, "verify-receipt failed")
 		return
 	}
 	shared.WriteJSON(w, http.StatusCreated, view)
