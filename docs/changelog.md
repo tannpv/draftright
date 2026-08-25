@@ -1,5 +1,28 @@
 # DraftRight Changelog
 
+## 2026-08-25
+
+### Rule #1 debt cleanup → PRODUCTION (#204, #205, #148)
+- Two codebase audits + fixes, all no-behaviour-change with machine guards against regression. **Backend (#204):** `ErrorCode` constants + a `statusByCode` map + a guard test, then a 175-call-site sweep so a mistyped error code is a compile error, not a silent HTTP 500; payment status/method/store-type + `ProviderType` + strategy-method enums adopted at every call site; tone/currency constants. Three "can't-merge" agreement tests (provider names, strategy methods, error codes) now fail CI on drift.
+- **Mobile (#205):** a `PrefsKeys` registry for the app↔native-keyboard contract (18 keys + the App-Group channel name — previously retyped at dozens of sites, a silent-drift #22 risk); fixed a real bug where dev builds posted bug-reports/feedback to the **prod** DB; deduped `_detectSource`/URL-normalize/error-parse/timeout; routed the feedback + bug-report (multipart) requests through the shared `ApiClient` chokepoint.
+- **Web + admin:** payment method + payment/subscription status literals → per-app single-source consts.
+- **Coverage:** `BackendClient`/`ApiClient`/helpers went 0 → 20 mobile unit tests (rewrite, subscription, payment, multipart, 401-refresh).
+- Merged develop→main (40 commits) and **deployed the backend refactors to Contabo prod** — verified `/health` 200, `/rewrite/trial` 200, and a bad-tone request returning `400 code:"invalid-input"` (proves the error-code sweep preserved the exact envelope). Rollback anchor `draftright-backend-go:pre-rule1-20260825`.
+
+## 2026-08-24
+
+### NestJS retired — Go is the only backend (#202)
+- Prod had run the Go backend since the 2026-06-19 cutover; NestJS remained only as repo dead-weight. Removed `backend/` (169 TS files), the Node CI workflows, the Node-vs-Go shadow-gate tooling, and the compose `backend:` service (renamed the Go service `backend-go`, serving all routes). Branch protection switched to require the four Go CI checks (new `backend-go-ci.yml`); docs reframed to Go-only. Reversibility tag `pre-nestjs-removal`.
+
+## 2026-08-23
+
+### Prod migrated to Contabo + go-live fixes (#192, #198, #199, #200, #201)
+- Production moved off the DigitalOcean droplet to a Contabo box (`deploy@169.58.214.18`, compose project `draftright` + edge Caddy). Fresh DB (`app_settings` seeded with a production baseline; `app_releases` intentionally left for the real release pipeline).
+- **#192 (security):** the streaming `/v1/rewrite` used a short built-in prompt with no anti-injection guard and broken translate — converged it onto the parity prompt registry; shipped after a 151/151 shadow-gate run, then re-verified on Contabo.
+- **#198:** bug-report screenshot uploads 500'd (nonroot container vs root-owned bind-mount) — durable one-shot `bug-reports-perms` init service in the prod compose.
+- **#201:** Go rejected `input_kind: null` where Node's `@IsOptional` accepts it — one `optionalField()` helper makes explicit null == absent across all optional properties.
+- **#200:** the release-publish script + Go prod runbook still targeted the dead DO host — retargeted to Contabo via env-overridable consts; removed the dead `versions.json` manifest mechanism (the Astro site reads `/updates/latest`).
+
 ## 2026-07-02
 
 ### Go backend: streaming /v1/rewrite training-data capture → PRODUCTION (#58)
