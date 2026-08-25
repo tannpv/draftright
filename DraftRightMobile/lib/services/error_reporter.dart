@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 
+import 'package:draftright_mobile/services/api_client.dart';
 import 'package:draftright_mobile/services/url_util.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -52,6 +53,22 @@ class ErrorReporter {
   static String? _appVersion;
   static final _queue = <Map<String, dynamic>>[];
   static bool _flushScheduled = false;
+  static Timer? _flushTimer;
+
+  /// Backend path errors are POSTed to. One source (Rule #1).
+  static const _errorsPath = '/errors';
+
+  /// Per-request timeout for the best-effort error flush — shorter than the
+  /// main request timeout so telemetry never delays anything user-facing.
+  static const _flushTimeout = Duration(seconds: 10);
+
+  /// Debounce before flushing a freshly-enqueued batch.
+  static const _flushDelay = Duration(seconds: 3);
+
+  /// Test seam: when set, the flush uses this http client instead of a fresh
+  /// one, so unit tests can drive the queue semantics without real network.
+  @visibleForTesting
+  static http.Client? debugHttpClient;
 
   /// Latest captured error, or null if none yet. UI widgets can subscribe to
   /// this to show an on-screen notice ("something went wrong: …") without
@@ -254,43 +271,66 @@ class ErrorReporter {
     if (_flushScheduled) return;
     if (_backendUrl == null) return;
     _flushScheduled = true;
-    Timer(const Duration(seconds: 3), _flush);
+    _flushTimer = Timer(_flushDelay, _flush);
   }
 
   static Future<void> _flush() async {
     _flushScheduled = false;
     if (_queue.isEmpty) return;
-    if (_backendUrl == null) return;
+    final backendUrl = _backendUrl;
+    if (backendUrl == null) return;
 
-    final batch = List<Map<String, dynamic>>.from(_queue);
-    final headers = <String, String>{'Content-Type': 'application/json'};
-    if (_bearerToken != null && _bearerToken!.isNotEmpty) {
-      headers['Authorization'] = 'Bearer $_bearerToken';
-    }
-
+    // Route through the shared ApiClient chokepoint (JSON + Bearer headers,
+    // timeout, error handling) instead of a hand-built request (#205 #9).
+    final client = debugHttpClient ?? http.Client();
+    final api = ApiClient(
+      baseUrl: backendUrl,
+      client: client,
+      defaultTimeout: _flushTimeout,
+    );
     var sentAny = false;
-    for (final entry in batch) {
-      try {
-        final res = await http
-            .post(
-              Uri.parse('$_backendUrl/errors'),
-              headers: headers,
-              body: jsonEncode(entry),
-            )
-            .timeout(const Duration(seconds: 10));
-        if (res.statusCode >= 200 && res.statusCode < 300) {
-          _queue.remove(entry);
+    try {
+      // Copy so _queue can be mutated while iterating.
+      for (final entry in List<Map<String, dynamic>>.from(_queue)) {
+        try {
+          await api.postJson(_errorsPath, body: entry, token: _bearerToken);
+          _queue.remove(entry); // 2xx — sent
           sentAny = true;
-        } else {
-          // Server rejected — drop this one to avoid infinite retries
-          _queue.remove(entry);
+        } on ApiException {
+          _queue.remove(entry); // non-2xx — drop to avoid infinite retries
+        } catch (_) {
+          // Network / timeout — leave in queue, retry next launch or event.
         }
-      } catch (_) {
-        // Network/timeout — leave in queue, retry next launch or next event
       }
+    } finally {
+      if (debugHttpClient == null) client.close();
     }
 
     if (sentAny) await _persistQueue();
     if (_queue.isNotEmpty) _scheduleFlush();
+  }
+
+  // ── Test seams (visibleForTesting) ─────────────────────────────────────────
+  @visibleForTesting
+  static Future<void> flushForTest() => _flush();
+
+  @visibleForTesting
+  static void seedQueueForTest(List<Map<String, dynamic>> entries) => _queue
+    ..clear()
+    ..addAll(entries);
+
+  @visibleForTesting
+  static List<Map<String, dynamic>> get queueForTest =>
+      List.unmodifiable(_queue);
+
+  @visibleForTesting
+  static void resetForTest() {
+    _flushTimer?.cancel();
+    _flushTimer = null;
+    _flushScheduled = false;
+    _queue.clear();
+    _backendUrl = null;
+    _bearerToken = null;
+    debugHttpClient = null;
   }
 }
