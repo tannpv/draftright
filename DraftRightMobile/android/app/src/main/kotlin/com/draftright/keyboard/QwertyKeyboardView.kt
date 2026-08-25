@@ -55,6 +55,11 @@ class QwertyKeyboardView(
     private val handler = Handler(Looper.getMainLooper())
     private var backspaceRepeating = false
 
+    // Single chokepoint for haptic + click on every key press (Rule #1: feedback
+    // is cross-cutting). `this` is the haptic host — valid here since the view is
+    // already constructed and gets attached before the first touch.
+    private val keyFeedback = KeyFeedback(this)
+
     var languagePack: LanguagePack = EnglishLanguagePack
         set(value) {
             field = value
@@ -252,6 +257,7 @@ class QwertyKeyboardView(
         keyView.setOnTouchListener { v, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
+                    keyFeedback.onKey(code)
                     bg.setColor(keyColorPressed)
                     v.invalidate()
                     longPressFired = false
@@ -360,6 +366,8 @@ class QwertyKeyboardView(
     private val backspaceRunnable = object : Runnable {
         override fun run() {
             if (backspaceRepeating) {
+                // Each auto-repeat delete gets its own feedback tick, like Samsung.
+                keyFeedback.onKey(SpecialKeys.BACKSPACE)
                 listener.onBackspace()
                 handler.postDelayed(this, 50)
             }
