@@ -1283,8 +1283,46 @@ catch it, then removing it. A guard that has never failed is not known to work."
 ### Task 8: Consumer import-lint and release
 
 **Files:**
-- Create: `.github/workflows/import-lint.yml`
-- Modify: `README.md`
+- Create: `.github/workflows/import-lint.yml`, `README.md`
+- Modify: `.github/workflows/ci.yml`
+
+> **Added after the Task 1 review.** "Zero non-stdlib dependencies" was a Global
+> Constraint with nothing enforcing it — `go vet` and `go test` both pass happily
+> after a `go get`. Per Rule #1 a cross-cutting constraint needs a machine that
+> proves nothing bypassed it, so Step 0 below adds that gate. This is why the
+> constraint is checked here rather than trusted.
+
+- [ ] **Step 0: Add the dependency gate to emailkit's own CI**
+
+Append to the `test` job's steps in `.github/workflows/ci.yml`:
+
+```yaml
+      - name: Fail if a dependency was added
+        run: |
+          # "Zero non-stdlib dependencies" is a Global Constraint. go vet and
+          # go test pass fine after a go get, so without this the constraint is
+          # a convention nobody enforces.
+          if grep -qE '^\s*require' go.mod; then
+            echo "::error::emailkit must stay dependency-free; go.mod has a require block."
+            exit 1
+          fi
+          if [ -f go.sum ]; then
+            echo "::error::go.sum exists — a dependency was added."
+            exit 1
+          fi
+          echo "ok — no dependencies"
+```
+
+Verify the gate can fail before trusting it:
+
+```bash
+go get golang.org/x/text@latest        # temporarily add a dep
+grep -E '^\s*require' go.mod           # expect a match => gate would fail
+go mod edit -droprequire golang.org/x/text && rm -f go.sum && go mod tidy
+grep -E '^\s*require' go.mod || echo "clean again"
+```
+
+Do not commit the temporary dependency.
 
 **Interfaces:**
 - Consumes: everything.
