@@ -17,7 +17,7 @@
 - **Package name: `emailkit`.** Ported files arrive as `package email`; every one needs the clause changed.
 - **No `internal/shared` imports.** `shared.WriteError`, `shared.WriteJSON`, `shared.CodeInvalidInput`, `shared.ISOMillis` are draftright-only and must not follow the code across.
 - **No DraftRight strings.** No `defaultFrom`, no DraftRight copy, no `builtinTemplates` contents, no `formatAmount`/`groupThousands`/`dateString`. Those are product vocabulary and stay in draftright.
-- **`deliver`, `resendClient`, `newResendClient` stay unexported.** Enforced by Task 8.
+- **`deliver`, `resendClient`, `NewResendSender`'s concrete type stay unexported.** Enforced by Task 7.
 
 ## Planning Note — a spec refinement
 
@@ -55,7 +55,7 @@ emailkit/
   webhook_test.go         7 cases + 3 new replay cases (Task 6)
   events.go               named constants + bounce classifier table
   events_test.go          classifier table cases
-  chokepoint_test.go      the machine (Task 8)
+  chokepoint_test.go      the machine (Task 7)
   .github/workflows/ci.yml
 ```
 
@@ -396,14 +396,139 @@ construct a client and bypass deliver()."
 
 ---
 
-### Task 4: The chokepoint
+### Task 4: Shared vocabulary and the bounce classifier
+
+> **Ordering note.** This was Task 5 in the first draft and has been moved
+> ahead of the chokepoint. The chokepoint's code and tests reference
+> `StatusSuppressed`, `StatusSkipped`, `StatusSent` and `StatusFailed`, which
+> are defined here — so with the original order Task 4 could not compile or be
+> reviewed on its own, breaking the per-task gate.
+
+**Files:**
+- Create: `events.go`, `events_test.go`
+- Source: the literals currently inline in `webhook.go` lines 80-113 and `service.go` lines 204-220
+
+**Interfaces:**
+- Consumes: nothing.
+- Produces: `EventDelivered`, `EventBounced`, `EventComplained`; `StatusSent`, `StatusFailed`, `StatusSuppressed`, `StatusSkipped`, `StatusDelivered`, `StatusBounced`, `StatusComplained`; `ReasonBounced`, `ReasonComplained`; `func isPermanentBounce(bounceType, subType string) bool`
+
+- [ ] **Step 1: Write the failing test**
+
+The permanent/transient distinction is load-bearing: a transient bounce (full
+mailbox, greylisting) must never suppress a real user, or that user silently
+stops receiving password resets.
+
+```go
+package emailkit
+
+import "testing"
+
+func TestIsPermanentBounce(t *testing.T) {
+	cases := []struct {
+		name, bType, subType string
+		want                 bool
+	}{
+		{"permanent general", "Permanent", "General", true},
+		{"permanent nomailbox", "Permanent", "NoEmail", true},
+		{"hard synonym", "hard", "", true},
+		{"lowercase permanent", "permanent", "suppressed", true},
+		{"transient mailbox full", "Transient", "MailboxFull", false},
+		{"transient greylist", "Transient", "General", false},
+		{"undetermined", "Undetermined", "", false},
+		{"empty", "", "", false},
+	}
+	for _, c := range cases {
+		if got := isPermanentBounce(c.bType, c.subType); got != c.want {
+			t.Errorf("%s: isPermanentBounce(%q,%q) = %v, want %v",
+				c.name, c.bType, c.subType, got, c.want)
+		}
+	}
+}
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `go test ./... -run TestIsPermanentBounce -v`
+Expected: FAIL — `undefined: isPermanentBounce`.
+
+- [ ] **Step 3: Write events.go**
+
+```go
+package emailkit
+
+import "strings"
+
+// Resend webhook event types. External-spec constants — the vocabulary belongs
+// to Resend (https://resend.com/docs/dashboard/webhooks/event-types), so the
+// literals are theirs; naming them once stops four repos retyping them.
+const (
+	EventDelivered  = "email.delivered"
+	EventBounced    = "email.bounced"
+	EventComplained = "email.complained"
+)
+
+// Statuses written to the audit row.
+const (
+	StatusSent       = "sent"
+	StatusFailed     = "failed"
+	StatusSuppressed = "suppressed"
+	StatusSkipped    = "skipped"
+	StatusDelivered  = "delivered"
+	StatusBounced    = "bounced"
+	StatusComplained = "complained"
+)
+
+// Reasons an address enters the suppression list.
+const (
+	ReasonBounced    = "bounced"
+	ReasonComplained = "complained"
+)
+
+// permanentBounceMarkers are the tokens that mean "this address will never
+// accept mail". Kept as data so a new category from Resend is one row here,
+// not another strings.Contains at a call site.
+var permanentBounceMarkers = []string{"permanent", "hard"}
+
+// isPermanentBounce reports whether a bounce should suppress the address.
+// Only permanent bounces suppress: a transient bounce (full mailbox,
+// greylisting) must not lock a real user out of password resets.
+func isPermanentBounce(bounceType, subType string) bool {
+	kind := strings.ToLower(bounceType + " " + subType)
+	for _, m := range permanentBounceMarkers {
+		if strings.Contains(kind, m) {
+			return true
+		}
+	}
+	return false
+}
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `go test ./... -run TestIsPermanentBounce -v`
+Expected: PASS, 1 test, 8 sub-cases.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add events.go events_test.go
+git commit -m "feat: name the Resend vocabulary once
+
+Event types, log statuses and suppression reasons were inline literals in two
+files and would have been retyped in three more repos. The bounce classifier
+becomes a data table so a new category is a row, not another Contains."
+```
+
+---
+
+### Task 5: The chokepoint
 
 **Files:**
 - Create: `service.go`, `service_test.go`
 - Source: `backend-rewrite-go/internal/email/service.go` at `5dbfa570`, lines 204-252 plus the Service/Config/wg scaffolding
 
 **Interfaces:**
-- Consumes: `Sender` (Task 3), `Registry` (Task 2).
+- Consumes: `Sender` (Task 3), `Registry` (Task 2), status constants (Task 4).
 - Produces:
   - `type Store interface { IsSuppressed; LogSend; Template; MarkByProviderID; Suppress }`
   - `type SendRecord struct { To, Type, Subject, Status string; ProviderID, Error *string }`
@@ -672,8 +797,8 @@ func strpOrNil(s string) *string {
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `go test ./... -run TestDeliver -race -v`
-Expected: PASS, 4 tests. `StatusSuppressed` etc. come from Task 5's `events.go`;
-if running Task 4 standalone, add them there first.
+Expected: PASS, 4 tests. The status constants come from Task 4's `events.go`,
+which lands first precisely so this task compiles and reviews on its own.
 
 - [ ] **Step 5: Commit**
 
@@ -689,125 +814,6 @@ retention, and repeating it in app logs gives that PII a second lifetime."
 
 ---
 
-### Task 5: Shared vocabulary and the bounce classifier
-
-**Files:**
-- Create: `events.go`, `events_test.go`
-- Source: the literals currently inline in `webhook.go` lines 80-113 and `service.go` lines 204-220
-
-**Interfaces:**
-- Consumes: nothing.
-- Produces: `EventDelivered`, `EventBounced`, `EventComplained`; `StatusSent`, `StatusFailed`, `StatusSuppressed`, `StatusSkipped`, `StatusDelivered`, `StatusBounced`, `StatusComplained`; `ReasonBounced`, `ReasonComplained`; `func isPermanentBounce(bounceType, subType string) bool`
-
-- [ ] **Step 1: Write the failing test**
-
-The permanent/transient distinction is load-bearing: a transient bounce (full
-mailbox, greylisting) must never suppress a real user, or that user silently
-stops receiving password resets.
-
-```go
-package emailkit
-
-import "testing"
-
-func TestIsPermanentBounce(t *testing.T) {
-	cases := []struct {
-		name, bType, subType string
-		want                 bool
-	}{
-		{"permanent general", "Permanent", "General", true},
-		{"permanent nomailbox", "Permanent", "NoEmail", true},
-		{"hard synonym", "hard", "", true},
-		{"lowercase permanent", "permanent", "suppressed", true},
-		{"transient mailbox full", "Transient", "MailboxFull", false},
-		{"transient greylist", "Transient", "General", false},
-		{"undetermined", "Undetermined", "", false},
-		{"empty", "", "", false},
-	}
-	for _, c := range cases {
-		if got := isPermanentBounce(c.bType, c.subType); got != c.want {
-			t.Errorf("%s: isPermanentBounce(%q,%q) = %v, want %v",
-				c.name, c.bType, c.subType, got, c.want)
-		}
-	}
-}
-```
-
-- [ ] **Step 2: Run test to verify it fails**
-
-Run: `go test ./... -run TestIsPermanentBounce -v`
-Expected: FAIL — `undefined: isPermanentBounce`.
-
-- [ ] **Step 3: Write events.go**
-
-```go
-package emailkit
-
-import "strings"
-
-// Resend webhook event types. External-spec constants — the vocabulary belongs
-// to Resend (https://resend.com/docs/dashboard/webhooks/event-types), so the
-// literals are theirs; naming them once stops four repos retyping them.
-const (
-	EventDelivered  = "email.delivered"
-	EventBounced    = "email.bounced"
-	EventComplained = "email.complained"
-)
-
-// Statuses written to the audit row.
-const (
-	StatusSent       = "sent"
-	StatusFailed     = "failed"
-	StatusSuppressed = "suppressed"
-	StatusSkipped    = "skipped"
-	StatusDelivered  = "delivered"
-	StatusBounced    = "bounced"
-	StatusComplained = "complained"
-)
-
-// Reasons an address enters the suppression list.
-const (
-	ReasonBounced    = "bounced"
-	ReasonComplained = "complained"
-)
-
-// permanentBounceMarkers are the tokens that mean "this address will never
-// accept mail". Kept as data so a new category from Resend is one row here,
-// not another strings.Contains at a call site.
-var permanentBounceMarkers = []string{"permanent", "hard"}
-
-// isPermanentBounce reports whether a bounce should suppress the address.
-// Only permanent bounces suppress: a transient bounce (full mailbox,
-// greylisting) must not lock a real user out of password resets.
-func isPermanentBounce(bounceType, subType string) bool {
-	kind := strings.ToLower(bounceType + " " + subType)
-	for _, m := range permanentBounceMarkers {
-		if strings.Contains(kind, m) {
-			return true
-		}
-	}
-	return false
-}
-```
-
-- [ ] **Step 4: Run test to verify it passes**
-
-Run: `go test ./... -run TestIsPermanentBounce -v`
-Expected: PASS, 1 test, 8 sub-cases.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add events.go events_test.go
-git commit -m "feat: name the Resend vocabulary once
-
-Event types, log statuses and suppression reasons were inline literals in two
-files and would have been retyped in three more repos. The bounce classifier
-becomes a data table so a new category is a row, not another Contains."
-```
-
----
-
 ### Task 6: Webhook with the replay window closed
 
 **Files:**
@@ -815,7 +821,7 @@ becomes a data table so a new category is a row, not another Contains."
 - Source: `backend-rewrite-go/internal/email/webhook.go` at `5dbfa570`
 
 **Interfaces:**
-- Consumes: `Store` (Task 4), constants and `isPermanentBounce` (Task 5).
+- Consumes: constants and `isPermanentBounce` (Task 4), `Store` (Task 5).
 - Produces:
   - `type WebhookHandler struct{}`
   - `func NewWebhookHandler(st Store, secret string, opts ...WebhookOption) *WebhookHandler`
@@ -889,7 +895,9 @@ func TestWebhook_AcceptsFreshTimestamp(t *testing.T) {
 Helper both new and ported tests use:
 
 ```go
-const testSecret = "whsec_" // + base64 key appended in signedRequest
+// A real base64 key. The ported verify() strips an optional whsec_ prefix and
+// base64-decodes the remainder as the HMAC key.
+const testSecret = "whsec_c3VwZXJzZWNyZXR0ZXN0a2V5MTIzNDU2"
 
 func signedRequest(t *testing.T, secret string, ts time.Time, body string) *http.Request {
 	t.Helper()
@@ -1366,16 +1374,16 @@ consumer requires the tag.
 |---|---|
 | new module `github.com/tannpv/emailkit` | 1 |
 | `Sender` interface, provider swappable | 3 |
-| `Store` port, storage per project, tenancy excluded | 4 |
-| generic `Send(ctx, key, to, vars)`, product methods excluded | 4 |
-| `defaultFrom` / DraftRight copy removed | 3, 4 |
+| `Store` port, storage per project, tenancy excluded | 5 |
+| generic `Send(ctx, key, to, vars)`, product methods excluded | 5 |
+| `defaultFrom` / DraftRight copy removed | 3, 5 |
 | `shared.*` couplings removed | 6 |
 | replay window fixed | 6 |
-| `deliver` unexported, sole caller | 4, 7 |
-| four literal groups named once | 5 |
-| table-driven bounce classifier | 5 |
+| `deliver` unexported, sole caller | 5, 7 |
+| four literal groups named once | 4 |
+| table-driven bounce classifier | 4 |
 | import-lint across consumers | 8 |
-| inherited tests as regression net | 2, 4, 6 |
+| inherited tests as regression net | 2, 5, 6 |
 
 Every spec requirement maps to a task. Two spec statements were **corrected**
 rather than implemented as written, both recorded in the Planning Note:
@@ -1384,11 +1392,11 @@ three inherited test files move unchanged.
 
 **Placeholder scan:** none. Every code step carries complete code.
 
-**Type consistency:** `Store` has the same five methods in Task 4's definition,
-Task 4's `fakeStore`, and Task 6's usage. `Sender.Send` has the same six-arg
-signature in Tasks 3, 4 and 7. `SendRecord` fields match between Task 4's
-definition and its test assertions. Status constants used in Task 4's tests are
-defined in Task 5 — noted inline in Task 4 Step 4.
+**Type consistency:** `Store` has the same five methods in Task 5's definition,
+Task 5's `fakeStore`, and Task 6's usage. `Sender.Send` has the same six-arg
+signature in Tasks 3, 5 and 7. `SendRecord` fields match between Task 5's
+definition and its test assertions. Status constants used by the chokepoint are
+defined in Task 4, which now runs before it.
 
 ## Out of scope — needs its own plan
 
