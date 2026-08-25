@@ -74,7 +74,7 @@ provider (SES direct, Postmark) is a new implementation, not an edit to the core
 
 | stays in draftright | moves to emailkit |
 |---|---|
-| `admin_logs_*`, `admin_templates_*` (~635 lines of admin UI) | `resend.go`, `webhook.go`, `templates.go` |
+| `admin_logs_*`, `admin_templates_*` (~635 lines of admin UI) | `resend.go`, `webhook.go`, the generic half of `templates.go` |
 | `repo_pg.go` → becomes its `Store` implementation | the `deliver` / `fire` / `SendRaw` core |
 | `SendVerification`, `SendPasswordReset`, `SendRenewalReminder`, `SendSubscriptionActivated`, `SendPaymentFailed`, `SendSubscriptionExpired` | generic `Send(ctx, key, to, vars)` |
 
@@ -176,9 +176,19 @@ there today. Restoring them is a prerequisite for step 2 verifying anything.
 Each step is its own branch and its own `/epiphanydev:full-review` pass.
 
 1. **emailkit** — extract, fix the replay window, add the enforcement test.
-   draftright's existing `service_test.go`, `webhook_test.go` and `templates_test.go`
-   move with the code and must pass unchanged. That is a real discriminator: they
-   were written against the current behaviour and will fail if extraction changes it.
+   draftright's `service_test.go` and `webhook_test.go` move and must pass with no
+   behavioural change. That is a real discriminator: they were written against the
+   current behaviour and will fail if extraction alters it.
+
+   **Corrected during planning:** `templates.go` splits three ways, not two, and
+   `templates_test.go` therefore **splits rather than moving**. The generic
+   substitution and escaping cases go to emailkit; the five product cases
+   (`Verification`, `PasswordReset`, `SubscriptionActivated`, `FormatAmount`,
+   `DateString`) stay in draftright alongside `builtinTemplates`, `shell()`,
+   `formatAmount`, `groupThousands` and `dateString`. This forces a third injection
+   point the spec did not originally name: a caller-supplied template `Registry`.
+   Without it, DraftRight's subscription copy would live in the shared module —
+   the precise outcome this design exists to prevent.
 2. **draftright migrates.** The only consumer with a proven production integration,
    so it validates the module against reality before anything new depends on it.
    Done on `main` in a clean clone — not the host's deployed copy, which is 99
