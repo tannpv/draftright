@@ -31,6 +31,9 @@ object ChineseLanguagePack : LanguagePack {
 
     override fun composer(): Composer = PinyinComposer()
 
+    /** Space converts the pinyin reading to the top hanzi candidate (standard ZH IME). */
+    override val convertsOnSpace: Boolean = true
+
     /** Matches the backend manifest's pack URL prefix (zh pack ships later). */
     private const val PACK_ID_PREFIX = "draftright-ime-zh"
 
