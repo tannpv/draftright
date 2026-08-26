@@ -2,15 +2,20 @@ import Foundation
 
 /// Chinese candidate engine (#211): everything the shared
 /// `DictionaryCandidateEngine` does (exact word lookup + raw-pinyin fallback),
-/// PLUS sentence-level pinyin — when the run-together pinyin isn't a known word,
-/// segment it and build a hanzi candidate from each syllable's top match
-/// ("woshi" → 我是). Wraps the shared engine rather than editing it so Japanese
-/// (which uses the same `DictionaryCandidateEngine`) is untouched — Rule #1.
-/// Mirror of the Kotlin `PinyinCandidateEngine`.
+/// PLUS sentence-level pinyin — segment a run-together pinyin into a hanzi
+/// candidate ("woshi" → 我是) — AND initials abbreviation — a word's syllable
+/// initials commit the whole word ("nh" → 你好, "bj" → 北京). Wraps the shared
+/// engine rather than editing it so Japanese (which uses the same
+/// `DictionaryCandidateEngine`) is untouched — Rule #1. Mirror of the Kotlin
+/// `PinyinCandidateEngine`.
 public final class PinyinCandidateEngine: CandidateEngine {
 
     private let dictionary: [String: [String]]
     private let base: DictionaryCandidateEngine
+
+    /// initials ("bj") → hanzi words whose syllable initials spell it (北京),
+    /// derived once from the dictionary + PinyinSegmenter (no new source of truth).
+    private lazy var initialsIndex: [String: [String]] = buildInitialsIndex()
 
     public init(dictionary: [String: [String]]) {
         self.dictionary = dictionary
@@ -20,20 +25,38 @@ public final class PinyinCandidateEngine: CandidateEngine {
     public func suggest(composing: String, previousTokens: [String], limit: Int) -> [Candidate] {
         if composing.isEmpty { return [] }
         let baseCands = base.suggest(composing: composing, previousTokens: previousTokens, limit: limit)
-        guard let segmented = segmentedCandidate(composing) else { return baseCands }
 
-        // Insert the segmented sentence just before the raw-pinyin fallback
-        // (the entry whose text == composing). Dedup by text.
+        // Candidates derived from the composing pinyin, best-first: a segmented
+        // sentence, then any initials-abbreviation matches.
+        var derived: [String] = []
+        if let segmented = segmentedCandidate(composing) { derived.append(segmented) }
+        if let abbr = initialsIndex[composing] { derived.append(contentsOf: abbr) }
+        if derived.isEmpty { return baseCands }
+
+        // Insert derived candidates just before the raw-pinyin fallback (the
+        // entry whose text == composing). Dedup by text.
         var out: [Candidate] = []
         var seen = Set<String>()
         for c in baseCands {
-            if c.text == composing, seen.insert(segmented).inserted {
-                out.append(Candidate(text: segmented))
+            if c.text == composing {
+                for d in derived where seen.insert(d).inserted { out.append(Candidate(text: d)) }
             }
             if seen.insert(c.text).inserted { out.append(c) }
         }
-        if seen.insert(segmented).inserted { out.append(Candidate(text: segmented)) }
+        for d in derived where seen.insert(d).inserted { out.append(Candidate(text: d)) }
         return Array(out.prefix(limit))
+    }
+
+    private func buildInitialsIndex() -> [String: [String]] {
+        var index: [String: [String]] = [:]
+        for (reading, hanziList) in dictionary {
+            guard let segments = PinyinSegmenter.segment(reading), segments.count >= 2 else { continue }
+            let initials = segments.map { String($0.prefix(1)) }.joined()
+            var bucket = index[initials] ?? []
+            for h in hanziList where !bucket.contains(h) { bucket.append(h) }
+            index[initials] = bucket
+        }
+        return index
     }
 
     private func segmentedCandidate(_ pinyin: String) -> String? {

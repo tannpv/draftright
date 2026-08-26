@@ -16,6 +16,8 @@ class PinyinCandidateEngineTest {
         "wo" to listOf("我"),
         "shi" to listOf("是", "时"),
         "men" to listOf("们"),
+        "women" to listOf("我们"),
+        "beijing" to listOf("北京"),
     )
     private val engine = PinyinCandidateEngine(dict)
 
@@ -48,5 +50,16 @@ class PinyinCandidateEngineTest {
 
     @Test fun `unsegmentable pinyin falls back to the base engine`() {
         assertEquals(listOf("xyz"), texts("xyz"))
+    }
+
+    @Test fun `initials abbreviation commits the whole word`() {
+        // "nh" = ni-hao initials → 你好; "bj" = bei-jing initials → 北京.
+        assertTrue(texts("nh").contains("你好"))
+        assertTrue(texts("bj").contains("北京"))
+    }
+
+    @Test fun `abbreviation of a two-syllable word`() {
+        // "wm" = wo-men → 我们.
+        assertTrue(texts("wm").contains("我们"))
     }
 }
