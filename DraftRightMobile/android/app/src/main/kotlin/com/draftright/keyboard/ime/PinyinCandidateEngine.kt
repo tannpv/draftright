@@ -23,6 +23,13 @@ class PinyinCandidateEngine(
      */
     private val initialsIndex: Map<String, List<String>> by lazy { buildInitialsIndex() }
 
+    /**
+     * fuzzy-folded reading → hanzi (fold("zhongguo")="zongguo" → 中国), so a
+     * sloppy spelling still finds the word. Derived from the dictionary via
+     * [PinyinFuzzy] — no new source of truth (Rule #1).
+     */
+    private val foldedIndex: Map<String, List<String>> by lazy { buildFoldedIndex() }
+
     override fun suggest(
         composing: String,
         previousTokens: List<String>,
@@ -36,6 +43,7 @@ class PinyinCandidateEngine(
         val derived = ArrayList<String>()
         segmentedCandidate(composing)?.let { derived.add(it) }
         initialsIndex[composing]?.let { derived.addAll(it) }
+        foldedIndex[PinyinFuzzy.fold(composing)]?.let { derived.addAll(it) }
         if (derived.isEmpty()) return baseCands
 
         // Insert the derived candidates just BEFORE the raw-pinyin fallback (the
@@ -51,6 +59,19 @@ class PinyinCandidateEngine(
         }
         for (d in derived) if (seen.add(d)) out.add(Candidate(d))
         return out.take(limit)
+    }
+
+    private fun buildFoldedIndex(): Map<String, List<String>> {
+        val index = HashMap<String, MutableList<String>>()
+        for ((reading, hanziList) in dictionary) {
+            val folded = PinyinFuzzy.fold(reading)
+            // Skip readings that don't fold to anything different — exact lookup
+            // already covers them, so a fuzzy entry would be redundant.
+            if (folded == reading) continue
+            val bucket = index.getOrPut(folded) { ArrayList() }
+            for (hanzi in hanziList) if (hanzi !in bucket) bucket.add(hanzi)
+        }
+        return index
     }
 
     private fun buildInitialsIndex(): Map<String, List<String>> {

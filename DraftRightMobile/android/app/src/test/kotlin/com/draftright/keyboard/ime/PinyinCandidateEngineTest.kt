@@ -18,6 +18,7 @@ class PinyinCandidateEngineTest {
         "men" to listOf("们"),
         "women" to listOf("我们"),
         "beijing" to listOf("北京"),
+        "zhongguo" to listOf("中国"),
     )
     private val engine = PinyinCandidateEngine(dict)
 
@@ -61,5 +62,11 @@ class PinyinCandidateEngineTest {
     @Test fun `abbreviation of a two-syllable word`() {
         // "wm" = wo-men → 我们.
         assertTrue(texts("wm").contains("我们"))
+    }
+
+    @Test fun `fuzzy pinyin matches retroflex-dental and nasal`() {
+        // "si" (dental) finds 是 (shi); "zongguo" finds 中国 (zhongguo).
+        assertTrue(texts("si").contains("是"))
+        assertTrue(texts("zongguo").contains("中国"))
     }
 }

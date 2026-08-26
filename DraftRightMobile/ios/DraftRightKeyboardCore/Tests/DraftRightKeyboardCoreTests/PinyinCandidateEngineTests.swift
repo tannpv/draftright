@@ -8,7 +8,7 @@ final class PinyinCandidateEngineTests: XCTestCase {
     private let dict: [String: [String]] = [
         "ni": ["你"], "hao": ["好"], "nihao": ["你好"],
         "wo": ["我"], "shi": ["是", "时"], "men": ["们"],
-        "women": ["我们"], "beijing": ["北京"],
+        "women": ["我们"], "beijing": ["北京"], "zhongguo": ["中国"],
     ]
     private var engine: PinyinCandidateEngine { PinyinCandidateEngine(dictionary: dict) }
 
@@ -47,5 +47,10 @@ final class PinyinCandidateEngineTests: XCTestCase {
 
     func testAbbreviationOfTwoSyllableWord() {
         XCTAssertTrue(texts("wm").contains("我们"))
+    }
+
+    func testFuzzyPinyinMatchesRetroflexDentalAndNasal() {
+        XCTAssertTrue(texts("si").contains("是"))
+        XCTAssertTrue(texts("zongguo").contains("中国"))
     }
 }
