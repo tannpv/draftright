@@ -40,6 +40,9 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
     private var originalText: String? = null
     private var candidateBar: CandidateBarView? = null
 
+    /** Pending JP/ZH conversion cursor — space cycles candidates (#207). */
+    private val cycle = com.draftright.keyboard.ime.ConversionCycle()
+
     /**
      * Maximum candidates rendered at once. The bar scrolls horizontally so
      * a higher cap is fine, but the trigram engine's top picks dominate —
@@ -184,7 +187,7 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
         // empty composer so a stale Telex buffer from the previous field can
         // never seed this one. `restarting` (same field re-init, e.g. rotation)
         // is left alone to avoid disrupting an in-progress composition.
-        if (!restarting) controller?.composer?.reset()
+        if (!restarting) { controller?.composer?.reset(); cycle.reset() }
     }
 
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
@@ -222,6 +225,7 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
         if (composing.isNotEmpty() && candidatesStart == -1 && candidatesEnd == -1) {
             currentInputConnection?.finishComposingText()
             controller?.composer?.reset()
+            cycle.reset()
             refreshCandidates()
         }
         // The cursor moved (a letter committed, Enter, or a manual tap). Re-read
@@ -251,6 +255,7 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
         // chat box when it opens.
         currentInputConnection?.finishComposingText()
         controller?.composer?.reset()
+        cycle.reset()
         // A live voice session must die with the input session it started in —
         // otherwise the mic keeps listening after the field/app switch (hot
         // mic) and its eventual transcript would commit into whatever field
@@ -284,6 +289,7 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
 
     private fun refreshKeyboardForActiveLanguage() {
         currentInputConnection?.finishComposingText()
+        cycle.reset()
         controller?.let { keyboard?.languagePack = it.current }
     }
 
@@ -313,6 +319,9 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
 
     override fun onCharTyped(char: String) {
         val ic = currentInputConnection ?: return
+        // A pending JP/ZH conversion is confirmed by the next input; do it before
+        // anything else so the composer is back in sync for the divergence guard.
+        confirmConversionIfPending(ic)
         val c = controller
         if (c == null || char.length != 1) {
             ic.commitText(char, 1)
@@ -331,6 +340,15 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
 
     override fun onBackspace() {
         val ic = currentInputConnection ?: return
+        // Backspace on a pending JP/ZH conversion cancels it back to the reading
+        // (the composer still holds the kana/pinyin), rather than deleting a char.
+        if (cycle.isActive) {
+            cycle.reset()
+            val reading = controller?.composer?.currentComposingText().orEmpty()
+            if (reading.isNotEmpty()) ic.setComposingText(reading, 1) else ic.finishComposingText()
+            refreshCandidates()
+            return
+        }
         val c = controller
         if (c == null) {
             ic.deleteSurroundingText(1, 0)
@@ -356,6 +374,9 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
 
     override fun onEnter() {
         val ic = currentInputConnection ?: return
+        // Enter confirms a pending JP/ZH conversion instead of inserting a newline
+        // (standard CJK IME behavior).
+        if (confirmConversionIfPending(ic)) return
         // Commit any pending Telex composition and clear the composer BEFORE the
         // editor action / newline. Otherwise the buffer (e.g. "tấn") survives the
         // send and the next keystroke composes on top of it → "tấng" (#71).
@@ -668,14 +689,40 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
      */
     private fun convertReadingOnSpace(ic: android.view.inputmethod.InputConnection): Boolean {
         val c = controller ?: return false
+        // Already converting → each further space cycles to the next candidate,
+        // shown as marked (pending) text. The composer still holds the reading,
+        // so backspace can revert and a confirm finalizes whatever's selected.
+        if (cycle.isActive) {
+            val next = cycle.advance() ?: return false
+            ic.setComposingText(next, 1)
+            return true
+        }
         val composing = c.composer?.currentComposingText().orEmpty()
         if (composing.isEmpty()) return false
-        val top = c.current.candidateEngine()
-            ?.suggest(composing, previousTokens = emptyList(), limit = 1)
-            ?.firstOrNull() ?: return false
-        // commitText REPLACES the marked composing region with the chosen form.
-        c.composer?.reset()
-        ic.commitText(top.text, 1)
+        val cands = c.current.candidateEngine()
+            ?.suggest(composing, previousTokens = emptyList(), limit = candidateLimit)
+            ?.map { it.text }
+            .orEmpty()
+        if (cands.isEmpty()) return false
+        cycle.start(cands)
+        val top = cycle.current() ?: return false
+        // Show the top candidate as MARKED text (not committed) so the next space
+        // can still cycle. finishComposingText on the next input confirms it.
+        ic.setComposingText(top, 1)
+        return true
+    }
+
+    /**
+     * If a JP/ZH conversion is pending, finalize the currently-selected candidate
+     * (the marked text) and clear the pending state. Returns true if it confirmed.
+     * Called at the top of the other input paths BEFORE the field-divergence
+     * guard, so the composer is reset back in sync before that guard runs.
+     */
+    private fun confirmConversionIfPending(ic: android.view.inputmethod.InputConnection): Boolean {
+        if (!cycle.isActive) return false
+        ic.finishComposingText()
+        controller?.composer?.reset()
+        cycle.reset()
         candidateBar?.setCandidates(emptyList())
         return true
     }
@@ -686,6 +733,7 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
         // so the kanji takes its place. Do NOT finishComposingText first — that
         // would finalize the kana and make this append (e.g. "わたし私").
         controller?.composer?.reset()
+        cycle.reset()
         ic.commitText(candidate.text + " ", 1)
         candidateBar?.setCandidates(emptyList())
     }
