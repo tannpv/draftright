@@ -90,3 +90,6 @@ DraftRightLinux/GCC/
 # whose parent directory is excluded.
 !Tests/
 dist/
+
+# Local secrets scratch (Resend API keys) — never commit
+/resend
