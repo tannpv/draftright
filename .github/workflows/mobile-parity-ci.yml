@@ -3,6 +3,11 @@ name: Mobile parity checks
 # Guards the cross-language duplicated facts that RULE #1 can't merge into one
 # source (Kotlin vs Swift). Runs on the self-hosted Contabo runner (free), not
 # GitHub-hosted minutes.
+#
+# SECURITY: push-only, NO pull_request trigger. The runner is self-hosted on a
+# shared box; running a PR's checkout (which could modify the script it runs)
+# on it would be arbitrary code execution on our infra. push to develop/main is
+# maintainer-controlled, so the checked-out script is already-trusted code.
 on:
   push:
     branches: [develop, main]
@@ -11,11 +16,9 @@ on:
       - 'DraftRightMobile/ios/DraftRightKeyboardCore/Sources/DraftRightKeyboardCore/IME/VietnameseBootstrapWordList.swift'
       - 'scripts/check-vi-bigram-parity.py'
       - '.github/workflows/mobile-parity-ci.yml'
-  pull_request:
-    paths:
-      - 'DraftRightMobile/android/app/src/main/res/raw/wordlist_vi_bigrams.tsv'
-      - 'DraftRightMobile/ios/DraftRightKeyboardCore/Sources/DraftRightKeyboardCore/IME/VietnameseBootstrapWordList.swift'
-      - 'scripts/check-vi-bigram-parity.py'
+
+permissions:
+  contents: read
 
 jobs:
   vi-bigram-parity:
@@ -24,5 +27,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Assert the two bigram copies agree
         run: python3 scripts/check-vi-bigram-parity.py
