@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tannpv/draftright-rewrite/internal/shared"
 	"github.com/tannpv/emailkit"
 )
 
@@ -123,22 +122,6 @@ func (s *Service) SendSubscriptionExpired(ctx context.Context, to, name, plan st
 // path. appsettings depends on this via its EmailSender port.
 func (s *Service) SendRaw(ctx context.Context, to, subject, html, label string) {
 	s.kit.SendRaw(ctx, to, subject, html, label)
-}
-
-// SendTestEmail is the admin-triggered "Send test email" — verifies Resend
-// creds + DNS. Builds the inline HTML (no template) with an ISO timestamp,
-// mirroring Node sendTestEmail. Fire-and-forget here (Node throws on error
-// to surface in the admin toast; the Go HTTP edge handles that seam).
-func (s *Service) SendTestEmail(ctx context.Context, to string) {
-	html := `<!doctype html>
-<html><body style="font-family:-apple-system,system-ui,sans-serif;background:#f5f5f7;padding:32px;margin:0;">
-  <div style="max-width:480px;margin:0 auto;background:#fff;border-radius:12px;padding:32px;">
-    <h1 style="font-size:20px;margin:0 0 16px;color:#111;">It works.</h1>
-    <p style="color:#444;line-height:1.5;margin:0 0 16px;">If you can read this, your Resend API key + sender domain are set up correctly. Renewal reminders, verification codes, and payment notices will all flow through this configuration.</p>
-    <p style="color:#888;font-size:13px;margin:24px 0 0;">— DraftRight admin test, sent ` + shared.ISOMillis(time.Now()) + `</p>
-  </div>
-</body></html>`
-	s.SendRaw(ctx, to, "DraftRight test email", html, "test email")
 }
 
 func orThere(n string) string {

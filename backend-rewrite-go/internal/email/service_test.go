@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	sqlc "github.com/tannpv/draftright-rewrite/internal/shared/pg/sqlc"
 	"github.com/tannpv/emailkit"
 )
 
@@ -72,40 +71,66 @@ func newTestService(store emailkit.Store, sender *capturingSender) *Service {
 	return &Service{kit: kit}
 }
 
+// testName is the name every case passes to its product method. Distinctive
+// rather than "X" so strings.Contains cannot match it by accident against
+// boilerplate in the shell markup.
+const testName = "Testerson"
+
 // The six product methods are the contract four other packages depend on. This
 // pins the subject each one produces, so a template rename or a wrong key
 // constant fails here rather than silently mailing nothing.
 //
-// wantCode additionally pins the rendered BODY for verification and
-// password-reset: their subjects carry no {{vars}}, so a bug that renamed the
-// "code" var going into Send (e.g. SendVerification's map key drifting from
-// the template's {{code}}) would leave the subject assertion green while
-// mailing an empty code. The other four subjects already embed a substituted
-// var (plan/expires/amount), so they don't need a separate body check.
+// wantBody pins the rendered BODY for every var the SUBJECT does not already
+// substitute — a map key drifting from the template's {{var}} (e.g.
+// SendRenewalReminder's "amount" renamed) renders as empty, and a
+// subject-only assertion stays green while the user is mailed "We'll charge
+// to your saved payment method". Per template, the subject substitutes:
+//
+//	verification, password-reset     — nothing (no {{var}} at all)
+//	renewal-reminder                 — {{plan}} and {{expires}}
+//	subscription-activated           — {{plan}} only
+//	payment-failed                   — {{plan}} only
+//	subscription-expired             — {{plan}} only
+//
+// {{amount}} appears in NO subject, and {{name}} appears in no subject
+// either, so both are pinned here for every method that passes them; so is
+// subscription-activated's body-only {{expires}}.
 func TestProductMethods_ProduceExpectedSubjects(t *testing.T) {
 	expires := time.Date(2026, time.June, 15, 12, 0, 0, 0, time.UTC)
+	const (
+		wantExpires = "Mon Jun 15 2026" // dateString(expires)
+		wantAmount  = "$9.99"           // formatAmount("USD", 999)
+	)
 	cases := []struct {
 		name     string
 		call     func(*Service)
 		subject  string
-		wantCode string
+		wantBody []string
 	}{
-		{"verification", func(s *Service) { s.SendVerification(context.Background(), "a@b.c", "X", "123456") },
-			"Welcome to DraftRight — confirm your email", "123456"},
-		{"password-reset", func(s *Service) { s.SendPasswordReset(context.Background(), "a@b.c", "X", "000111") },
-			"Reset your DraftRight password", "000111"},
+		{"verification", func(s *Service) { s.SendVerification(context.Background(), "a@b.c", testName, "123456") },
+			"Welcome to DraftRight — confirm your email",
+			[]string{testName, "123456"}},
+		{"password-reset", func(s *Service) { s.SendPasswordReset(context.Background(), "a@b.c", testName, "000111") },
+			"Reset your DraftRight password",
+			[]string{testName, "000111"}},
 		{"renewal-reminder", func(s *Service) {
-			s.SendRenewalReminder(context.Background(), "a@b.c", "X", "Pro", expires, "USD", 999)
+			s.SendRenewalReminder(context.Background(), "a@b.c", testName, "Pro", expires, "USD", 999)
 		},
-			"DraftRight Pro renews on Mon Jun 15 2026", ""},
+			"DraftRight Pro renews on Mon Jun 15 2026",
+			[]string{testName, wantAmount}},
 		{"subscription-activated", func(s *Service) {
-			s.SendSubscriptionActivated(context.Background(), "a@b.c", "X", "Pro", expires, "USD", 999)
+			s.SendSubscriptionActivated(context.Background(), "a@b.c", testName, "Pro", expires, "USD", 999)
 		},
-			"Your DraftRight Pro subscription is active", ""},
-		{"payment-failed", func(s *Service) { s.SendPaymentFailed(context.Background(), "a@b.c", "X", "Pro") },
-			"Action needed: renewal payment failed for DraftRight Pro", ""},
-		{"subscription-expired", func(s *Service) { s.SendSubscriptionExpired(context.Background(), "a@b.c", "X", "Pro") },
-			"Your DraftRight Pro subscription has expired", ""},
+			"Your DraftRight Pro subscription is active",
+			[]string{testName, wantAmount, wantExpires}},
+		{"payment-failed", func(s *Service) { s.SendPaymentFailed(context.Background(), "a@b.c", testName, "Pro") },
+			"Action needed: renewal payment failed for DraftRight Pro",
+			[]string{testName}},
+		{"subscription-expired", func(s *Service) {
+			s.SendSubscriptionExpired(context.Background(), "a@b.c", testName, "Pro")
+		},
+			"Your DraftRight Pro subscription has expired",
+			[]string{testName}},
 	}
 	for _, c := range cases {
 		st := &recordingStore{}
@@ -119,34 +144,13 @@ func TestProductMethods_ProduceExpectedSubjects(t *testing.T) {
 		if st.logs[0].Subject != c.subject {
 			t.Errorf("%s: subject = %q, want %q", c.name, st.logs[0].Subject, c.subject)
 		}
-		if c.wantCode != "" && !strings.Contains(sender.html, c.wantCode) {
-			t.Errorf("%s: body = %q, want it to contain %q", c.name, sender.html, c.wantCode)
+		for _, want := range c.wantBody {
+			if !strings.Contains(sender.html, want) {
+				t.Errorf("%s: body = %q, want it to contain %q", c.name, sender.html, want)
+			}
 		}
 	}
 }
-
-// stubQuerier is a minimal pgQuerier fake used only to drive PgRepo.Credentials
-// through the real adapter (see TestResolveCredentials's ErrNoRows case).
-// Every other method is unused by that path and left at its zero value.
-type stubQuerier struct {
-	settingsRow sqlc.GetEmailSettingsRow
-	settingsErr error
-}
-
-func (stubQuerier) IsEmailSuppressed(context.Context, string) (bool, error) { return false, nil }
-func (stubQuerier) InsertEmailLog(context.Context, sqlc.InsertEmailLogParams) error {
-	return nil
-}
-func (s stubQuerier) GetEmailSettings(context.Context) (sqlc.GetEmailSettingsRow, error) {
-	return s.settingsRow, s.settingsErr
-}
-func (stubQuerier) GetEmailTemplateByKey(context.Context, string) (sqlc.GetEmailTemplateByKeyRow, error) {
-	return sqlc.GetEmailTemplateByKeyRow{}, nil
-}
-func (stubQuerier) MarkEmailByProviderID(context.Context, sqlc.MarkEmailByProviderIDParams) error {
-	return nil
-}
-func (stubQuerier) SuppressEmail(context.Context, sqlc.SuppressEmailParams) error { return nil }
 
 // TestResolveCredentials covers resolveCredentials — the only transport-
 // adjacent policy this package still owns: whether a per-send override from
@@ -154,7 +158,7 @@ func (stubQuerier) SuppressEmail(context.Context, sqlc.SuppressEmailParams) erro
 // send instead of falling back.
 //
 // The "no row configured" case deliberately drives resolveCredentials through
-// a real *PgRepo backed by stubQuerier, not through recordingStore: the fix it
+// a real *PgRepo backed by fakeQuerier, not through recordingStore: the fix it
 // guards (Important #1 — PgRepo.Credentials treating pgx.ErrNoRows as "no
 // override" rather than a resolver failure) lives in repo_pg.go, and a
 // recordingStore-only fake would keep passing even if that fix were reverted.
@@ -184,7 +188,7 @@ func TestResolveCredentials(t *testing.T) {
 		},
 		{
 			name:     "store has no app_settings row (pgx.ErrNoRows) -> env used, no error",
-			creds:    NewPgRepo(stubQuerier{settingsErr: pgx.ErrNoRows}),
+			creds:    NewPgRepo(&fakeQuerier{settingsErr: pgx.ErrNoRows}),
 			cfg:      Config{EnvAPIKey: "env-key", EnvFrom: "env-from@x.com"},
 			wantKey:  "env-key",
 			wantFrom: "env-from@x.com",
