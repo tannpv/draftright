@@ -18,8 +18,12 @@ on:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Self-hosted runner on Contabo (label `contabo`). GitHub-hosted minutes are
+    # billing-blocked; self-hosted minutes are free and bypass that. Secrets are
+    # still injected by GitHub at run time and wiped by the final cleanup step.
+    # Flip back to `ubuntu-latest` once hosted billing is restored.
+    runs-on: [self-hosted, contabo]
+    timeout-minutes: 40
     env:
       TRACK: ${{ github.event.inputs.track }}
 
@@ -43,6 +47,12 @@ jobs:
           flutter-version: 3.41.4
           channel: stable
           cache: true
+
+      - name: Set up Android SDK
+        # GitHub-hosted images ship the Android SDK; the self-hosted Contabo
+        # runner does not. Installs cmdline-tools + accepts licenses; Gradle
+        # auto-downloads the platform/build-tools/NDK the build needs.
+        uses: android-actions/setup-android@v3
 
       - name: Set up Ruby + bundler cache
         uses: ruby/setup-ruby@v1
