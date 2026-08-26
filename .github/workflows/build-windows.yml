@@ -84,8 +84,13 @@ jobs:
     needs: [unit-tests, release-build-gate]
     if: needs.release-build-gate.outputs.proceed == 'true'
     name: Build ${{ matrix.runtime }}
-    runs-on: windows-latest
-    timeout-minutes: 25
+    # Self-hosted Windows runner (billing on GitHub-hosted windows-latest is
+    # blocked; self-hosted minutes are free). Requires a Win11 box with VS 2022
+    # (.NET desktop + Windows App SDK/WinUI workloads + Win10 SDK 19041), .NET 8
+    # SDK, and Inno Setup. Flip back to `windows-latest` once hosted billing is
+    # restored. The Linux jobs already run on the Contabo `draftright` runners.
+    runs-on: [self-hosted, windows, x64]
+    timeout-minutes: 40
 
     strategy:
       fail-fast: false
@@ -466,8 +471,13 @@ jobs:
     # submits (Store upload is manual). Release/dispatch only.
     needs: [unit-tests, release-build-gate]
     if: needs.release-build-gate.outputs.proceed == 'true'
-    runs-on: windows-latest
-    timeout-minutes: 25
+    # Self-hosted Windows runner (billing on GitHub-hosted windows-latest is
+    # blocked; self-hosted minutes are free). Requires a Win11 box with VS 2022
+    # (.NET desktop + Windows App SDK/WinUI workloads + Win10 SDK 19041), .NET 8
+    # SDK, and Inno Setup. Flip back to `windows-latest` once hosted billing is
+    # restored. The Linux jobs already run on the Contabo `draftright` runners.
+    runs-on: [self-hosted, windows, x64]
+    timeout-minutes: 40
 
     env:
       COMMIT_SHA: ${{ github.sha }}

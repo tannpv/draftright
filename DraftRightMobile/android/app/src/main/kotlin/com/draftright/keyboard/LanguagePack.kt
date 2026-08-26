@@ -19,6 +19,13 @@ interface LanguagePack {
     val symbols2Rows: List<List<KeyDef>>
     val longPressAccents: Map<Char, List<Char>>
 
+    /**
+     * Number-only keypad for numeric fields (OTP/PIN/phone, #208). Digits are
+     * language-neutral, so every pack shares one definition by default; a pack
+     * with a bespoke numeric arrangement may override.
+     */
+    val numericRows: List<List<KeyDef>> get() = com.draftright.keyboard.lang.QwertyLayout.numericRows
+
     /** BCP-47 tag for on-device speech recognition; null = voice input unavailable for this pack. */
     val sttLocale: String? get() = null
 
