@@ -20,8 +20,11 @@ on:
       - 'DraftRightMobile/ios/DraftRightKeyboardCore/Sources/DraftRightKeyboardCore/IME/VietnameseBootstrapWordList.swift'
       - 'DraftRightMobile/android/app/src/main/kotlin/com/draftright/keyboard/ime/PinyinSyllables.kt'
       - 'DraftRightMobile/ios/DraftRightKeyboardCore/Sources/DraftRightKeyboardCore/IME/PinyinSyllables.swift'
+      - 'DraftRightMobile/android/app/src/main/kotlin/com/draftright/keyboard/ime/FlickLayout.kt'
+      - 'DraftRightMobile/ios/DraftRightKeyboardCore/Sources/DraftRightKeyboardCore/IME/FlickLayout.swift'
       - 'scripts/check-vi-bigram-parity.py'
       - 'scripts/check-pinyin-syllables-parity.py'
+      - 'scripts/check-flick-layout-parity.py'
       - '.github/workflows/mobile-parity-ci.yml'
 
 permissions:
@@ -40,3 +43,5 @@ jobs:
         run: python3 scripts/check-vi-bigram-parity.py
       - name: Assert the two pinyin syllable sets agree
         run: python3 scripts/check-pinyin-syllables-parity.py
+      - name: Assert the two flick kana maps agree
+        run: python3 scripts/check-flick-layout-parity.py
