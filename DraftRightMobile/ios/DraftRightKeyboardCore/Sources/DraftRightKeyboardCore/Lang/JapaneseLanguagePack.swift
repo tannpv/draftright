@@ -33,6 +33,9 @@ public struct JapaneseLanguagePack: LanguagePack {
     /// Rōmaji→kana composer; its kana buffer drives the candidate engine.
     public func makeComposer() -> Composer? { RomajiKanaComposer() }
 
+    /// Space converts the kana reading to the top kanji candidate (standard JP IME).
+    public var convertsOnSpace: Bool { true }
+
     public func makeCandidateEngine() -> CandidateEngine? {
         let key = DictPackResolver.resolvedPackURL(
             appGroupContainer: Self.appGroupContainer,
