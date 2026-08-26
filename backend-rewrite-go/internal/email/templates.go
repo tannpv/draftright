@@ -87,27 +87,3 @@ var builtinTemplates = map[string]templateDef{
     <p style="color:#444;line-height:1.5;margin:0 0 16px;">We'll automatically retry over the next few days. You can update your payment method any time to fix this faster.</p>`),
 	},
 }
-
-// adHocKey is the throwaway registry key substitute renders under. It never
-// leaves this function — a Registry is keyed by definition, so rendering an
-// unregistered pair needs some key, and naming it once beats inventing one at
-// the call.
-const adHocKey = "ad-hoc"
-
-// substitute renders an ad-hoc template string that is NOT in
-// BuiltinRegistry — an admin's saved override, which the admin preview screen
-// must render before it is ever sent. Subject context passes values through
-// raw (escape false); HTML body context escapes them (escape true).
-//
-// The token syntax and the escaping rules are emailkit's, reached through the
-// same Registry.Render every real send uses. Keeping draftright's own regexp
-// and escaper here would be a second definition of the escaping policy, and a
-// divergence between them would show up as an XSS hole in exactly one of the
-// two paths.
-func substitute(s string, vars map[string]string, escape bool) string {
-	subject, body := emailkit.Registry{adHocKey: {Subject: s, Body: s}}.Render(adHocKey, vars)
-	if escape {
-		return body
-	}
-	return subject
-}

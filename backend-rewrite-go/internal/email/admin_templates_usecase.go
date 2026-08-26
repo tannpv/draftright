@@ -24,6 +24,8 @@ import (
 	"encoding/json"
 	"errors"
 	"time"
+
+	"github.com/tannpv/emailkit"
 )
 
 // ErrUnknownTemplate is returned by Update/Preview when the path key is not a
@@ -187,5 +189,10 @@ func (s *AdminTemplatesService) Preview(ctx context.Context, key string) (subjec
 		subjTpl = c.Subject
 		htmlTpl = c.HTML
 	}
-	return substitute(subjTpl, sample, false), substitute(htmlTpl, sample, true), nil
+	// previewKey is a throwaway registry key: Render needs a Registry, and
+	// this one-entry Registry is built and read back in the same expression,
+	// so any stable non-empty string works — it never leaves this call.
+	const previewKey = "preview"
+	subject, html = emailkit.Registry{previewKey: {Subject: subjTpl, Body: htmlTpl}}.Render(previewKey, sample)
+	return subject, html, nil
 }
