@@ -9,6 +9,10 @@ name: Mobile parity checks
 # on it would be arbitrary code execution on our infra. push to develop/main is
 # maintainer-controlled, so the checked-out script is already-trusted code.
 on:
+  # Manual run only adds a maintainer-triggered dispatch (safe on the self-hosted
+  # runner — no fork-PR code path); the security reason to avoid pull_request
+  # does not apply to workflow_dispatch.
+  workflow_dispatch:
   push:
     branches: [develop, main]
     paths:
