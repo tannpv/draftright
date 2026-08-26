@@ -52,7 +52,16 @@ class TrigramCandidateEngine(private val wordList: LanguageWordList) : Candidate
             val bigramBoost = successors[word] ?: 0
             freq + bigramBoost * BIGRAM_WEIGHT
         }
-        return ranked.take(limit).map { (word, _) -> Candidate(word) }
+        val exact = ranked.take(limit)
+        if (exact.size >= limit) return exact.map { (word, _) -> Candidate(word) }
+
+        // Typo tolerance (#207): top up the remaining slots with close dictionary
+        // words so a mistyped word still offers a correction. Only fills empty
+        // slots, so a correctly-typed word's exact matches are never displaced.
+        val have = exact.mapTo(HashSet()) { it.first }
+        val fuzzy = wordList.fuzzyMatches(prefix, MAX_EDITS, limit - exact.size)
+            .filter { it.first !in have }
+        return (exact + fuzzy).take(limit).map { (word, _) -> Candidate(word) }
     }
 
     private fun nextWord(previousTokens: List<String>, limit: Int): List<Candidate> {
@@ -72,5 +81,10 @@ class TrigramCandidateEngine(private val wordList: LanguageWordList) : Candidate
     companion object {
         /** Bigram score weight relative to unigram frequency. Tuned empirically. */
         const val BIGRAM_WEIGHT = 5
+
+        /** Max edit distance for typo-tolerance top-up. 1 keeps corrections tight
+         *  (a single wrong/missing/extra key) so the small bootstrap dictionary
+         *  can't offer wildly wrong "corrections". */
+        const val MAX_EDITS = 1
     }
 }
