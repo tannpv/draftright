@@ -27,6 +27,9 @@ public struct ChineseLanguagePack: LanguagePack {
 
     public func makeComposer() -> Composer? { PinyinComposer() }
 
+    /// Space converts the pinyin reading to the top hanzi candidate (standard ZH IME).
+    public var convertsOnSpace: Bool { true }
+
     public func makeCandidateEngine() -> CandidateEngine? {
         let key = DictPackResolver.resolvedPackURL(
             appGroupContainer: Self.appGroupContainer,
