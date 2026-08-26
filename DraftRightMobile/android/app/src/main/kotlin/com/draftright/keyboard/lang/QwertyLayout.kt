@@ -43,6 +43,25 @@ object QwertyLayout {
         bottomRow(KeyDef("ABC", SpecialKeys.ALPHA, 1.5f)),
     )
 
+    /**
+     * Samsung-style number-only keypad for OTP/PIN/phone fields (#208). A 3-col
+     * digit grid — NOT the ?123 symbols layer, so no letters or punctuation
+     * distract from entering a code. Language-neutral, so every pack shares this
+     * one definition (Rule #1). Bottom row keeps ABC (escape back to letters),
+     * 0, backspace and enter so the user is never trapped on the pad.
+     */
+    val numericRows: List<List<KeyDef>> = listOf(
+        chars("1", "2", "3"),
+        chars("4", "5", "6"),
+        chars("7", "8", "9"),
+        listOf(
+            KeyDef("ABC", SpecialKeys.ALPHA, 1.0f),
+            KeyDef("0", '0'.code, 1.0f),
+            KeyDef("←", SpecialKeys.BACKSPACE, 1.0f),
+            KeyDef("↵", SpecialKeys.ENTER, 1.0f),
+        ),
+    )
+
     val symbols2Rows: List<List<KeyDef>> = listOf(
         chars("~", "`", "|", "•", "√", "π", "÷", "×", "¶", "Δ"),
         chars("£", "€", "¥", "^", "[", "]", "{", "}"),
