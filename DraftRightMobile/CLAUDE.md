@@ -68,3 +68,32 @@ cd android && ./gradlew assembleDebug  # Android build via Gradle
 - Key labels use emoji for special keys (shift ⬆, backspace ←, enter ↵, globe 🌐)
 - Toolbar tone icons: ✎ 💬 ✨ ⊖ 🔧 🌐
 - IME colors use explicit values (not theme attrs — unreliable in InputMethodService)
+
+## Keyboard IME architecture (native-feel parity — #207/#209/#211/#212)
+
+Android (`android/.../keyboard/`) and iOS (`ios/DraftRightKeyboardCore/`) mirror
+each other 1:1. The seam:
+
+- **Composer** per pack (romaji→kana, telex, pinyin, flick-kana) → **CandidateEngine**
+  (`TrigramCandidateEngine` Latin w/ bigram next-word + fuzzy edit-distance;
+  `DictionaryCandidateEngine` reading→candidates shared by JP+ZH;
+  `PinyinCandidateEngine` **wraps** it, adds ZH sentence-pinyin/abbreviation/fuzzy)
+  → candidate bar. `LanguagePack` traits: `numericRows`, `convertsOnSpace` (JP/ZH).
+- IME: `KeyFeedback` (haptic/sound chokepoint), `PreviousTokens` (n-gram context),
+  `ConversionCycle` (JP/ZH space-convert + repeat-space cycle), `FlickGesture`/
+  `FlickLayout` (JP 12-key flick).
+
+**Cross-language data parity (RULE #1):** Kotlin & Swift can't share source, so
+duplicated linguistic data (VI bigrams, pinyin syllables, flick kana map) each get
+a `scripts/check-*-parity.py` guard wired into `.github/workflows/mobile-parity-ci.yml`
+(runs on the Contabo self-hosted `draftright` runner). Add a parity script whenever
+you add cross-language keyboard data.
+
+**On-device verify before merging IME-flow changes** (space-convert, cycling,
+flick) — board ≠ runtime. Candidate-engine-only changes are lower risk. Enable a
+language in app Settings → Keyboard languages; cycle the globe key to it.
+
+**CI note:** GitHub-hosted Actions is billing-blocked — mobile/Windows builds run
+on self-hosted Contabo (Linux) + a Win11 desktop (Windows, pending). Play deploy's
+real upload keystore lives ONLY in the standalone repo's CI secret. See the
+maintainer's memory `reference_contabo_selfhosted_runner`.
