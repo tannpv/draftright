@@ -24,6 +24,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
+	"github.com/tannpv/emailkit"
 
 	"github.com/tannpv/draftright-rewrite/internal/adapter/redislimit"
 	redistrial "github.com/tannpv/draftright-rewrite/internal/adapter/redistrial"
@@ -460,7 +461,12 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 		core.plans = http.HandlerFunc(planspkg.NewHandler(planspkg.NewService(plansReader)).List)
 		subWriter := subpkg.NewWriter(q)
 		emailRepo := emailpkg.NewPgRepo(q)
-		emailSvc := emailpkg.NewService(emailRepo, emailpkg.Config{
+		// emailRepo is passed twice — once as the emailkit.Store, once as the
+		// CredentialSource. The two are separate interfaces even though one
+		// type satisfies both, so a future store that cannot supply
+		// credentials is a compile error rather than a silent fallback to
+		// env-only.
+		emailSvc := emailpkg.NewService(emailRepo, emailRepo, emailpkg.Config{
 			EnvAPIKey: cfg.ResendAPIKey,
 			EnvFrom:   cfg.EmailFrom,
 		})
@@ -553,10 +559,16 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 		core.feedbackList = http.HandlerFunc(fbHandler.List)
 		core.feedbackVote = http.HandlerFunc(fbHandler.Vote)
 
-		// email webhook (public, raw body): Resend/Svix delivery events reflect
-		// onto email_logs + the suppression list. The *PgRepo satisfies the
-		// suppressor port (MarkByProviderID + Suppress).
-		core.emailWebhook = http.HandlerFunc(emailpkg.NewWebhookHandler(emailRepo, cfg.ResendWebhookSecret).Handle)
+		// email webhook (public, raw body): Resend delivery events reflect
+		// onto email_logs + the suppression list via emailkit's shared
+		// handler, which normalises the address before calling Suppress —
+		// unlike draftright's deleted webhook, which echoed the provider's
+		// casing verbatim and could suppress an address the exact-match
+		// lookup could never find again.
+		emailWebhookHandler := emailkit.NewWebhookHandler(emailRepo, cfg.ResendWebhookSecret)
+		// Status mapping (5xx-vs-4xx) and the request-scoped error log live in
+		// emailpkg.WebhookResponder, not here — see its doc comment for why.
+		core.emailWebhook = emailpkg.WebhookResponder(emailWebhookHandler)
 
 		// Phase 4c-1 admin foundation: admin-auth endpoints.
 		adminAuthSvc := adminauth.NewService(
