@@ -44,6 +44,16 @@ func (r *PgRepo) LogSend(ctx context.Context, a emailkit.SendRecord) error {
 func (r *PgRepo) Credentials(ctx context.Context) (string, string, error) {
 	row, err := r.q.GetEmailSettings(ctx)
 	if err != nil {
+		// No app_settings row means "not configured yet", not "resolution
+		// failed": emailkit's Config.Resolve contract skips the send (no env
+		// fallback) only on a genuine failure — a dead DB, a bad decrypt.
+		// Treating an absent row the same way stopped every email on a fresh
+		// deployment, since app_settings starts empty. Every other error
+		// (including a row that exists but fails to decrypt) still fails
+		// closed below. Same shape as Template's identical check.
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", "", nil
+		}
 		return "", "", err
 	}
 	apiKey, err := secretcipher.Decrypt(row.ResendApiKey)

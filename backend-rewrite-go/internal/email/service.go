@@ -46,22 +46,38 @@ type Service struct{ kit *emailkit.Service }
 // omitting this argument is a compile error instead.
 func NewService(store emailkit.Store, creds CredentialSource, cfg Config) *Service {
 	resolve := func(ctx context.Context) (string, string, error) {
-		apiKey, from, err := creds.Credentials(ctx)
-		if err != nil {
-			return "", "", err
-		}
-		if apiKey == "" {
-			apiKey = cfg.EnvAPIKey
-		}
-		if from == "" {
-			from = cfg.EnvFrom
-		}
-		if from == "" {
-			from = defaultFrom
-		}
-		return apiKey, from, nil
+		return resolveCredentials(ctx, creds, cfg)
 	}
 	return &Service{kit: emailkit.NewService(store, emailkit.Config{Resolve: resolve}, BuiltinRegistry())}
+}
+
+// resolveCredentials implements emailkit.Config.Resolve's contract: the
+// store's override, when present, REPLACES the env fallback rather than
+// layering over it. Extracted out of NewService's closure — this is the last
+// transport-adjacent policy draftright still owns, and a bare closure had no
+// name a test could call directly.
+//
+// An error from creds.Credentials propagates untouched and short-circuits the
+// env fallback: see Config.Resolve's doc for why (sending with credentials an
+// operator believes they replaced is worse than not sending). A nil error
+// with empty strings — whether because no override row exists yet or because
+// one exists with blank columns — is "no override configured" and falls
+// through to cfg per field.
+func resolveCredentials(ctx context.Context, creds CredentialSource, cfg Config) (string, string, error) {
+	apiKey, from, err := creds.Credentials(ctx)
+	if err != nil {
+		return "", "", err
+	}
+	if apiKey == "" {
+		apiKey = cfg.EnvAPIKey
+	}
+	if from == "" {
+		from = cfg.EnvFrom
+	}
+	if from == "" {
+		from = defaultFrom
+	}
+	return apiKey, from, nil
 }
 
 // Wait blocks until in-flight sends finish. Test-only.
