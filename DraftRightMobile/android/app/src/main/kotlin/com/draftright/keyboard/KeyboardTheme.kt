@@ -6,7 +6,7 @@ import android.content.res.Configuration
 /**
  * Single source of truth for the keyboard's dark/light detection.
  *
- * Several views (QwertyKeyboardView, LanguageStripView, popups) previously
+ * Several views (QwertyKeyboardView, popups) previously
  * each re-derived `uiMode and UI_MODE_NIGHT_MASK` inline. Centralising it
  * keeps the detection identical everywhere and gives one place to change
  * if the theme strategy ever moves to a user setting.

@@ -13,8 +13,9 @@ import java.util.Locale
 
 /**
  * Chinese (中文) pinyin pack — type pinyin on the standard QWERTY ([QwertyLayout]);
- * [PinyinComposer] shows the pinyin live and [DictionaryCandidateEngine] offers
- * Hanzi candidates. Same shape as Japanese, only the dictionary differs (Rule #1).
+ * [PinyinComposer] shows the pinyin live and [PinyinCandidateEngine] offers Hanzi
+ * candidates (sentence pinyin, initials abbreviation, fuzzy). Same shared
+ * dictionary engine as Japanese underneath, only the dictionary differs (Rule #1).
  *
  * Ships a built-in seed; the full pinyin→hanzi dictionary arrives later as a
  * downloadable pack (mirrors the Japanese dict-pack pipeline).

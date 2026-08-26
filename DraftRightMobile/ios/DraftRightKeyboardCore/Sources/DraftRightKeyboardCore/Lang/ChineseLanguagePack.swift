@@ -1,8 +1,9 @@
 import Foundation
 
 /// Chinese (中文) pinyin pack — type pinyin on the standard QWERTY;
-/// `PinyinComposer` shows the pinyin live and `DictionaryCandidateEngine` offers
-/// Hanzi candidates. Same shape as Japanese, only the dictionary differs.
+/// `PinyinComposer` shows the pinyin live and `PinyinCandidateEngine` offers Hanzi
+/// candidates (sentence pinyin, initials abbreviation, fuzzy). Same shared
+/// dictionary engine as Japanese underneath, only the dictionary differs.
 /// Mirrors the Kotlin ChineseLanguagePack.
 public struct ChineseLanguagePack: LanguagePack {
     public let id = "zh"

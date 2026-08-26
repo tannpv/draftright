@@ -34,7 +34,6 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var toolbar: ToolbarView? = null
     private var keyboard: QwertyKeyboardView? = null
-    private var languageStrip: LanguageStripView? = null
     private var diffSheet: DiffSheetView? = null
     private var rootLayout: LinearLayout? = null
     private var originalText: String? = null
