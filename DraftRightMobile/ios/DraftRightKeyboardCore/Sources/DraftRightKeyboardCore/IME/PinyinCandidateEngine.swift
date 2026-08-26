@@ -17,6 +17,10 @@ public final class PinyinCandidateEngine: CandidateEngine {
     /// derived once from the dictionary + PinyinSegmenter (no new source of truth).
     private lazy var initialsIndex: [String: [String]] = buildInitialsIndex()
 
+    /// fuzzy-folded reading → hanzi (fold("zhongguo")="zongguo" → 中国), derived
+    /// from the dictionary via PinyinFuzzy — no new source of truth.
+    private lazy var foldedIndex: [String: [String]] = buildFoldedIndex()
+
     public init(dictionary: [String: [String]]) {
         self.dictionary = dictionary
         self.base = DictionaryCandidateEngine(dictionary: dictionary)
@@ -31,6 +35,7 @@ public final class PinyinCandidateEngine: CandidateEngine {
         var derived: [String] = []
         if let segmented = segmentedCandidate(composing) { derived.append(segmented) }
         if let abbr = initialsIndex[composing] { derived.append(contentsOf: abbr) }
+        if let fuzzy = foldedIndex[PinyinFuzzy.fold(composing)] { derived.append(contentsOf: fuzzy) }
         if derived.isEmpty { return baseCands }
 
         // Insert derived candidates just before the raw-pinyin fallback (the
@@ -45,6 +50,18 @@ public final class PinyinCandidateEngine: CandidateEngine {
         }
         for d in derived where seen.insert(d).inserted { out.append(Candidate(text: d)) }
         return Array(out.prefix(limit))
+    }
+
+    private func buildFoldedIndex() -> [String: [String]] {
+        var index: [String: [String]] = [:]
+        for (reading, hanziList) in dictionary {
+            let folded = PinyinFuzzy.fold(reading)
+            if folded == reading { continue } // exact lookup already covers it
+            var bucket = index[folded] ?? []
+            for h in hanziList where !bucket.contains(h) { bucket.append(h) }
+            index[folded] = bucket
+        }
+        return index
     }
 
     private func buildInitialsIndex() -> [String: [String]] {
