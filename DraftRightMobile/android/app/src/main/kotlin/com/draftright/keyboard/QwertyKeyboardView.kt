@@ -50,10 +50,20 @@ class QwertyKeyboardView(
     private val KEY_POPUP_TEXT_SP = 32f
 
     private var shiftState = ShiftState.OFF
-    private var currentLayer = 0 // 0=alpha, 1=symbols1, 2=symbols2
+    private var currentLayer = 0 // 0=alpha, 1=symbols1, 2=symbols2, 3=numeric
+
+    private companion object {
+        /** Dedicated number-only keypad for numeric fields (#208). */
+        const val LAYER_NUMERIC = 3
+    }
 
     private val handler = Handler(Looper.getMainLooper())
     private var backspaceRepeating = false
+
+    // Single chokepoint for haptic + click on every key press (Rule #1: feedback
+    // is cross-cutting). `this` is the haptic host — valid here since the view is
+    // already constructed and gets attached before the first touch.
+    private val keyFeedback = KeyFeedback(this)
 
     var languagePack: LanguagePack = EnglishLanguagePack
         set(value) {
@@ -78,13 +88,13 @@ class QwertyKeyboardView(
     }
 
     /**
-     * Open the digits (symbols1) layer for a numeric field, or return to alpha
-     * for a text field (#190). No-op when already on the target layer, so
-     * re-focusing a field doesn't cause a rebuild flicker. Reuses the existing
-     * symbols1 layer rather than introducing a separate numeric layout.
+     * Open the dedicated number-only keypad for a numeric field (OTP/PIN/phone),
+     * or return to alpha for a text field (#190, #208). No-op when already on the
+     * target layer, so re-focusing a field doesn't cause a rebuild flicker.
+     * Samsung parity: numeric fields get digits only, not the ?123 symbols layer.
      */
     fun setNumericLayer(numeric: Boolean) {
-        val target = if (numeric) 1 else 0
+        val target = if (numeric) LAYER_NUMERIC else 0
         if (currentLayer == target) return
         currentLayer = target
         // A numeric layer has no shift; clear it so a stale shift doesn't linger
@@ -131,6 +141,7 @@ class QwertyKeyboardView(
         val rows = when (currentLayer) {
             0 -> languagePack.alphaRows
             1 -> languagePack.symbols1Rows
+            LAYER_NUMERIC -> languagePack.numericRows
             else -> languagePack.symbols2Rows
         }
 
@@ -252,6 +263,7 @@ class QwertyKeyboardView(
         keyView.setOnTouchListener { v, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
+                    keyFeedback.onKey(code)
                     bg.setColor(keyColorPressed)
                     v.invalidate()
                     longPressFired = false
@@ -360,6 +372,8 @@ class QwertyKeyboardView(
     private val backspaceRunnable = object : Runnable {
         override fun run() {
             if (backspaceRepeating) {
+                // Each auto-repeat delete gets its own feedback tick, like Samsung.
+                keyFeedback.onKey(SpecialKeys.BACKSPACE)
                 listener.onBackspace()
                 handler.postDelayed(this, 50)
             }

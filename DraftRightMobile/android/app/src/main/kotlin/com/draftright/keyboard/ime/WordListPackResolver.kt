@@ -22,6 +22,9 @@ object WordListPackResolver {
     private const val TAG = "WordListPackResolver"
     private const val PACKS_SUBDIR = "packs"
 
+    /** Sibling suffix for a pack's optional bigram file: `<pack>.pack.bigrams`. */
+    private const val BIGRAMS_SUFFIX = ".bigrams"
+
     /**
      * Try the installed pack; fall back to the bundled raw resource.
      *
@@ -32,24 +35,32 @@ object WordListPackResolver {
      *                     version even if the catalog has rotated.
      * @param fallbackResId Raw resource ID of the bootstrap TSV that ships
      *                      with the APK.
+     * @param fallbackBigramsResId Optional raw resource ID of the bootstrap
+     *                      bigram TSV (`prev<TAB>next<TAB>count`) enabling
+     *                      next-word prediction; null = unigram-only.
      */
     fun loadOrFallback(
         context: Context,
         packIdPrefix: String,
         fallbackResId: Int,
+        fallbackBigramsResId: Int? = null,
     ): LanguageWordList {
         val installed = findLatestInstalled(context, packIdPrefix)
         if (installed != null) {
             try {
+                // A downloaded pack may ship a sibling "<name>.bigrams" file;
+                // load it when present so installed packs get next-word too.
+                val bigrams = File(installed.parentFile, installed.name + BIGRAMS_SUFFIX)
+                    .takeIf { it.isFile }
                 Log.i(TAG, "Using installed pack ${installed.name} (${installed.length()} bytes)")
-                return WordListLoader.loadWordsFromFile(installed)
+                return WordListLoader.loadWordsFromFile(installed, bigrams)
             } catch (e: Exception) {
                 // Don't let a corrupt pack kill suggestions — fall back to
                 // the bundled list, log so it shows up in /errors.
                 Log.w(TAG, "Failed to load installed pack ${installed.name}; falling back to bootstrap", e)
             }
         }
-        return WordListLoader.loadWords(context, fallbackResId)
+        return WordListLoader.loadWords(context, fallbackResId, fallbackBigramsResId)
     }
 
     /**
