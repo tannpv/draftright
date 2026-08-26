@@ -17,13 +17,19 @@ import (
 // credentials result: zero values reproduce the old always-empty behaviour
 // (resolver falls through to Config), and tests that need a different
 // resolver outcome set them instead of declaring a second CredentialSource
-// fake.
+// fake. markErr/suppressErr are the webhook-path equivalent, used by
+// webhook_responder_test.go to drive emailkit.ErrStoreFailure without a real
+// database — one fake covers both the send path and the webhook path rather
+// than each test file declaring its own.
 type recordingStore struct {
 	logs []emailkit.SendRecord
 
 	credAPIKey string
 	credFrom   string
 	credErr    error
+
+	markErr     error
+	suppressErr error
 }
 
 func (r *recordingStore) IsSuppressed(context.Context, string) (bool, error) { return false, nil }
@@ -34,8 +40,10 @@ func (r *recordingStore) LogSend(_ context.Context, s emailkit.SendRecord) error
 func (r *recordingStore) Template(context.Context, string) (string, string, bool) {
 	return "", "", false
 }
-func (r *recordingStore) MarkByProviderID(context.Context, string, string, *string) error { return nil }
-func (r *recordingStore) Suppress(context.Context, string, string) error                  { return nil }
+func (r *recordingStore) MarkByProviderID(context.Context, string, string, *string) error {
+	return r.markErr
+}
+func (r *recordingStore) Suppress(context.Context, string, string) error { return r.suppressErr }
 func (r *recordingStore) Credentials(context.Context) (string, string, error) {
 	return r.credAPIKey, r.credFrom, r.credErr
 }

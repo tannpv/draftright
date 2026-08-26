@@ -566,25 +566,9 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 		// casing verbatim and could suppress an address the exact-match
 		// lookup could never find again.
 		emailWebhookHandler := emailkit.NewWebhookHandler(emailRepo, cfg.ResendWebhookSecret)
-		core.emailWebhook = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			err := emailWebhookHandler.Handle(w, r)
-			if err == nil {
-				return // Handle wrote the success body itself
-			}
-			// A store failure is the one retryable case: both store operations
-			// are idempotent, so answering 5xx lets Resend redeliver and the
-			// retry converges. Answering 200 here — as this endpoint did
-			// before — loses the event permanently, and a lost suppression
-			// means the bounced address keeps being mailed.
-			if errors.Is(err, emailkit.ErrStoreFailure) {
-				shared.WriteError(w, r, shared.CodeInternal, "Webhook processing failed")
-				return
-			}
-			// Signature, staleness and payload failures are not retryable and
-			// are answered identically: telling a caller which check failed
-			// tells an attacker which half of the request to fix.
-			shared.WriteError(w, r, shared.CodeInvalidInput, "Invalid webhook signature")
-		})
+		// Status mapping (5xx-vs-4xx) and the request-scoped error log live in
+		// emailpkg.WebhookResponder, not here — see its doc comment for why.
+		core.emailWebhook = emailpkg.WebhookResponder(emailWebhookHandler)
 
 		// Phase 4c-1 admin foundation: admin-auth endpoints.
 		adminAuthSvc := adminauth.NewService(
