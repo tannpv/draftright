@@ -31,6 +31,9 @@ object JapaneseLanguagePack : LanguagePack {
     /** Rōmaji→kana composer; its kana buffer drives the candidate engine. */
     override fun composer(): Composer = RomajiKanaComposer()
 
+    /** Space converts the kana reading to the top kanji candidate (standard JP IME). */
+    override val convertsOnSpace: Boolean = true
+
     /** Matches the backend manifest's pack URL prefix. */
     private const val PACK_ID_PREFIX = "draftright-ime-ja"
 

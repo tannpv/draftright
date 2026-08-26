@@ -386,6 +386,13 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
             refreshCandidates()
             return
         }
+        // Standard JP/ZH IME: with a reading in progress, space converts it to the
+        // top candidate (kana→kanji, pinyin→hanzi) rather than committing the raw
+        // reading + a space. commitText replaces the marked composing region, so
+        // the kanji/hanzi takes the reading's place; no trailing space (CJK text
+        // has none). With no reading (empty buffer) space falls through to normal.
+        if (c.current.convertsOnSpace && convertReadingOnSpace(ic)) return
+
         dropStaleComposerIfFieldDiverged(ic)
         when (val outcome = c.onKey(' ')) {
             is KeystrokeOutcome.Commit -> ic.commitText(outcome.text, 1)
@@ -653,6 +660,26 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
      * starts fresh, append a trailing space (matches Samsung/Gboard UX), and
      * clear the bar so we don't show stale suggestions.
      */
+    /**
+     * JP/ZH space-to-convert: commit the top candidate for the current reading
+     * (kana→kanji, pinyin→hanzi). Returns true when it consumed the space (a
+     * reading was converted), false when there was nothing to convert (empty
+     * buffer or no candidate) so the caller falls back to a normal space.
+     */
+    private fun convertReadingOnSpace(ic: android.view.inputmethod.InputConnection): Boolean {
+        val c = controller ?: return false
+        val composing = c.composer?.currentComposingText().orEmpty()
+        if (composing.isEmpty()) return false
+        val top = c.current.candidateEngine()
+            ?.suggest(composing, previousTokens = emptyList(), limit = 1)
+            ?.firstOrNull() ?: return false
+        // commitText REPLACES the marked composing region with the chosen form.
+        c.composer?.reset()
+        ic.commitText(top.text, 1)
+        candidateBar?.setCandidates(emptyList())
+        return true
+    }
+
     private fun handleCandidatePicked(candidate: com.draftright.keyboard.ime.Candidate) {
         val ic = currentInputConnection ?: return
         // commitText REPLACES the active composing region (the highlighted kana),
