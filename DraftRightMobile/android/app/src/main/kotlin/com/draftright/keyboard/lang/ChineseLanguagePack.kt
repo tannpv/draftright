@@ -7,8 +7,8 @@ import com.draftright.keyboard.composer.PinyinComposer
 import com.draftright.keyboard.ime.CandidateEngine
 import com.draftright.keyboard.ime.ChinesePinyinSeedDictionary
 import com.draftright.keyboard.ime.DictPackResolver
-import com.draftright.keyboard.ime.DictionaryCandidateEngine
 import com.draftright.keyboard.ime.ImeContext
+import com.draftright.keyboard.ime.PinyinCandidateEngine
 import java.util.Locale
 
 /**
@@ -64,7 +64,9 @@ object ChineseLanguagePack : LanguagePack {
             } else {
                 ChinesePinyinSeedDictionary.dict
             }
-            val engine = DictionaryCandidateEngine(dict)
+            // Sentence-level pinyin: PinyinCandidateEngine wraps the shared
+            // dictionary engine and adds segmented multi-syllable candidates (#211).
+            val engine = PinyinCandidateEngine(dict)
             cachedEngine = engine
             cachedKey = key
             return engine

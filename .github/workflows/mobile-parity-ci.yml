@@ -14,7 +14,10 @@ on:
     paths:
       - 'DraftRightMobile/android/app/src/main/res/raw/wordlist_vi_bigrams.tsv'
       - 'DraftRightMobile/ios/DraftRightKeyboardCore/Sources/DraftRightKeyboardCore/IME/VietnameseBootstrapWordList.swift'
+      - 'DraftRightMobile/android/app/src/main/kotlin/com/draftright/keyboard/ime/PinyinSyllables.kt'
+      - 'DraftRightMobile/ios/DraftRightKeyboardCore/Sources/DraftRightKeyboardCore/IME/PinyinSyllables.swift'
       - 'scripts/check-vi-bigram-parity.py'
+      - 'scripts/check-pinyin-syllables-parity.py'
       - '.github/workflows/mobile-parity-ci.yml'
 
 permissions:
@@ -31,3 +34,5 @@ jobs:
           persist-credentials: false
       - name: Assert the two bigram copies agree
         run: python3 scripts/check-vi-bigram-parity.py
+      - name: Assert the two pinyin syllable sets agree
+        run: python3 scripts/check-pinyin-syllables-parity.py

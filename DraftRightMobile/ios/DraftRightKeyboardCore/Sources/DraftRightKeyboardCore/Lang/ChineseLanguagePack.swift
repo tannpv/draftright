@@ -41,7 +41,9 @@ public struct ChineseLanguagePack: LanguagePack {
             packIdPrefix: Self.packIdPrefix,
             fallback: { ChinesePinyinSeedDictionary.dict }
         )
-        let engine = DictionaryCandidateEngine(dictionary: dict)
+        // Sentence-level pinyin: PinyinCandidateEngine wraps the shared dictionary
+        // engine and adds segmented multi-syllable candidates (#211).
+        let engine = PinyinCandidateEngine(dictionary: dict)
         Self.cachedEngine = engine
         Self.cachedKey = key
         return engine
