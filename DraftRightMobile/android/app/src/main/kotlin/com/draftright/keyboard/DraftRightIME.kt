@@ -34,6 +34,8 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var toolbar: ToolbarView? = null
     private var keyboard: QwertyKeyboardView? = null
+    /** JP flick view, shown instead of [keyboard] when Japanese + flick mode (#212). */
+    private var flickKeyboard: FlickKeyboardView? = null
     private var diffSheet: DiffSheetView? = null
     private var rootLayout: LinearLayout? = null
     private var originalText: String? = null
@@ -115,14 +117,19 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
         }
     }
     private var controller: KeyboardController? = null
+    /** Last-applied flick mode, so [syncControllerWithSettings] rebuilds when the
+     *  toggle flips even though the enabled-language list is unchanged (#212). */
+    private var lastJpFlick: Boolean = false
 
     override fun onCreateInputView(): View {
         settings = SharedSettings(this)
+        lastJpFlick = settings.jpFlickEnabled
 
         controller = KeyboardController(
             registry,
             enabledIds = settings.enabledLanguageIds,
             activeId = settings.activeLanguageId,
+            jpFlick = settings.jpFlickEnabled,
         )
 
         val root = LinearLayout(this).apply {
@@ -162,20 +169,38 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
         toolbar = tb
         root.addView(tb)
 
-        val kb = QwertyKeyboardView(this, this)
-        // Step D: assign languagePack via the setter (triggers second
-        // buildKeyboard()). With EN as the only enabled pack, controller.current
-        // == EnglishLanguagePack which equals kb.languagePack's default, so
-        // this is semantically a no-op — but the setter still fires
-        // buildKeyboard() once more. Goal: rule out the setter / second
-        // buildKeyboard call as the trigger.
-        kb.languagePack = controller!!.current
-        keyboard = kb
-        root.addView(kb)
+        rootLayout = root
+        // Adds the right keyboard view (QWERTY, or the JP flick grid when enabled).
+        installKeyboardView()
 
         applyNavBarBottomInset(root)
-        rootLayout = root
         return root
+    }
+
+    /** True when Japanese is active AND flick mode is on — the only case that
+     *  shows [FlickKeyboardView] instead of [QwertyKeyboardView] (#212). */
+    private fun neededFlick(): Boolean =
+        ::settings.isInitialized && settings.jpFlickEnabled && controller?.current?.id == "ja"
+
+    /**
+     * Install the correct keyboard view into [rootLayout] — the single place that
+     * chooses QWERTY vs flick (Rule #1). Removes whichever is present first, so
+     * it's safe to call on creation, language switch, and settings change.
+     */
+    private fun installKeyboardView() {
+        val root = rootLayout ?: return
+        keyboard?.let { root.removeView(it) }; keyboard = null
+        flickKeyboard?.let { root.removeView(it) }; flickKeyboard = null
+        if (neededFlick()) {
+            val fk = FlickKeyboardView(this, this)
+            flickKeyboard = fk
+            root.addView(fk)
+        } else {
+            val kb = QwertyKeyboardView(this, this)
+            controller?.let { kb.languagePack = it.current }
+            keyboard = kb
+            root.addView(kb)
+        }
     }
 
     // --- Input session lifecycle ---
@@ -289,7 +314,13 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
     private fun refreshKeyboardForActiveLanguage() {
         currentInputConnection?.finishComposingText()
         cycle.reset()
-        controller?.let { keyboard?.languagePack = it.current }
+        // Swap the whole view only when crossing the flick↔QWERTY boundary; other
+        // language switches just retarget the QWERTY pack (keeps the view + state).
+        if (neededFlick() != (flickKeyboard != null)) {
+            installKeyboardView()
+        } else {
+            controller?.let { keyboard?.languagePack = it.current }
+        }
     }
 
     /**
@@ -743,14 +774,19 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
         if (!::settings.isInitialized) return
         val c = controller ?: return
         val desired = settings.enabledLanguageIds
-        if (desired == c.enabled.map { it.id }) return
+        val flick = settings.jpFlickEnabled
+        // Rebuild on a language-list change OR a flick-mode toggle (the langs can
+        // be identical when only the flick switch flipped, so check both).
+        if (desired == c.enabled.map { it.id } && flick == lastJpFlick) return
+        lastJpFlick = flick
         val active = settings.activeLanguageId
             .takeIf { it in desired }
             ?: c.current.id.takeIf { it in desired }
             ?: desired.firstOrNull()
             ?: "en"
-        controller = KeyboardController(registry, enabledIds = desired, activeId = active)
-        keyboard?.languagePack = controller!!.current
+        controller = KeyboardController(registry, enabledIds = desired, activeId = active, jpFlick = flick)
+        if (neededFlick() != (flickKeyboard != null)) installKeyboardView()
+        else keyboard?.languagePack = controller!!.current
     }
 
     private fun applyNavBarBottomInset(root: View) {

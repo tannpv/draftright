@@ -29,6 +29,7 @@ class SettingsService extends ChangeNotifier {
   String _activeLanguageId = kDefaultLanguageId;
   String _lastSeenVersion = '';
   bool _voicePolishEnabled = true;
+  bool _jpFlickEnabled = false;
 
   String get backendUrl => _backendUrl;
 
@@ -51,6 +52,7 @@ class SettingsService extends ChangeNotifier {
   /// (dictate-only, no /rewrite call). The keyboards read this as rawMode's
   /// inverse (#197). Default on = the original behaviour.
   bool get voicePolishEnabled => _voicePolishEnabled;
+  bool get jpFlickEnabled => _jpFlickEnabled;
 
   Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
@@ -85,6 +87,7 @@ class SettingsService extends ChangeNotifier {
     }
     _lastSeenVersion = _prefs.getString(PrefsKeys.lastSeenVersion) ?? '';
     _voicePolishEnabled = _prefs.getBool(PrefsKeys.voicePolishEnabled) ?? true;
+    _jpFlickEnabled = _prefs.getBool(PrefsKeys.jpFlickEnabled) ?? false;
 
     // Sync backend URL to SharedPreferences for keyboard extensions
     await _prefs.setString(PrefsKeys.backendUrl, _backendUrl);
@@ -106,6 +109,15 @@ class SettingsService extends ChangeNotifier {
     _voicePolishEnabled = enabled;
     await _prefs.setBool(PrefsKeys.voicePolishEnabled, enabled);
     await AuthService.syncVoicePolishEnabledToAppGroup(enabled);
+    notifyListeners();
+  }
+
+  /// Toggle the Japanese 12-key flick layout (#212). Off = rōmaji QWERTY. The
+  /// Android keyboard reads the SharedPreferences bool directly; iOS flick is a
+  /// later phase, so no App Group sync yet.
+  Future<void> setJpFlickEnabled(bool enabled) async {
+    _jpFlickEnabled = enabled;
+    await _prefs.setBool(PrefsKeys.jpFlickEnabled, enabled);
     notifyListeners();
   }
 

@@ -372,6 +372,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
               ),
+              if (settings.enabledLanguageIds.contains('ja')) ...[
+                const SizedBox(height: 8),
+                Card(
+                  child: SwitchListTile(
+                    secondary:
+                        const Text('あ', style: TextStyle(fontSize: 22)),
+                    title: const Text('Japanese flick input (フリック)'),
+                    subtitle: const Text(
+                        '12-key kana grid — flick a key for い/う/え/お. '
+                        'Off = rōmaji QWERTY.'),
+                    value: settings.jpFlickEnabled,
+                    onChanged: (v) => settings.setJpFlickEnabled(v),
+                  ),
+                ),
+              ],
               const SizedBox(height: 12),
               const Text('Add a language (download)',
                   style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
