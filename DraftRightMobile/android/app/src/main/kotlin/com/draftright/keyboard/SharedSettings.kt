@@ -55,6 +55,12 @@ class SharedSettings(context: Context) {
     val activeLanguageId: String
         get() = prefs.getString("flutter.draftright.activeLanguageId", "en") ?: "en"
 
+    /** Whether Japanese uses the 12-key flick (フリック) layout instead of romaji
+     *  QWERTY (#212). Written by the Flutter app; default off = the original
+     *  romaji behaviour, so existing users are untouched. */
+    val jpFlickEnabled: Boolean
+        get() = prefs.getBoolean("flutter.draftright.jpFlickEnabled", false)
+
     /** Whether voice dictation is AI-polished (#197). False = insert the raw
      *  transcript. Written by the Flutter app as a SharedPreferences bool;
      *  default on = the original behaviour. Fed to the voice session as

@@ -4,6 +4,8 @@ class KeyboardController(
     private val registry: LanguageRegistry,
     enabledIds: List<String>,
     activeId: String,
+    /** When true, Japanese uses the flick kana composer instead of rōmaji (#212). */
+    private val jpFlick: Boolean = false,
 ) {
     var enabled: List<LanguagePack> =
         registry.all.filter { it.id in enabledIds }
@@ -14,8 +16,13 @@ class KeyboardController(
         enabled.firstOrNull { it.id == activeId } ?: enabled.first()
         private set
 
-    var composer: Composer? = current.composer()
+    var composer: Composer? = makeComposer(current)
         private set
+
+    /** Japanese + flick mode gets the kana passthrough composer; every other case
+     *  keeps the pack's own composer, so non-flick behaviour is unchanged. */
+    private fun makeComposer(pack: LanguagePack): Composer? =
+        if (pack.id == "ja" && jpFlick) com.draftright.keyboard.composer.KanaComposer() else pack.composer()
 
     fun cycleLanguage(reverse: Boolean = false) {
         if (enabled.size <= 1) return
@@ -25,7 +32,7 @@ class KeyboardController(
         val nextIdx = ((rawIdx % enabled.size) + enabled.size) % enabled.size
         composer?.reset()
         current = enabled[nextIdx]
-        composer = current.composer()
+        composer = makeComposer(current)
     }
 
     fun setActive(id: String) {
@@ -33,7 +40,7 @@ class KeyboardController(
         if (target.id == current.id) return
         composer?.reset()
         current = target
-        composer = current.composer()
+        composer = makeComposer(current)
     }
 
     fun onKey(char: Char): KeystrokeOutcome {

@@ -19,6 +19,7 @@ class PrefsKeys {
   static const floatingBubbleEnabled = 'draftright.floatingBubbleEnabled';
   static const enabledLanguageIds = 'draftright.enabledLanguageIds';
   static const activeLanguageId = 'draftright.activeLanguageId';
+  static const jpFlickEnabled = 'draftright.jpFlickEnabled';
   static const lastSeenVersion = 'draftright.lastSeenVersion';
   static const voicePolishEnabled = 'draftright.voicePolishEnabled';
   static const oneTapTone = 'draftright.oneTapTone';
