@@ -14,6 +14,7 @@
 		096896BBA348387F8A65889D /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88E04E1C4B31E2AFAC7DEEE9 /* AppDelegate.swift */; };
 		0B0F0927D0C47B4663DC995B /* SharedKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = A07D316FE4FE99EDD5922F96 /* SharedKeychain.swift */; };
 		1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */ = {isa = PBXBuildFile; fileRef = 1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */; };
+		1AEEAE43066E70B1569A9A00 /* SpeechVoiceInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83C6498B32253B040630E139 /* SpeechVoiceInput.swift */; };
 		1D1E151DC20ADAC8D2F8C910 /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AD8997318C0237682399A953 /* Pods_Runner.framework */; };
 		1FAABDAD11D7F2FEBE581A4B /* SharedSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = F52E61497CDC2BCE4E673A21 /* SharedSettings.swift */; };
 		2066BD4DC241D0D897DC3500 /* KeyboardViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48B352C2112BE551474B2FE8 /* KeyboardViewController.swift */; };
@@ -35,6 +36,7 @@
 		97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
 		99D8F15864ECBAFF6B1DE724 /* SharedKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = A07D316FE4FE99EDD5922F96 /* SharedKeychain.swift */; };
+		A6951C883338229AC166CDAE /* FlickKeyboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60F627D9359A7D3E5B7EEC5A /* FlickKeyboardView.swift */; };
 		AAA3603D8BC3B6B17F18EE3F /* AccentPopupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAE43508063932C07D91C4CA /* AccentPopupView.swift */; };
 		C28C0DDC4FD8AF51F23BBBA0 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 40CA77BC8C1023B5F3AE2D36 /* Foundation.framework */; };
 		D100C7C91D2A1D92239CA30E /* BackendClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B4DE00CF78D3D3F4EEF5388 /* BackendClient.swift */; };
@@ -89,6 +91,7 @@
 		48B352C2112BE551474B2FE8 /* KeyboardViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = KeyboardViewController.swift; sourceTree = "<group>"; };
 		490176BE7F9EDAECEF3B3684 /* KBTestHost.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = KBTestHost.entitlements; sourceTree = "<group>"; };
 		5B4DE00CF78D3D3F4EEF5388 /* BackendClient.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BackendClient.swift; sourceTree = "<group>"; };
+		60F627D9359A7D3E5B7EEC5A /* FlickKeyboardView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FlickKeyboardView.swift; sourceTree = "<group>"; };
 		6835ACA844AC398E7A5362B4 /* ActionViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ActionViewController.swift; sourceTree = "<group>"; };
 		6A9A59276D900A83374CF747 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		6C4C4EFACDA78448A27A3B35 /* ToolbarView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ToolbarView.swift; sourceTree = "<group>"; };
@@ -96,6 +99,7 @@
 		74858FAE1ED2DC5600515810 /* AppDelegate.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		7AFA3C8E1D35360C0083082E /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Release.xcconfig; path = Flutter/Release.xcconfig; sourceTree = "<group>"; };
+		83C6498B32253B040630E139 /* SpeechVoiceInput.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SpeechVoiceInput.swift; sourceTree = "<group>"; };
 		88E04E1C4B31E2AFAC7DEEE9 /* AppDelegate.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		8C4EF552001DA5828736C107 /* Pods-RunnerTests.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerTests.profile.xcconfig"; path = "Target Support Files/Pods-RunnerTests/Pods-RunnerTests.profile.xcconfig"; sourceTree = "<group>"; };
 		8F9761013DC2D3776761C018 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -221,6 +225,8 @@
 				AAE43508063932C07D91C4CA /* AccentPopupView.swift */,
 				E057ECD64116FCFDDA971A7D /* BrandColor.swift */,
 				9C1FD7933E61D9B1B5C7456F /* CandidateBarView.swift */,
+				60F627D9359A7D3E5B7EEC5A /* FlickKeyboardView.swift */,
+				83C6498B32253B040630E139 /* SpeechVoiceInput.swift */,
 			);
 			path = DraftRightKeyboard;
 			sourceTree = "<group>";
@@ -743,6 +749,8 @@
 				AAA3603D8BC3B6B17F18EE3F /* AccentPopupView.swift in Sources */,
 				222B81F3122A0F9215D39C5F /* BrandColor.swift in Sources */,
 				F2ED85BC7C74F0FF15C3FACB /* CandidateBarView.swift in Sources */,
+				A6951C883338229AC166CDAE /* FlickKeyboardView.swift in Sources */,
+				1AEEAE43066E70B1569A9A00 /* SpeechVoiceInput.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

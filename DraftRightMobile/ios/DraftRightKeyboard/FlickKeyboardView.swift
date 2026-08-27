@@ -40,7 +40,7 @@ final class FlickKeyboardView: UIView {
     private var keyColorSpecial: UIColor = .lightGray
     private var keyColorPressed: UIColor = .lightGray
     private var keyTextColor: UIColor = .black
-    private let brand = BrandColor.draftRightBrand
+    private let brand = UIColor.draftRightBrand
 
     override init(frame: CGRect) {
         super.init(frame: frame)

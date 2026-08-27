@@ -78,7 +78,8 @@ class KeyboardViewController: UIInputViewController {
     /// text fields — only when the focused field's keyboardType changes, so we
     /// never fight a user who tapped ?123 on a text field (#190).
     private func updateNumericLayer() {
-        let kind = textDocumentProxy.keyboardType.rawValue
+        // keyboardType is optional (UIKeyboardType?); nil → treat as .default.
+        let kind = (textDocumentProxy.keyboardType ?? .default).rawValue
         guard kind != lastKeyboardType else { return }
         lastKeyboardType = kind
         keyboard.setNumericLayer(NumericField.isNumericKeyboard(kind))
