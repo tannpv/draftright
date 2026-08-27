@@ -20,6 +20,7 @@ import android.widget.TextView
 import android.widget.Toast
 import com.draftright.keyboard.ime.CandidateBarView
 import com.draftright.keyboard.ime.ImeContext
+import com.draftright.keyboard.ime.KanaModifier
 import com.draftright.keyboard.ime.NumericField
 import com.draftright.keyboard.lang.EnglishLanguagePack
 import com.draftright.keyboard.voice.SpeechRecognizerVoiceInput
@@ -399,6 +400,29 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
                 ic.finishComposingText()
             }
         }
+        refreshCandidates()
+    }
+
+    /**
+     * JP flick 小゛゜ key (#212): cycle the last composing kana through its
+     * dakuten/handakuten/small variant (か→が, は→ば→ぱ, つ→っ→づ). Acts only on the
+     * kana buffer — replace the last kana in the composer, then re-mark the region.
+     * No-op when nothing is composing, when a conversion is already pending, or
+     * when the last kana has no variant (RULE #1: the variant table lives in
+     * [KanaModifier], this method just drives the composer).
+     */
+    override fun onKanaModifier() {
+        val ic = currentInputConnection ?: return
+        if (cycle.isActive) return
+        val composer = controller?.composer ?: return
+        val composing = composer.currentComposingText()
+        if (composing.isEmpty()) return
+        val last = composing.substring(composing.length - 1)
+        val cycled = KanaModifier.cycle(last)
+        if (cycled == last) return
+        composer.onBackspace()
+        composer.onKey(cycled[0])
+        ic.setComposingText(composer.currentComposingText(), 1)
         refreshCandidates()
     }
 
