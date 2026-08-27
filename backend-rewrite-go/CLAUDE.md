@@ -185,6 +185,64 @@ docker build -t draftright-backend-go:latest .
 # rollback: docker tag draftright-backend-go:pre-<tag> draftright-backend-go:latest && recreate
 ```
 
+## Email: the transport is not ours (2026-08-26)
+
+`internal/email` no longer sends anything. Sending, rendering, escaping, the
+delivery webhook, suppression and address normalisation all live in
+**`github.com/tannpv/emailkit`**, which was extracted from this package so
+liseuse and bacnam would not need a third copy of one policy.
+
+What stays here is what this project owns: **which emails exist and what they
+say.** The six product methods (`SendVerification`, `SendPasswordReset`,
+`SendRenewalReminder`, `SendSubscriptionActivated`, `SendPaymentFailed`,
+`SendSubscriptionExpired`) are thin wrappers over `emailkit.Send`. Their
+signatures must not change — `appsettings`, `payment`, `subscription` and the
+expiry cron each depend on them through their own ports.
+
+`PgRepo` **is** the `emailkit.Store`; there is no adapter type. `builtinTemplates`
+becomes the `emailkit.Registry` via `BuiltinRegistry()`.
+
+**Do not reintroduce a transport here.** No provider endpoint, no signature
+verification, no retry or suppression logic. If you find yourself writing one,
+the fix belongs upstream in emailkit. Mechanical check:
+
+```bash
+grep -rE "api\.resend\.com|svix-|hmac.Equal" --include="*.go" . | grep -v _test.go
+# must return nothing
+```
+
+### Credentials resolve per send, not at startup
+
+`NewService(store, creds, cfg)` takes the credential source as an explicit
+parameter — `emailRepo` is passed twice, once as `Store` and once as
+`CredentialSource`, so a future store that cannot supply credentials is a compile
+error rather than a silent fallback to env-only.
+
+The chain is: `app_settings` row → env → `defaultFrom`. An operator changing the
+key in the admin UI therefore takes effect **without a restart**, which is what
+emailkit's `Config.Resolve` exists to preserve.
+
+`pgx.ErrNoRows` means "no override configured" and falls through to env. Every
+*other* error — a decrypt failure, an unreachable database — withholds the send.
+Do not widen that check: an absent row is not a failed resolution, and sending
+with credentials someone believes they replaced is worse than not sending.
+
+### The webhook answers differently than it used to
+
+`POST /webhooks/resend` is mounted via `email.WebhookResponder`. It must stay
+public, unauthenticated, and free of body-consuming middleware — emailkit reads
+the raw body to verify the Svix signature, and anything that consumes it first
+breaks verification with no error.
+
+- `ErrStoreFailure` → **5xx**, so Resend redelivers. Both store operations are
+  idempotent, so the retry converges. This endpoint used to answer 200
+  unconditionally, losing failed suppressions permanently.
+- `ErrBadSignature`, `ErrStale`, `ErrBadPayload` → one opaque **4xx**. The
+  distinction survives only in the log, deliberately: telling a caller which
+  check failed tells an attacker which half of the request to fix.
+- Anything unrecognised → **5xx**. Defaulting unknown errors to 4xx would tell
+  the provider not to redeliver and drop the event silently.
+
 ## Gotchas
 
 - Never commit the compiled `/server` binary — gitignored; it falls out of
