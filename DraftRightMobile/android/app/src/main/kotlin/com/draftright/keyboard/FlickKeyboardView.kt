@@ -23,7 +23,8 @@ import com.draftright.keyboard.ime.FlickLayout
  *
  * Phase 3 adds the 小゛゜ modifier key (cycles the last kana's dakuten/small
  * variant via [KeyboardActionListener.onKanaModifier]) and a 、。 punctuation
- * flick key. The flick-preview popup is still deferred (phase 3b).
+ * flick key. Phase 3b adds the held-key [FlickPreviewPopup] showing the five
+ * reachable characters and highlighting the finger's current selection.
  */
 class FlickKeyboardView(
     context: Context,
@@ -61,6 +62,9 @@ class FlickKeyboardView(
     private val keyTextColor: Int
     private val bgColor: Int
     private val brand = Color.parseColor(KeyboardTheme.BRAND_BLUE)
+
+    /** Held-key flick preview (#212 phase 3b). Lazy: colors are set in init. */
+    private val preview by lazy { FlickPreviewPopup(context, keyColor, keyTextColor, brand) }
 
     init {
         orientation = VERTICAL
@@ -148,17 +152,24 @@ class FlickKeyboardView(
             when (e.action) {
                 MotionEvent.ACTION_DOWN -> {
                     startX = e.rawX; startY = e.rawY
-                    bg.setColor(keyColorPressed); key.invalidate(); true
+                    bg.setColor(keyColorPressed); key.invalidate()
+                    preview.show(key, resolve)
+                    true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    // Live-highlight the character the finger currently selects.
+                    val dir = FlickGesture.resolve(e.rawX - startX, e.rawY - startY, flickThresholdPx)
+                    preview.update(dir); true
                 }
                 MotionEvent.ACTION_UP -> {
-                    bg.setColor(keyColor); key.invalidate()
+                    bg.setColor(keyColor); key.invalidate(); preview.dismiss()
                     val dir = FlickGesture.resolve(e.rawX - startX, e.rawY - startY, flickThresholdPx)
                     // Fall back to the tap text when the flicked direction has none (e.g. や←).
                     val text = resolve(dir) ?: resolve(FlickDirection.TAP)
                     if (text != null) listener.onCharTyped(text)
                     true
                 }
-                MotionEvent.ACTION_CANCEL -> { bg.setColor(keyColor); key.invalidate(); true }
+                MotionEvent.ACTION_CANCEL -> { bg.setColor(keyColor); key.invalidate(); preview.dismiss(); true }
                 else -> false
             }
         }
