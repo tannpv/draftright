@@ -1,10 +1,12 @@
-<!-- Material "mic" glyph — voice-dictation toolbar button. Tinted programmatically. -->
+<!-- Material mic (Voice dictation tone). Tinted programmatically. Authored on a
+     960 viewport to match the sibling ic_tone_*.xml icons (#65-8); same glyph as
+     before, uniformly scaled ×40 from the 24-unit path. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
+    android:viewportWidth="960"
+    android:viewportHeight="960">
     <path
         android:fillColor="#FFFFFFFF"
-        android:pathData="M12,14c1.66,0 2.99,-1.34 2.99,-3L15,5c0,-1.66 -1.34,-3 -3,-3S9,3.34 9,5v6c0,1.66 1.34,3 3,3z M17.3,11c0,3 -2.54,5.1 -5.3,5.1S6.7,14 6.7,11L5,11c0,3.41 2.72,6.23 6,6.72L11,21h2l0,-3.28c3.28,-0.49 6,-3.3 6,-6.72h-1.7z" />
+        android:pathData="M480,560c66.4,0 119.6,-53.6 119.6,-120L600,200c0,-66.4 -53.6,-120 -120,-120S360,133.6 360,200v240c0,66.4 53.6,120 120,120z M692,440c0,120 -101.6,204 -212,204S268,560 268,440L200,440c0,136.4 108.8,249.2 240,268.8L440,840h80l0,-131.2c131.2,-19.6 240,-132 240,-268.8h-68z" />
 </vector>
