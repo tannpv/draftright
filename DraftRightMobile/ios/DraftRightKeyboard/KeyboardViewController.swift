@@ -225,9 +225,16 @@ class KeyboardViewController: UIInputViewController {
             return
         }
         let composing = controller?.composer?.currentComposingText() ?? ""
+        // Feed the words committed before the cursor as n-gram context so next-word
+        // prediction + VI bigram boosting fire (the composing word itself is
+        // excluded — see PreviousTokens). Mirrors Android DraftRightIME (#209).
+        let previous = PreviousTokens.fromTextBeforeCursor(
+            textDocumentProxy.documentContextBeforeInput,
+            composing: composing
+        )
         let items = engine.suggest(
             composing: composing,
-            previousTokens: [],   // n-gram context wired later (Task 11 step 7)
+            previousTokens: previous,
             limit: candidateLimit
         )
         candidateBar.setCandidates(items)
