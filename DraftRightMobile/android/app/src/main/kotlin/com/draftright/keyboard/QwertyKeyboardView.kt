@@ -27,6 +27,10 @@ interface KeyboardActionListener {
     /** Horizontal swipe on the space bar. +1 = right (next language),
      *  -1 = left (previous language). Samsung-style language cycle. */
     fun onSpaceSwipe(direction: Int) {}
+
+    /** JP flick 小゛゜ key: cycle the last kana's dakuten/small variant (#212).
+     *  Default no-op — only the flick keyboard raises it. */
+    fun onKanaModifier() {}
 }
 
 class QwertyKeyboardView(

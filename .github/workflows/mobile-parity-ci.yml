@@ -22,9 +22,12 @@ on:
       - 'DraftRightMobile/ios/DraftRightKeyboardCore/Sources/DraftRightKeyboardCore/IME/PinyinSyllables.swift'
       - 'DraftRightMobile/android/app/src/main/kotlin/com/draftright/keyboard/ime/FlickLayout.kt'
       - 'DraftRightMobile/ios/DraftRightKeyboardCore/Sources/DraftRightKeyboardCore/IME/FlickLayout.swift'
+      - 'DraftRightMobile/android/app/src/main/kotlin/com/draftright/keyboard/ime/KanaModifier.kt'
+      - 'DraftRightMobile/ios/DraftRightKeyboardCore/Sources/DraftRightKeyboardCore/IME/KanaModifier.swift'
       - 'scripts/check-vi-bigram-parity.py'
       - 'scripts/check-pinyin-syllables-parity.py'
       - 'scripts/check-flick-layout-parity.py'
+      - 'scripts/check-kana-modifier-parity.py'
       - '.github/workflows/mobile-parity-ci.yml'
 
 permissions:
@@ -45,3 +48,5 @@ jobs:
         run: python3 scripts/check-pinyin-syllables-parity.py
       - name: Assert the two flick kana maps agree
         run: python3 scripts/check-flick-layout-parity.py
+      - name: Assert the two kana modifier tables agree
+        run: python3 scripts/check-kana-modifier-parity.py

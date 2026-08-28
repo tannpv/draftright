@@ -10,6 +10,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
+import com.draftright.keyboard.ime.FlickDirection
 import com.draftright.keyboard.ime.FlickGesture
 import com.draftright.keyboard.ime.FlickLayout
 
@@ -20,8 +21,10 @@ import com.draftright.keyboard.ime.FlickLayout
  * owns the touch plumbing + rendering. The resolved kana goes to the IME via
  * [KeyboardActionListener.onCharTyped], feeding the existing kana→kanji engine.
  *
- * Minimal for phase 2: no flick-preview popup yet (phase 3), and 小゛゜/punctuation
- * keys are deferred to phase 3; this ships the core gojūon flick input.
+ * Phase 3 adds the 小゛゜ modifier key (cycles the last kana's dakuten/small
+ * variant via [KeyboardActionListener.onKanaModifier]) and a 、。 punctuation
+ * flick key. Phase 3b adds the held-key [FlickPreviewPopup] showing the five
+ * reachable characters and highlighting the finger's current selection.
  */
 class FlickKeyboardView(
     context: Context,
@@ -37,12 +40,20 @@ class FlickKeyboardView(
     private val flickThresholdPx: Float =
         dpToPx(18).toFloat()
 
-    // The 12-key kana grid (row-head kana). Function keys live in the bottom row.
+    // The gojūon kana grid (row-head kana). The 4th row + function keys are built
+    // separately (modifier / わ / punctuation, then globe/space/⌫/↵).
     private val kanaRows: List<List<String>> = listOf(
         listOf("あ", "か", "さ"),
         listOf("た", "な", "は"),
         listOf("ま", "や", "ら"),
-        listOf("＾_＾", "わ", "、。"), // placeholders (modifier / punctuation) — phase 3
+    )
+
+    /** Flick map for the punctuation key: tap 、 · flicks 。？！ (#212). */
+    private val punctMap: Map<FlickDirection, String> = mapOf(
+        FlickDirection.TAP to "、",
+        FlickDirection.LEFT to "。",
+        FlickDirection.UP to "？",
+        FlickDirection.RIGHT to "！",
     )
 
     private val keyColor: Int
@@ -51,6 +62,9 @@ class FlickKeyboardView(
     private val keyTextColor: Int
     private val bgColor: Int
     private val brand = Color.parseColor(KeyboardTheme.BRAND_BLUE)
+
+    /** Held-key flick preview (#212 phase 3b). Lazy: colors are set in init. */
+    private val preview by lazy { FlickPreviewPopup(context, keyColor, keyTextColor, brand) }
 
     init {
         orientation = VERTICAL
@@ -75,6 +89,12 @@ class FlickKeyboardView(
             for (rowHead in row) rl.addView(kanaKey(rowHead), keyParams(1f))
             addView(rl)
         }
+        // Modifier / わ / punctuation row: 小゛゜ | わ | 、。
+        val mods = rowLayout()
+        mods.addView(functionKey("小゛゜") { listener.onKanaModifier() }, keyParams(1f))
+        mods.addView(kanaKey("わ"), keyParams(1f))
+        mods.addView(flickKey("、", punctMap), keyParams(1f))
+        addView(mods)
         // Bottom function row: 🌐 | space (wide) | ⌫ | ↵
         val fn = rowLayout()
         fn.addView(functionKey("🌐") { listener.onSwitchKeyboard() }, keyParams(1f))
@@ -111,8 +131,20 @@ class FlickKeyboardView(
     }
 
     /** A kana key: tap → row-head kana, flick → the direction's kana. */
-    private fun kanaKey(rowHead: String): TextView {
-        val key = baseKey(rowHead, special = false)
+    private fun kanaKey(rowHead: String): TextView =
+        flickKey(rowHead) { dir -> FlickLayout.kanaFor(rowHead, dir) }
+
+    /** A flick key driven by a fixed direction→text map (e.g. punctuation). */
+    private fun flickKey(label: String, map: Map<FlickDirection, String>): TextView =
+        flickKey(label) { dir -> map[dir] }
+
+    /**
+     * A key whose emitted text depends on the flick direction. [resolve] returns
+     * the text for a direction, or null when that direction is undefined (then we
+     * fall back to the tap text). One touch-plumbing chokepoint for every flick key.
+     */
+    private fun flickKey(label: String, resolve: (FlickDirection) -> String?): TextView {
+        val key = baseKey(label, special = false)
         val bg = key.background as GradientDrawable
         var startX = 0f
         var startY = 0f
@@ -120,18 +152,24 @@ class FlickKeyboardView(
             when (e.action) {
                 MotionEvent.ACTION_DOWN -> {
                     startX = e.rawX; startY = e.rawY
-                    bg.setColor(keyColorPressed); key.invalidate(); true
-                }
-                MotionEvent.ACTION_UP -> {
-                    bg.setColor(keyColor); key.invalidate()
-                    val dir = FlickGesture.resolve(e.rawX - startX, e.rawY - startY, flickThresholdPx)
-                    // Fall back to the tap kana when the flicked direction has none (e.g. や←).
-                    val kana = FlickLayout.kanaFor(rowHead, dir)
-                        ?: FlickLayout.kanaFor(rowHead, com.draftright.keyboard.ime.FlickDirection.TAP)
-                    if (kana != null) listener.onCharTyped(kana)
+                    bg.setColor(keyColorPressed); key.invalidate()
+                    preview.show(key, resolve)
                     true
                 }
-                MotionEvent.ACTION_CANCEL -> { bg.setColor(keyColor); key.invalidate(); true }
+                MotionEvent.ACTION_MOVE -> {
+                    // Live-highlight the character the finger currently selects.
+                    val dir = FlickGesture.resolve(e.rawX - startX, e.rawY - startY, flickThresholdPx)
+                    preview.update(dir); true
+                }
+                MotionEvent.ACTION_UP -> {
+                    bg.setColor(keyColor); key.invalidate(); preview.dismiss()
+                    val dir = FlickGesture.resolve(e.rawX - startX, e.rawY - startY, flickThresholdPx)
+                    // Fall back to the tap text when the flicked direction has none (e.g. や←).
+                    val text = resolve(dir) ?: resolve(FlickDirection.TAP)
+                    if (text != null) listener.onCharTyped(text)
+                    true
+                }
+                MotionEvent.ACTION_CANCEL -> { bg.setColor(keyColor); key.invalidate(); preview.dismiss(); true }
                 else -> false
             }
         }
