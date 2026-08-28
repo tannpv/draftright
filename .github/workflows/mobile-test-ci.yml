@@ -1,0 +1,48 @@
+name: Mobile Dart tests
+
+# The Flutter app ships 100+ Dart unit/widget tests under DraftRightMobile/test/,
+# but until now nothing ran them — a regression in lib/ could land unnoticed
+# (RULE #1: a test suite that no machine enforces is dead weight). This gate runs
+# `flutter analyze` + `flutter test` on every change to the Dart app.
+#
+# Runs on the self-hosted Contabo runner because GitHub-hosted minutes are
+# billing-blocked; Flutter is provisioned per-run by flutter-action (same version
+# the Play deploy uses). `--no-fatal-infos` keeps pre-existing lint infos
+# (e.g. DropdownButtonFormField value→initialValue deprecations) non-blocking
+# while still failing on warnings + errors.
+
+on:
+  push:
+    branches: [develop, main]
+    paths:
+      - 'DraftRightMobile/lib/**'
+      - 'DraftRightMobile/test/**'
+      - 'DraftRightMobile/pubspec.yaml'
+      - 'DraftRightMobile/pubspec.lock'
+      - '.github/workflows/mobile-test-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  flutter-test:
+    name: flutter analyze + test
+    runs-on: [self-hosted, linux, x64, draftright]
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: DraftRightMobile
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.41.4
+          cache: true
+      - name: Resolve dependencies
+        run: flutter pub get
+      - name: Static analysis
+        run: flutter analyze --no-fatal-infos
+      - name: Unit + widget tests
+        run: flutter test

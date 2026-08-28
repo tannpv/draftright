@@ -7,7 +7,7 @@ import 'package:draftright_mobile/models/language_module.dart';
 import 'package:draftright_mobile/services/ime_pack_service.dart';
 import 'package:draftright_mobile/widgets/language_packs_section.dart';
 
-final _ja = const LanguageModule(
+const _ja = LanguageModule(
   id: 'ja',
   displayName: '日本語',
   inputMethod: 'candidate',
@@ -21,9 +21,9 @@ final _ja = const LanguageModule(
   ),
 );
 
-Widget _wrap(PackInstaller svc, {bool installed = false}) => MaterialApp(
+Widget _wrap(PackInstaller svc) => MaterialApp(
       home: Scaffold(
-        body: LanguagePacksSection(modules: [_ja], packInstaller: svc),
+        body: LanguagePacksSection(modules: const [_ja], packInstaller: svc),
       ),
     );
 
@@ -75,7 +75,7 @@ void main() {
     await t.pumpWidget(MaterialApp(
       home: Scaffold(
         body: LanguagePacksSection(
-          modules: [_ja],
+          modules: const [_ja],
           packInstaller: fake,
           onLanguageEnabledChanged: (id, enabled) => events.add((id, enabled)),
         ),
