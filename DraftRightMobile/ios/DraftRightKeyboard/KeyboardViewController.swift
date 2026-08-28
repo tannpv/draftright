@@ -10,6 +10,9 @@ class KeyboardViewController: UIInputViewController {
     private let flickKeyboard = FlickKeyboardView()
     private let aiClient = BackendClient()
     private let settings = SharedSettings()
+    /// Samsung-parity key feedback (#209): click on every key + a Full-Access-gated
+    /// haptic tick. hasFullAccess is read at fire time so toggling it takes effect.
+    private lazy var feedback = KeyFeedback(hasFullAccess: { [weak self] in self?.hasFullAccess ?? false })
     private var diffSheet: DiffSheetView?
     private var originalText: String?
     private var heightConstraint: NSLayoutConstraint!
@@ -510,6 +513,7 @@ extension KeyboardViewController: DiffSheetDelegate {
 
 extension KeyboardViewController: KeyboardActionDelegate {
     func keyboardDidType(_ char: String) {
+        feedback.fire(.char)
         guard let ch = char.first, char.count == 1 else {
             textDocumentProxy.insertText(char)
             refreshCandidates()
@@ -520,11 +524,13 @@ extension KeyboardViewController: KeyboardActionDelegate {
     }
 
     func keyboardDidBackspace() {
+        feedback.fire(.delete)
         dispatchBackspace(controller.onBackspace())
         refreshCandidates()
     }
 
     func keyboardDidEnter() {
+        feedback.fire(.enter)
         // Commit any pending composition so newline doesn't get swallowed
         // by the marked-text region.
         textDocumentProxy.unmarkText()
@@ -534,6 +540,7 @@ extension KeyboardViewController: KeyboardActionDelegate {
     }
 
     func keyboardDidSpace() {
+        feedback.fire(.space)
         // Route space through the composer so a pending Telex composition
         // commits FIRST, then space appends. Without this, a direct
         // insertText(" ") replaces the marked region (e.g. "viet")
@@ -543,6 +550,7 @@ extension KeyboardViewController: KeyboardActionDelegate {
     }
 
     func keyboardDidSwitchKeyboard() {
+        feedback.fire(.other)
         // Single tap on globe: cycle to next enabled language. If only
         // one is enabled, fall back to system keyboard switcher.
         if controller.enabled.count > 1 {
@@ -574,6 +582,7 @@ extension KeyboardViewController: KeyboardActionDelegate {
     /// the Android `DraftRightIME.onKanaModifier`; the variant table lives in
     /// `KanaModifier` (parity-guarded), this just drives the composer.
     func keyboardDidKanaModifier() {
+        feedback.fire(.other)
         guard let composer = controller.composer else { return }
         let composing = composer.currentComposingText()
         guard let last = composing.last else { return }
@@ -610,4 +619,11 @@ private final class UIKitTextProxy: KeyboardTextProxy {
         proxy.setMarkedText(text, selectedRange: NSRange(location: text.utf16.count, length: 0))
     }
     func clearComposing() { proxy.unmarkText() }
+}
+
+// UIDevice.playInputClick() only sounds when the responder chain contains a
+// UIInputViewAudioFeedback view returning true — the KeyFeedback chokepoint
+// relies on this for the click half of key feedback (#209).
+extension KeyboardViewController: UIInputViewAudioFeedback {
+    var enableInputClicksWhenVisible: Bool { true }
 }
