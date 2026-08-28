@@ -27,7 +27,9 @@ public enum VoiceOutcome: Equatable {
 /// - `cancelSession` while listening/processing → cancels the recognizer,
 ///   returns to `.idle`, emits `.nothing`. A `polish` result arriving after
 ///   cancellation (it can run on a worker thread) is dropped.
-/// - recognizer error → `.nothing` + `.idle` (no transcript ever existed).
+/// - recognizer error → salvage the last partial as `.raw` with the salvage hint
+///   (golden rule: a SPEECH_TIMEOUT mid-sentence must not discard heard words);
+///   `.nothing` + `.idle` only when the recognizer never produced any transcript.
 ///
 /// Threading: `startSession`/`cancelSession`/`finishSession` and the recognizer
 /// callbacks run on the main thread, but `polish`'s completion may land on any
