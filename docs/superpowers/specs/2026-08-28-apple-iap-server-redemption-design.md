@@ -57,61 +57,71 @@ Verified against the tree 2026-08-28 (re-check; the repo moves):
 So the DB and part of the Go plumbing already anticipate `apple_iap`. The work is
 producing it and verifying transactions — not inventing a subscription model.
 
-## Architecture decision: one honest `Strategy` (not a second port)
+## Architecture decision: one honest `Strategy`, no new capability
 
-**Chosen (owner):** Apple IAP is a full `PaymentMethod` implementing the existing
+**Chosen (owner):** Apple IAP is a `PaymentMethod` implementing the existing
 `Strategy` interface — one interface for every provider, so admin, method
 listing, reporting, and the parity test treat all providers uniformly, and a
-future **Google Play IAP** fits the same shape. This is preferred over a separate
+future **Google Play IAP** fits the same shape. Preferred over a separate
 `Redeemer` port.
 
-**RULE #1 constraint that shapes it:** StoreKit inverts the server-first flow —
-the purchase completes on-device, then the server verifies. Three of `Strategy`'s
-four methods have no server action. A naive implementation would fake them
-(`CreateCheckout` returning empty success) — an interface whose contract is false
-for one implementation, the exact anti-pattern RULE #1 forbids. So the interface
-is **refined to admit a redemption-style provider as a first-class case**:
+**The recon (2026-08-28) showed the interface already accommodates a
+redemption-style provider honestly — no `Kind()` capability is needed** (an
+earlier draft of this spec added one; it was dropped because it duplicates what
+`registeredMethods` already encodes, which would itself be a RULE #1 violation):
 
-- Add **`Strategy.Kind() ProviderKind`** where `ProviderKind ∈ {ServerCheckout,
-  ClientRedemption}`. The 4 existing providers return `ServerCheckout` (no
-  behaviour change); Apple IAP returns `ClientRedemption`.
-- **Callers gate on `Kind()`** before any server-checkout call. For a
-  `ClientRedemption` provider, `CreateCheckout` is never invoked in a correct
-  flow; if invoked it returns a typed `ErrClientRedemption` (honest — the
-  contract says "only `ServerCheckout` providers create a checkout").
-- `CancelSubscription` / `CustomerPortalURL` for IAP return the `itms-apps://`
-  **manage-subscription deep link** (Apple forbids server-side cancel; the user
-  manages it in Settings). This is a real, honest value, not a stub.
-- The **real work** lives in verification (a client-transaction verify entry
-  point) and `VerifyWebhook` (App Store Server Notifications V2).
+- `CustomerPortalURL` is documented to return `""` when there is no portal
+  (`strategy.go:137`). IAP returns the real `itms-apps://apps.apple.com/account/subscriptions`
+  manage URL — honest, non-empty.
+- `CancelSubscription` is documented to return `false` when the provider can't
+  cancel (`strategy.go:139`). Apple forbids server-side cancel → IAP returns
+  `false`. Honest, per the existing contract.
+- `registeredMethods` (`methods.go:18`) **is** the "can check out" list. **IAP is
+  not a checkout method** — the purchase happens on-device — so it is **not added
+  to `registeredMethods`**, and `CreateCheckout` is therefore never routed to it.
+  IAP's `CreateCheckout` returns an explicit `ErrNotCheckoutMethod`
+  (honest, never reached in a correct flow).
 
-This keeps one interface (the owner's call) while every method is honest for
-every provider — capability-declared, never faked.
+So IAP touches the system in **two honest places**:
+
+1. **A new redeem endpoint** — `POST /payment/apple/redeem`. After the on-device
+   purchase, the client posts the signed StoreKit transaction; the server
+   verifies it and grants. This fits **none** of the four `Strategy` methods
+   (it's not a checkout, portal, cancel, or webhook), so it is a **new handler +
+   use-case**, not a `Strategy` method.
+2. **`VerifyWebhook`** carries **App Store Server Notifications V2** (renewals,
+   cancellations, refunds, grace) on `POST /payment/webhook/apple`, exactly like
+   the other providers' webhooks.
+
+Both funnel into the existing grant/extend writers. No new interface machinery.
 
 ## Components (each: one purpose, one interface, testable alone)
 
 1. **`applestore` strategy package** (`internal/payment/strategy/applestore/`) —
-   implements `Strategy`: `Kind() = ClientRedemption`; server-first methods
-   return the typed redemption result / deep link; `VerifyWebhook` handles ASSN
-   V2. Mirrors the shape of the sibling provider packages.
-2. **Transaction verifier** — verifies a signed StoreKit JWS transaction: JWS
-   signature chain to Apple's root, plus `bundleId`, `environment`
-   (sandbox/prod), and `iss`/`aud` claims. Pure function over bytes → verified
-   transaction struct. No network in the unit tests (embedded Apple root certs +
-   sample payloads).
-3. **product → plan resolver** — one map from App Store product id to the
-   existing plan id. **Single source of truth.** A guard test asserts the map is
-   a bijection with the configured plans (every plan has a product id; every
-   product id resolves to a real plan) — a mismatch would grant the wrong plan
-   silently.
-4. **Redemption use-case** — orchestrates: verify → resolve product→plan → grant
-   via `activateSubscription` → record `store_type = apple_iap` +
-   `store_transaction_id`. No second grant path.
-5. **Notification handler (ASSN V2)** — verify the signed notification, map the
-   notification type (`SUBSCRIBED`, `DID_RENEW`, `DID_CHANGE_RENEWAL_STATUS`,
-   `EXPIRED`, `REFUND`, `GRACE_PERIOD_EXPIRED`, …) to an entitlement update
-   through the same chokepoint. **Renewals must not re-send the activation
-   email.**
+   implements `Strategy`, mirroring the `stripe` package's test-seam shape:
+   `CreateCheckout` → `ErrNotCheckoutMethod`; `CustomerPortalURL` → the
+   `itms-apps://` manage URL; `CancelSubscription` → `false`; `VerifyWebhook` →
+   parse + verify an App Store Server Notification V2 into a `WebhookAction`.
+2. **Transaction/notification verifier** (`applestore/verify.go`) — verifies a
+   signed StoreKit JWS (the `x5c` cert chain to Apple's root, ES256 signature,
+   plus `bundleId` and `environment` checks). A `verify func(...)` seam injected
+   in `New(...)` so unit tests never hit Apple (embedded root cert + fixture
+   payloads).
+3. **product → plan resolver** — App Store product id → plan id, **mirroring the
+   LemonSqueezy pattern** (recon §8): `apple_product_monthly` / `apple_product_yearly`
+   in the payment credentials/app_settings, resolved via the existing
+   `FindFirstActivePlanID(ctx, billing, currency)`. **No schema change.** One
+   resolver, one source of truth; a guard test asserts both product ids resolve
+   to an active plan (a mismatch would grant the wrong plan silently).
+4. **Redeem use-case** — orchestrates the client-transaction path: verify →
+   resolve product→plan → grant via the existing activation chokepoint → stamp
+   `store_type = apple_iap` + `store_transaction_id` (the original transaction id,
+   so later notifications match). No second grant path.
+5. **Notification handling** — `VerifyWebhook` + `HandleWebhook`'s action switch:
+   map the notification type (`SUBSCRIBED`, `DID_RENEW`,
+   `DID_CHANGE_RENEWAL_STATUS`, `EXPIRED`, `REFUND`, `GRACE_PERIOD_EXPIRED`, …) to
+   an entitlement update. First cycle stamps the store ref; renewals call
+   `ExtendByStoreRef` and **must not re-send the activation email**.
 
 ## Data flow
 
@@ -123,7 +133,7 @@ Client (StoreKit 2, later spec)
                                     └─ activateSubscription  ◀── the ONE grant chokepoint
                                        └─ record store_type=apple_iap, store_transaction_id
 
-Apple ──▶ POST /payment/apple/notifications (ASSN V2)
+Apple ──▶ POST /payment/webhook/apple (ASSN V2, matches existing webhook route convention)
             └─ verify signed notification
                └─ map type → entitlement update
                   └─ activateSubscription (renew: no email) / revoke / extend expires_at
@@ -136,7 +146,7 @@ Endpoint paths are indicative; match the existing router's convention.
 | Concern | Single source of truth | Machine that proves it |
 |---|---|---|
 | Granting Pro | `activateSubscription` | no second grant path; verified by code review + a test that redemption calls it |
-| method ↔ strategy ↔ kind | `registeredMethods` | extend `strategy_method_parity_test.go`: every method has a strategy and a `Kind` |
+| method const (payment ↔ strategy pkg) | `payment.MethodAppleIAP` | extend `strategy_method_parity_test.go` with `{strategy.MethodAppleIAP, MethodAppleIAP}` |
 | store-type production | `StoreTypeForMethod` (`MethodAppleIAP → StoreAppleIAP`) | one mapping; parity/enum tests |
 | product id → plan id | one resolver map | bijection guard test (plan↔product) |
 | mobile method identity | `payment_method.dart` enum + `wireName` | never branch on the wire string (the file already states this rule) |
