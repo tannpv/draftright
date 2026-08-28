@@ -31,6 +31,8 @@ on:
       - 'scripts/check-flick-layout-parity.py'
       - 'scripts/check-kana-modifier-parity.py'
       - 'scripts/check-katakana-parity.py'
+      - 'scripts/check-no-objective-c.py'
+      - 'DraftRightMobile/pubspec.lock'
       - '.github/workflows/mobile-parity-ci.yml'
 
 permissions:
@@ -55,3 +57,5 @@ jobs:
         run: python3 scripts/check-kana-modifier-parity.py
       - name: Assert the two katakana transliterators agree
         run: python3 scripts/check-katakana-parity.py
+      - name: Assert objective_c stays out of the dep graph (#27 bootstrap crash)
+        run: python3 scripts/check-no-objective-c.py
