@@ -6,7 +6,7 @@ import com.draftright.keyboard.LanguagePack
 import com.draftright.keyboard.composer.RomajiKanaComposer
 import com.draftright.keyboard.ime.CandidateEngine
 import com.draftright.keyboard.ime.ImeContext
-import com.draftright.keyboard.ime.DictionaryCandidateEngine
+import com.draftright.keyboard.ime.KatakanaCandidateEngine
 import com.draftright.keyboard.ime.DictPackResolver
 import com.draftright.keyboard.ime.JapaneseSeedDictionary
 import java.util.Locale
@@ -65,7 +65,7 @@ object JapaneseLanguagePack : LanguagePack {
             } else {
                 JapaneseSeedDictionary.dict
             }
-            val engine = DictionaryCandidateEngine(dict)
+            val engine = KatakanaCandidateEngine(dict)
             cachedEngine = engine
             cachedKey = key
             return engine

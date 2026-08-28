@@ -24,10 +24,13 @@ on:
       - 'DraftRightMobile/ios/DraftRightKeyboardCore/Sources/DraftRightKeyboardCore/IME/FlickLayout.swift'
       - 'DraftRightMobile/android/app/src/main/kotlin/com/draftright/keyboard/ime/KanaModifier.kt'
       - 'DraftRightMobile/ios/DraftRightKeyboardCore/Sources/DraftRightKeyboardCore/IME/KanaModifier.swift'
+      - 'DraftRightMobile/android/app/src/main/kotlin/com/draftright/keyboard/ime/Katakana.kt'
+      - 'DraftRightMobile/ios/DraftRightKeyboardCore/Sources/DraftRightKeyboardCore/IME/Katakana.swift'
       - 'scripts/check-vi-bigram-parity.py'
       - 'scripts/check-pinyin-syllables-parity.py'
       - 'scripts/check-flick-layout-parity.py'
       - 'scripts/check-kana-modifier-parity.py'
+      - 'scripts/check-katakana-parity.py'
       - '.github/workflows/mobile-parity-ci.yml'
 
 permissions:
@@ -50,3 +53,5 @@ jobs:
         run: python3 scripts/check-flick-layout-parity.py
       - name: Assert the two kana modifier tables agree
         run: python3 scripts/check-kana-modifier-parity.py
+      - name: Assert the two katakana transliterators agree
+        run: python3 scripts/check-katakana-parity.py

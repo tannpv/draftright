@@ -47,7 +47,7 @@ public struct JapaneseLanguagePack: LanguagePack {
             packIdPrefix: Self.packIdPrefix,
             fallback: { JapaneseSeedDictionary.dict }
         )
-        let engine = DictionaryCandidateEngine(dictionary: dict)
+        let engine = KatakanaCandidateEngine(dictionary: dict)
         Self.cachedEngine = engine
         Self.cachedKey = key
         return engine
