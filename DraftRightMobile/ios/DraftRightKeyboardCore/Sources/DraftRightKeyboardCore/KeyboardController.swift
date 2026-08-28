@@ -9,16 +9,25 @@ public enum KeystrokeOutcome: Equatable {
 
 public final class KeyboardController {
     private let registry: LanguageRegistry
+    /// When true, Japanese uses the flick kana composer instead of rōmaji (#212).
+    private let jpFlick: Bool
     public private(set) var enabled: [LanguagePack]
     public private(set) var current: LanguagePack
     public private(set) var composer: Composer?
 
-    public init(registry: LanguageRegistry, enabledIds: [String], activeId: String) {
+    public init(registry: LanguageRegistry, enabledIds: [String], activeId: String, jpFlick: Bool = false) {
         self.registry = registry
+        self.jpFlick = jpFlick
         let filtered = registry.all.filter { enabledIds.contains($0.id) }
         self.enabled = filtered.isEmpty ? [registry.byIdOrDefault("en")] : filtered
         self.current = self.enabled.first(where: { $0.id == activeId }) ?? self.enabled[0]
-        self.composer = self.current.makeComposer()
+        self.composer = Self.makeComposer(self.current, jpFlick: jpFlick)
+    }
+
+    /// Japanese + flick mode gets the kana passthrough composer; every other case
+    /// keeps the pack's own composer, so non-flick behaviour is unchanged (#212).
+    private static func makeComposer(_ pack: LanguagePack, jpFlick: Bool) -> Composer? {
+        (pack.id == "ja" && jpFlick) ? KanaComposer() : pack.makeComposer()
     }
 
     public func cycleLanguage(reverse: Bool = false) {
@@ -29,7 +38,7 @@ public final class KeyboardController {
         let nextIdx = ((rawIdx % enabled.count) + enabled.count) % enabled.count
         composer?.reset()
         current = enabled[nextIdx]
-        composer = current.makeComposer()
+        composer = Self.makeComposer(current, jpFlick: jpFlick)
     }
 
     public func setActive(id: String) {
@@ -37,7 +46,7 @@ public final class KeyboardController {
         guard target.id != current.id else { return }
         composer?.reset()
         current = target
-        composer = current.makeComposer()
+        composer = Self.makeComposer(current, jpFlick: jpFlick)
     }
 
     public func onKey(_ char: Character) -> KeystrokeOutcome {

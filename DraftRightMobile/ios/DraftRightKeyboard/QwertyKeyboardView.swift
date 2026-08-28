@@ -15,6 +15,14 @@ protocol KeyboardActionDelegate: AnyObject {
     /// Horizontal swipe on the space bar. +1 = right, -1 = left.
     /// Used to cycle through enabled keyboard languages (Samsung-style).
     func keyboardDidSpaceSwipe(direction: Int)
+    /// JP flick 小゛゜ key: cycle the last kana's dakuten/small variant (#212).
+    /// Only the flick keyboard raises it — a default no-op keeps QWERTY callers
+    /// unaffected.
+    func keyboardDidKanaModifier()
+}
+
+extension KeyboardActionDelegate {
+    func keyboardDidKanaModifier() {}
 }
 
 // MARK: - QwertyKeyboardView

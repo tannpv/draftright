@@ -5,6 +5,9 @@ class KeyboardViewController: UIInputViewController {
 
     private let toolbar = ToolbarView()
     private let keyboard = QwertyKeyboardView()
+    /// JP flick surface, shown instead of `keyboard` when Japanese + flick mode
+    /// (#212). Both share identical constraints; only `isHidden` differs.
+    private let flickKeyboard = FlickKeyboardView()
     private let aiClient = BackendClient()
     private let settings = SharedSettings()
     private var diffSheet: DiffSheetView?
@@ -75,7 +78,8 @@ class KeyboardViewController: UIInputViewController {
     /// text fields — only when the focused field's keyboardType changes, so we
     /// never fight a user who tapped ?123 on a text field (#190).
     private func updateNumericLayer() {
-        let kind = textDocumentProxy.keyboardType.rawValue
+        // keyboardType is optional (UIKeyboardType?); nil → treat as .default.
+        let kind = (textDocumentProxy.keyboardType ?? .default).rawValue
         guard kind != lastKeyboardType else { return }
         lastKeyboardType = kind
         keyboard.setNumericLayer(NumericField.isNumericKeyboard(kind))
@@ -129,14 +133,25 @@ class KeyboardViewController: UIInputViewController {
         controller = KeyboardController(
             registry: registry,
             enabledIds: settings.enabledLanguageIds,
-            activeId: settings.activeLanguageId
+            activeId: settings.activeLanguageId,
+            jpFlick: settings.jpFlickEnabled
         )
         keyboard.languagePack = controller.current
         candidateEngine = controller.current.makeCandidateEngine()
         // After a language switch (or first build) the previous engine's
         // suggestions are stale — clear the bar so it doesn't show old hints.
         candidateBar.setCandidates([])
+        updateKeyboardSurface()
         adjustHeightForCandidateBar()
+    }
+
+    /// Show the flick keyboard for Japanese + flick mode, the QWERTY view for
+    /// everything else. Both stay installed with identical constraints; toggling
+    /// `isHidden` is the single switch (#212).
+    private func updateKeyboardSurface() {
+        let flick = settings.jpFlickEnabled && controller.current.id == "ja"
+        flickKeyboard.isHidden = !flick
+        keyboard.isHidden = flick
     }
 
     private func setupUI() {
@@ -162,10 +177,16 @@ class KeyboardViewController: UIInputViewController {
         setupVoiceSession()
         toolbar.setVoiceAvailable(SpeechVoiceInput.isAvailable)
 
-        // Keyboard
+        // Keyboard surfaces — QWERTY + JP flick share identical constraints;
+        // updateKeyboardSurface() toggles which one is visible (#212).
         keyboard.delegate = self
         keyboard.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(keyboard)
+
+        flickKeyboard.delegate = self
+        flickKeyboard.translatesAutoresizingMaskIntoConstraints = false
+        flickKeyboard.isHidden = true
+        view.addSubview(flickKeyboard)
 
         NSLayoutConstraint.activate([
             candidateBar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
@@ -182,7 +203,13 @@ class KeyboardViewController: UIInputViewController {
             keyboard.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             keyboard.topAnchor.constraint(equalTo: toolbar.bottomAnchor),
             keyboard.heightAnchor.constraint(equalToConstant: keyboard.totalHeight),
+
+            flickKeyboard.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            flickKeyboard.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            flickKeyboard.topAnchor.constraint(equalTo: toolbar.bottomAnchor),
+            flickKeyboard.heightAnchor.constraint(equalToConstant: flickKeyboard.totalHeight),
         ])
+        updateKeyboardSurface()
     }
 
     // MARK: - Candidate strip
@@ -516,6 +543,7 @@ extension KeyboardViewController: KeyboardActionDelegate {
             keyboard.languagePack = controller.current
             candidateEngine = controller.current.makeCandidateEngine()
             candidateBar.setCandidates([])
+            updateKeyboardSurface()
             adjustHeightForCandidateBar()
         } else {
             advanceToNextInputMode()
@@ -528,7 +556,28 @@ extension KeyboardViewController: KeyboardActionDelegate {
         keyboard.languagePack = controller.current
         candidateEngine = controller.current.makeCandidateEngine()
         candidateBar.setCandidates([])
+        updateKeyboardSurface()
         adjustHeightForCandidateBar()
+    }
+
+    /// JP flick 小゛゜ key (#212): cycle the last composing kana through its
+    /// dakuten/handakuten/small variant (か→が, は→ば→ぱ, つ→っ→づ). Acts only on
+    /// the composer buffer — replace the last kana, then re-mark the region.
+    /// No-op when nothing is composing or the last kana has no variant. Mirrors
+    /// the Android `DraftRightIME.onKanaModifier`; the variant table lives in
+    /// `KanaModifier` (parity-guarded), this just drives the composer.
+    func keyboardDidKanaModifier() {
+        guard let composer = controller.composer else { return }
+        let composing = composer.currentComposingText()
+        guard let last = composing.last else { return }
+        let cycled = KanaModifier.cycle(String(last))
+        guard cycled != String(last), let ch = cycled.first else { return }
+        _ = composer.onBackspace()
+        _ = composer.onKey(ch)
+        let updated = composer.currentComposingText()
+        textDocumentProxy.setMarkedText(
+            updated, selectedRange: NSRange(location: updated.utf16.count, length: 0))
+        refreshCandidates()
     }
 
     // MARK: - KeystrokeOutcome dispatch
