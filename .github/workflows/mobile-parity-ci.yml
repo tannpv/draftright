@@ -33,6 +33,9 @@ on:
       - 'scripts/check-katakana-parity.py'
       - 'scripts/check-keyfeedback-kind-parity.py'
       - 'scripts/check-numeric-layout-parity.py'
+      - 'scripts/check-voice-hints-parity.py'
+      - 'DraftRightMobile/android/app/src/main/kotlin/com/draftright/keyboard/voice/VoiceSessionController.kt'
+      - 'DraftRightMobile/ios/DraftRightKeyboardCore/Sources/DraftRightKeyboardCore/Voice/VoiceSessionController.swift'
       - 'DraftRightMobile/android/app/src/main/kotlin/com/draftright/keyboard/KeyFeedback.kt'
       - 'DraftRightMobile/ios/DraftRightKeyboardCore/Sources/DraftRightKeyboardCore/KeyFeedbackKind.swift'
       - 'DraftRightMobile/android/app/src/main/kotlin/com/draftright/keyboard/lang/QwertyLayout.kt'
@@ -67,5 +70,7 @@ jobs:
         run: python3 scripts/check-keyfeedback-kind-parity.py
       - name: Assert the numeric keypad layout agrees
         run: python3 scripts/check-numeric-layout-parity.py
+      - name: Assert the voice hint strings agree
+        run: python3 scripts/check-voice-hints-parity.py
       - name: Assert objective_c stays out of the dep graph (#27 bootstrap crash)
         run: python3 scripts/check-no-objective-c.py
