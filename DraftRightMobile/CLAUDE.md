@@ -77,17 +77,22 @@ each other 1:1. The seam:
 - **Composer** per pack (romaji→kana, telex, pinyin, flick-kana) → **CandidateEngine**
   (`TrigramCandidateEngine` Latin w/ bigram next-word + fuzzy edit-distance;
   `DictionaryCandidateEngine` reading→candidates shared by JP+ZH;
-  `PinyinCandidateEngine` **wraps** it, adds ZH sentence-pinyin/abbreviation/fuzzy)
+  `PinyinCandidateEngine` **wraps** it, adds ZH sentence-pinyin/abbreviation/fuzzy;
+  `KatakanaCandidateEngine` **wraps** it for JP, adds the katakana reading かな→カナ
+  via `Katakana.fromHiragana` — cited Unicode +0x60 over U+3041..U+3096)
   → candidate bar. `LanguagePack` traits: `numericRows`, `convertsOnSpace` (JP/ZH).
 - IME: `KeyFeedback` (haptic/sound chokepoint), `PreviousTokens` (n-gram context),
   `ConversionCycle` (JP/ZH space-convert + repeat-space cycle), `FlickGesture`/
-  `FlickLayout` (JP 12-key flick).
+  `FlickLayout` (JP 12-key flick), `KanaModifier` (小゛゜ dakuten/handakuten/small
+  cycle か→が, は→ば→ぱ, つ→っ→づ), `FlickPreviewPopup` (held-key cross highlighting
+  the finger's flick selection). JP flick is opt-in via `jpFlickEnabled`; OFF =
+  rōmaji QWERTY (the default — latin JP input). Globe key switches to EN for raw latin.
 
 **Cross-language data parity (RULE #1):** Kotlin & Swift can't share source, so
-duplicated linguistic data (VI bigrams, pinyin syllables, flick kana map) each get
-a `scripts/check-*-parity.py` guard wired into `.github/workflows/mobile-parity-ci.yml`
-(runs on the Contabo self-hosted `draftright` runner). Add a parity script whenever
-you add cross-language keyboard data.
+duplicated linguistic data each gets a `scripts/check-*-parity.py` guard wired into
+`.github/workflows/mobile-parity-ci.yml` (Contabo self-hosted `draftright` runner).
+5 guards today: VI bigrams, pinyin syllables, flick kana map, kana modifier cycles,
+katakana constants. Add one whenever you add cross-language keyboard data.
 
 **On-device verify before merging IME-flow changes** (space-convert, cycling,
 flick) — board ≠ runtime. Candidate-engine-only changes are lower risk. Enable a
