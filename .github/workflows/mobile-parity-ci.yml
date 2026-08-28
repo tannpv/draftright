@@ -31,6 +31,9 @@ on:
       - 'scripts/check-flick-layout-parity.py'
       - 'scripts/check-kana-modifier-parity.py'
       - 'scripts/check-katakana-parity.py'
+      - 'scripts/check-keyfeedback-kind-parity.py'
+      - 'DraftRightMobile/android/app/src/main/kotlin/com/draftright/keyboard/KeyFeedback.kt'
+      - 'DraftRightMobile/ios/DraftRightKeyboardCore/Sources/DraftRightKeyboardCore/KeyFeedbackKind.swift'
       - 'scripts/check-no-objective-c.py'
       - 'DraftRightMobile/pubspec.lock'
       - '.github/workflows/mobile-parity-ci.yml'
@@ -57,5 +60,7 @@ jobs:
         run: python3 scripts/check-kana-modifier-parity.py
       - name: Assert the two katakana transliterators agree
         run: python3 scripts/check-katakana-parity.py
+      - name: Assert the key-feedback kinds agree
+        run: python3 scripts/check-keyfeedback-kind-parity.py
       - name: Assert objective_c stays out of the dep graph (#27 bootstrap crash)
         run: python3 scripts/check-no-objective-c.py
