@@ -32,6 +32,9 @@ public protocol LanguagePack {
     var alphaRows: [[KeyDef]] { get }
     var symbols1Rows: [[KeyDef]] { get }
     var symbols2Rows: [[KeyDef]] { get }
+    /// Dedicated numeric keypad for OTP/PIN/phone fields (#209). Defaults to the
+    /// shared 1-9 / ABC 0 ← ↵ grid; packs rarely override it.
+    var numericRows: [[KeyDef]] { get }
     var longPressAccents: [Character: [Character]] { get }
     func makeComposer() -> Composer?
 
@@ -53,6 +56,8 @@ public protocol LanguagePack {
 }
 
 public extension LanguagePack {
+    /// Default numeric keypad — the shared OTP/PIN grid.
+    var numericRows: [[KeyDef]] { QwertyLayout.numericRows }
     /// Default: no composition (Latin packs type directly). JP/VI override.
     func makeComposer() -> Composer? { PassthroughComposer() }
     func makeCandidateEngine() -> CandidateEngine? { nil }

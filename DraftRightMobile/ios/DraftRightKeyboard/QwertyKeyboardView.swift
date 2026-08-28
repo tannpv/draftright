@@ -61,12 +61,11 @@ final class QwertyKeyboardView: UIView {
         buildKeyboard()
     }
 
-    /// Open the digits (symbols1) layer for a numeric field, or return to alpha
-    /// for a text field (#190). No-op when already on the target layer, so
-    /// re-focusing a field doesn't rebuild-flicker. Reuses the existing symbols1
-    /// layer rather than adding a separate numeric layout.
+    /// Open the dedicated numeric keypad (1-9 / ABC 0 ← ↵) for a numeric field,
+    /// or return to alpha for a text field (#190/#209). No-op when already on the
+    /// target layer, so re-focusing a field doesn't rebuild-flicker.
     func setNumericLayer(_ numeric: Bool) {
-        let target = numeric ? 1 : 0
+        let target = numeric ? 3 : 0
         guard currentLayer != target else { return }
         currentLayer = target
         // A numeric layer has no shift; clear it so a stale shift doesn't linger
@@ -153,6 +152,7 @@ final class QwertyKeyboardView: UIView {
         switch currentLayer {
         case 1:  return languagePack.symbols1Rows
         case 2:  return languagePack.symbols2Rows
+        case 3:  return languagePack.numericRows
         default: return languagePack.alphaRows
         }
     }
