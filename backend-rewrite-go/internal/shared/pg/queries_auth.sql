@@ -222,6 +222,22 @@ WHERE id = (
   LIMIT 1
 );
 
+-- name: StampStoreRefByUser :execrows
+-- Stamps store_transaction_id on the user's newest active subscription,
+-- matched by user_id + store_type — NO payments join. The IAP redeem path
+-- (RedeemAppleTransaction) creates no payment row, so StampStoreRefByReference
+-- (which joins payments.reference_code) would match nothing and leave
+-- store_transaction_id NULL, breaking every later ExtendByStoreRef/
+-- ExpireByStoreRef match. Grant() already set store_type on insert, so this
+-- only needs to fill in the transaction id.
+UPDATE subscriptions SET store_type = $2, store_transaction_id = $3, updated_at = now()
+WHERE id = (
+  SELECT sub.id FROM subscriptions sub
+  WHERE sub.user_id = $1 AND sub.store_type = $2 AND sub.status = 'active'::subscriptions_status_enum
+  ORDER BY sub.created_at DESC
+  LIMIT 1
+);
+
 -- name: ExtendByStoreRef :execrows
 UPDATE subscriptions SET expires_at = $3, updated_at = now()
 WHERE store_type = $1 AND store_transaction_id = $2 AND status = 'active'::subscriptions_status_enum;

@@ -25,6 +25,7 @@ type WebhookQuerier interface {
 	CancelActiveSubsByUser(ctx context.Context, id pgtype.UUID) error
 	InsertGrantedSubscription(ctx context.Context, arg sqlc.InsertGrantedSubscriptionParams) (sqlc.Subscription, error)
 	StampStoreRefByReference(ctx context.Context, arg sqlc.StampStoreRefByReferenceParams) (int64, error)
+	StampStoreRefByUser(ctx context.Context, arg sqlc.StampStoreRefByUserParams) (int64, error)
 	ExtendByStoreRef(ctx context.Context, arg sqlc.ExtendByStoreRefParams) (int64, error)
 	CancelByStoreRef(ctx context.Context, arg sqlc.CancelByStoreRefParams) (int64, error)
 	ExpireByStoreRef(ctx context.Context, arg sqlc.ExpireByStoreRefParams) (int64, error)
@@ -70,6 +71,24 @@ func (w *WebhookWriter) Grant(ctx context.Context, userID, planID, storeType str
 func (w *WebhookWriter) StampStoreRef(ctx context.Context, referenceCode, storeType, transactionID string) error {
 	_, err := w.q.StampStoreRefByReference(ctx, sqlc.StampStoreRefByReferenceParams{
 		ReferenceCode:      referenceCode,
+		StoreType:          sqlc.SubscriptionsStoreTypeEnum(storeType),
+		StoreTransactionID: &transactionID,
+	})
+	return err
+}
+
+// StampStoreRefByUser writes (store_type, store_transaction_id) onto the
+// user's newest active sub, matched by user_id + store_type — NO payments
+// join. Used by the IAP redeem path, which creates no payment row (unlike
+// StampStoreRef, which joins on payments.reference_code and would stamp
+// nothing there).
+func (w *WebhookWriter) StampStoreRefByUser(ctx context.Context, userID, storeType, transactionID string) error {
+	uid, err := parseUUID(userID)
+	if err != nil {
+		return err
+	}
+	_, err = w.q.StampStoreRefByUser(ctx, sqlc.StampStoreRefByUserParams{
+		UserID:             uid,
 		StoreType:          sqlc.SubscriptionsStoreTypeEnum(storeType),
 		StoreTransactionID: &transactionID,
 	})

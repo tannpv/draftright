@@ -23,6 +23,7 @@ const (
 	MethodLemonSqueezy PaymentMethod = "lemonsqueezy"
 	MethodApplePay     PaymentMethod = "apple_pay"
 	MethodGooglePay    PaymentMethod = "google_pay"
+	MethodAppleIAP     PaymentMethod = "apple_iap"
 )
 
 // PaymentStatus mirrors the Node PaymentStatus enum.
@@ -81,6 +82,8 @@ func StoreTypeForMethod(m PaymentMethod) StoreType {
 		return StoreBankTransfer
 	case MethodPayPal:
 		return StorePayPal
+	case MethodAppleIAP:
+		return StoreAppleIAP
 	case MethodApplePay, MethodGooglePay:
 		return StoreStripe
 	case MethodMoMo:

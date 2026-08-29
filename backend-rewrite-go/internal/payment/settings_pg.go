@@ -60,6 +60,8 @@ type Credentials struct {
 	PayPalWebhookID            string
 	PayPalPlanMonthly          string
 	PayPalPlanYearly           string
+	AppleProductMonthly        string
+	AppleProductYearly         string
 }
 
 // Credentials reads the singleton app_settings credential row. A missing row
@@ -92,6 +94,8 @@ func (a *SettingsAdapter) Credentials(ctx context.Context) (Credentials, error) 
 		PayPalWebhookID:            row.PaypalWebhookID,
 		PayPalPlanMonthly:          row.PaypalPlanMonthly,
 		PayPalPlanYearly:           row.PaypalPlanYearly,
+		AppleProductMonthly:        row.AppleProductMonthly,
+		AppleProductYearly:         row.AppleProductYearly,
 	}
 	// Decrypt secret credentials at rest (#50). No-op for legacy plaintext and
 	// when SECRETS_ENCRYPTION_KEY is unset. Only the true secrets are decrypted;
@@ -116,4 +120,15 @@ func (a *SettingsAdapter) LemonSqueezyVariants(ctx context.Context) (string, str
 		return "", "", err
 	}
 	return c.LemonSqueezyVariantMonthly, c.LemonSqueezyVariantYearly, nil
+}
+
+// AppleProducts returns the configured (monthly, yearly) App Store product
+// ids, satisfying the Service's VariantResolver port for the Apple IAP
+// product→plan resolution path (same seam as LemonSqueezyVariants).
+func (a *SettingsAdapter) AppleProducts(ctx context.Context) (string, string, error) {
+	c, err := a.Credentials(ctx)
+	if err != nil {
+		return "", "", err
+	}
+	return c.AppleProductMonthly, c.AppleProductYearly, nil
 }

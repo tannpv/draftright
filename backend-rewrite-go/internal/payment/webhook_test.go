@@ -2,6 +2,7 @@ package payment
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"testing"
 	"time"
@@ -80,13 +81,15 @@ func (f *fakeWebhookRepo) UserEmailName(ctx context.Context, userID string) (str
 }
 
 type fakeSubsWriter struct {
-	granted    bool
-	grantStore string
-	stamped    string // "storeType:txnID"
-	extended   string
-	cancelled  string
-	expired    string
-	found      *subscription.StoreRefSub
+	granted        bool
+	grantStore     string
+	stamped        string // "storeType:txnID"
+	stampByUserRef string // txnID passed to StampStoreRefByUser (IAP redeem path)
+	extended       string
+	cancelled      string
+	expired        string
+	found          *subscription.StoreRefSub
+	extendNoMatch  bool // ExtendByStoreRef reports 0 rows matched (simulates a lost first /redeem)
 }
 
 func (f *fakeSubsWriter) Grant(ctx context.Context, userID, planID, storeType string, expiresAt *time.Time) error {
@@ -98,8 +101,15 @@ func (f *fakeSubsWriter) StampStoreRef(ctx context.Context, referenceCode, store
 	f.stamped = storeType + ":" + transactionID
 	return nil
 }
+func (f *fakeSubsWriter) StampStoreRefByUser(ctx context.Context, userID, storeType, transactionID string) error {
+	f.stampByUserRef = transactionID
+	return nil
+}
 func (f *fakeSubsWriter) ExtendByStoreRef(ctx context.Context, storeType, transactionID string, expiresAt time.Time) (int64, error) {
 	f.extended = storeType + ":" + transactionID
+	if f.extendNoMatch {
+		return 0, nil
+	}
 	return 1, nil
 }
 func (f *fakeSubsWriter) CancelByStoreRef(ctx context.Context, storeType, transactionID string) (int64, error) {
@@ -115,14 +125,16 @@ func (f *fakeSubsWriter) FindByStoreRef(ctx context.Context, storeType, transact
 }
 
 type noopEmailer struct {
-	activatedTo string
-	failedTo    string
-	failed      bool
-	failedName  string
+	activatedTo    string
+	activatedCalls int
+	failedTo       string
+	failed         bool
+	failedName     string
 }
 
 func (e *noopEmailer) SubscriptionActivated(ctx context.Context, to, name, planName string) {
 	e.activatedTo = to
+	e.activatedCalls++
 }
 func (e *noopEmailer) PaymentFailed(ctx context.Context, to, name, planName string) {
 	e.failedTo = to
@@ -131,11 +143,17 @@ func (e *noopEmailer) PaymentFailed(ctx context.Context, to, name, planName stri
 }
 
 type fakeVariants struct {
-	monthly, yearly string
+	monthly, yearly           string // Lemon Squeezy variant ids
+	appleMonthly, appleYearly string // App Store product ids
+	appleErr                  error
 }
 
 func (f fakeVariants) LemonSqueezyVariants(ctx context.Context) (string, string, error) {
 	return f.monthly, f.yearly, nil
+}
+
+func (f fakeVariants) AppleProducts(ctx context.Context) (string, string, error) {
+	return f.appleMonthly, f.appleYearly, f.appleErr
 }
 
 // webhookSvc builds a Service wired for the webhook path with the given
@@ -143,10 +161,22 @@ func (f fakeVariants) LemonSqueezyVariants(ctx context.Context) (string, string,
 func webhookSvc(settings fakeSettings, strat strategy.Strategy, repo WebhookRepo, subs SubsWriter, emailer WebhookEmailer, variants VariantResolver) *Service {
 	svc := &Service{
 		settings:   settings,
-		strategies: map[string]strategy.Strategy{"stripe": strat, "vietqr": strat, "lemonsqueezy": strat, "bank_transfer": strat, "paypal": strat},
+		strategies: map[string]strategy.Strategy{"stripe": strat, "vietqr": strat, "lemonsqueezy": strat, "bank_transfer": strat, "paypal": strat, string(MethodAppleIAP): strat},
 		now:        func() time.Time { return time.Unix(1700000000, 0).UTC() },
 	}
 	return svc.WithWebhook(repo, subs, emailer, variants)
+}
+
+// newTestServiceWithAppleProducts wires a Service for resolvePlanIDFromAppleProduct
+// tests only: a fake WebhookRepo whose FindFirstActivePlanID returns a stub
+// plan id, and the given Apple product ids in the credentials resolver.
+// Mirrors the LS resolver's test setup (webhookSvc), scoped to the two
+// collaborators the resolver actually touches.
+func newTestServiceWithAppleProducts(t *testing.T, monthly, yearly string) *Service {
+	t.Helper()
+	repo := &fakeWebhookRepo{planID: "pl_apple_stub"}
+	svc := &Service{}
+	return svc.WithWebhook(repo, &fakeSubsWriter{}, &noopEmailer{}, fakeVariants{appleMonthly: monthly, appleYearly: yearly})
 }
 
 // --- tests ---------------------------------------------------------------
@@ -528,5 +558,164 @@ func TestHandleWebhook_PayPalExpiredExpires(t *testing.T) {
 	}
 	if !res.Success || subs.expired != "paypal:I-SUB-3" {
 		t.Fatalf("did not expire by store ref: res=%+v expired=%q", res, subs.expired)
+	}
+}
+
+// --- Apple IAP product→plan resolver (Task 6 of the Apple IAP server
+// redemption plan) — mirrors resolvePlanIDFromLSVariant, but an unmatched
+// product id must error rather than silently resolve to no plan.
+
+func TestResolvePlanIDFromAppleProduct(t *testing.T) {
+	s := newTestServiceWithAppleProducts(t, "com.draftright.pro.monthly", "com.draftright.pro.yearly")
+
+	plan, billing, err := s.resolvePlanIDFromAppleProduct(context.Background(), "com.draftright.pro.yearly")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if billing != "yearly" || plan == "" {
+		t.Fatalf("got plan=%q billing=%q", plan, billing)
+	}
+
+	if _, _, err := s.resolvePlanIDFromAppleProduct(context.Background(), "unknown.product"); err == nil {
+		t.Fatal("unknown product id must error, not grant a plan")
+	}
+}
+
+func TestResolvePlanIDFromAppleProduct_MonthlyResolves(t *testing.T) {
+	s := newTestServiceWithAppleProducts(t, "com.draftright.pro.monthly", "com.draftright.pro.yearly")
+
+	plan, billing, err := s.resolvePlanIDFromAppleProduct(context.Background(), "com.draftright.pro.monthly")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if billing != "monthly" || plan == "" {
+		t.Fatalf("got plan=%q billing=%q", plan, billing)
+	}
+}
+
+func TestResolvePlanIDFromAppleProduct_UnconfiguredNeverMatchesEmptyProductID(t *testing.T) {
+	// Both product ids unset (credentials row absent/blank) — an empty
+	// productID must not spuriously match either "" comparison.
+	s := newTestServiceWithAppleProducts(t, "", "")
+
+	if _, _, err := s.resolvePlanIDFromAppleProduct(context.Background(), ""); err == nil {
+		t.Fatal("blank product id against unconfigured credentials must error, not grant a plan")
+	}
+}
+
+func TestResolvePlanIDFromAppleProduct_CredentialsErrorPropagates(t *testing.T) {
+	repo := &fakeWebhookRepo{planID: "pl_apple_stub"}
+	svc := &Service{}
+	svc.WithWebhook(repo, &fakeSubsWriter{}, &noopEmailer{}, fakeVariants{appleErr: errors.New("db unavailable")})
+
+	if _, _, err := svc.resolvePlanIDFromAppleProduct(context.Background(), "com.draftright.pro.monthly"); err == nil {
+		t.Fatal("credentials resolver error must propagate, not grant a plan")
+	}
+}
+
+// --- Apple IAP webhook notification lifecycle (Task 8 of the Apple IAP server
+// redemption plan). Renewals extend the sub matched by the ORIGINAL
+// transaction id (stamped by RedeemAppleTransaction on first purchase) and
+// must NOT re-send the activation email — that already happened at redeem
+// time. Expiry/refund revoke. An unmatched notification (lost first /redeem)
+// must not error — Apple would just retry — and must not grant, since the
+// notification carries no user identity in Spec 1.
+
+func TestHandleWebhook_AppleRenew_ExtendsNoEmail(t *testing.T) {
+	subs := &fakeSubsWriter{}
+	em := &noopEmailer{}
+	svc := webhookSvc(fakeSettings{csv: "apple_iap", found: true},
+		fakeVerifier{action: strategy.WebhookAction{
+			Type: strategy.ActionAppleRenewed, AppleOriginalTransactionID: "o1",
+			CurrentPeriodEnd: 4102444800, // 2100-01-01
+		}}, &fakeWebhookRepo{}, subs, em, fakeVariants{})
+
+	res, err := svc.HandleWebhook(context.Background(), string(MethodAppleIAP), nil, http.Header{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Success {
+		t.Fatalf("renewal must report success: %+v", res)
+	}
+	if subs.extended != "apple_iap:o1" {
+		t.Fatalf("renewal did not extend by original transaction id: %q", subs.extended)
+	}
+	if em.activatedCalls != 0 {
+		t.Fatalf("renewal must not re-send the activation email, got %d calls", em.activatedCalls)
+	}
+}
+
+func TestHandleWebhook_AppleSubscribed_AlsoExtends(t *testing.T) {
+	// apple_subscribed can arrive as a re-confirmation of a purchase the
+	// client already redeemed (which granted + stamped it) — it must take the
+	// same extend path as apple_renewed, never a second grant.
+	subs := &fakeSubsWriter{}
+	svc := webhookSvc(fakeSettings{csv: "apple_iap", found: true},
+		fakeVerifier{action: strategy.WebhookAction{
+			Type: strategy.ActionAppleSubscribed, AppleOriginalTransactionID: "o2",
+			CurrentPeriodEnd: 4102444800,
+		}}, &fakeWebhookRepo{}, subs, &noopEmailer{}, fakeVariants{})
+
+	res, err := svc.HandleWebhook(context.Background(), string(MethodAppleIAP), nil, http.Header{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Success || subs.extended != "apple_iap:o2" {
+		t.Fatalf("subscribed notification did not extend: res=%+v extended=%q", res, subs.extended)
+	}
+	if subs.granted {
+		t.Fatal("subscribed notification must not grant a second time")
+	}
+}
+
+func TestHandleWebhook_AppleRenewNoMatch_LogsNoError(t *testing.T) {
+	subs := &fakeSubsWriter{extendNoMatch: true}
+	svc := webhookSvc(fakeSettings{csv: "apple_iap", found: true},
+		fakeVerifier{action: strategy.WebhookAction{
+			Type: strategy.ActionAppleRenewed, AppleOriginalTransactionID: "orphan",
+			CurrentPeriodEnd: 4102444800,
+		}}, &fakeWebhookRepo{}, subs, &noopEmailer{}, fakeVariants{})
+
+	res, err := svc.HandleWebhook(context.Background(), string(MethodAppleIAP), nil, http.Header{})
+	if err != nil {
+		t.Fatalf("unmatched notification must not error (Apple would retry): %v", err)
+	}
+	if !res.Success {
+		t.Fatalf("unmatched notification must still report success: %+v", res)
+	}
+	if subs.granted {
+		t.Fatal("unmatched notification must not grant — no user identity in Spec 1")
+	}
+}
+
+func TestHandleWebhook_AppleExpired_Revokes(t *testing.T) {
+	subs := &fakeSubsWriter{}
+	svc := webhookSvc(fakeSettings{csv: "apple_iap", found: true},
+		fakeVerifier{action: strategy.WebhookAction{
+			Type: strategy.ActionAppleExpired, AppleOriginalTransactionID: "o1",
+		}}, &fakeWebhookRepo{}, subs, &noopEmailer{}, fakeVariants{})
+
+	res, err := svc.HandleWebhook(context.Background(), string(MethodAppleIAP), nil, http.Header{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Success || subs.expired != "apple_iap:o1" {
+		t.Fatalf("did not expire by original transaction id: res=%+v expired=%q", res, subs.expired)
+	}
+}
+
+func TestHandleWebhook_AppleRefunded_Revokes(t *testing.T) {
+	subs := &fakeSubsWriter{}
+	svc := webhookSvc(fakeSettings{csv: "apple_iap", found: true},
+		fakeVerifier{action: strategy.WebhookAction{
+			Type: strategy.ActionAppleRefunded, AppleOriginalTransactionID: "o3",
+		}}, &fakeWebhookRepo{}, subs, &noopEmailer{}, fakeVariants{})
+
+	res, err := svc.HandleWebhook(context.Background(), string(MethodAppleIAP), nil, http.Header{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Success || subs.expired != "apple_iap:o3" {
+		t.Fatalf("refund did not revoke by original transaction id: res=%+v expired=%q", res, subs.expired)
 	}
 }

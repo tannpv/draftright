@@ -371,6 +371,8 @@ type AppSetting struct {
 	PaypalWebhookID            string           `db:"paypal_webhook_id" json:"paypal_webhook_id"`
 	PaypalPlanMonthly          string           `db:"paypal_plan_monthly" json:"paypal_plan_monthly"`
 	PaypalPlanYearly           string           `db:"paypal_plan_yearly" json:"paypal_plan_yearly"`
+	AppleProductMonthly        string           `db:"apple_product_monthly" json:"apple_product_monthly"`
+	AppleProductYearly         string           `db:"apple_product_yearly" json:"apple_product_yearly"`
 }
 
 type BugReport struct {

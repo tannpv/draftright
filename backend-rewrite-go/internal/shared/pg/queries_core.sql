@@ -45,6 +45,8 @@ SELECT stripe_secret_key,
        paypal_mode,
        paypal_webhook_id,
        paypal_plan_monthly,
-       paypal_plan_yearly
+       paypal_plan_yearly,
+       apple_product_monthly,
+       apple_product_yearly
 FROM app_settings
 LIMIT 1;

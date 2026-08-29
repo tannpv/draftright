@@ -540,6 +540,7 @@ class _PaymentMethodTile extends StatelessWidget {
       case PaymentMethodKind.vietqr:       return Icons.qr_code_2;
       case PaymentMethodKind.bankTransfer: return Icons.account_balance;
       case PaymentMethodKind.applePay:     return Icons.apple;
+      case PaymentMethodKind.appleIap:     return Icons.shopping_bag;
       case PaymentMethodKind.googlePay:    return Icons.g_mobiledata;
     }
   }

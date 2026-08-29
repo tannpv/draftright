@@ -415,6 +415,14 @@ type Querier interface {
 	SoftDeleteAiProvider(ctx context.Context, id pgtype.UUID) error
 	SoftDeletePlan(ctx context.Context, id pgtype.UUID) error
 	StampStoreRefByReference(ctx context.Context, arg StampStoreRefByReferenceParams) (int64, error)
+	// Stamps store_transaction_id on the user's newest active subscription,
+	// matched by user_id + store_type — NO payments join. The IAP redeem path
+	// (RedeemAppleTransaction) creates no payment row, so StampStoreRefByReference
+	// (which joins payments.reference_code) would match nothing and leave
+	// store_transaction_id NULL, breaking every later ExtendByStoreRef/
+	// ExpireByStoreRef match. Grant() already set store_type on insert, so this
+	// only needs to fill in the transaction id.
+	StampStoreRefByUser(ctx context.Context, arg StampStoreRefByUserParams) (int64, error)
 	// Cron pass 1: active subs whose expiry falls in the reminder window.
 	// Bounds passed by caller (now+2.5d, now+3.5d) to keep tz in the Go process.
 	SubsDueForRenewal(ctx context.Context, arg SubsDueForRenewalParams) ([]SubsDueForRenewalRow, error)
