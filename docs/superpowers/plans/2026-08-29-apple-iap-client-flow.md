@@ -33,10 +33,13 @@
 
 - [ ] **Step 1: Add the deps**
 
-In `pubspec.yaml` `dependencies:`, alongside `flutter_stripe`, add (use the latest caret-compatible versions the resolver picks; these plugins are federated — `in_app_purchase` pulls the storekit impl, but pin it explicitly so SK2 config is reachable):
+In `pubspec.yaml` `dependencies:`, alongside `flutter_stripe`, add **only** the
+umbrella package — do NOT pin `in_app_purchase_storekit` explicitly. `in_app_purchase`
+pulls the correct storekit impl transitively (its own constraint is
+`^0.4.0`); an explicit `^0.3.0` pin would be a disjoint range and fail the version
+solve. `AppleIapService` uses no SK2-specific types, so no direct storekit dep is needed:
 ```yaml
   in_app_purchase: ^3.2.0
-  in_app_purchase_storekit: ^0.3.0
 ```
 
 - [ ] **Step 2: Resolve + verify build**
@@ -208,11 +211,17 @@ The core: wraps `in_app_purchase`, drives buy/restore, redeems via the backend, 
 - Test: `DraftRightMobile/test/services/payment/apple_iap_service_test.dart`
 
 **Interfaces:**
-- Consumes: `InAppPurchase.instance` (overridable seam for tests), `BackendClient.redeemAppleTransaction` (Task 2), `AppleProducts` (Task 3).
+- Consumes: `InAppPurchase.instance` (the service uses it unconditionally — do NOT
+  add an `iap` constructor param; `InAppPurchase` has a private constructor and
+  can't be subclassed). `BackendClient.redeemAppleTransaction` (Task 2), `AppleProducts` (Task 3).
+- **Test seam:** every `InAppPurchase` method delegates to `InAppPurchasePlatform.instance`
+  (a `PlatformInterface`). Tests swap it — `InAppPurchasePlatform.instance = FakeIapPlatform()`
+  where `class FakeIapPlatform extends InAppPurchasePlatform` (or `with MockPlatformInterfaceMixin`)
+  — the upstream-idiomatic way, matching the plugin's own test suite. The service is NOT parameterized on the platform.
 - Produces:
   ```dart
   class AppleIapService {
-    AppleIapService(this._backend, {InAppPurchase? iap, void Function()? onEntitlementChanged});
+    AppleIapService(this._backend, {void Function()? onEntitlementChanged});
     Future<bool> available();
     Future<List<ProductDetails>> products();
     Future<void> buy(String productId);      // productId ∈ AppleProducts.ids
@@ -220,39 +229,57 @@ The core: wraps `in_app_purchase`, drives buy/restore, redeems via the backend, 
     void dispose();
   }
   ```
-  On each `purchased`/`restored` detail from the plugin's `purchaseStream`: call `_backend.redeemAppleTransaction(detail.verificationData.serverVerificationData)`, then `iap.completePurchase(detail)` on success + invoke `onEntitlementChanged`; on redeem failure do NOT complete (log + report + surface). On `error`/`canceled` details: surface/ignore, do not complete a non-purchased detail.
+  On each `purchased`/`restored` detail from `InAppPurchase.instance.purchaseStream`:
+  call `_backend.redeemAppleTransaction(detail.verificationData.serverVerificationData)`
+  (`serverVerificationData` IS the StoreKit 2 JWS by default in storekit ≥0.4.x —
+  the backend verifies exactly this), then `completePurchase(detail)` on success +
+  invoke `onEntitlementChanged`; on redeem failure do NOT complete (log + report,
+  do NOT rethrow — the stream `onData` callback's error would become an unhandled
+  fatal). On `error`/`canceled`: log/ignore, never complete a non-purchased detail.
 
 - [ ] **Step 1: Write the failing test**
 
-Use a fake `InAppPurchase` (subclass or a thin wrapper interface if `InAppPurchase` isn't directly subclassable — introduce a minimal `IapPlatform` seam the service depends on, with a real impl delegating to `InAppPurchase.instance` and a fake for tests). Drive a `purchased` detail through a `StreamController` and assert the redeem+complete sequence:
+Swap `InAppPurchasePlatform.instance` for a fake (the upstream-idiomatic seam —
+`InAppPurchase.instance`'s methods all delegate to it). `FakeIapPlatform extends
+InAppPurchasePlatform with MockPlatformInterfaceMixin` exposes a `purchaseStream`
+`StreamController`, records `completePurchase`, and returns canned
+`queryProductDetails`. In `setUp`, `InAppPurchasePlatform.instance = fake;` (assign
+before any `AppleIapService` is built). `FakeBackend extends BackendClient`
+overrides `redeemAppleTransaction` (records args, optional `failRedeem`).
 ```dart
-// Fake IAP exposes a purchaseStream controller, records completePurchase calls,
-// and returns canned products. Fake backend records redeemAppleTransaction args
-// and can be made to throw.
 test('purchased detail -> redeem then completePurchase, entitlement callback fires', () async {
-  final iap = FakeIap();
+  final fake = FakeIapPlatform();
+  InAppPurchasePlatform.instance = fake;
   final backend = FakeBackend();
   var changed = 0;
-  final svc = AppleIapService(backend, iap: iap, onEntitlementChanged: () => changed++);
-  iap.emit(purchased('signed-jws', AppleProducts.monthly));
+  final svc = AppleIapService(backend, onEntitlementChanged: () => changed++);
+  fake.emit(purchased('signed-jws', AppleProducts.monthly));   // pushes onto purchaseStream
   await pumpEventQueue();
   expect(backend.redeemed, ['signed-jws']);
-  expect(iap.completed, hasLength(1));
+  expect(fake.completed, hasLength(1));
   expect(changed, 1);
   svc.dispose();
 });
 
 test('redeem failure does NOT complete the transaction (so it retries)', () async {
-  final iap = FakeIap();
+  final fake = FakeIapPlatform();
+  InAppPurchasePlatform.instance = fake;
   final backend = FakeBackend()..failRedeem = true;
-  final svc = AppleIapService(backend, iap: iap);
-  iap.emit(purchased('signed-jws', AppleProducts.monthly));
+  final svc = AppleIapService(backend);
+  fake.emit(purchased('signed-jws', AppleProducts.monthly));
   await pumpEventQueue();
   expect(backend.redeemed, ['signed-jws']);   // attempted
-  expect(iap.completed, isEmpty);             // NOT finished
+  expect(fake.completed, isEmpty);             // NOT finished → retries
   svc.dispose();
 });
 ```
+(`purchased(jws, productId)` builds a `PurchaseDetails` with
+`status: PurchaseStatus.purchased`, `productID: productId`,
+`verificationData: PurchaseVerificationData(localVerificationData: '', serverVerificationData: jws, source: 'app_store')`,
+`pendingCompletePurchase: true`. `FakeIapPlatform` must implement enough of the
+abstract surface to compile — `MockPlatformInterfaceMixin` bypasses the token
+check; stub `purchaseStream`, `queryProductDetails`, `buyNonConsumable`,
+`restorePurchases`, `completePurchase`, `isAvailable`, and no-op the rest.)
 
 - [ ] **Step 2: Run — verify it fails**
 
@@ -264,22 +291,21 @@ Expected: FAIL — `AppleIapService` undefined.
 ```dart
 import 'dart:async';
 import 'package:in_app_purchase/in_app_purchase.dart';
-import '../backend_client.dart';
-import '../../helpers/logger.dart';            // DRLogger (confirm path)
-import '../error_reporter.dart';               // ErrorReporter (confirm path)
-import 'apple_products.dart';
+import 'package:draftright_mobile/services/backend_client.dart';
+import 'package:draftright_mobile/services/logger_service.dart';   // DRLogger
+import 'package:draftright_mobile/services/error_reporter.dart';   // ErrorReporter (confirm exact path via wallet_payment_handler.dart imports)
+import 'package:draftright_mobile/services/payment/apple_products.dart';
 
 class AppleIapService {
   final BackendClient _backend;
-  final InAppPurchase _iap;
   final void Function()? _onEntitlementChanged;
+  final InAppPurchase _iap = InAppPurchase.instance;   // delegates to InAppPurchasePlatform.instance (the test seam)
   StreamSubscription<List<PurchaseDetails>>? _sub;
 
-  AppleIapService(this._backend, {InAppPurchase? iap, void Function()? onEntitlementChanged})
-      : _iap = iap ?? InAppPurchase.instance,
-        _onEntitlementChanged = onEntitlementChanged {
+  AppleIapService(this._backend, {void Function()? onEntitlementChanged})
+      : _onEntitlementChanged = onEntitlementChanged {
     _sub = _iap.purchaseStream.listen(_onPurchases, onError: (e, st) {
-      DRLogger.error('iap stream error', e, st);
+      DRLogger.error('iap stream error: $e\n$st', category: 'PaymentService');
     });
   }
 
@@ -309,13 +335,14 @@ class AppleIapService {
           }
           _onEntitlementChanged?.call();
         } catch (e, st) {
-          DRLogger.error('apple redeem failed', e, st);
+          // Fully handled here: log + report, and DON'T complete → the txn stays
+          // pending and retries. Do NOT rethrow — this is a stream onData callback,
+          // so a thrown error becomes an unhandled (fatal) async error.
+          DRLogger.error('apple redeem failed: $e\n$st', category: 'PaymentService');
           ErrorReporter.reportHandled(e, stack: st, severity: 'warning', context: {'stage': 'apple_redeem'});
-          // Do NOT complete — the transaction stays pending and retries.
-          rethrow;
         }
       } else if (d.status == PurchaseStatus.error) {
-        DRLogger.error('apple purchase error', d.error, null);
+        DRLogger.error('apple purchase error: ${d.error}', category: 'PaymentService');
       }
       // canceled/pending: nothing to do.
     }
@@ -324,7 +351,8 @@ class AppleIapService {
   void dispose() => _sub?.cancel();
 }
 ```
-(Confirm the real `DRLogger`/`ErrorReporter` import paths from `wallet_payment_handler.dart`. If `InAppPurchase` can't be faked directly in the test, introduce a tiny `IapPlatform` interface the service takes instead of `InAppPurchase`, with a prod impl delegating to `InAppPurchase.instance`; keep the public interface above unchanged.)
+(Confirm the exact `ErrorReporter` import path + `reportHandled` signature against
+`wallet_payment_handler.dart`'s imports before writing — match it.)
 
 - [ ] **Step 4: Run — verify pass**
 
@@ -349,37 +377,42 @@ Today `PaymentService.inAppCheckoutAllowed` returns false on iOS ("no in-app che
 - Test: `DraftRightMobile/test/services/payment/payment_status_test.dart` (or a new `payment_platform_gate_test.dart`)
 
 **Interfaces:**
-- Produces: `static bool get appleIapAllowed` — true only on iOS (not web, not Android). `inAppCheckoutAllowed` keeps its meaning (external-rail tiles) and stays false on iOS.
+- Produces: `static bool get appleIapAllowed` — true only on iOS (not web, not Android). `inAppCheckoutAllowed` keeps its meaning (external-rail tiles) and stays false on iOS. Plus a **test override** `@visibleForTesting static bool? debugForceApplePlatform` so the gate test AND the Task 6 widget test can force the iOS branch on a non-iOS test host (the codebase already uses this pattern — `ErrorReporter.debugHttpClient`).
 
 - [ ] **Step 1: Write the failing test**
 
 ```dart
-test('appleIapAllowed is iOS-only; external checkout stays off on iOS', () {
-  // These read Platform via the same guarded pattern; on the test host
-  // (non-iOS) appleIapAllowed is false and inAppCheckoutAllowed is true —
-  // assert the getters exist and are mutually consistent for the host.
-  expect(PaymentService.appleIapAllowed, isA<bool>());
-  // On a non-iOS test host both reduce to the host's platform; the key
-  // invariant: they are never BOTH true on iOS. (Device-verified separately.)
-  expect(PaymentService.appleIapAllowed && !PaymentService.inAppCheckoutAllowed || !PaymentService.appleIapAllowed, isTrue);
+import 'package:flutter/foundation.dart';
+// ...
+test('appleIapAllowed follows the platform, overridable for tests', () {
+  PaymentService.debugForceApplePlatform = true;
+  expect(PaymentService.appleIapAllowed, isTrue);
+  PaymentService.debugForceApplePlatform = false;
+  expect(PaymentService.appleIapAllowed, isFalse);
+  PaymentService.debugForceApplePlatform = null;   // reset to real platform
+  addTearDown(() => PaymentService.debugForceApplePlatform = null);
 });
 ```
-(Pragmatic: platform getters are hard to unit-test on a non-iOS host. Keep this test to the getter's existence + the mutual-exclusion invariant; the real iOS behaviour is device-verified. If the repo has a platform-override seam, prefer that and assert both iOS and non-iOS branches.)
 
 - [ ] **Step 2: Run — verify it fails**
 
 Run: `cd DraftRightMobile && flutter test test/services/payment/payment_status_test.dart`
-Expected: FAIL — `appleIapAllowed` undefined.
+Expected: FAIL — `appleIapAllowed` / `debugForceApplePlatform` undefined.
 
 - [ ] **Step 3: Implement**
 
-In `payment_service.dart`, beside `inAppCheckoutAllowed`:
+In `payment_service.dart`, beside `inAppCheckoutAllowed` (line 84) and `_platformIsIos` (86-89):
 ```dart
+  /// Test-only override for the iOS platform check. Non-null forces the result;
+  /// null (prod) reads the real platform. Mirrors ErrorReporter.debugHttpClient.
+  @visibleForTesting
+  static bool? debugForceApplePlatform;
+
   /// iOS shows the StoreKit IAP path (compliant with 3.1.1), not the external
   /// checkout tiles. True only on iOS.
-  static bool get appleIapAllowed => _platformIsIos;
+  static bool get appleIapAllowed => debugForceApplePlatform ?? _platformIsIos;
 ```
-(`_platformIsIos` already exists, `payment_service.dart:86-96`.)
+(Add `import 'package:flutter/foundation.dart';` for `@visibleForTesting` if not already imported.)
 
 - [ ] **Step 4: Run — verify pass**
 
@@ -408,27 +441,47 @@ Replace the status-only "manage on the web" block (`subscription_screen.dart:251
 
 - [ ] **Step 1: Write the failing widget test**
 
+Force the iOS branch with `PaymentService.debugForceApplePlatform = true` (Task 5's
+hook), and inject fakes via new optional `SubscriptionScreen` constructor params
+(Step 3 adds them). Use a `FakeBackend` returning an `isFree` `SubscriptionInfo`
+and a `FakeAppleIapService` (records `buy`/`restore`).
 ```dart
-// Pump SubscriptionScreen with a fake backend (isFree) + a fake AppleIapService
-// injected; force the iOS/appleIapAllowed branch via the platform-override seam
-// or by injecting the service. Assert:
+setUp(() => PaymentService.debugForceApplePlatform = true);
+tearDown(() => PaymentService.debugForceApplePlatform = null);
+
 testWidgets('iOS free plan shows Buy + Restore, not the web-steering text', (t) async {
-  await t.pumpWidget(wrapWithIapAllowed(SubscriptionScreen(/* injected fakes */)));
+  await t.pumpWidget(MaterialApp(home: SubscriptionScreen(backend: fakeFreeBackend(), iapService: FakeAppleIapService())));
   await t.pumpAndSettle();
   expect(find.textContaining('on the web'), findsNothing);   // 2.3.10: steering gone
   expect(find.text('Restore Purchases'), findsOneWidget);    // Apple-required
   expect(find.textContaining('Upgrade'), findsOneWidget);    // buy affordance
 });
-testWidgets('tapping Buy drives AppleIapService.buy then refreshes on success', (t) async {
+testWidgets('tapping Buy drives AppleIapService.buy', (t) async {
   final iap = FakeAppleIapService();
-  await t.pumpWidget(wrapWithIapAllowed(SubscriptionScreen(iapService: iap, backend: fakeBackend)));
+  await t.pumpWidget(MaterialApp(home: SubscriptionScreen(backend: fakeFreeBackend(), iapService: iap)));
   await t.pumpAndSettle();
-  await t.tap(find.text('Upgrade to Pro (monthly)'));   // label per impl
+  await t.tap(find.textContaining('Upgrade to Pro'));
   await t.pumpAndSettle();
-  expect(iap.bought, [AppleProducts.monthly]);
+  expect(iap.bought, [AppleProducts.monthly]);   // default billing = monthly
 });
 ```
-(To make the screen testable, add optional injected `AppleIapService`/`BackendClient` constructor params defaulting to the real ones — mirror how the screen already constructs `_backend`/`_payments` in `initState`.)
+
+- [ ] **Step 3a: Make the screen injectable (do this first in Step 3)**
+
+`SubscriptionScreen` builds `_backend`/`_payments` in `initState` from
+`context.read`. Add optional constructor params that default to null, and in
+`initState` use the injected value or construct the real one — mirroring the
+existing `initState` wiring:
+```dart
+class SubscriptionScreen extends StatefulWidget {
+  const SubscriptionScreen({super.key, this.backend, this.iapService});
+  final BackendClient? backend;
+  final AppleIapService? iapService;
+  // ...
+}
+// in initState: _backend = widget.backend ?? BackendClient(...);
+//               _iap = widget.iapService ?? AppleIapService(_backend, onEntitlementChanged: _load);
+```
 
 - [ ] **Step 2: Run — verify it fails**
 
@@ -448,7 +501,7 @@ if (PaymentService.inAppCheckoutAllowed) ...[
   const SizedBox(height: 16),
   FilledButton(
     onPressed: _iapBusy ? null : () => _onIapBuy(),          // buys AppleProducts.<period>
-    child: Text(_iapBusy ? 'Processing…' : 'Upgrade to Pro (${_billingPeriod.name})'),
+    child: Text(_iapBusy ? 'Processing…' : 'Upgrade to Pro (${_billingPeriod.displayName})'),
   ),
   const SizedBox(height: 8),
   TextButton(
