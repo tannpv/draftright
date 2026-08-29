@@ -81,13 +81,14 @@ func (f *fakeWebhookRepo) UserEmailName(ctx context.Context, userID string) (str
 }
 
 type fakeSubsWriter struct {
-	granted    bool
-	grantStore string
-	stamped    string // "storeType:txnID"
-	extended   string
-	cancelled  string
-	expired    string
-	found      *subscription.StoreRefSub
+	granted        bool
+	grantStore     string
+	stamped        string // "storeType:txnID"
+	stampByUserRef string // txnID passed to StampStoreRefByUser (IAP redeem path)
+	extended       string
+	cancelled      string
+	expired        string
+	found          *subscription.StoreRefSub
 }
 
 func (f *fakeSubsWriter) Grant(ctx context.Context, userID, planID, storeType string, expiresAt *time.Time) error {
@@ -97,6 +98,10 @@ func (f *fakeSubsWriter) Grant(ctx context.Context, userID, planID, storeType st
 }
 func (f *fakeSubsWriter) StampStoreRef(ctx context.Context, referenceCode, storeType, transactionID string) error {
 	f.stamped = storeType + ":" + transactionID
+	return nil
+}
+func (f *fakeSubsWriter) StampStoreRefByUser(ctx context.Context, userID, storeType, transactionID string) error {
+	f.stampByUserRef = transactionID
 	return nil
 }
 func (f *fakeSubsWriter) ExtendByStoreRef(ctx context.Context, storeType, transactionID string, expiresAt time.Time) (int64, error) {
@@ -116,14 +121,16 @@ func (f *fakeSubsWriter) FindByStoreRef(ctx context.Context, storeType, transact
 }
 
 type noopEmailer struct {
-	activatedTo string
-	failedTo    string
-	failed      bool
-	failedName  string
+	activatedTo    string
+	activatedCalls int
+	failedTo       string
+	failed         bool
+	failedName     string
 }
 
 func (e *noopEmailer) SubscriptionActivated(ctx context.Context, to, name, planName string) {
 	e.activatedTo = to
+	e.activatedCalls++
 }
 func (e *noopEmailer) PaymentFailed(ctx context.Context, to, name, planName string) {
 	e.failedTo = to

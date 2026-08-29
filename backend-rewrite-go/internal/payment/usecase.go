@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/tannpv/draftright-rewrite/internal/payment/strategy"
+	"github.com/tannpv/draftright-rewrite/internal/payment/strategy/applestore"
 	"github.com/tannpv/draftright-rewrite/internal/shared"
 	"github.com/tannpv/draftright-rewrite/internal/subscription"
 )
@@ -43,6 +44,9 @@ type SettingsReader interface {
 type SubsWriter interface {
 	Grant(ctx context.Context, userID, planID, storeType string, expiresAt *time.Time) error
 	StampStoreRef(ctx context.Context, referenceCode, storeType, transactionID string) error
+	// StampStoreRefByUser matches by user_id + store_type — NO payments join —
+	// for the IAP redeem path, which creates no payment row (see apple_redeem.go).
+	StampStoreRefByUser(ctx context.Context, userID, storeType, transactionID string) error
 	ExtendByStoreRef(ctx context.Context, storeType, transactionID string, expiresAt time.Time) (int64, error)
 	CancelByStoreRef(ctx context.Context, storeType, transactionID string) (int64, error)
 	ExpireByStoreRef(ctx context.Context, storeType, transactionID string) (int64, error)
@@ -99,6 +103,18 @@ type Service struct {
 	subsWriter  SubsWriter
 	emailer     WebhookEmailer
 	variants    VariantResolver
+
+	// appleVerify is the seam over applestore.Verifier.Verify that
+	// RedeemAppleTransaction calls (Task 7). Injected via WithAppleVerify;
+	// main.go wires the real verifier (Task 9), tests wire a stub.
+	appleVerify func(signedTransaction string) (applestore.JWSPayload, error)
+}
+
+// WithAppleVerify injects the client-transaction verifier seam RedeemAppleTransaction
+// uses (additive, mirrors WithWebhook). Returns the same Service for chaining.
+func (s *Service) WithAppleVerify(verify func(signedTransaction string) (applestore.JWSPayload, error)) *Service {
+	s.appleVerify = verify
+	return s
 }
 
 // WithWebhook injects the Phase 3c webhook collaborators (additive — NewService's
