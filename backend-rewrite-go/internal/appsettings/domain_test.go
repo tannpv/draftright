@@ -19,7 +19,8 @@ func TestAppSettings_JSONKeyOrder(t *testing.T) {
 		"vietqr_bank_id", "vietqr_account_number", "vietqr_account_name",
 		"casso_api_key", "sepay_api_key", "sepay_mode", "resend_api_key", "email_from",
 		"google_client_id", "google_client_secret", "apple_client_id", "apple_team_id",
-		"apple_key_id", "lemonsqueezy_api_key", "lemonsqueezy_store_id",
+		"apple_key_id", "apple_product_monthly", "apple_product_yearly",
+		"lemonsqueezy_api_key", "lemonsqueezy_store_id",
 		"lemonsqueezy_webhook_secret", "lemonsqueezy_variant_monthly",
 		"lemonsqueezy_variant_yearly", "client_log_level", "updated_at"}
 	prev := -1
@@ -47,6 +48,8 @@ func TestAppSettings_MasksSecrets(t *testing.T) {
 		// PayPal webhook + plan IDs are public identifiers, never masked.
 		PaypalWebhookID: "8SR12345WEBHOOK", PaypalPlanMonthly: "P-MONTHLY-PLAN-ID",
 		PaypalPlanYearly: "P-YEARLY-PLAN-ID",
+		// Apple App Store product ids are public identifiers, never masked.
+		AppleProductMonthly: "com.draftright.monthly", AppleProductYearly: "com.draftright.yearly",
 	}
 	b, _ := json.Marshal(s)
 	body := string(b)
@@ -62,6 +65,11 @@ func TestAppSettings_MasksSecrets(t *testing.T) {
 	for _, raw := range []string{"8SR12345WEBHOOK", "P-MONTHLY-PLAN-ID", "P-YEARLY-PLAN-ID"} {
 		if !strings.Contains(body, raw) {
 			t.Errorf("paypal identifier %q wrongly masked: %s", raw, body)
+		}
+	}
+	for _, raw := range []string{"com.draftright.monthly", "com.draftright.yearly"} {
+		if !strings.Contains(body, raw) {
+			t.Errorf("apple product identifier %q wrongly masked: %s", raw, body)
 		}
 	}
 	if !strings.Contains(body, `"stripe_secret_key":"sk_…mnop"`) {

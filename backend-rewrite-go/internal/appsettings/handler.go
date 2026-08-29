@@ -79,6 +79,8 @@ type patchBody struct {
 	AppleClientID              *string `json:"apple_client_id"`
 	AppleTeamID                *string `json:"apple_team_id"`
 	AppleKeyID                 *string `json:"apple_key_id"`
+	AppleProductMonthly        *string `json:"apple_product_monthly"`
+	AppleProductYearly         *string `json:"apple_product_yearly"`
 	LemonsqueezyAPIKey         *string `json:"lemonsqueezy_api_key"`
 	LemonsqueezyStoreID        *string `json:"lemonsqueezy_store_id"`
 	LemonsqueezyWebhookSecret  *string `json:"lemonsqueezy_webhook_secret"`
@@ -158,6 +160,8 @@ func (h *Handler) Patch(w http.ResponseWriter, r *http.Request) {
 		AppleClientID:              body.AppleClientID,
 		AppleTeamID:                body.AppleTeamID,
 		AppleKeyID:                 body.AppleKeyID,
+		AppleProductMonthly:        body.AppleProductMonthly,
+		AppleProductYearly:         body.AppleProductYearly,
 		LemonsqueezyAPIKey:         body.LemonsqueezyAPIKey,
 		LemonsqueezyStoreID:        body.LemonsqueezyStoreID,
 		LemonsqueezyWebhookSecret:  body.LemonsqueezyWebhookSecret,
