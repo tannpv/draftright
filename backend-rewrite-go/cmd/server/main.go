@@ -715,8 +715,21 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 		// strategy map (so HandleProviderNotification can resolve it) but
 		// deliberately absent from registeredMethods below — it is
 		// redemption-only, never a checkout method a storefront offers.
-		appleVerifier := applestore.NewVerifier(loadAppleRootCAs(), cfg.AppleBundleID, cfg.AppleEnvironment)
-		appleStrat := applestore.New(appleVerifier)
+		//
+		// Wiring is gated by applestore.ValidateConfig (final whole-branch
+		// review finding, money-leak): NewVerifier treats an empty wantEnv as
+		// "skip the environment claim check" (see Verify), so mounting the
+		// Apple routes with AppleBundleID set but AppleEnvironment empty would
+		// silently accept Sandbox/StoreKit-test transactions as Production and
+		// grant real Pro for free. Exactly one of the two set means the
+		// operator intended Apple IAP but misconfigured it — fail fast at boot
+		// instead. Both empty is the existing safe default: no Apple routes
+		// mounted at all.
+		appleConfigured, err := applestore.ValidateConfig(cfg.AppleBundleID, cfg.AppleEnvironment)
+		if err != nil {
+			cleanup()
+			return usecase.RewriteDeps{}, coreHandlers{}, nil, fmt.Errorf("apple iap config: %w", err)
+		}
 		strategies := map[string]paymentstrategy.Strategy{
 			string(paymentpkg.MethodStripe):       stripeStrat,
 			string(paymentpkg.MethodVietQR):       vietqrStrat,
@@ -725,7 +738,11 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 			string(paymentpkg.MethodPayPal):       paypalStrat,
 			string(paymentpkg.MethodApplePay):     stripeStrat,
 			string(paymentpkg.MethodGooglePay):    stripeStrat,
-			string(paymentpkg.MethodAppleIAP):     appleStrat,
+		}
+		var appleVerifier *applestore.Verifier
+		if appleConfigured {
+			appleVerifier = applestore.NewVerifier(loadAppleRootCAs(), cfg.AppleBundleID, cfg.AppleEnvironment)
+			strategies[string(paymentpkg.MethodAppleIAP)] = applestore.New(appleVerifier)
 		}
 		paymentSvc := paymentpkg.NewService(
 			paymentRepo, paymentSettings, cfg.PaymentEnabledMethods,
@@ -750,8 +767,13 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 		// value instead of importing applestore/crypto/x509 itself — same
 		// Verifier the webhook strategy above uses, so a client-submitted
 		// transaction and a server notification are checked against the same
-		// root/bundle/environment configuration.
-		paymentSvc.WithAppleVerify(appleVerifier.Verify)
+		// root/bundle/environment configuration. Only injected when
+		// appleConfigured (see ValidateConfig gate above) — otherwise
+		// core.paymentAppleRedeem / core.paymentWebhookApple stay nil below and
+		// shared/router.go mounts neither route.
+		if appleConfigured {
+			paymentSvc.WithAppleVerify(appleVerifier.Verify)
+		}
 		paymentHandler := paymentpkg.NewHandler(paymentSvc)
 		core.paymentMethods = http.HandlerFunc(paymentHandler.Methods)
 		core.paymentStatus = http.HandlerFunc(paymentHandler.Status)
@@ -759,14 +781,16 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 		core.paymentCheckout = http.HandlerFunc(paymentHandler.Checkout)
 		core.paymentPortal = http.HandlerFunc(paymentHandler.Portal)
 		core.paymentCancelSub = http.HandlerFunc(paymentHandler.CancelSubscription)
-		core.paymentAppleRedeem = http.HandlerFunc(paymentHandler.AppleRedeem)
+		if appleConfigured {
+			core.paymentAppleRedeem = http.HandlerFunc(paymentHandler.AppleRedeem)
+			core.paymentWebhookApple = http.HandlerFunc(paymentHandler.AppleWebhook)
+		}
 		core.paymentWebhookStripe = http.HandlerFunc(paymentHandler.StripeWebhook)
 		core.paymentWebhookVietQR = http.HandlerFunc(paymentHandler.VietQRWebhook)
 		core.paymentWebhookCasso = http.HandlerFunc(paymentHandler.CassoWebhook)
 		core.paymentWebhookSepay = http.HandlerFunc(paymentHandler.SepayWebhook)
 		core.paymentWebhookLemonSqueezy = http.HandlerFunc(paymentHandler.LemonSqueezyWebhook)
 		core.paymentWebhookPayPal = http.HandlerFunc(paymentHandler.PayPalWebhook)
-		core.paymentWebhookApple = http.HandlerFunc(paymentHandler.AppleWebhook)
 
 		// Daily subscription-expiry cron (ports NestJS @Cron("0 09 * * *")).
 		// Reuses the same subReader (it satisfies subpkg.CronRepo via

@@ -141,11 +141,16 @@ type Config struct {
 	// AppleBundleID + AppleEnvironment configure the StoreKit JWS verifier
 	// (applestore.NewVerifier) — the bundle id every transaction's `bundleId`
 	// claim must match, and the ASSN `environment` claim to require
-	// ("Production" | "Sandbox"; empty skips the environment check, e.g. dev
-	// accepting both). Env-ONLY like ApplePayMerchantID above: the verifier is
-	// built once at startup (no app_settings column, no live DB read per
-	// request) because rotating bundle id / environment is a deploy, not an
-	// admin-portal toggle.
+	// ("Production" | "Sandbox"). Both empty is the only permitted "not
+	// configured" state — Apple IAP is then skipped entirely at boot. Setting
+	// exactly one of the two is a fatal misconfiguration (main.go's
+	// composeDeps calls applestore.ValidateConfig and refuses to start): an
+	// empty AppleEnvironment makes the verifier skip the environment claim
+	// check (see Verify), which would silently accept Sandbox/StoreKit-test
+	// transactions as Production and grant real Pro for free. Env-ONLY like
+	// ApplePayMerchantID above: the verifier is built once at startup (no
+	// app_settings column, no live DB read per request) because rotating
+	// bundle id / environment is a deploy, not an admin-portal toggle.
 	AppleBundleID    string
 	AppleEnvironment string
 
