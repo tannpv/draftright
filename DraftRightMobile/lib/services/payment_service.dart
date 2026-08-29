@@ -74,14 +74,23 @@ class PaymentService {
     return true;
   }
 
-  /// Whether this platform may present an in-app checkout for a digital
-  /// subscription. iOS is excluded: App Store Guideline 3.1.1 forbids
-  /// selling digital subscriptions via non-IAP payment and forbids buy
-  /// buttons or links to external checkout. iOS therefore shows plan
-  /// status only; Android / desktop / web use our web-billing model,
-  /// which those stores allow. Any UI that offers checkout must gate on
-  /// this — never branch on `Platform.isIOS` directly.
-  static bool get inAppCheckoutAllowed => kIsWeb || !_platformIsIos;
+  /// Whether this platform may present the external-rail checkout (Lemon
+  /// Squeezy / Stripe / VietQR / bank tiles) for a digital subscription.
+  /// iOS is excluded: App Store Guideline 3.1.1 forbids selling digital
+  /// subscriptions via non-IAP payment and forbids buy buttons or links to
+  /// external checkout. iOS instead shows the StoreKit path
+  /// ([appleIapAllowed]); Android / desktop / web use our web-billing
+  /// model, which those stores allow.
+  ///
+  /// Derived from [appleIapAllowed] (the single source of truth for "is
+  /// this iOS", including the test override) rather than re-checking
+  /// `Platform.isIOS` — two independent iOS checks would drift under
+  /// [debugForceApplePlatform] the way they did before this was unified:
+  /// a test forcing the Apple branch left this getter still reading the
+  /// real (non-iOS) test-host platform, so both branches evaluated true
+  /// at once. Any UI that offers checkout must gate on this — never
+  /// branch on `Platform.isIOS` directly.
+  static bool get inAppCheckoutAllowed => kIsWeb || !appleIapAllowed;
 
   /// Test-only override for the iOS platform check. Non-null forces the result;
   /// null (prod) reads the real platform. Mirrors ErrorReporter.debugHttpClient.
