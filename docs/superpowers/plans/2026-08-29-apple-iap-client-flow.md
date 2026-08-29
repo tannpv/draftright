@@ -138,19 +138,20 @@ git commit -m "feat(mobile): BackendClient.redeemAppleTransaction -> POST /payme
 - Test: `DraftRightMobile/test/services/payment/apple_products_test.dart`
 
 **Interfaces:**
-- Produces: `class AppleProducts { static const monthly = '...'; static const yearly = '...'; static const ids = {monthly, yearly}; static String? billingFor(String productId); }`.
+- Produces: `class AppleProducts { static const monthly = '...'; static const yearly = '...'; static const ids = {monthly, yearly}; static BillingPeriod? billingFor(String productId); }`. `billingFor` returns the typed `BillingPeriod` enum (RULE #1: the cadence's one source of truth is that enum — never a raw `'monthly'`/`'yearly'` string).
 
 - [ ] **Step 1: Write the failing test**
 
 ```dart
 import 'package:flutter_test/flutter_test.dart';
 import 'package:draftright_mobile/services/payment/apple_products.dart';
+import 'package:draftright_mobile/services/payment/billing_period.dart';
 
 void main() {
   test('product ids map to billing periods, one source of truth', () {
     expect(AppleProducts.ids, {AppleProducts.monthly, AppleProducts.yearly});
-    expect(AppleProducts.billingFor(AppleProducts.monthly), 'monthly');
-    expect(AppleProducts.billingFor(AppleProducts.yearly), 'yearly');
+    expect(AppleProducts.billingFor(AppleProducts.monthly), BillingPeriod.monthly);
+    expect(AppleProducts.billingFor(AppleProducts.yearly), BillingPeriod.yearly);
     expect(AppleProducts.billingFor('unknown'), isNull);
   });
 }
@@ -164,6 +165,8 @@ Expected: FAIL — undefined.
 - [ ] **Step 3: Implement**
 
 ```dart
+import 'package:draftright_mobile/services/payment/billing_period.dart';
+
 /// The App Store product identifiers for DraftRight Pro. These MUST equal the
 /// backend `apple_product_monthly` / `apple_product_yearly` settings and the
 /// products configured in App Store Connect — a drift buys the wrong plan.
@@ -174,12 +177,15 @@ class AppleProducts {
   static const String yearly = 'com.draftright.pro.yearly';
   static const Set<String> ids = {monthly, yearly};
 
-  static String? billingFor(String productId) {
+  /// Maps a product id to its billing cadence as the typed [BillingPeriod]
+  /// enum — never a raw `'monthly'`/`'yearly'` string, so the cadence has one
+  /// source of truth (the enum) across purchase, display, and plan-resolution.
+  static BillingPeriod? billingFor(String productId) {
     switch (productId) {
       case monthly:
-        return 'monthly';
+        return BillingPeriod.monthly;
       case yearly:
-        return 'yearly';
+        return BillingPeriod.yearly;
       default:
         return null;
     }
