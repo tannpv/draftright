@@ -68,6 +68,14 @@ platform :ios do
       output_directory: "build/",
       clean: true,
       xcargs: "-allowProvisioningUpdates",
+      # The .ipa EXPORT step (not just the upload) must authenticate to App
+      # Store Connect: without an Apple ID logged into Xcode there is no
+      # "iOS Distribution" cert in the keychain, so xcodebuild -exportArchive
+      # fails "No Accounts / No signing certificate". Passing the ASC API key
+      # lets -allowProvisioningUpdates create/fetch the distribution cert +
+      # profile headlessly (the CI-signing path). Without this the lane only
+      # authenticated the UPLOAD, and export died first.
+      api_key: asc_api_key,
       # xcpretty (the default formatter) isn't installed here and gym
       # treats its absence as the whole build failing.  Disable the
       # formatter — raw xcodebuild output goes straight to the log
@@ -85,8 +93,9 @@ platform :ios do
     )
   end
 
-  # Future use: build the .ipa via gym and upload via deliver.
-  # Disabled by default until distribution cert is seeded in keychain.
+  # Build the .ipa via gym and upload via deliver. The ASC API key on
+  # build_app (below) makes this self-sufficient — no distribution cert needs
+  # to be pre-seeded in the keychain; -allowProvisioningUpdates creates it.
   desc "Build .ipa and upload to App Store Connect (full release + submit for review)"
   lane :release do
     build_app(
@@ -96,6 +105,9 @@ platform :ios do
       output_directory: "build/",
       clean: true,
       xcargs: "-allowProvisioningUpdates",
+      # See the beta lane: the API key is required for the EXPORT step's
+      # cert/profile creation, not only the upload.
+      api_key: asc_api_key,
     )
     upload_to_app_store(
       api_key: asc_api_key,
