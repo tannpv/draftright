@@ -26,3 +26,20 @@ func TestStrategy_ContractShape(t *testing.T) {
 		t.Fatal("VerifyWebhook should reject a body with no signedPayload")
 	}
 }
+
+// The notifAction map IS the type→action logic (VerifyNotification is thin over
+// it, gated only by real crypto). #217's webhook_test already proves
+// ActionAppleExpired → ExpireByStoreRef (revoke, no email, idempotent), so
+// asserting the map entry proves REVOKE→revoke end to end.
+func TestNotifAction_RevokeAndFailToRenew(t *testing.T) {
+	// REVOKE (family-sharing access pulled) must revoke now — same action as EXPIRED.
+	if got := notifAction["REVOKE"]; got != strategy.ActionAppleExpired {
+		t.Fatalf("REVOKE mapped to %q, want %q (revoke via ExpireByStoreRef)", got, strategy.ActionAppleExpired)
+	}
+	// DID_FAIL_TO_RENEW is billing-retry/grace, NOT expiry — deliberately
+	// unmapped so it falls through to Ignored (no entitlement change);
+	// GRACE_PERIOD_EXPIRED owns the eventual revoke.
+	if _, ok := notifAction["DID_FAIL_TO_RENEW"]; ok {
+		t.Fatal("DID_FAIL_TO_RENEW must stay unmapped (→ Ignored); mapping it would change entitlement during grace")
+	}
+}

@@ -12,12 +12,20 @@ import (
 const manageSubscriptionsURL = "itms-apps://apps.apple.com/account/subscriptions"
 
 // notificationType → strategy action.
+//
+// DID_FAIL_TO_RENEW is DELIBERATELY unmapped: it signals entry into billing
+// retry / grace, NOT loss of entitlement — the subscription is still active.
+// If the retry never recovers, Apple later fires GRACE_PERIOD_EXPIRED (mapped
+// to ActionAppleExpired), which owns the actual revoke. There is no soft
+// "in grace" state on the subscription row to note, so the honest mapping is
+// the unmapped→Ignored fallthrough (no entitlement change).
 var notifAction = map[string]string{
 	"SUBSCRIBED":                strategy.ActionAppleSubscribed,
 	"DID_RENEW":                 strategy.ActionAppleRenewed,
 	"EXPIRED":                   strategy.ActionAppleExpired,
 	"GRACE_PERIOD_EXPIRED":      strategy.ActionAppleExpired,
 	"REFUND":                    strategy.ActionAppleRefunded,
+	"REVOKE":                    strategy.ActionAppleExpired, // family-sharing access pulled → revoke now (same path as EXPIRED)
 	"DID_CHANGE_RENEWAL_STATUS": strategy.ActionAppleRenewed, // status flips don't grant; mapped, handler decides
 }
 
