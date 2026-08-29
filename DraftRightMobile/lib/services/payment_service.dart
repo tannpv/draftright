@@ -83,6 +83,15 @@ class PaymentService {
   /// this — never branch on `Platform.isIOS` directly.
   static bool get inAppCheckoutAllowed => kIsWeb || !_platformIsIos;
 
+  /// Test-only override for the iOS platform check. Non-null forces the result;
+  /// null (prod) reads the real platform. Mirrors ErrorReporter.debugHttpClient.
+  @visibleForTesting
+  static bool? debugForceApplePlatform;
+
+  /// iOS shows the StoreKit IAP path (compliant with 3.1.1), not the external
+  /// checkout tiles. True only on iOS.
+  static bool get appleIapAllowed => debugForceApplePlatform ?? _platformIsIos;
+
   static bool get _platformIsIos {
     if (kIsWeb) return false;
     try { return Platform.isIOS; } catch (_) { return false; }
