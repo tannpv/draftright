@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -199,12 +200,52 @@ func (s *Service) HandleWebhook(ctx context.Context, method string, payload []by
 		_, _ = s.subsWriter.ExpireByStoreRef(ctx, string(StorePayPal), action.PayPalSubscriptionID)
 		return WebhookResult{Success: true}, nil
 
+	case strategy.ActionAppleSubscribed, strategy.ActionAppleRenewed:
+		// Extend the sub matched by the ORIGINAL transaction id (stamped by
+		// RedeemAppleTransaction on first purchase). apple_subscribed can also
+		// arrive as a re-confirmation of an already-redeemed purchase, so it
+		// takes the same extend path — never a second grant. Renewals must
+		// NOT re-send the activation email (that already happened at redeem).
+		exp := time.Unix(action.CurrentPeriodEnd, 0).UTC()
+		n, err := s.subsWriter.ExtendByStoreRef(ctx, string(StoreAppleIAP), action.AppleOriginalTransactionID, exp)
+		if err != nil {
+			return WebhookResult{}, err
+		}
+		if n == 0 {
+			// No matching row → the first /redeem POST never landed (lost
+			// request). We cannot grant from here in Spec 1: the notification
+			// carries no user identity (user↔transaction linkage via StoreKit
+			// appAccountToken arrives with the CLIENT spec). Recovery is a
+			// client retry of /redeem. Log for observability; do not error the
+			// webhook — Apple would just retry forever.
+			s.logUnmatchedAppleNotification(action.AppleOriginalTransactionID)
+		}
+		return WebhookResult{Success: true}, nil
+
+	case strategy.ActionAppleExpired, strategy.ActionAppleRefunded:
+		if _, err := s.subsWriter.ExpireByStoreRef(ctx, string(StoreAppleIAP), action.AppleOriginalTransactionID); err != nil {
+			return WebhookResult{}, err
+		}
+		return WebhookResult{Success: true}, nil
+
 	case strategy.ActionDisputeCreated:
 		return WebhookResult{Success: true}, nil
 
 	default: // ActionIgnored
 		return WebhookResult{Success: false}, nil
 	}
+}
+
+// logUnmatchedAppleNotification records an App Store Server Notification
+// (renew/subscribed) that matched no subscription row by original transaction
+// id. The Service has no injected logger seam (unlike AdminService), so this
+// goes through slog.Default() — a one-line structured warning, never an error
+// (see the ActionAppleSubscribed/Renewed case for why the webhook must not fail).
+func (s *Service) logUnmatchedAppleNotification(originalTransactionID string) {
+	slog.Default().Warn("apple webhook notification matched no subscription",
+		"store_type", string(StoreAppleIAP),
+		"original_transaction_id", originalTransactionID,
+	)
 }
 
 // completePayment flips a pending payment to completed/failed by reference and,
