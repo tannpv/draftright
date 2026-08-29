@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -286,6 +287,34 @@ func (s *Service) resolvePlanIDFromLSVariant(ctx context.Context, variantID, cur
 	}
 	id, _ := s.webhookRepo.FindFirstActivePlanID(ctx, billing, currency)
 	return id
+}
+
+// resolvePlanIDFromAppleProduct maps an App Store product id to the active
+// plan id for its billing period — the single source of truth for App Store
+// product→plan (RULE #1), mirroring resolvePlanIDFromLSVariant. Unlike the LS
+// resolver (which only re-confirms an already-pending payment, so it degrades
+// to "" on any mismatch), this is the FIRST resolution for an IAP redemption:
+// an unconfigured or unmatched product id is an error, never a silently
+// granted plan.
+func (s *Service) resolvePlanIDFromAppleProduct(ctx context.Context, productID string) (string, string, error) {
+	monthly, yearly, err := s.variants.AppleProducts(ctx)
+	if err != nil {
+		return "", "", err
+	}
+	var billing string
+	switch {
+	case productID == monthly && monthly != "":
+		billing = "monthly"
+	case productID == yearly && yearly != "":
+		billing = "yearly"
+	default:
+		return "", "", fmt.Errorf("apple product %q maps to no plan", productID)
+	}
+	planID, err := s.webhookRepo.FindFirstActivePlanID(ctx, billing, DefaultCurrency)
+	if err != nil {
+		return "", "", err
+	}
+	return planID, billing, nil
 }
 
 // result builds a WebhookResult that always carries the reference code (the

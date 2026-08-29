@@ -231,7 +231,9 @@ CREATE TABLE public.app_settings (
     lemonsqueezy_variant_yearly character varying(50) DEFAULT ''::character varying NOT NULL,
     paypal_webhook_id character varying(100) DEFAULT ''::character varying NOT NULL,
     paypal_plan_monthly character varying(100) DEFAULT ''::character varying NOT NULL,
-    paypal_plan_yearly character varying(100) DEFAULT ''::character varying NOT NULL
+    paypal_plan_yearly character varying(100) DEFAULT ''::character varying NOT NULL,
+    apple_product_monthly character varying(200) DEFAULT ''::character varying NOT NULL,
+    apple_product_yearly character varying(200) DEFAULT ''::character varying NOT NULL
 );
 
 

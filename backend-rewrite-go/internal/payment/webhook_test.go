@@ -2,6 +2,7 @@ package payment
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"testing"
 	"time"
@@ -131,11 +132,17 @@ func (e *noopEmailer) PaymentFailed(ctx context.Context, to, name, planName stri
 }
 
 type fakeVariants struct {
-	monthly, yearly string
+	monthly, yearly           string // Lemon Squeezy variant ids
+	appleMonthly, appleYearly string // App Store product ids
+	appleErr                  error
 }
 
 func (f fakeVariants) LemonSqueezyVariants(ctx context.Context) (string, string, error) {
 	return f.monthly, f.yearly, nil
+}
+
+func (f fakeVariants) AppleProducts(ctx context.Context) (string, string, error) {
+	return f.appleMonthly, f.appleYearly, f.appleErr
 }
 
 // webhookSvc builds a Service wired for the webhook path with the given
@@ -147,6 +154,18 @@ func webhookSvc(settings fakeSettings, strat strategy.Strategy, repo WebhookRepo
 		now:        func() time.Time { return time.Unix(1700000000, 0).UTC() },
 	}
 	return svc.WithWebhook(repo, subs, emailer, variants)
+}
+
+// newTestServiceWithAppleProducts wires a Service for resolvePlanIDFromAppleProduct
+// tests only: a fake WebhookRepo whose FindFirstActivePlanID returns a stub
+// plan id, and the given Apple product ids in the credentials resolver.
+// Mirrors the LS resolver's test setup (webhookSvc), scoped to the two
+// collaborators the resolver actually touches.
+func newTestServiceWithAppleProducts(t *testing.T, monthly, yearly string) *Service {
+	t.Helper()
+	repo := &fakeWebhookRepo{planID: "pl_apple_stub"}
+	svc := &Service{}
+	return svc.WithWebhook(repo, &fakeSubsWriter{}, &noopEmailer{}, fakeVariants{appleMonthly: monthly, appleYearly: yearly})
 }
 
 // --- tests ---------------------------------------------------------------
@@ -528,5 +547,57 @@ func TestHandleWebhook_PayPalExpiredExpires(t *testing.T) {
 	}
 	if !res.Success || subs.expired != "paypal:I-SUB-3" {
 		t.Fatalf("did not expire by store ref: res=%+v expired=%q", res, subs.expired)
+	}
+}
+
+// --- Apple IAP product→plan resolver (Task 6 of the Apple IAP server
+// redemption plan) — mirrors resolvePlanIDFromLSVariant, but an unmatched
+// product id must error rather than silently resolve to no plan.
+
+func TestResolvePlanIDFromAppleProduct(t *testing.T) {
+	s := newTestServiceWithAppleProducts(t, "com.draftright.pro.monthly", "com.draftright.pro.yearly")
+
+	plan, billing, err := s.resolvePlanIDFromAppleProduct(context.Background(), "com.draftright.pro.yearly")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if billing != "yearly" || plan == "" {
+		t.Fatalf("got plan=%q billing=%q", plan, billing)
+	}
+
+	if _, _, err := s.resolvePlanIDFromAppleProduct(context.Background(), "unknown.product"); err == nil {
+		t.Fatal("unknown product id must error, not grant a plan")
+	}
+}
+
+func TestResolvePlanIDFromAppleProduct_MonthlyResolves(t *testing.T) {
+	s := newTestServiceWithAppleProducts(t, "com.draftright.pro.monthly", "com.draftright.pro.yearly")
+
+	plan, billing, err := s.resolvePlanIDFromAppleProduct(context.Background(), "com.draftright.pro.monthly")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if billing != "monthly" || plan == "" {
+		t.Fatalf("got plan=%q billing=%q", plan, billing)
+	}
+}
+
+func TestResolvePlanIDFromAppleProduct_UnconfiguredNeverMatchesEmptyProductID(t *testing.T) {
+	// Both product ids unset (credentials row absent/blank) — an empty
+	// productID must not spuriously match either "" comparison.
+	s := newTestServiceWithAppleProducts(t, "", "")
+
+	if _, _, err := s.resolvePlanIDFromAppleProduct(context.Background(), ""); err == nil {
+		t.Fatal("blank product id against unconfigured credentials must error, not grant a plan")
+	}
+}
+
+func TestResolvePlanIDFromAppleProduct_CredentialsErrorPropagates(t *testing.T) {
+	repo := &fakeWebhookRepo{planID: "pl_apple_stub"}
+	svc := &Service{}
+	svc.WithWebhook(repo, &fakeSubsWriter{}, &noopEmailer{}, fakeVariants{appleErr: errors.New("db unavailable")})
+
+	if _, _, err := svc.resolvePlanIDFromAppleProduct(context.Background(), "com.draftright.pro.monthly"); err == nil {
+		t.Fatal("credentials resolver error must propagate, not grant a plan")
 	}
 }

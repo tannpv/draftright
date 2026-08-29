@@ -68,10 +68,13 @@ type WebhookEmailer interface {
 	PaymentFailed(ctx context.Context, to, name, planName string)
 }
 
-// VariantResolver resolves the configured Lemon Squeezy monthly/yearly variant
-// ids (re-resolve the true plan from the webhook's variant_id).
+// VariantResolver resolves the configured monthly/yearly product identifiers
+// for the providers whose webhook plan re-resolution needs one: Lemon
+// Squeezy variant ids, and Apple App Store product ids (the single source of
+// truth for App Store product→plan; see resolvePlanIDFromAppleProduct).
 type VariantResolver interface {
 	LemonSqueezyVariants(ctx context.Context) (monthly, yearly string, err error)
+	AppleProducts(ctx context.Context) (monthly, yearly string, err error)
 }
 
 // Service is the payment use case (methods/status/history + checkout).
