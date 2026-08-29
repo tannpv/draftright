@@ -19,6 +19,7 @@ func TestStrategyMethodConstsMatchPayment(t *testing.T) {
 		{strategy.MethodBankTransfer, MethodBankTransfer},
 		{strategy.MethodApplePay, MethodApplePay},
 		{strategy.MethodGooglePay, MethodGooglePay},
+		{strategy.MethodAppleIAP, MethodAppleIAP},
 	}
 	for _, c := range cases {
 		if c.strat != string(c.canonical) {

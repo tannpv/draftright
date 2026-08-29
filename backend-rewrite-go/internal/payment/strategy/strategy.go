@@ -105,6 +105,7 @@ const (
 	MethodBankTransfer = "bank_transfer"
 	MethodApplePay     = "apple_pay"
 	MethodGooglePay    = "google_pay"
+	MethodAppleIAP     = "apple_iap"
 )
 
 // CurrencyVND is VietQR's fixed settlement currency (#204 finding #7).

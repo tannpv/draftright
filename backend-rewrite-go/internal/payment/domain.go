@@ -23,6 +23,7 @@ const (
 	MethodLemonSqueezy PaymentMethod = "lemonsqueezy"
 	MethodApplePay     PaymentMethod = "apple_pay"
 	MethodGooglePay    PaymentMethod = "google_pay"
+	MethodAppleIAP     PaymentMethod = "apple_iap"
 )
 
 // PaymentStatus mirrors the Node PaymentStatus enum.
