@@ -67,7 +67,8 @@ const selectCols = "id, environment, trial_limit, token_expiry_minutes, refresh_
 	"momo_partner_code, momo_access_key, momo_secret_key, momo_mode, vietqr_bank_id, " +
 	"vietqr_account_number, vietqr_account_name, casso_api_key, sepay_api_key, sepay_mode, " +
 	"resend_api_key, email_from, google_client_id, google_client_secret, apple_client_id, " +
-	"apple_team_id, apple_key_id, lemonsqueezy_api_key, lemonsqueezy_store_id, " +
+	"apple_team_id, apple_key_id, apple_product_monthly, apple_product_yearly, " +
+	"lemonsqueezy_api_key, lemonsqueezy_store_id, " +
 	"lemonsqueezy_webhook_secret, lemonsqueezy_variant_monthly, lemonsqueezy_variant_yearly, " +
 	"client_log_level, updated_at"
 
@@ -248,6 +249,12 @@ func patchSQL(p Patch) (set string, args []any) {
 	if p.AppleKeyID != nil {
 		add("apple_key_id", *p.AppleKeyID)
 	}
+	if p.AppleProductMonthly != nil {
+		add("apple_product_monthly", *p.AppleProductMonthly)
+	}
+	if p.AppleProductYearly != nil {
+		add("apple_product_yearly", *p.AppleProductYearly)
+	}
 	if p.LemonsqueezyAPIKey != nil {
 		add("lemonsqueezy_api_key", *p.LemonsqueezyAPIKey)
 	}
@@ -308,6 +315,8 @@ func fromRow(row sqlc.AppSetting) AppSettings {
 		AppleClientID:              row.AppleClientID,
 		AppleTeamID:                row.AppleTeamID,
 		AppleKeyID:                 row.AppleKeyID,
+		AppleProductMonthly:        row.AppleProductMonthly,
+		AppleProductYearly:         row.AppleProductYearly,
 		LemonsqueezyAPIKey:         row.LemonsqueezyApiKey,
 		LemonsqueezyStoreID:        row.LemonsqueezyStoreID,
 		LemonsqueezyWebhookSecret:  row.LemonsqueezyWebhookSecret,
@@ -361,6 +370,8 @@ func scanSettings(row pgx.Row) (AppSettings, error) {
 		&s.AppleClientID,
 		&s.AppleTeamID,
 		&s.AppleKeyID,
+		&s.AppleProductMonthly,
+		&s.AppleProductYearly,
 		&s.LemonsqueezyAPIKey,
 		&s.LemonsqueezyStoreID,
 		&s.LemonsqueezyWebhookSecret,

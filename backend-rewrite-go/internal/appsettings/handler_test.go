@@ -84,18 +84,27 @@ func TestGet_Returns200(t *testing.T) {
 	}
 }
 
-// PATCH /admin/settings with a valid patch → 200, full settings row.
+// PATCH /admin/settings with a valid patch → 200, full settings row. Also
+// covers #218: apple_product_monthly/yearly must reach the repo Patch,
+// mirroring the PayPal plan-id passthrough.
 func TestPatch_Returns200(t *testing.T) {
-	h := NewHandler(NewService(&fakeRepo{}, fakeValidator{}, &fakeSender{}))
+	repo := &fakeRepo{}
+	h := NewHandler(NewService(repo, fakeValidator{}, &fakeSender{}))
 	rec := httptest.NewRecorder()
 	h.Patch(rec, httptest.NewRequest(http.MethodPatch, "/admin/settings",
-		strings.NewReader(`{"environment":"prod"}`)))
+		strings.NewReader(`{"environment":"prod","apple_product_monthly":"com.draftright.monthly","apple_product_yearly":"com.draftright.yearly"}`)))
 
 	if rec.Code != 200 {
 		t.Fatalf("status=%d, want 200; body=%s", rec.Code, rec.Body.String())
 	}
 	if !strings.Contains(rec.Body.String(), `"environment"`) {
 		t.Fatalf("body missing environment key: %s", rec.Body.String())
+	}
+	if repo.patched.AppleProductMonthly == nil || *repo.patched.AppleProductMonthly != "com.draftright.monthly" {
+		t.Errorf("apple_product_monthly must reach repo, got %v", repo.patched.AppleProductMonthly)
+	}
+	if repo.patched.AppleProductYearly == nil || *repo.patched.AppleProductYearly != "com.draftright.yearly" {
+		t.Errorf("apple_product_yearly must reach repo, got %v", repo.patched.AppleProductYearly)
 	}
 }
 
