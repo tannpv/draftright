@@ -7,6 +7,7 @@ package strategy
 import (
 	"context"
 	"crypto/subtle"
+	"errors"
 	"net/http"
 )
 
@@ -93,6 +94,10 @@ const (
 	ActionPayPalPaymentFailed    = "paypal_payment_failed"
 	ActionPayPalSubCanceled      = "paypal_subscription_canceled"
 	ActionPayPalSubExpired       = "paypal_subscription_expired"
+	ActionAppleSubscribed        = "apple_subscribed"
+	ActionAppleRenewed           = "apple_renewed"
+	ActionAppleExpired           = "apple_expired"
+	ActionAppleRefunded          = "apple_refunded"
 	ActionIgnored                = "ignored"
 )
 
@@ -105,6 +110,7 @@ const (
 	MethodBankTransfer = "bank_transfer"
 	MethodApplePay     = "apple_pay"
 	MethodGooglePay    = "google_pay"
+	MethodAppleIAP     = "apple_iap"
 )
 
 // CurrencyVND is VietQR's fixed settlement currency (#204 finding #7).
@@ -125,6 +131,10 @@ type WebhookAction struct {
 	LSCustomerID         string
 	LSVariantID          string
 	PayPalSubscriptionID string
+	// Apple App Store (IAP). Expiry uses the existing CurrentPeriodEnd field.
+	AppleTransactionID         string
+	AppleOriginalTransactionID string
+	AppleProductID             string
 }
 
 // Ignored is the no-op action (returned for events we don't act on).
@@ -154,6 +164,11 @@ type WebhookError struct {
 }
 
 func (e *WebhookError) Error() string { return e.Message }
+
+// ErrNotCheckoutMethod is returned by CreateCheckout for redemption-style
+// providers (Apple IAP) that never create a server checkout. It is never hit in
+// a correct flow — such methods are absent from registeredMethods.
+var ErrNotCheckoutMethod = errors.New("payment: method does not support server checkout")
 
 // ResolveCredential ports BasePaymentStrategy.resolveCredential: DB value wins
 // when non-empty, else the env fallback, else "".

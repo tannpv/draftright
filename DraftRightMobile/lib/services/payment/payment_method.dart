@@ -12,6 +12,7 @@ enum PaymentMethodKind {
   bankTransfer,
   paypal,
   applePay,
+  appleIap,
   googlePay;
 
   /// String the backend uses on the wire.  Single source of truth.
@@ -23,6 +24,7 @@ enum PaymentMethodKind {
       case PaymentMethodKind.bankTransfer:  return 'bank_transfer';
       case PaymentMethodKind.paypal:        return 'paypal';
       case PaymentMethodKind.applePay:      return 'apple_pay';
+      case PaymentMethodKind.appleIap:      return 'apple_iap';
       case PaymentMethodKind.googlePay:     return 'google_pay';
     }
   }
@@ -99,6 +101,13 @@ class PaymentMethodDescriptor {
           kind: PaymentMethodKind.applePay,
           displayName: 'Apple Pay',
           description: 'Pay with Face ID, Touch ID, or your Apple ID password',
+          currencies: ['USD'],
+        );
+      case PaymentMethodKind.appleIap:
+        return const PaymentMethodDescriptor(
+          kind: PaymentMethodKind.appleIap,
+          displayName: 'App Store',
+          description: 'Pay using your App Store account',
           currencies: ['USD'],
         );
       case PaymentMethodKind.googlePay:

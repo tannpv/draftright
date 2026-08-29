@@ -148,7 +148,7 @@ class WalletPaymentHandler implements PaymentHandler {
       return '$stage: ${err.code} — ${err.message ?? err.toString()}';
     }
     if (e is StripeError) {
-      return '$stage: ${e.code} — ${e.message ?? e.toString()}';
+      return '$stage: ${e.code} — ${e.message}';
     }
     return '$stage: $e';
   }

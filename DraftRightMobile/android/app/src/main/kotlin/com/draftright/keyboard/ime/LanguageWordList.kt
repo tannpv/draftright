@@ -27,6 +27,15 @@ interface LanguageWordList {
      */
     fun successors(token: String): Map<String, Int>
 
+    /**
+     * Dictionary words within [maxEdits] Levenshtein distance of [term], for
+     * typo tolerance / autocorrect (#207). Used only to top up the candidate
+     * bar when the exact prefix scan leaves empty slots, so a mistyped word
+     * still offers the right correction. Default empty — an mmap-backed store
+     * would need its own index, so it opts in rather than scanning 50k rows.
+     */
+    fun fuzzyMatches(term: String, maxEdits: Int, limit: Int): List<Pair<String, Int>> = emptyList()
+
     fun close() {}
 }
 
@@ -63,4 +72,42 @@ class InMemoryWordList(
 
     override fun successors(token: String): Map<String, Int> =
         lcBigrams[token.lowercase()] ?: emptyMap()
+
+    /**
+     * Full scan for words within [maxEdits] of [term], ranked by (distance asc,
+     * frequency desc). Cheap for the hundreds-of-entries bootstrap list; the
+     * mmap store overrides with an index instead of scanning. Compares on the
+     * lowercased forms so casing isn't counted as an edit.
+     */
+    override fun fuzzyMatches(term: String, maxEdits: Int, limit: Int): List<Pair<String, Int>> {
+        if (term.isEmpty() || limit <= 0 || maxEdits <= 0) return emptyList()
+        val lc = term.lowercase()
+        val hits = ArrayList<Triple<String, Int, Int>>() // word, freq, distance
+        for ((word, freq) in words) {
+            val d = boundedLevenshtein(lc, word.lowercase(), maxEdits)
+            if (d in 1..maxEdits) hits.add(Triple(word, freq, d))
+        }
+        hits.sortWith(compareBy({ it.third }, { -it.second }))
+        return hits.take(limit).map { it.first to it.second }
+    }
+
+    /** Levenshtein distance, short-circuiting to [max]+1 once every cell in a
+     *  row exceeds [max] (so a far word costs O(max·len), not O(len²)). */
+    private fun boundedLevenshtein(a: String, b: String, max: Int): Int {
+        if (kotlin.math.abs(a.length - b.length) > max) return max + 1
+        var prev = IntArray(b.length + 1) { it }
+        var curr = IntArray(b.length + 1)
+        for (i in 1..a.length) {
+            curr[0] = i
+            var rowMin = curr[0]
+            for (j in 1..b.length) {
+                val cost = if (a[i - 1] == b[j - 1]) 0 else 1
+                curr[j] = minOf(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost)
+                if (curr[j] < rowMin) rowMin = curr[j]
+            }
+            if (rowMin > max) return max + 1
+            val tmp = prev; prev = curr; curr = tmp
+        }
+        return prev[b.length]
+    }
 }

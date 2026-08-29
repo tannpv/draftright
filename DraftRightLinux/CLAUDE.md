@@ -170,7 +170,7 @@ The hotkey uses `org.freedesktop.portal.GlobalShortcuts`. The portal **refuses a
 - The compositor owns the final binding and may substitute a different trigger, so the app displays what `BindShortcuts`/`ListShortcuts` report back — never the requested combination.
 - Under a nested `dbus-run-session` the GNOME portal backend cannot reach Mutter, so the handshake stalls. Test the hotkey on the **real** session bus.
 
-**Cross-platform (Win+Linux, not under #93):** #107 Grammar-check + Diff view (macOS-only) · #108 Rewrite cache (macOS-only). `models/payment.py` is the Rule#1 reference (enum + `from_wire` + `display_name`) — bring UI/services up to it.
+**Cross-platform (Win+Linux, not under #93):** #108 Rewrite cache (still macOS-only). #107 Grammar-check + Diff view is **DONE** — ported to Win+Linux (`models/diff.py`, `models/grammar.py`, `services/grammar_fixer.py`, `ui/{grammar_view,diff_view}.py`) and guarded 3-way by the golden vectors in `parity/{word-diff,grammar-resolve,grammar-fixall}-vectors.json` (`test/test_diff_and_grammar.py` + `test_*_golden_parity.py`). `models/payment.py` is the Rule#1 reference (enum + `from_wire` + `display_name`) — bring UI/services up to it.
 
 **Partial:** #22 desktop updater — Linux DONE (version 2.4.1, 401 refresh wired, sha256 integrity in `update_service.py`); macOS `UpdateService.swift` HAS the integrity check in code + tests (`verifyIntegrity`, commit `73112702`, on main; `UpdateServiceTests`) but it is **NOT in the shipped binary** — macOS 2.3.30 (shipped 2026-07-23) predates the check (2026-07-30), so deployed macOS still auto-updates unverified. Closing #22's macOS half needs the **next macOS notarized release** (manual, Developer ID) to carry `73112702`, not more code.
 

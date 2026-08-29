@@ -26,6 +26,10 @@ public final class TrigramCandidateEngine: CandidateEngine {
     /// consistent across platforms.
     public static let bigramWeight: Int = 5
 
+    /// Max edit distance for typo-tolerance top-up. 1 keeps corrections tight
+    /// (a single wrong/missing/extra key). Mirrors the Android `MAX_EDITS`.
+    public static let maxEdits: Int = 1
+
     public init(wordList: LanguageWordList) {
         self.wordList = wordList
     }
@@ -58,7 +62,17 @@ public final class TrigramCandidateEngine: CandidateEngine {
             let bScore = b.freq + bBoost * Self.bigramWeight
             return aScore > bScore
         }
-        return ranked.prefix(limit).map { Candidate(text: $0.word) }
+        let exact = Array(ranked.prefix(limit))
+        if exact.count >= limit { return exact.map { Candidate(text: $0.word) } }
+
+        // Typo tolerance (#207): top up the remaining slots with close dictionary
+        // words so a mistyped word still offers a correction. Only fills empty
+        // slots, so a correctly-typed word's exact matches are never displaced.
+        let have = Set(exact.map { $0.word })
+        let fuzzy = wordList
+            .fuzzyMatches(prefix, maxEdits: Self.maxEdits, limit: limit - exact.count)
+            .filter { !have.contains($0.word) }
+        return (exact + fuzzy).prefix(limit).map { Candidate(text: $0.word) }
     }
 
     private func nextWord(previousTokens: [String], limit: Int) -> [Candidate] {

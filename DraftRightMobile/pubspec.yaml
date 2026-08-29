@@ -1,7 +1,7 @@
 name: draftright_mobile
 description: AI-powered text rewriting keyboard toolbar
 publish_to: 'none'
-version: 2.4.14+75
+version: 2.4.15+77
 
 environment:
   sdk: ^3.0.0
@@ -40,6 +40,7 @@ dependencies:
   app_links: ^6.3.0
   sign_in_with_apple: ^8.1.0
   flutter_stripe: ^12.6.0
+  in_app_purchase: ^3.2.0
 
 dev_dependencies:
   flutter_test:
@@ -48,6 +49,12 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^3.0.0
   flutter_launcher_icons: ^0.14.0
+  # Test-only: AppleIapService's test seam swaps InAppPurchasePlatform.instance
+  # for a fake (in_app_purchase's own upstream-idiomatic test pattern) — both
+  # are transitive deps of in_app_purchase already; declaring them directly
+  # satisfies the depend_on_referenced_packages lint.
+  in_app_purchase_platform_interface: ^1.4.0
+  plugin_platform_interface: ^2.0.0
 
 dependency_overrides:
   # path_provider_foundation 2.5.0/2.6.0 switched its iOS implementation to the

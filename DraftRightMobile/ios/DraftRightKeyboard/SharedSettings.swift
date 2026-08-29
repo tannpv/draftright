@@ -79,4 +79,12 @@ struct SharedSettings {
     var voicePolishEnabled: Bool {
         (defaults?.string(forKey: "draftright.voicePolishEnabled") ?? "true") != "false"
     }
+
+    /// Whether Japanese uses 12-key flick (フリック) input instead of the rōmaji
+    /// QWERTY layout (#212). The Flutter app writes "true"/"false" into the App
+    /// Group; absent defaults to off (rōmaji), matching the Flutter default and
+    /// the Android `SharedSettings.jpFlickEnabled` reader.
+    var jpFlickEnabled: Bool {
+        (defaults?.string(forKey: "draftright.jpFlickEnabled") ?? "false") == "true"
+    }
 }

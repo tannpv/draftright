@@ -22,10 +22,17 @@ public protocol LanguageWordList {
     /// to a co-occurrence count. Empty when `token` is unknown.
     func successors(_ token: String) -> [String: Int]
 
+    /// Dictionary words within `maxEdits` Levenshtein distance of `term`, for
+    /// typo tolerance / autocorrect (#207). Mirror of Android
+    /// `LanguageWordList.fuzzyMatches`. Default empty — an mmap store would need
+    /// its own index rather than scanning 50k rows, so it opts in.
+    func fuzzyMatches(_ term: String, maxEdits: Int, limit: Int) -> [(word: String, freq: Int)]
+
     func close()
 }
 
 public extension LanguageWordList {
+    func fuzzyMatches(_ term: String, maxEdits: Int, limit: Int) -> [(word: String, freq: Int)] { [] }
     func close() {}
 }
 
@@ -66,5 +73,43 @@ public final class InMemoryWordList: LanguageWordList {
 
     public func successors(_ token: String) -> [String: Int] {
         lowerBigrams[token.lowercased()] ?? [:]
+    }
+
+    /// Full scan for words within `maxEdits` of `term`, ranked by (distance asc,
+    /// frequency desc). Cheap for the bootstrap list; the mmap store overrides
+    /// with an index. Compares lowercased so casing isn't counted as an edit.
+    /// Mirrors Android `InMemoryWordList.fuzzyMatches`.
+    public func fuzzyMatches(_ term: String, maxEdits: Int, limit: Int) -> [(word: String, freq: Int)] {
+        if term.isEmpty || limit <= 0 || maxEdits <= 0 { return [] }
+        let a = Array(term.lowercased())
+        var hits: [(word: String, freq: Int, dist: Int)] = []
+        for entry in words {
+            let d = Self.boundedLevenshtein(a, Array(entry.word.lowercased()), max: maxEdits)
+            if d >= 1 && d <= maxEdits { hits.append((entry.word, entry.freq, d)) }
+        }
+        hits.sort { $0.dist != $1.dist ? $0.dist < $1.dist : $0.freq > $1.freq }
+        return hits.prefix(limit).map { ($0.word, $0.freq) }
+    }
+
+    /// Levenshtein distance, short-circuiting to `max`+1 once every cell in a
+    /// row exceeds `max`. Mirrors Android `boundedLevenshtein`.
+    private static func boundedLevenshtein(_ a: [Character], _ b: [Character], max: Int) -> Int {
+        if abs(a.count - b.count) > max { return max + 1 }
+        if a.isEmpty { return b.count }
+        if b.isEmpty { return a.count }
+        var prev = Array(0...b.count)
+        var curr = [Int](repeating: 0, count: b.count + 1)
+        for i in 1...a.count {
+            curr[0] = i
+            var rowMin = curr[0]
+            for j in 1...b.count {
+                let cost = a[i - 1] == b[j - 1] ? 0 : 1
+                curr[j] = Swift.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost)
+                if curr[j] < rowMin { rowMin = curr[j] }
+            }
+            if rowMin > max { return max + 1 }
+            swap(&prev, &curr)
+        }
+        return prev[b.count]
     }
 }

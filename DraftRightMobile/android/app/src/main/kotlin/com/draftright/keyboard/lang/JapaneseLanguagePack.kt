@@ -6,7 +6,7 @@ import com.draftright.keyboard.LanguagePack
 import com.draftright.keyboard.composer.RomajiKanaComposer
 import com.draftright.keyboard.ime.CandidateEngine
 import com.draftright.keyboard.ime.ImeContext
-import com.draftright.keyboard.ime.DictionaryCandidateEngine
+import com.draftright.keyboard.ime.KatakanaCandidateEngine
 import com.draftright.keyboard.ime.DictPackResolver
 import com.draftright.keyboard.ime.JapaneseSeedDictionary
 import java.util.Locale
@@ -30,6 +30,9 @@ object JapaneseLanguagePack : LanguagePack {
 
     /** Rōmaji→kana composer; its kana buffer drives the candidate engine. */
     override fun composer(): Composer = RomajiKanaComposer()
+
+    /** Space converts the kana reading to the top kanji candidate (standard JP IME). */
+    override val convertsOnSpace: Boolean = true
 
     /** Matches the backend manifest's pack URL prefix. */
     private const val PACK_ID_PREFIX = "draftright-ime-ja"
@@ -62,7 +65,7 @@ object JapaneseLanguagePack : LanguagePack {
             } else {
                 JapaneseSeedDictionary.dict
             }
-            val engine = DictionaryCandidateEngine(dict)
+            val engine = KatakanaCandidateEngine(dict)
             cachedEngine = engine
             cachedKey = key
             return engine

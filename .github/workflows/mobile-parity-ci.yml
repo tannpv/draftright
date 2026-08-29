@@ -1,0 +1,76 @@
+name: Mobile parity checks
+
+# Guards the cross-language duplicated facts that RULE #1 can't merge into one
+# source (Kotlin vs Swift). Runs on the self-hosted Contabo runner (free), not
+# GitHub-hosted minutes.
+#
+# SECURITY: push-only, NO pull_request trigger. The runner is self-hosted on a
+# shared box; running a PR's checkout (which could modify the script it runs)
+# on it would be arbitrary code execution on our infra. push to develop/main is
+# maintainer-controlled, so the checked-out script is already-trusted code.
+on:
+  # Manual run only adds a maintainer-triggered dispatch (safe on the self-hosted
+  # runner — no fork-PR code path); the security reason to avoid pull_request
+  # does not apply to workflow_dispatch.
+  workflow_dispatch:
+  push:
+    branches: [develop, main]
+    paths:
+      - 'DraftRightMobile/android/app/src/main/res/raw/wordlist_vi_bigrams.tsv'
+      - 'DraftRightMobile/ios/DraftRightKeyboardCore/Sources/DraftRightKeyboardCore/IME/VietnameseBootstrapWordList.swift'
+      - 'DraftRightMobile/android/app/src/main/kotlin/com/draftright/keyboard/ime/PinyinSyllables.kt'
+      - 'DraftRightMobile/ios/DraftRightKeyboardCore/Sources/DraftRightKeyboardCore/IME/PinyinSyllables.swift'
+      - 'DraftRightMobile/android/app/src/main/kotlin/com/draftright/keyboard/ime/FlickLayout.kt'
+      - 'DraftRightMobile/ios/DraftRightKeyboardCore/Sources/DraftRightKeyboardCore/IME/FlickLayout.swift'
+      - 'DraftRightMobile/android/app/src/main/kotlin/com/draftright/keyboard/ime/KanaModifier.kt'
+      - 'DraftRightMobile/ios/DraftRightKeyboardCore/Sources/DraftRightKeyboardCore/IME/KanaModifier.swift'
+      - 'DraftRightMobile/android/app/src/main/kotlin/com/draftright/keyboard/ime/Katakana.kt'
+      - 'DraftRightMobile/ios/DraftRightKeyboardCore/Sources/DraftRightKeyboardCore/IME/Katakana.swift'
+      - 'scripts/check-vi-bigram-parity.py'
+      - 'scripts/check-pinyin-syllables-parity.py'
+      - 'scripts/check-flick-layout-parity.py'
+      - 'scripts/check-kana-modifier-parity.py'
+      - 'scripts/check-katakana-parity.py'
+      - 'scripts/check-keyfeedback-kind-parity.py'
+      - 'scripts/check-numeric-layout-parity.py'
+      - 'scripts/check-voice-hints-parity.py'
+      - 'DraftRightMobile/android/app/src/main/kotlin/com/draftright/keyboard/voice/VoiceSessionController.kt'
+      - 'DraftRightMobile/ios/DraftRightKeyboardCore/Sources/DraftRightKeyboardCore/Voice/VoiceSessionController.swift'
+      - 'DraftRightMobile/android/app/src/main/kotlin/com/draftright/keyboard/KeyFeedback.kt'
+      - 'DraftRightMobile/ios/DraftRightKeyboardCore/Sources/DraftRightKeyboardCore/KeyFeedbackKind.swift'
+      - 'DraftRightMobile/android/app/src/main/kotlin/com/draftright/keyboard/lang/QwertyLayout.kt'
+      - 'DraftRightMobile/ios/DraftRightKeyboardCore/Sources/DraftRightKeyboardCore/Lang/QwertyLayout.swift'
+      - 'scripts/check-no-objective-c.py'
+      - 'DraftRightMobile/pubspec.lock'
+      - '.github/workflows/mobile-parity-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  vi-bigram-parity:
+    name: VI bigram parity (Android TSV ↔ iOS Swift)
+    runs-on: [self-hosted, linux, x64, draftright]
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Assert the two bigram copies agree
+        run: python3 scripts/check-vi-bigram-parity.py
+      - name: Assert the two pinyin syllable sets agree
+        run: python3 scripts/check-pinyin-syllables-parity.py
+      - name: Assert the two flick kana maps agree
+        run: python3 scripts/check-flick-layout-parity.py
+      - name: Assert the two kana modifier tables agree
+        run: python3 scripts/check-kana-modifier-parity.py
+      - name: Assert the two katakana transliterators agree
+        run: python3 scripts/check-katakana-parity.py
+      - name: Assert the key-feedback kinds agree
+        run: python3 scripts/check-keyfeedback-kind-parity.py
+      - name: Assert the numeric keypad layout agrees
+        run: python3 scripts/check-numeric-layout-parity.py
+      - name: Assert the voice hint strings agree
+        run: python3 scripts/check-voice-hints-parity.py
+      - name: Assert objective_c stays out of the dep graph (#27 bootstrap crash)
+        run: python3 scripts/check-no-objective-c.py

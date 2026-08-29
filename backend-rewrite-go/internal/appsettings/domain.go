@@ -54,6 +54,8 @@ type AppSettings struct {
 	AppleClientID              string
 	AppleTeamID                string
 	AppleKeyID                 string
+	AppleProductMonthly        string
+	AppleProductYearly         string
 	LemonsqueezyAPIKey         string
 	LemonsqueezyStoreID        string
 	LemonsqueezyWebhookSecret  string
@@ -101,6 +103,8 @@ type Patch struct {
 	AppleClientID              *string
 	AppleTeamID                *string
 	AppleKeyID                 *string
+	AppleProductMonthly        *string
+	AppleProductYearly         *string
 	LemonsqueezyAPIKey         *string
 	LemonsqueezyStoreID        *string
 	LemonsqueezyWebhookSecret  *string
@@ -145,6 +149,8 @@ func (s AppSettings) MarshalJSON() ([]byte, error) {
 		AppleClientID              string `json:"apple_client_id"`
 		AppleTeamID                string `json:"apple_team_id"`
 		AppleKeyID                 string `json:"apple_key_id"`
+		AppleProductMonthly        string `json:"apple_product_monthly"`
+		AppleProductYearly         string `json:"apple_product_yearly"`
 		LemonsqueezyAPIKey         string `json:"lemonsqueezy_api_key"`
 		LemonsqueezyStoreID        string `json:"lemonsqueezy_store_id"`
 		LemonsqueezyWebhookSecret  string `json:"lemonsqueezy_webhook_secret"`
@@ -191,6 +197,8 @@ func (s AppSettings) MarshalJSON() ([]byte, error) {
 		AppleClientID:              s.AppleClientID,
 		AppleTeamID:                s.AppleTeamID,
 		AppleKeyID:                 s.AppleKeyID,
+		AppleProductMonthly:        s.AppleProductMonthly,
+		AppleProductYearly:         s.AppleProductYearly,
 		LemonsqueezyAPIKey:         shared.MaskSecret(s.LemonsqueezyAPIKey),
 		LemonsqueezyStoreID:        s.LemonsqueezyStoreID,
 		LemonsqueezyWebhookSecret:  shared.MaskSecret(s.LemonsqueezyWebhookSecret),

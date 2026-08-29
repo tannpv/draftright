@@ -1,8 +1,9 @@
 import Foundation
 
 /// Chinese (中文) pinyin pack — type pinyin on the standard QWERTY;
-/// `PinyinComposer` shows the pinyin live and `DictionaryCandidateEngine` offers
-/// Hanzi candidates. Same shape as Japanese, only the dictionary differs.
+/// `PinyinComposer` shows the pinyin live and `PinyinCandidateEngine` offers Hanzi
+/// candidates (sentence pinyin, initials abbreviation, fuzzy). Same shared
+/// dictionary engine as Japanese underneath, only the dictionary differs.
 /// Mirrors the Kotlin ChineseLanguagePack.
 public struct ChineseLanguagePack: LanguagePack {
     public let id = "zh"
@@ -27,6 +28,9 @@ public struct ChineseLanguagePack: LanguagePack {
 
     public func makeComposer() -> Composer? { PinyinComposer() }
 
+    /// Space converts the pinyin reading to the top hanzi candidate (standard ZH IME).
+    public var convertsOnSpace: Bool { true }
+
     public func makeCandidateEngine() -> CandidateEngine? {
         let key = DictPackResolver.resolvedPackURL(
             appGroupContainer: Self.appGroupContainer,
@@ -38,7 +42,9 @@ public struct ChineseLanguagePack: LanguagePack {
             packIdPrefix: Self.packIdPrefix,
             fallback: { ChinesePinyinSeedDictionary.dict }
         )
-        let engine = DictionaryCandidateEngine(dictionary: dict)
+        // Sentence-level pinyin: PinyinCandidateEngine wraps the shared dictionary
+        // engine and adds segmented multi-syllable candidates (#211).
+        let engine = PinyinCandidateEngine(dictionary: dict)
         Self.cachedEngine = engine
         Self.cachedKey = key
         return engine

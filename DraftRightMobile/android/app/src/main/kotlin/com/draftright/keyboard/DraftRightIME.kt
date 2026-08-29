@@ -20,6 +20,7 @@ import android.widget.TextView
 import android.widget.Toast
 import com.draftright.keyboard.ime.CandidateBarView
 import com.draftright.keyboard.ime.ImeContext
+import com.draftright.keyboard.ime.KanaModifier
 import com.draftright.keyboard.ime.NumericField
 import com.draftright.keyboard.lang.EnglishLanguagePack
 import com.draftright.keyboard.voice.SpeechRecognizerVoiceInput
@@ -34,11 +35,15 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var toolbar: ToolbarView? = null
     private var keyboard: QwertyKeyboardView? = null
-    private var languageStrip: LanguageStripView? = null
+    /** JP flick view, shown instead of [keyboard] when Japanese + flick mode (#212). */
+    private var flickKeyboard: FlickKeyboardView? = null
     private var diffSheet: DiffSheetView? = null
     private var rootLayout: LinearLayout? = null
     private var originalText: String? = null
     private var candidateBar: CandidateBarView? = null
+
+    /** Pending JP/ZH conversion cursor — space cycles candidates (#207). */
+    private val cycle = com.draftright.keyboard.ime.ConversionCycle()
 
     /**
      * Maximum candidates rendered at once. The bar scrolls horizontally so
@@ -113,14 +118,19 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
         }
     }
     private var controller: KeyboardController? = null
+    /** Last-applied flick mode, so [syncControllerWithSettings] rebuilds when the
+     *  toggle flips even though the enabled-language list is unchanged (#212). */
+    private var lastJpFlick: Boolean = false
 
     override fun onCreateInputView(): View {
         settings = SharedSettings(this)
+        lastJpFlick = settings.jpFlickEnabled
 
         controller = KeyboardController(
             registry,
             enabledIds = settings.enabledLanguageIds,
             activeId = settings.activeLanguageId,
+            jpFlick = settings.jpFlickEnabled,
         )
 
         val root = LinearLayout(this).apply {
@@ -160,20 +170,38 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
         toolbar = tb
         root.addView(tb)
 
-        val kb = QwertyKeyboardView(this, this)
-        // Step D: assign languagePack via the setter (triggers second
-        // buildKeyboard()). With EN as the only enabled pack, controller.current
-        // == EnglishLanguagePack which equals kb.languagePack's default, so
-        // this is semantically a no-op — but the setter still fires
-        // buildKeyboard() once more. Goal: rule out the setter / second
-        // buildKeyboard call as the trigger.
-        kb.languagePack = controller!!.current
-        keyboard = kb
-        root.addView(kb)
+        rootLayout = root
+        // Adds the right keyboard view (QWERTY, or the JP flick grid when enabled).
+        installKeyboardView()
 
         applyNavBarBottomInset(root)
-        rootLayout = root
         return root
+    }
+
+    /** True when Japanese is active AND flick mode is on — the only case that
+     *  shows [FlickKeyboardView] instead of [QwertyKeyboardView] (#212). */
+    private fun neededFlick(): Boolean =
+        ::settings.isInitialized && settings.jpFlickEnabled && controller?.current?.id == "ja"
+
+    /**
+     * Install the correct keyboard view into [rootLayout] — the single place that
+     * chooses QWERTY vs flick (Rule #1). Removes whichever is present first, so
+     * it's safe to call on creation, language switch, and settings change.
+     */
+    private fun installKeyboardView() {
+        val root = rootLayout ?: return
+        keyboard?.let { root.removeView(it) }; keyboard = null
+        flickKeyboard?.let { root.removeView(it) }; flickKeyboard = null
+        if (neededFlick()) {
+            val fk = FlickKeyboardView(this, this)
+            flickKeyboard = fk
+            root.addView(fk)
+        } else {
+            val kb = QwertyKeyboardView(this, this)
+            controller?.let { kb.languagePack = it.current }
+            keyboard = kb
+            root.addView(kb)
+        }
     }
 
     // --- Input session lifecycle ---
@@ -184,7 +212,7 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
         // empty composer so a stale Telex buffer from the previous field can
         // never seed this one. `restarting` (same field re-init, e.g. rotation)
         // is left alone to avoid disrupting an in-progress composition.
-        if (!restarting) controller?.composer?.reset()
+        if (!restarting) { controller?.composer?.reset(); cycle.reset() }
     }
 
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
@@ -222,6 +250,7 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
         if (composing.isNotEmpty() && candidatesStart == -1 && candidatesEnd == -1) {
             currentInputConnection?.finishComposingText()
             controller?.composer?.reset()
+            cycle.reset()
             refreshCandidates()
         }
         // The cursor moved (a letter committed, Enter, or a manual tap). Re-read
@@ -251,6 +280,7 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
         // chat box when it opens.
         currentInputConnection?.finishComposingText()
         controller?.composer?.reset()
+        cycle.reset()
         // A live voice session must die with the input session it started in —
         // otherwise the mic keeps listening after the field/app switch (hot
         // mic) and its eventual transcript would commit into whatever field
@@ -284,7 +314,14 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
 
     private fun refreshKeyboardForActiveLanguage() {
         currentInputConnection?.finishComposingText()
-        controller?.let { keyboard?.languagePack = it.current }
+        cycle.reset()
+        // Swap the whole view only when crossing the flick↔QWERTY boundary; other
+        // language switches just retarget the QWERTY pack (keeps the view + state).
+        if (neededFlick() != (flickKeyboard != null)) {
+            installKeyboardView()
+        } else {
+            controller?.let { keyboard?.languagePack = it.current }
+        }
     }
 
     /**
@@ -313,6 +350,9 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
 
     override fun onCharTyped(char: String) {
         val ic = currentInputConnection ?: return
+        // A pending JP/ZH conversion is confirmed by the next input; do it before
+        // anything else so the composer is back in sync for the divergence guard.
+        confirmConversionIfPending(ic)
         val c = controller
         if (c == null || char.length != 1) {
             ic.commitText(char, 1)
@@ -331,6 +371,15 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
 
     override fun onBackspace() {
         val ic = currentInputConnection ?: return
+        // Backspace on a pending JP/ZH conversion cancels it back to the reading
+        // (the composer still holds the kana/pinyin), rather than deleting a char.
+        if (cycle.isActive) {
+            cycle.reset()
+            val reading = controller?.composer?.currentComposingText().orEmpty()
+            if (reading.isNotEmpty()) ic.setComposingText(reading, 1) else ic.finishComposingText()
+            refreshCandidates()
+            return
+        }
         val c = controller
         if (c == null) {
             ic.deleteSurroundingText(1, 0)
@@ -354,8 +403,34 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
         refreshCandidates()
     }
 
+    /**
+     * JP flick 小゛゜ key (#212): cycle the last composing kana through its
+     * dakuten/handakuten/small variant (か→が, は→ば→ぱ, つ→っ→づ). Acts only on the
+     * kana buffer — replace the last kana in the composer, then re-mark the region.
+     * No-op when nothing is composing, when a conversion is already pending, or
+     * when the last kana has no variant (RULE #1: the variant table lives in
+     * [KanaModifier], this method just drives the composer).
+     */
+    override fun onKanaModifier() {
+        val ic = currentInputConnection ?: return
+        if (cycle.isActive) return
+        val composer = controller?.composer ?: return
+        val composing = composer.currentComposingText()
+        if (composing.isEmpty()) return
+        val last = composing.substring(composing.length - 1)
+        val cycled = KanaModifier.cycle(last)
+        if (cycled == last) return
+        composer.onBackspace()
+        composer.onKey(cycled[0])
+        ic.setComposingText(composer.currentComposingText(), 1)
+        refreshCandidates()
+    }
+
     override fun onEnter() {
         val ic = currentInputConnection ?: return
+        // Enter confirms a pending JP/ZH conversion instead of inserting a newline
+        // (standard CJK IME behavior).
+        if (confirmConversionIfPending(ic)) return
         // Commit any pending Telex composition and clear the composer BEFORE the
         // editor action / newline. Otherwise the buffer (e.g. "tấn") survives the
         // send and the next keystroke composes on top of it → "tấng" (#71).
@@ -386,6 +461,13 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
             refreshCandidates()
             return
         }
+        // Standard JP/ZH IME: with a reading in progress, space converts it to the
+        // top candidate (kana→kanji, pinyin→hanzi) rather than committing the raw
+        // reading + a space. commitText replaces the marked composing region, so
+        // the kanji/hanzi takes the reading's place; no trailing space (CJK text
+        // has none). With no reading (empty buffer) space falls through to normal.
+        if (c.current.convertsOnSpace && convertReadingOnSpace(ic)) return
+
         dropStaleComposerIfFieldDiverged(ic)
         when (val outcome = c.onKey(' ')) {
             is KeystrokeOutcome.Commit -> ic.commitText(outcome.text, 1)
@@ -653,12 +735,59 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
      * starts fresh, append a trailing space (matches Samsung/Gboard UX), and
      * clear the bar so we don't show stale suggestions.
      */
+    /**
+     * JP/ZH space-to-convert: commit the top candidate for the current reading
+     * (kana→kanji, pinyin→hanzi). Returns true when it consumed the space (a
+     * reading was converted), false when there was nothing to convert (empty
+     * buffer or no candidate) so the caller falls back to a normal space.
+     */
+    private fun convertReadingOnSpace(ic: android.view.inputmethod.InputConnection): Boolean {
+        val c = controller ?: return false
+        // Already converting → each further space cycles to the next candidate,
+        // shown as marked (pending) text. The composer still holds the reading,
+        // so backspace can revert and a confirm finalizes whatever's selected.
+        if (cycle.isActive) {
+            val next = cycle.advance() ?: return false
+            ic.setComposingText(next, 1)
+            return true
+        }
+        val composing = c.composer?.currentComposingText().orEmpty()
+        if (composing.isEmpty()) return false
+        val cands = c.current.candidateEngine()
+            ?.suggest(composing, previousTokens = emptyList(), limit = candidateLimit)
+            ?.map { it.text }
+            .orEmpty()
+        if (cands.isEmpty()) return false
+        cycle.start(cands)
+        val top = cycle.current() ?: return false
+        // Show the top candidate as MARKED text (not committed) so the next space
+        // can still cycle. finishComposingText on the next input confirms it.
+        ic.setComposingText(top, 1)
+        return true
+    }
+
+    /**
+     * If a JP/ZH conversion is pending, finalize the currently-selected candidate
+     * (the marked text) and clear the pending state. Returns true if it confirmed.
+     * Called at the top of the other input paths BEFORE the field-divergence
+     * guard, so the composer is reset back in sync before that guard runs.
+     */
+    private fun confirmConversionIfPending(ic: android.view.inputmethod.InputConnection): Boolean {
+        if (!cycle.isActive) return false
+        ic.finishComposingText()
+        controller?.composer?.reset()
+        cycle.reset()
+        candidateBar?.setCandidates(emptyList())
+        return true
+    }
+
     private fun handleCandidatePicked(candidate: com.draftright.keyboard.ime.Candidate) {
         val ic = currentInputConnection ?: return
         // commitText REPLACES the active composing region (the highlighted kana),
         // so the kanji takes its place. Do NOT finishComposingText first — that
         // would finalize the kana and make this append (e.g. "わたし私").
         controller?.composer?.reset()
+        cycle.reset()
         ic.commitText(candidate.text + " ", 1)
         candidateBar?.setCandidates(emptyList())
     }
@@ -669,14 +798,19 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
         if (!::settings.isInitialized) return
         val c = controller ?: return
         val desired = settings.enabledLanguageIds
-        if (desired == c.enabled.map { it.id }) return
+        val flick = settings.jpFlickEnabled
+        // Rebuild on a language-list change OR a flick-mode toggle (the langs can
+        // be identical when only the flick switch flipped, so check both).
+        if (desired == c.enabled.map { it.id } && flick == lastJpFlick) return
+        lastJpFlick = flick
         val active = settings.activeLanguageId
             .takeIf { it in desired }
             ?: c.current.id.takeIf { it in desired }
             ?: desired.firstOrNull()
             ?: "en"
-        controller = KeyboardController(registry, enabledIds = desired, activeId = active)
-        keyboard?.languagePack = controller!!.current
+        controller = KeyboardController(registry, enabledIds = desired, activeId = active, jpFlick = flick)
+        if (neededFlick() != (flickKeyboard != null)) installKeyboardView()
+        else keyboard?.languagePack = controller!!.current
     }
 
     private fun applyNavBarBottomInset(root: View) {

@@ -29,6 +29,15 @@ interface LanguagePack {
     /** BCP-47 tag for on-device speech recognition; null = voice input unavailable for this pack. */
     val sttLocale: String? get() = null
 
+    /**
+     * Whether pressing space converts the live composing *reading* to the top
+     * candidate instead of committing the reading + a space (#207 Phase 2). True
+     * for reading-conversion input (Japanese kana→kanji, Chinese pinyin→hanzi),
+     * the standard JP/ZH IME behavior. False for direct/prediction input
+     * (Latin, Telex, Hangul), where space is a literal space.
+     */
+    val convertsOnSpace: Boolean get() = false
+
     /** Default: no composition (Latin packs type directly). JP/VI override. */
     fun composer(): Composer = PassthroughComposer()
 

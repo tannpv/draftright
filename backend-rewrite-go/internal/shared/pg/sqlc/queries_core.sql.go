@@ -45,7 +45,9 @@ SELECT stripe_secret_key,
        paypal_mode,
        paypal_webhook_id,
        paypal_plan_monthly,
-       paypal_plan_yearly
+       paypal_plan_yearly,
+       apple_product_monthly,
+       apple_product_yearly
 FROM app_settings
 LIMIT 1
 `
@@ -69,6 +71,8 @@ type GetPaymentCredentialsRow struct {
 	PaypalWebhookID            string `db:"paypal_webhook_id" json:"paypal_webhook_id"`
 	PaypalPlanMonthly          string `db:"paypal_plan_monthly" json:"paypal_plan_monthly"`
 	PaypalPlanYearly           string `db:"paypal_plan_yearly" json:"paypal_plan_yearly"`
+	AppleProductMonthly        string `db:"apple_product_monthly" json:"apple_product_monthly"`
+	AppleProductYearly         string `db:"apple_product_yearly" json:"apple_product_yearly"`
 }
 
 // Checkout-time provider credentials from the singleton app_settings row.
@@ -96,6 +100,8 @@ func (q *Queries) GetPaymentCredentials(ctx context.Context) (GetPaymentCredenti
 		&i.PaypalWebhookID,
 		&i.PaypalPlanMonthly,
 		&i.PaypalPlanYearly,
+		&i.AppleProductMonthly,
+		&i.AppleProductYearly,
 	)
 	return i, err
 }

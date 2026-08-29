@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -36,6 +38,12 @@ func (r WebhookResult) MarshalJSON() ([]byte, error) {
 // HandleWebhook verifies a provider webhook then dispatches the resulting action
 // to the subscription writer / payment repo / emailer. Ports
 // PaymentService.handleWebhook + completePayment + activateSubscription.
+// Gated on the storefront's EnabledMethods — the checkout-facing providers
+// (Stripe, VietQR, ...) only fire notifications for methods a customer could
+// actually have checked out with. Apple IAP is redemption-only and deliberately
+// absent from that list; its notifications go through the ungated
+// HandleProviderNotification below, which shares everything past strategy
+// resolution with this method (verifyWebhookAction + applyWebhookAction).
 func (s *Service) HandleWebhook(ctx context.Context, method string, payload []byte, headers http.Header) (WebhookResult, error) {
 	enabled, err := s.EnabledMethods(ctx)
 	if err != nil {
@@ -44,19 +52,68 @@ func (s *Service) HandleWebhook(ctx context.Context, method string, payload []by
 	if !contains(enabled, method) {
 		return WebhookResult{}, notFound("Payment method '" + method + "' is not enabled.")
 	}
+	strat, err := s.resolveStrategy(method)
+	if err != nil {
+		return WebhookResult{}, err
+	}
+	action, err := verifyWebhookAction(ctx, strat, payload, headers)
+	if err != nil {
+		return WebhookResult{}, err
+	}
+	return s.applyWebhookAction(ctx, method, action)
+}
+
+// HandleProviderNotification runs a provider webhook WITHOUT the storefront
+// EnabledMethods gate — for webhook-only methods (Apple IAP) that are never
+// offered for checkout (absent from registeredMethods) but still receive
+// server-to-server notifications. It resolves the strategy directly from the
+// registry; everything after (signature verification + action dispatch) is
+// the SAME code HandleWebhook runs, via verifyWebhookAction + applyWebhookAction
+// — one grant/revoke implementation, no gate-path fork (Rule #1).
+func (s *Service) HandleProviderNotification(ctx context.Context, method string, payload []byte, headers http.Header) (WebhookResult, error) {
+	strat, err := s.resolveStrategy(method)
+	if err != nil {
+		return WebhookResult{}, err
+	}
+	action, err := verifyWebhookAction(ctx, strat, payload, headers)
+	if err != nil {
+		return WebhookResult{}, err
+	}
+	return s.applyWebhookAction(ctx, method, action)
+}
+
+// resolveStrategy looks up a provider strategy by method key, converting a
+// registry miss into the same *DomainError HandleWebhook has always returned
+// for an unsupported method. Shared by both entry points above.
+func (s *Service) resolveStrategy(method string) (strategy.Strategy, error) {
 	strat, ok := s.strategies[method]
 	if !ok {
-		return WebhookResult{}, badRequest("Unsupported payment method: " + method)
+		return nil, badRequest("Unsupported payment method: " + method)
 	}
+	return strat, nil
+}
+
+// verifyWebhookAction runs a strategy's VerifyWebhook and converts a
+// *strategy.WebhookError into the Service's *DomainError. Shared by
+// HandleWebhook and HandleProviderNotification so the conversion has one
+// source of truth.
+func verifyWebhookAction(ctx context.Context, strat strategy.Strategy, payload []byte, headers http.Header) (strategy.WebhookAction, error) {
 	action, err := strat.VerifyWebhook(ctx, payload, headers)
 	if err != nil {
 		var we *strategy.WebhookError
 		if errors.As(err, &we) {
-			return WebhookResult{}, &DomainError{Status: we.Status, Message: we.Message}
+			return strategy.WebhookAction{}, &DomainError{Status: we.Status, Message: we.Message}
 		}
-		return WebhookResult{}, err
+		return strategy.WebhookAction{}, err
 	}
+	return action, nil
+}
 
+// applyWebhookAction dispatches a verified webhook action to the
+// subscription writer / payment repo / emailer. Extracted so both
+// HandleWebhook (enabled-gated) and HandleProviderNotification (ungated,
+// webhook-only methods) share exactly one grant/extend/revoke implementation.
+func (s *Service) applyWebhookAction(ctx context.Context, method string, action strategy.WebhookAction) (WebhookResult, error) {
 	switch action.Type {
 	case strategy.ActionPaymentCompleted:
 		if action.StripeCustomerID != "" {
@@ -198,12 +255,52 @@ func (s *Service) HandleWebhook(ctx context.Context, method string, payload []by
 		_, _ = s.subsWriter.ExpireByStoreRef(ctx, string(StorePayPal), action.PayPalSubscriptionID)
 		return WebhookResult{Success: true}, nil
 
+	case strategy.ActionAppleSubscribed, strategy.ActionAppleRenewed:
+		// Extend the sub matched by the ORIGINAL transaction id (stamped by
+		// RedeemAppleTransaction on first purchase). apple_subscribed can also
+		// arrive as a re-confirmation of an already-redeemed purchase, so it
+		// takes the same extend path — never a second grant. Renewals must
+		// NOT re-send the activation email (that already happened at redeem).
+		exp := time.Unix(action.CurrentPeriodEnd, 0).UTC()
+		n, err := s.subsWriter.ExtendByStoreRef(ctx, string(StoreAppleIAP), action.AppleOriginalTransactionID, exp)
+		if err != nil {
+			return WebhookResult{}, err
+		}
+		if n == 0 {
+			// No matching row → the first /redeem POST never landed (lost
+			// request). We cannot grant from here in Spec 1: the notification
+			// carries no user identity (user↔transaction linkage via StoreKit
+			// appAccountToken arrives with the CLIENT spec). Recovery is a
+			// client retry of /redeem. Log for observability; do not error the
+			// webhook — Apple would just retry forever.
+			s.logUnmatchedAppleNotification(action.AppleOriginalTransactionID)
+		}
+		return WebhookResult{Success: true}, nil
+
+	case strategy.ActionAppleExpired, strategy.ActionAppleRefunded:
+		if _, err := s.subsWriter.ExpireByStoreRef(ctx, string(StoreAppleIAP), action.AppleOriginalTransactionID); err != nil {
+			return WebhookResult{}, err
+		}
+		return WebhookResult{Success: true}, nil
+
 	case strategy.ActionDisputeCreated:
 		return WebhookResult{Success: true}, nil
 
 	default: // ActionIgnored
 		return WebhookResult{Success: false}, nil
 	}
+}
+
+// logUnmatchedAppleNotification records an App Store Server Notification
+// (renew/subscribed) that matched no subscription row by original transaction
+// id. The Service has no injected logger seam (unlike AdminService), so this
+// goes through slog.Default() — a one-line structured warning, never an error
+// (see the ActionAppleSubscribed/Renewed case for why the webhook must not fail).
+func (s *Service) logUnmatchedAppleNotification(originalTransactionID string) {
+	slog.Default().Warn("apple webhook notification matched no subscription",
+		"store_type", string(StoreAppleIAP),
+		"original_transaction_id", originalTransactionID,
+	)
 }
 
 // completePayment flips a pending payment to completed/failed by reference and,
@@ -286,6 +383,34 @@ func (s *Service) resolvePlanIDFromLSVariant(ctx context.Context, variantID, cur
 	}
 	id, _ := s.webhookRepo.FindFirstActivePlanID(ctx, billing, currency)
 	return id
+}
+
+// resolvePlanIDFromAppleProduct maps an App Store product id to the active
+// plan id for its billing period — the single source of truth for App Store
+// product→plan (RULE #1), mirroring resolvePlanIDFromLSVariant. Unlike the LS
+// resolver (which only re-confirms an already-pending payment, so it degrades
+// to "" on any mismatch), this is the FIRST resolution for an IAP redemption:
+// an unconfigured or unmatched product id is an error, never a silently
+// granted plan.
+func (s *Service) resolvePlanIDFromAppleProduct(ctx context.Context, productID string) (string, string, error) {
+	monthly, yearly, err := s.variants.AppleProducts(ctx)
+	if err != nil {
+		return "", "", err
+	}
+	var billing string
+	switch {
+	case productID == monthly && monthly != "":
+		billing = "monthly"
+	case productID == yearly && yearly != "":
+		billing = "yearly"
+	default:
+		return "", "", fmt.Errorf("apple product %q maps to no plan", productID)
+	}
+	planID, err := s.webhookRepo.FindFirstActivePlanID(ctx, billing, DefaultCurrency)
+	if err != nil {
+		return "", "", err
+	}
+	return planID, billing, nil
 }
 
 // result builds a WebhookResult that always carries the reference code (the

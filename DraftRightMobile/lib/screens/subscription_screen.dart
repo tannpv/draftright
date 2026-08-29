@@ -3,13 +3,20 @@ import 'package:provider/provider.dart';
 import 'package:draftright_mobile/services/auth_service.dart';
 import 'package:draftright_mobile/services/backend_client.dart';
 import 'package:draftright_mobile/services/payment_service.dart';
+import 'package:draftright_mobile/services/payment/apple_iap_service.dart';
+import 'package:draftright_mobile/services/payment/apple_products.dart';
 import 'package:draftright_mobile/services/payment/billing_period.dart';
 import 'package:draftright_mobile/services/payment/payment_method.dart';
 import 'package:draftright_mobile/services/settings_service.dart';
 import 'package:draftright_mobile/widgets/billing_period_selector.dart';
 
 class SubscriptionScreen extends StatefulWidget {
-  const SubscriptionScreen({super.key});
+  /// [backend] / [iapService] are test-only injection points — production
+  /// callers never pass them, so `initState` builds the real instances.
+  const SubscriptionScreen({super.key, this.backend, this.iapService});
+
+  final BackendClient? backend;
+  final AppleIapService? iapService;
 
   @override
   State<SubscriptionScreen> createState() => _SubscriptionScreenState();
@@ -22,6 +29,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
   // and owns the handler map.
   late final BackendClient _backend;
   late final PaymentService _payments;
+  late final AppleIapService _iap;
 
   SubscriptionInfo? _info;
   bool _isLoading = true;
@@ -52,16 +60,22 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
   // checkout for the matching plan id.
   BillingPeriod _billingPeriod = BillingPeriod.monthly;
 
+  // True while a StoreKit buy/restore call is in flight. Disables the
+  // buy/restore buttons so a double-tap doesn't fire two StoreKit
+  // requests.
+  bool _iapBusy = false;
+
   @override
   void initState() {
     super.initState();
-    final auth = context.read<AuthService>();
-    final settings = context.read<SettingsService>();
-    _backend = BackendClient(
-      auth: auth,
-      getBaseUrl: () => settings.backendUrl,
-    );
+    _backend = widget.backend ??
+        BackendClient(
+          auth: context.read<AuthService>(),
+          getBaseUrl: () => context.read<SettingsService>().backendUrl,
+        );
     _payments = PaymentService(_backend);
+    _iap = widget.iapService ??
+        AppleIapService(_backend, onEntitlementChanged: _load);
 
     // Refresh subscription on app resume — covers the
     // external-browser return path:
@@ -77,6 +91,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _iap.dispose();
     super.dispose();
   }
 
@@ -88,6 +103,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
   }
 
   Future<void> _load() async {
+    if (!mounted) return;
     setState(() {
       _isLoading = true;
       _error = null;
@@ -168,13 +184,8 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
       default: statusLabel = info.status;
     }
 
-    String billingLabel;
-    switch (info.billingPeriod) {
-      case 'none': billingLabel = 'Free'; break;
-      case 'monthly': billingLabel = 'Monthly'; break;
-      case 'yearly': billingLabel = 'Yearly'; break;
-      default: billingLabel = info.billingPeriod;
-    }
+    final bp = BillingPeriod.fromWire(info.billingPeriod);
+    final String billingLabel = bp?.displayName ?? (info.isFree ? 'Free' : info.billingPeriod);
 
     return ListView(
       padding: const EdgeInsets.all(24),
@@ -248,20 +259,29 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
             ),
             const SizedBox(height: 16),
             ..._buildPaymentMethodTiles(),
-          ] else ...[
-            // iOS: App Store Guideline 3.1.1 bans in-app external-payment
-            // checkout for digital subscriptions (no billing selector, no
-            // payment tiles, no buy button/link). Status-only — Pro is
-            // purchased on the web and synced here.
+          ] else if (PaymentService.appleIapAllowed) ...[
+            // iOS: App Store Guideline 3.1.1 requires digital subscriptions
+            // to be purchasable in-app via StoreKit — buy through
+            // AppleIapService, not an external checkout tile.
             Text(
-              'DraftRight Pro',
+              'Upgrade to Pro',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            Text(
-              'Manage your DraftRight plan from your account on the web. '
-              'Your Pro status syncs here automatically.',
-              style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+            BillingPeriodSelector(
+              value: _billingPeriod,
+              onChanged: (p) => setState(() => _billingPeriod = p),
+            ),
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: _iapBusy ? null : _onIapBuy,
+              style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+              child: Text(_iapBusy ? 'Processing…' : 'Upgrade to Pro (${_billingPeriod.displayName})'),
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: _iapBusy ? null : _onIapRestore,
+              child: const Text('Restore Purchases'),
             ),
           ],
         ] else ...[
@@ -343,6 +363,52 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
               onTap: () => _onMethodTap(kind),
             ))
         .toList();
+  }
+
+  /// Buys the product for the selected [_billingPeriod] via StoreKit.
+  /// Completion + the entitlement refresh happen out-of-band through
+  /// `AppleIapService`'s `onEntitlementChanged` callback (wired to
+  /// `_load` in `initState`) once the purchase redeems with the
+  /// backend — this only drives the StoreKit sheet.
+  Future<void> _onIapBuy() async {
+    final id = AppleProducts.idFor(_billingPeriod);
+    if (id == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Purchase failed. Please try again.')),
+        );
+      }
+      return;
+    }
+    setState(() => _iapBusy = true);
+    try {
+      await _iap.buy(id);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Purchase failed. Please try again.')),
+      );
+    } finally {
+      if (mounted) setState(() => _iapBusy = false);
+    }
+  }
+
+  /// Restores previously-purchased StoreKit transactions — required by
+  /// Apple for non-consumable/subscription IAP. Same completion path
+  /// as [_onIapBuy]: `onEntitlementChanged` refreshes the screen once
+  /// the restored transaction redeems with the backend.
+  Future<void> _onIapRestore() async {
+    setState(() => _iapBusy = true);
+    try {
+      await _iap.restore();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Restore failed. Please try again.')),
+      );
+    } finally {
+      if (mounted) setState(() => _iapBusy = false);
+    }
   }
 
   Future<void> _onManageTap() async {
@@ -540,6 +606,7 @@ class _PaymentMethodTile extends StatelessWidget {
       case PaymentMethodKind.vietqr:       return Icons.qr_code_2;
       case PaymentMethodKind.bankTransfer: return Icons.account_balance;
       case PaymentMethodKind.applePay:     return Icons.apple;
+      case PaymentMethodKind.appleIap:     return Icons.shopping_bag;
       case PaymentMethodKind.googlePay:    return Icons.g_mobiledata;
     }
   }
