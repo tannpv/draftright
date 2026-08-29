@@ -11,6 +11,13 @@ void main() {
       expect(PaymentMethodKind.paypal.wireName,       'paypal');
     });
 
+    test('appleIap round-trips its wire name', () {
+      expect(PaymentMethodKind.appleIap.wireName, 'apple_iap');
+      expect(PaymentMethodKind.fromWire('apple_iap'), PaymentMethodKind.appleIap);
+      // apple_pay stays distinct.
+      expect(PaymentMethodKind.applePay.wireName, 'apple_pay');
+    });
+
     test('fromWire round-trips every known value', () {
       for (final k in PaymentMethodKind.values) {
         expect(PaymentMethodKind.fromWire(k.wireName), k);

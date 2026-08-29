@@ -207,6 +207,7 @@ class PaymentService {
       case PaymentMethodKind.stripe:
       case PaymentMethodKind.paypal:
       case PaymentMethodKind.applePay:
+      case PaymentMethodKind.appleIap:
       case PaymentMethodKind.googlePay:
         return 'USD';
     }
