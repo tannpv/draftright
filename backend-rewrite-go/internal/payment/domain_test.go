@@ -21,6 +21,16 @@ func TestStoreTypeForMethod(t *testing.T) {
 	}
 }
 
+func TestStoreTypeForMethod_AppleIAP(t *testing.T) {
+	if got := StoreTypeForMethod(MethodAppleIAP); got != StoreAppleIAP {
+		t.Fatalf("StoreTypeForMethod(apple_iap) = %q, want %q", got, StoreAppleIAP)
+	}
+	// apple_pay stays Stripe-backed — must not be conflated with apple_iap.
+	if got := StoreTypeForMethod(MethodApplePay); got != StoreStripe {
+		t.Fatalf("StoreTypeForMethod(apple_pay) = %q, want %q", got, StoreStripe)
+	}
+}
+
 func TestEnumWireValues(t *testing.T) {
 	pairs := []struct{ got, want string }{
 		{string(MethodStripe), "stripe"},

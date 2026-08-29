@@ -82,6 +82,8 @@ func StoreTypeForMethod(m PaymentMethod) StoreType {
 		return StoreBankTransfer
 	case MethodPayPal:
 		return StorePayPal
+	case MethodAppleIAP:
+		return StoreAppleIAP
 	case MethodApplePay, MethodGooglePay:
 		return StoreStripe
 	case MethodMoMo:
