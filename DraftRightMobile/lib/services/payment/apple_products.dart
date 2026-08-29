@@ -10,17 +10,17 @@ class AppleProducts {
   static const String yearly = 'com.draftright.pro.yearly';
   static const Set<String> ids = {monthly, yearly};
 
-  /// Maps a product id to its billing cadence as the typed [BillingPeriod]
-  /// enum — never a raw `'monthly'`/`'yearly'` string, so the cadence has one
-  /// source of truth (the enum) across purchase, display, and plan-resolution.
-  static BillingPeriod? billingFor(String productId) {
-    switch (productId) {
-      case monthly:
-        return BillingPeriod.monthly;
-      case yearly:
-        return BillingPeriod.yearly;
-      default:
-        return null;
+  /// Maps a billing cadence to its App Store product id — the direction
+  /// production callers actually need (period the user picked -> id to buy).
+  /// Explicit per-value mapping, never a ternary/silent fallthrough at the
+  /// call site: an unhandled [BillingPeriod] returns `null` rather than
+  /// quietly buying the wrong plan.
+  static String? idFor(BillingPeriod period) {
+    switch (period) {
+      case BillingPeriod.monthly:
+        return monthly;
+      case BillingPeriod.yearly:
+        return yearly;
     }
   }
 }

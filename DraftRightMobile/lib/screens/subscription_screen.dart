@@ -103,6 +103,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
   }
 
   Future<void> _load() async {
+    if (!mounted) return;
     setState(() {
       _isLoading = true;
       _error = null;
@@ -370,11 +371,17 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
   /// `_load` in `initState`) once the purchase redeems with the
   /// backend — this only drives the StoreKit sheet.
   Future<void> _onIapBuy() async {
+    final id = AppleProducts.idFor(_billingPeriod);
+    if (id == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Purchase failed. Please try again.')),
+        );
+      }
+      return;
+    }
     setState(() => _iapBusy = true);
     try {
-      final id = _billingPeriod == BillingPeriod.yearly
-          ? AppleProducts.yearly
-          : AppleProducts.monthly;
       await _iap.buy(id);
     } catch (e) {
       if (!mounted) return;
