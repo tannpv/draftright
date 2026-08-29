@@ -143,9 +143,9 @@ func TestAppleWebhookActionFields(t *testing.T) {
 		AppleTransactionID:         "t1",
 		AppleOriginalTransactionID: "o1",
 		AppleProductID:             "p1",
-		ExpiresAtUnix:              123,
+		CurrentPeriodEnd:           123, // reused existing field, not a new one
 	}
-	if a.Type != ActionAppleRenewed || a.AppleOriginalTransactionID != "o1" || a.ExpiresAtUnix != 123 {
+	if a.Type != ActionAppleRenewed || a.AppleOriginalTransactionID != "o1" || a.CurrentPeriodEnd != 123 {
 		t.Fatal("apple webhook action fields not wired")
 	}
 	if ErrNotCheckoutMethod == nil {
@@ -161,13 +161,13 @@ Expected: FAIL — undefined `ActionAppleRenewed`, `AppleOriginalTransactionID`,
 
 - [ ] **Step 3: Add the types**
 
-In `strategy.go`, add to the `WebhookAction` struct:
+In `strategy.go`, add to the `WebhookAction` struct (the expiry reuses the
+existing `CurrentPeriodEnd int64` already on the struct — do not add a new one):
 ```go
-	// Apple App Store (IAP). ExpiresAtUnix is the renewal/expiry instant in unix seconds.
+	// Apple App Store (IAP). Expiry uses the existing CurrentPeriodEnd field.
 	AppleTransactionID         string
 	AppleOriginalTransactionID string
 	AppleProductID             string
-	ExpiresAtUnix              int64
 ```
 Add to the action-const block:
 ```go
@@ -176,6 +176,7 @@ Add to the action-const block:
 	ActionAppleExpired    = "apple_expired"
 	ActionAppleRefunded   = "apple_refunded"
 ```
+**Reuse `CurrentPeriodEnd`, do not add a new expiry field** (review m3): `WebhookAction.CurrentPeriodEnd int64` (strategy.go:123) already means "period end, unix seconds" and is used by Stripe/LS/PayPal. The Apple path uses it too — do **not** add `ExpiresAtUnix`.
 At package scope (add `"errors"` to imports if absent):
 ```go
 // ErrNotCheckoutMethod is returned by CreateCheckout for redemption-style
@@ -349,37 +350,38 @@ func NewVerifier(roots *x509.CertPool, bundleID, environment string) *Verifier {
 
 func sha256Sum(b []byte) [32]byte { return sha256.Sum256(b) }
 
-// Verify checks the x5c chain to the configured root, the ES256 signature, and
-// the bundleId/environment claims, returning the decoded payload.
-func (v *Verifier) Verify(jws string) (JWSPayload, error) {
+// verifySignature checks the x5c chain to the configured root + the ES256
+// signature, and returns the RAW decoded payload bytes. It does NOT check any
+// claims — the outer ASSN V2 envelope has no top-level bundleId/environment, so
+// claim checks belong only to the inner transaction JWS (see Verify).
+func (v *Verifier) verifySignature(jws string) ([]byte, error) {
 	parts := strings.Split(jws, ".")
 	if len(parts) != 3 {
-		return JWSPayload{}, errors.New("jws: want 3 segments")
+		return nil, errors.New("jws: want 3 segments")
 	}
 	hdrBytes, err := base64.RawURLEncoding.DecodeString(parts[0])
 	if err != nil {
-		return JWSPayload{}, fmt.Errorf("jws header: %w", err)
+		return nil, fmt.Errorf("jws header: %w", err)
 	}
 	var hdr struct {
 		Alg string   `json:"alg"`
 		X5c []string `json:"x5c"`
 	}
 	if err := json.Unmarshal(hdrBytes, &hdr); err != nil {
-		return JWSPayload{}, fmt.Errorf("jws header json: %w", err)
+		return nil, fmt.Errorf("jws header json: %w", err)
 	}
 	if hdr.Alg != "ES256" || len(hdr.X5c) == 0 {
-		return JWSPayload{}, errors.New("jws: expect ES256 with x5c")
+		return nil, errors.New("jws: expect ES256 with x5c")
 	}
-	// Parse the chain (leaf first).
 	var chain []*x509.Certificate
 	for _, b64 := range hdr.X5c {
-		der, err := base64.StdEncoding.DecodeString(b64)
+		der, err := base64.StdEncoding.DecodeString(b64) // x5c is standard base64 (RFC 7515)
 		if err != nil {
-			return JWSPayload{}, fmt.Errorf("x5c decode: %w", err)
+			return nil, fmt.Errorf("x5c decode: %w", err)
 		}
 		crt, err := x509.ParseCertificate(der)
 		if err != nil {
-			return JWSPayload{}, fmt.Errorf("x5c parse: %w", err)
+			return nil, fmt.Errorf("x5c parse: %w", err)
 		}
 		chain = append(chain, crt)
 	}
@@ -388,28 +390,45 @@ func (v *Verifier) Verify(jws string) (JWSPayload, error) {
 	for _, c := range chain[1:] {
 		inter.AddCert(c)
 	}
-	if _, err := leaf.Verify(x509.VerifyOptions{Roots: v.roots, Intermediates: inter}); err != nil {
-		return JWSPayload{}, fmt.Errorf("x5c chain: %w", err)
+	// KeyUsages: ExtKeyUsageAny — Apple's StoreKit leaf is NOT a TLS server-auth
+	// cert (it carries Apple's OID 1.2.840.113635.100.6.11.1). Leaving KeyUsages
+	// empty defaults to ServerAuth and REJECTS the real Apple chain (review M1).
+	// Validity dates are still checked by x509.Verify. OCSP/revocation and the
+	// Apple leaf OID are intentionally NOT checked — chain-to-Apple-root is the gate.
+	if _, err := leaf.Verify(x509.VerifyOptions{
+		Roots:         v.roots,
+		Intermediates: inter,
+		KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageAny},
+	}); err != nil {
+		return nil, fmt.Errorf("x5c chain: %w", err)
 	}
 	pub, ok := leaf.PublicKey.(*ecdsa.PublicKey)
 	if !ok {
-		return JWSPayload{}, errors.New("leaf key not ecdsa")
+		return nil, errors.New("leaf key not ecdsa")
 	}
-	// Verify ES256 signature over "header.payload".
 	sig, err := base64.RawURLEncoding.DecodeString(parts[2])
 	if err != nil || len(sig) != 64 {
-		return JWSPayload{}, errors.New("jws signature format")
+		return nil, errors.New("jws signature format")
 	}
 	sum := sha256Sum([]byte(parts[0] + "." + parts[1]))
 	r := new(big.Int).SetBytes(sig[:32])
 	s := new(big.Int).SetBytes(sig[32:])
 	if !ecdsa.Verify(pub, sum[:], r, s) {
-		return JWSPayload{}, errors.New("jws signature invalid")
+		return nil, errors.New("jws signature invalid")
 	}
-	// Decode + check claims.
 	payBytes, err := base64.RawURLEncoding.DecodeString(parts[1])
 	if err != nil {
-		return JWSPayload{}, fmt.Errorf("jws payload: %w", err)
+		return nil, fmt.Errorf("jws payload: %w", err)
+	}
+	return payBytes, nil
+}
+
+// Verify checks signature AND the bundleId/environment claims — use for the
+// inner transaction JWS. Returns the decoded transaction payload.
+func (v *Verifier) Verify(jws string) (JWSPayload, error) {
+	payBytes, err := v.verifySignature(jws)
+	if err != nil {
+		return JWSPayload{}, err
 	}
 	var p JWSPayload
 	if err := json.Unmarshal(payBytes, &p); err != nil {
@@ -423,7 +442,26 @@ func (v *Verifier) Verify(jws string) (JWSPayload, error) {
 	}
 	return p, nil
 }
+
+// VerifyEnvelope checks the signature of an ASSN V2 outer JWS (no claim checks)
+// and returns its raw payload for the notification envelope decode.
+func (v *Verifier) VerifyEnvelope(jws string) ([]byte, error) {
+	return v.verifySignature(jws)
+}
 ```
+Add a fourth test to `verify_test.go` for `ExtKeyUsageAny` being tolerated (a leaf with a non-serverAuth EKU still verifies) so M1 can't regress:
+```go
+func TestVerify_NonServerAuthLeaf(t *testing.T) {
+	// A leaf with an unrelated EKU must still verify (Apple's leaf isn't serverAuth).
+	key, der, pool := selfSignedWithEKU(t, x509.ExtKeyUsageCodeSigning)
+	v := NewVerifier(pool, "com.draftright.app", "Sandbox")
+	jws := makeJWS(t, key, der, JWSPayload{BundleID: "com.draftright.app", Environment: "Sandbox"})
+	if _, err := v.Verify(jws); err != nil {
+		t.Fatalf("non-serverAuth leaf rejected: %v", err)
+	}
+}
+```
+(`selfSignedWithEKU` mirrors `selfSigned` but sets `tmpl.ExtKeyUsage = []x509.ExtKeyUsage{eku}` and `IsCA:false` with a separate CA — or reuse the self-signed CA and set the EKU on it.)
 
 - [ ] **Step 4: Run — verify pass**
 
@@ -549,30 +587,35 @@ func (s *Strategy) VerifyWebhook(ctx context.Context, payload []byte, headers ht
 	return s.VerifyNotification(body.SignedPayload)
 }
 
-// VerifyNotification verifies the ASSN V2 signed payload and its inner
-// transaction, returning the mapped action. Exported for direct-notification
-// tests and reuse.
+// VerifyNotification verifies an ASSN V2 signed payload and its inner
+// transaction, returning the mapped action.
+//
+// The OUTER envelope is signature-verified only (VerifyEnvelope): it carries
+// notificationType + data.signedTransactionInfo and has NO top-level
+// bundleId/environment, so running the claim-checking Verify on it would always
+// fail (review C3). bundleId/environment are checked on the INNER transaction.
 func (s *Strategy) VerifyNotification(signedPayload string) (strategy.WebhookAction, error) {
 	if s.v == nil {
 		return strategy.WebhookAction{}, errors.New("applestore: verifier not configured")
 	}
-	// The outer JWS payload carries notificationType + data.signedTransactionInfo.
-	outer, err := s.v.Verify(signedPayload)
-	_ = outer // outer payload shares JWSPayload's env/bundle checks
+	envBytes, err := s.v.VerifyEnvelope(signedPayload)
 	if err != nil {
 		return strategy.WebhookAction{}, &strategy.WebhookError{Status: 401, Message: "notification signature: " + err.Error()}
 	}
-	// Re-parse the outer payload for the notification envelope fields.
-	env, txJWS, ntype, err := decodeNotificationEnvelope(signedPayload)
-	if err != nil {
-		return strategy.WebhookAction{}, &strategy.WebhookError{Status: 400, Message: err.Error()}
+	var env struct {
+		NotificationType string `json:"notificationType"`
+		Data             struct {
+			SignedTransactionInfo string `json:"signedTransactionInfo"`
+		} `json:"data"`
 	}
-	_ = env
-	tx, err := s.v.Verify(txJWS)
+	if err := json.Unmarshal(envBytes, &env); err != nil || env.Data.SignedTransactionInfo == "" {
+		return strategy.WebhookAction{}, &strategy.WebhookError{Status: 400, Message: "notification: no signedTransactionInfo"}
+	}
+	tx, err := s.v.Verify(env.Data.SignedTransactionInfo) // inner: full claim check
 	if err != nil {
 		return strategy.WebhookAction{}, &strategy.WebhookError{Status: 401, Message: "transaction signature: " + err.Error()}
 	}
-	act, ok := notifAction[ntype]
+	act, ok := notifAction[env.NotificationType]
 	if !ok {
 		return strategy.Ignored(), nil
 	}
@@ -581,47 +624,8 @@ func (s *Strategy) VerifyNotification(signedPayload string) (strategy.WebhookAct
 		AppleTransactionID:         tx.TransactionID,
 		AppleOriginalTransactionID: tx.OriginalTransactionID,
 		AppleProductID:             tx.ProductID,
-		ExpiresAtUnix:              tx.ExpiresDate / 1000,
+		CurrentPeriodEnd:           tx.ExpiresDate / 1000, // ms → unix seconds
 	}, nil
-}
-
-// decodeNotificationEnvelope pulls notificationType + the inner
-// signedTransactionInfo out of an already-signature-verified outer JWS payload.
-func decodeNotificationEnvelope(signedPayload string) (env, txJWS, ntype string, err error) {
-	// reuse the base64 payload segment of the outer JWS
-	seg := jwsPayloadSegment(signedPayload)
-	var p struct {
-		NotificationType string `json:"notificationType"`
-		Data             struct {
-			Environment           string `json:"environment"`
-			SignedTransactionInfo string `json:"signedTransactionInfo"`
-		} `json:"data"`
-	}
-	if err = decodeSegment(seg, &p); err != nil {
-		return "", "", "", err
-	}
-	if p.Data.SignedTransactionInfo == "" {
-		return "", "", "", errors.New("notification: no signedTransactionInfo")
-	}
-	return p.Data.Environment, p.Data.SignedTransactionInfo, p.NotificationType, nil
-}
-```
-Add the two tiny helpers to `verify.go` (they share its imports):
-```go
-func jwsPayloadSegment(jws string) string {
-	parts := strings.Split(jws, ".")
-	if len(parts) != 3 {
-		return ""
-	}
-	return parts[1]
-}
-
-func decodeSegment(seg string, out any) error {
-	b, err := base64.RawURLEncoding.DecodeString(seg)
-	if err != nil {
-		return err
-	}
-	return json.Unmarshal(b, out)
 }
 ```
 
@@ -644,7 +648,9 @@ git commit -m "feat(applestore): Strategy impl — honest checkout/portal/cancel
 Mirror `resolvePlanIDFromLSVariant` (`webhook.go:272-289`): Apple product ids come from credentials, resolve to a plan via billing period + `FindFirstActivePlanID`.
 
 **Files:**
-- Modify: the payment credentials struct + `usecase.go` resolver seam (follow `VariantResolver`, usecase.go:73-75)
+- Migration: add `apple_product_monthly` + `apple_product_yearly` columns to the settings table (a reversible up/down migration; the LS/PayPal credentials are typed `app_settings` columns, so this **is** a schema change — review m4)
+- Modify: `backend-rewrite-go/internal/platform/db/queries_core.sql` (settings upsert/select, ~lines 40-48) + run `sqlc generate`
+- Modify: the `Credentials` struct (`settings_pg.go:44-54`) + the resolver seam (follow `VariantResolver`, usecase.go:73-75) to expose `appleProducts(ctx) (monthly, yearly string, err error)`
 - Modify: `backend-rewrite-go/internal/payment/webhook.go` (add `resolvePlanIDFromAppleProduct`)
 - Test: `backend-rewrite-go/internal/payment/webhook_test.go`
 
@@ -724,32 +730,37 @@ git commit -m "feat(payment): resolve App Store product id -> plan id (LS patter
 
 **Files:**
 - Create: `backend-rewrite-go/internal/payment/apple_redeem.go`
+- Migration + `queries_auth.sql` + `sqlc generate`: new query `StampStoreRefByUser` — sets `store_transaction_id` on the user's newest active sub matched by `user_id` + `store_type` (NO `payments` join; the existing `StampStoreRefByReference` joins on `payments.reference_code`, which the redeem path never creates — review C1).
+- Modify: `backend-rewrite-go/internal/subscription/webhook_writer.go` (+ the `SubsWriter` port in `usecase.go:43-50`): add `StampStoreRefByUser(ctx, userID, storeType, txnID string) error`.
 - Test: `backend-rewrite-go/internal/payment/apple_redeem_test.go`
 
+**Why not `StampStoreRef`:** it returns only `error` and matches by `reference_code` via a `payments` join (queries_auth.sql:215-223). The IAP redeem creates no payment row, so it would stamp nothing — leaving `store_transaction_id` NULL and making every later `ExtendByStoreRef`/`ExpireByStoreRef` match 0 rows (review C1/C2). Stamp by `user_id` instead.
+
 **Interfaces:**
-- Consumes: `applestore` verifier via a small port; `resolvePlanIDFromAppleProduct` (Task 6); `s.subsWriter.Grant` + `StampStoreRef` (webhook_writer.go:43/70); `StoreTypeForMethod`.
-- Produces: `func (s *Service) RedeemAppleTransaction(ctx context.Context, userID, signedTransaction string) error`.
+- Consumes: the `applestore` verifier seam (`s.appleVerify`); `resolvePlanIDFromAppleProduct` (Task 6); `s.subsWriter.Grant` (webhook_writer.go:43) + the new `StampStoreRefByUser`; `s.emailer.SubscriptionActivated`; `StoreAppleIAP`.
+- Produces: `func (s *Service) RedeemAppleTransaction(ctx context.Context, userID, signedTransaction string) error`; `SubsWriter.StampStoreRefByUser(ctx, userID, storeType, txnID string) error`.
 
 - [ ] **Step 1: Write the failing test**
 
 Create `apple_redeem_test.go`. Uses fakes: a verifier stub returning a known `JWSPayload`, a fake `subsWriter` recording `Grant` + `StampStoreRef`, Apple product ids in creds.
+Extend the existing `fakeSubsWriter` (webhook_test.go — real fields are `granted bool`, `grantStore`, `stamped`, `extended`, `expired`; add `stampByUserRef string` + implement the new port method to record it). Then:
 ```go
 func TestRedeemAppleTransaction_GrantsOnceAndStamps(t *testing.T) {
 	f := &fakeSubsWriter{}
-	s := newTestServiceForRedeem(t, f, "com.draftright.pro.monthly", "com.draftright.pro.yearly")
-	// verifier stub yields product=monthly, originalTxn=o1, expires in the future
-	err := s.RedeemAppleTransaction(context.Background(), "user-1", "stub-jws-monthly")
-	if err != nil {
+	em := &fakeEmailer{}
+	s := newTestServiceForRedeem(t, f, em, "com.draftright.pro.monthly", "com.draftright.pro.yearly")
+	// verifier stub yields productId=monthly product, originalTransactionId=o1, future expiry
+	if err := s.RedeemAppleTransaction(context.Background(), "user-1", "stub-jws-monthly"); err != nil {
 		t.Fatal(err)
 	}
-	if f.grantCalls != 1 {
-		t.Fatalf("Grant called %d times, want 1", f.grantCalls)
+	if !f.granted || f.grantStore != string(StoreAppleIAP) {
+		t.Fatalf("grant store type = %q, want apple_iap (granted=%v)", f.grantStore, f.granted)
 	}
-	if f.lastStoreType != string(StoreAppleIAP) {
-		t.Fatalf("store type = %q, want apple_iap", f.lastStoreType)
+	if f.stampByUserRef != "o1" {
+		t.Fatalf("store ref = %q, want original transaction id o1", f.stampByUserRef)
 	}
-	if f.lastStoreRef != "o1" {
-		t.Fatalf("store ref = %q, want original transaction id o1", f.lastStoreRef)
+	if em.activatedCalls != 1 {
+		t.Fatalf("first IAP purchase should send one activation email, got %d", em.activatedCalls)
 	}
 }
 ```
@@ -772,8 +783,9 @@ import (
 )
 
 // RedeemAppleTransaction verifies a client-supplied StoreKit transaction, grants
-// Pro through the one grant chokepoint, and stamps the store ref so later App
-// Store notifications match this subscription. No second grant path (RULE #1).
+// Pro (cancelling any prior active sub, via Grant), stamps the ORIGINAL
+// transaction id so later notifications match this row, and sends the activation
+// email (parity with the other providers' first grant). No second grant path.
 func (s *Service) RedeemAppleTransaction(ctx context.Context, userID, signedTransaction string) error {
 	tx, err := s.appleVerify(signedTransaction) // seam over applestore.Verifier.Verify
 	if err != nil {
@@ -794,15 +806,20 @@ func (s *Service) RedeemAppleTransaction(ctx context.Context, userID, signedTran
 	if err := s.subsWriter.Grant(ctx, userID, planID, string(StoreAppleIAP), &exp); err != nil {
 		return err
 	}
-	// Stamp the ORIGINAL transaction id so renewals (which carry the same
-	// originalTransactionId) match via ExtendByStoreRef.
-	if _, err := s.subsWriter.StampStoreRef(ctx, userID, string(StoreAppleIAP), tx.OriginalTransactionID); err != nil {
+	// Stamp the ORIGINAL transaction id ONTO the just-granted row (matched by
+	// user_id + store_type — NOT by a payments reference, which doesn't exist for
+	// IAP) so renewals/expiries/refunds match via Extend/ExpireByStoreRef.
+	if err := s.subsWriter.StampStoreRefByUser(ctx, userID, string(StoreAppleIAP), tx.OriginalTransactionID); err != nil {
 		return err
+	}
+	// First IAP purchase emails like every other provider (webhook.go:255-257).
+	if email, name, err := s.webhookRepo.UserEmailName(ctx, userID); err == nil && email != "" {
+		s.emailer.SubscriptionActivated(ctx, email, name, "Pro")
 	}
 	return nil
 }
 ```
-(Add the `appleVerify func(signedTransaction string) (applestore.JWSPayload, error)` seam + `resolvePlanIDFromAppleProduct` to `Service`; inject the real verifier in `main.go`. `StampStoreRef`'s exact signature is `webhook_writer.go:70` — match it; adjust the return handling if it differs.)
+(Add the `appleVerify func(signedTransaction string) (applestore.JWSPayload, error)` seam + `resolvePlanIDFromAppleProduct` (Task 6) to `Service`; inject the real verifier in `main.go`, Task 9. `StampStoreRefByUser` is the new writer above — a plain `UPDATE ... WHERE user_id=$1 AND store_type=$2 AND is_active` on the newest active sub, returning `error`.)
 
 - [ ] **Step 4: Run — verify pass**
 
@@ -831,17 +848,17 @@ Add the Apple action cases to `HandleWebhook`'s switch (`webhook.go:39`), mirror
 
 - [ ] **Step 1: Write the failing tests**
 
-Add to `webhook_test.go`:
+Add to `webhook_test.go`. `appleAction(actionType, originalTxnID string, periodEnd int64)` wires a fake `strategy.Strategy` whose `VerifyWebhook` returns a `WebhookAction{Type, AppleOriginalTransactionID, CurrentPeriodEnd}`; register it in the test service's `strategies` map under `string(MethodAppleIAP)`. Assert against the real `fakeSubsWriter` fields (`extended`, `expired`) + `fakeEmailer` (`activatedCalls`) — extend the fake to make `ExtendByStoreRef` return a settable rows-affected so the `n==0` branch is testable:
 ```go
 func TestHandleWebhook_AppleRenew_ExtendsNoEmail(t *testing.T) {
-	f := &fakeSubsWriter{}
+	f := &fakeSubsWriter{extendRows: 1} // one row matched
 	em := &fakeEmailer{}
 	s := newTestServiceForWebhook(t, f, em, appleAction(strategy.ActionAppleRenewed, "o1", 4102444800)) // 2100
-	if err := s.HandleWebhook(context.Background(), string(MethodAppleIAP), []byte("{}"), nil); err != nil {
+	if err := s.HandleWebhook(context.Background(), string(MethodAppleIAP), []byte(`{"signedPayload":"x"}`), nil); err != nil {
 		t.Fatal(err)
 	}
-	if f.extendCalls != 1 {
-		t.Fatalf("ExtendByStoreRef calls = %d, want 1", f.extendCalls)
+	if !f.extended {
+		t.Fatal("renewal must ExtendByStoreRef")
 	}
 	if em.activatedCalls != 0 {
 		t.Fatal("renewal must not re-send activation email")
@@ -851,15 +868,14 @@ func TestHandleWebhook_AppleRenew_ExtendsNoEmail(t *testing.T) {
 func TestHandleWebhook_AppleExpired_Revokes(t *testing.T) {
 	f := &fakeSubsWriter{}
 	s := newTestServiceForWebhook(t, f, &fakeEmailer{}, appleAction(strategy.ActionAppleExpired, "o1", 0))
-	if err := s.HandleWebhook(context.Background(), string(MethodAppleIAP), []byte("{}"), nil); err != nil {
+	if err := s.HandleWebhook(context.Background(), string(MethodAppleIAP), []byte(`{"signedPayload":"x"}`), nil); err != nil {
 		t.Fatal(err)
 	}
-	if f.expireCalls != 1 {
-		t.Fatalf("ExpireByStoreRef calls = %d, want 1", f.expireCalls)
+	if !f.expired {
+		t.Fatal("expiry must ExpireByStoreRef")
 	}
 }
 ```
-(`appleAction(...)` wires a fake strategy whose `VerifyWebhook` returns the given `WebhookAction`; register it in the test service's `strategies` map under `apple_iap`.)
 
 - [ ] **Step 2: Run — verify it fails**
 
@@ -868,27 +884,34 @@ Expected: FAIL — no Apple cases; `extendCalls`/`expireCalls` stay 0.
 
 - [ ] **Step 3: Add the cases**
 
-In `HandleWebhook`'s `switch action.Type` (mirror the PayPal renewal/cancel arms):
+In `HandleWebhook`'s `switch action.Type` (mirror the PayPal renewal/cancel arms).
+Expiry uses the reused `action.CurrentPeriodEnd`. Match the real
+`ExtendByStoreRef`/`ExpireByStoreRef` signatures (webhook_writer.go:80 — returns
+`(int64, error)`; and `ExpireByStoreRef`):
 ```go
-	case strategy.ActionAppleSubscribed:
-		// First cycle from a notification (belt-and-suspenders with the redeem
-		// endpoint): extend if the sub already exists, else it will be granted by
-		// the redeem path. Extend keyed on the original transaction id.
-		exp := time.Unix(action.ExpiresAtUnix, 0).UTC()
-		if _, err := s.subsWriter.ExtendByStoreRef(ctx, string(StoreAppleIAP), action.AppleOriginalTransactionID, exp); err != nil {
+	case strategy.ActionAppleSubscribed, strategy.ActionAppleRenewed:
+		// Extend the existing sub matched by the ORIGINAL transaction id (stamped
+		// on first redeem). Renewals must NOT re-send the activation email.
+		exp := time.Unix(action.CurrentPeriodEnd, 0).UTC()
+		n, err := s.subsWriter.ExtendByStoreRef(ctx, string(StoreAppleIAP), action.AppleOriginalTransactionID, exp)
+		if err != nil {
 			return err
 		}
-	case strategy.ActionAppleRenewed:
-		exp := time.Unix(action.ExpiresAtUnix, 0).UTC()
-		if _, err := s.subsWriter.ExtendByStoreRef(ctx, string(StoreAppleIAP), action.AppleOriginalTransactionID, exp); err != nil {
-			return err
+		if n == 0 {
+			// No matching row → the first redeem never landed (lost POST). We
+			// cannot grant from here in Spec 1: the notification carries no user
+			// identity (user↔transaction linkage via StoreKit appAccountToken
+			// arrives with the CLIENT spec). Recovery is client retry of /redeem.
+			// Log for observability; do not error the webhook (Apple would retry).
+			s.logUnmatchedAppleNotification(action.AppleOriginalTransactionID)
 		}
-		// No activation email on renewal (Global Constraint).
 	case strategy.ActionAppleExpired, strategy.ActionAppleRefunded:
 		if err := s.subsWriter.ExpireByStoreRef(ctx, string(StoreAppleIAP), action.AppleOriginalTransactionID); err != nil {
 			return err
 		}
 ```
+(`logUnmatchedAppleNotification` is a one-line structured log on `s`; if the
+service has no logger seam yet, use the existing logging pattern in this file.)
 
 - [ ] **Step 4: Run — verify pass**
 
@@ -919,24 +942,31 @@ git commit -m "feat(payment): Apple notification lifecycle — extend on renew (
 
 - [ ] **Step 1: Write the failing handler test**
 
-Create `handler_apple_test.go`:
+`NewHandler` takes a concrete `*Service` (handler.go:17-20), so build a real
+`Service` with fake `subsWriter` + the verifier seam (reuse `newTestServiceForRedeem`
+from Task 7), and inject the auth claims via the real accessor. Create
+`handler_apple_test.go`:
 ```go
-func TestAppleRedeemHandler_CallsService(t *testing.T) {
-	svc := &fakeRedeemService{} // records userID + signedTransaction
-	h := NewHandler(svc /* ...other deps as the constructor requires... */)
-	body := `{"signedTransaction":"jws"}`
-	req := httptest.NewRequest(http.MethodPost, "/payment/apple/redeem", strings.NewReader(body))
-	req = req.WithContext(withUserID(req.Context(), "user-9")) // match the app's auth-context helper
+func TestAppleRedeemHandler_GrantsForAuthedUser(t *testing.T) {
+	f := &fakeSubsWriter{}
+	svc := newTestServiceForRedeem(t, f, &fakeEmailer{}, "com.draftright.pro.monthly", "com.draftright.pro.yearly")
+	h := NewHandler(svc /* + the other deps NewHandler needs; see an existing handler test */)
+
+	req := httptest.NewRequest(http.MethodPost, "/payment/apple/redeem", strings.NewReader(`{"signedTransaction":"stub-jws-monthly"}`))
+	// inject claims the way the auth middleware does (shared.ClaimsFromContext reads this key):
+	req = req.WithContext(shared.WithClaims(req.Context(), &shared.Claims{Sub: "user-9"}))
 	rec := httptest.NewRecorder()
 	h.AppleRedeem(rec, req)
+
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status %d, body %s", rec.Code, rec.Body)
 	}
-	if svc.lastUser != "user-9" || svc.lastTxn != "jws" {
-		t.Fatalf("service not called with request values: %+v", svc)
+	if !f.granted || f.grantStore != string(StoreAppleIAP) {
+		t.Fatalf("handler did not grant apple_iap for the authed user: %+v", f)
 	}
 }
 ```
+(Confirm the exact claims-injection helper name against `shared` — `ClaimsFromContext` is at handler.go:70-75; use its matching setter. If none is exported, set the context key the middleware uses.)
 
 - [ ] **Step 2: Run — verify it fails**
 
@@ -945,6 +975,27 @@ Expected: FAIL — `AppleRedeem` undefined.
 
 - [ ] **Step 3: Implement handler + wiring**
 
+**M2 — the webhook must bypass the storefront `EnabledMethods` gate.** `HandleWebhook` 404s any method not in `EnabledMethods(ctx)` (webhook.go:40-46), and `apple_iap` is deliberately absent from `registeredMethods`/the enabled CSV. So the Apple webhook needs a path that gates on the **strategy registry only**. Add a `Service` method:
+```go
+// HandleProviderNotification runs a provider webhook WITHOUT the storefront
+// enabled-methods gate — for webhook-only methods (Apple IAP) that are never
+// offered for checkout but must still process notifications. It resolves the
+// strategy directly; everything after (VerifyWebhook + action switch) is shared
+// with HandleWebhook.
+func (s *Service) HandleProviderNotification(ctx context.Context, method string, payload []byte, headers http.Header) error {
+	strat, ok := s.strategies[method]
+	if !ok {
+		return &strategy.WebhookError{Status: 404, Message: method + " not configured"}
+	}
+	action, err := strat.VerifyWebhook(ctx, payload, headers)
+	if err != nil {
+		return err
+	}
+	return s.applyWebhookAction(ctx, method, action) // extract the existing switch into applyWebhookAction
+}
+```
+Refactor `HandleWebhook`'s action switch into `applyWebhookAction(ctx, method, action)` so both entry points share it (no duplicated grant logic — RULE #1). `HandleWebhook` keeps the enabled-gate + calls `applyWebhookAction`.
+
 `handler_apple.go`:
 ```go
 package payment
@@ -952,12 +1003,14 @@ package payment
 import (
 	"encoding/json"
 	"net/http"
+
+	"github.com/tannpv/draftright-rewrite/internal/shared"
 )
 
 // AppleRedeem accepts a client-verified StoreKit transaction and grants Pro.
 func (h *Handler) AppleRedeem(w http.ResponseWriter, r *http.Request) {
-	userID := userIDFromContext(r.Context()) // the app's existing auth-context accessor
-	if userID == "" {
+	claims := shared.ClaimsFromContext(r.Context()) // the app's auth-context accessor (handler.go:70-75)
+	if claims == nil || claims.Sub == "" {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
@@ -968,20 +1021,29 @@ func (h *Handler) AppleRedeem(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "signedTransaction required", http.StatusBadRequest)
 		return
 	}
-	if err := h.svc.RedeemAppleTransaction(r.Context(), userID, body.SignedTransaction); err != nil {
+	if err := h.svc.RedeemAppleTransaction(r.Context(), claims.Sub, body.SignedTransaction); err != nil {
 		http.Error(w, "redeem failed", http.StatusBadGateway)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
 }
-```
-In `handler_webhook.go`:
-```go
+
+// AppleWebhook processes App Store Server Notifications V2 — ungated (webhook-only method).
 func (h *Handler) AppleWebhook(w http.ResponseWriter, r *http.Request) {
-	h.webhook(w, r, string(MethodAppleIAP))
+	body, _ := io.ReadAll(r.Body)
+	if err := h.svc.HandleProviderNotification(r.Context(), string(MethodAppleIAP), body, r.Header); err != nil {
+		var we *strategy.WebhookError
+		if errors.As(err, &we) {
+			http.Error(w, we.Message, we.Status)
+			return
+		}
+		http.Error(w, "webhook error", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
 }
 ```
-In `router.go`: add fields `PaymentWebhookApple http.Handler` and `PaymentAppleRedeem http.Handler`; mount the webhook in the public group and the redeem in the auth group:
+In `router.go`: add fields `PaymentWebhookApple http.Handler` + `PaymentAppleRedeem http.Handler`; mount webhook in the PUBLIC group, redeem in the AUTH group:
 ```go
 	if r.PaymentWebhookApple != nil {
 		mux.Method(http.MethodPost, "/payment/webhook/apple", r.PaymentWebhookApple)
@@ -991,12 +1053,12 @@ In `router.go`: add fields `PaymentWebhookApple http.Handler` and `PaymentAppleR
 		authed.Method(http.MethodPost, "/payment/apple/redeem", r.PaymentAppleRedeem)
 	}
 ```
-In `main.go`: build the verifier + strategy and wire handlers:
+In `main.go`: add config fields `cfg.AppleBundleID`, `cfg.AppleEnvironment` (config struct + env, review m5); `loadAppleRootCAs()` embeds Apple Root CA G3 PEM (`//go:embed` a `.pem`, `x509.NewCertPool().AppendCertsFromPEM`) and returns `*x509.CertPool`:
 ```go
-	appleRoots := loadAppleRootCAs() // embed Apple Root CA G3 PEM; helper returns *x509.CertPool
+	appleRoots := loadAppleRootCAs()
 	appleStrat := applestore.New(applestore.NewVerifier(appleRoots, cfg.AppleBundleID, cfg.AppleEnvironment))
 	strategies[string(paymentpkg.MethodAppleIAP)] = appleStrat
-	// inject the redeem verifier seam into the payment Service (paymentpkg.NewService option)
+	// inject the redeem verifier seam into the payment Service (a NewService option)
 	core.paymentWebhookApple = http.HandlerFunc(paymentHandler.AppleWebhook)
 	core.paymentAppleRedeem = http.HandlerFunc(paymentHandler.AppleRedeem)
 ```
@@ -1081,4 +1143,11 @@ git commit -m "feat(mobile): add apple_iap to PaymentMethodKind + wireName (SSOT
 - App Store Connect subscription group + products + pricing (manual, owner).
 - Client StoreKit 2 purchase + restore UI (Flutter + native) — its own spec.
 - Removing the Apple Pay entitlement from the iOS subscription path — deliberate, after this is live.
-- The two pre-implementation checks from the spec (`activateSubscription` email-on-renewal semantics; `expires_at` extension) — verify against the code before Task 7/8; the plan already routes renewals through `ExtendByStoreRef` (not `activateSubscription`) so no renewal email fires.
+- The two pre-implementation checks from the spec (`activateSubscription` email-on-renewal semantics; `expires_at` extension) — verify against the code before Task 7/8; the plan routes renewals through `ExtendByStoreRef` (not `activateSubscription`) so no renewal email fires.
+- **Notification-driven first-grant recovery (review M3):** if the client purchase succeeds but the `/redeem` POST is lost, Spec 1 relies on **client retry** of `/redeem`. A `SUBSCRIBED`/`DID_RENEW` notification for an unknown subscription cannot grant, because the notification carries no user identity — the user↔transaction link is a StoreKit `appAccountToken` the **client** sets at purchase, which lands with the client spec. Until then, the unmatched notification is logged (`logUnmatchedAppleNotification`), not errored. The client spec will add `appAccountToken` to `JWSPayload` + a notification-recovery grant.
+
+### Implementation notes carried from review
+
+- `handler_apple.go`'s `AppleWebhook` needs `io`, `errors`, and the `strategy` + `shared` imports.
+- Task 9 extracts `HandleWebhook`'s action switch (built in Task 8) into `applyWebhookAction(ctx, method, action)` so the ungated Apple path (`HandleProviderNotification`) and the gated path share ONE grant/extend switch — no duplicated lifecycle logic (RULE #1).
+- All new writer methods (`StampStoreRefByUser`) go on the `SubsWriter` port (`usecase.go:43-50`) AND its `*subscription.WebhookWriter` impl AND every fake used in tests, or the package won't compile.

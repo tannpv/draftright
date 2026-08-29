@@ -109,10 +109,11 @@ Both funnel into the existing grant/extend writers. No new interface machinery.
    payloads).
 3. **product → plan resolver** — App Store product id → plan id, **mirroring the
    LemonSqueezy pattern** (recon §8): `apple_product_monthly` / `apple_product_yearly`
-   in the payment credentials/app_settings, resolved via the existing
-   `FindFirstActivePlanID(ctx, billing, currency)`. **No schema change.** One
-   resolver, one source of truth; a guard test asserts both product ids resolve
-   to an active plan (a mismatch would grant the wrong plan silently).
+   stored as typed `app_settings` columns (like the LS/PayPal creds), resolved via
+   the existing `FindFirstActivePlanID(ctx, billing, currency)`. This **adds two
+   settings columns** (a reversible migration + `queries_core.sql` + `sqlc generate`).
+   One resolver, one source of truth; a guard test asserts both product ids
+   resolve to an active plan (a mismatch would grant the wrong plan silently).
 4. **Redeem use-case** — orchestrates the client-transaction path: verify →
    resolve product→plan → grant via the existing activation chokepoint → stamp
    `store_type = apple_iap` + `store_transaction_id` (the original transaction id,
