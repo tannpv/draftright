@@ -102,6 +102,13 @@ type Router struct {
 	PaymentWebhookSepay        http.Handler // POST /payment/webhook/sepay        (public)
 	PaymentWebhookLemonSqueezy http.Handler // POST /payment/webhook/lemonsqueezy (public)
 	PaymentWebhookPayPal       http.Handler // POST /payment/webhook/paypal       (public)
+	// PaymentWebhookApple is public at transport like every other webhook above
+	// — Apple attaches no bearer token, only a signed payload the strategy's
+	// VerifyWebhook authenticates. apple_iap is deliberately absent from
+	// EnabledMethods (redemption-only, never a checkout method), so the
+	// handler behind this route calls Service.HandleProviderNotification, not
+	// the EnabledMethods-gated path the other 6 webhook routes use.
+	PaymentWebhookApple http.Handler // POST /payment/webhook/apple (public)
 
 	// Phase 4a ancillary endpoints. All PUBLIC (mounted before the auth
 	// group). Errors accepts an optional best-effort JWT (the handler reads
@@ -110,9 +117,10 @@ type Router struct {
 	UpdatesLatest    http.Handler // GET  /updates/latest     (public)
 	ErrorsIngest     http.Handler // POST /errors             (public, optional JWT)
 
-	PaymentCheckout  http.Handler // POST /payment/checkout       (auth)
-	PaymentPortal    http.Handler // GET /payment/portal          (auth)
-	PaymentCancelSub http.Handler // DELETE /payment/subscription (auth)
+	PaymentCheckout    http.Handler // POST /payment/checkout       (auth)
+	PaymentPortal      http.Handler // GET /payment/portal          (auth)
+	PaymentCancelSub   http.Handler // DELETE /payment/subscription (auth)
+	PaymentAppleRedeem http.Handler // POST /payment/apple/redeem (auth) — client-verified StoreKit transaction → Grant
 
 	// Phase 4b LLM-ingest endpoints. All nil-guarded like Phase 4a.
 	//
@@ -313,6 +321,9 @@ func (r *Router) Build() http.Handler {
 	if r.PaymentWebhookPayPal != nil {
 		mux.Method(http.MethodPost, "/payment/webhook/paypal", r.PaymentWebhookPayPal)
 	}
+	if r.PaymentWebhookApple != nil {
+		mux.Method(http.MethodPost, "/payment/webhook/apple", r.PaymentWebhookApple)
+	}
 
 	// Phase 4a ancillary public endpoints — mounted BEFORE the auth group
 	// so they're reachable without a JWT (parity with Node: all three are
@@ -435,6 +446,9 @@ func (r *Router) Build() http.Handler {
 		}
 		if r.PaymentCancelSub != nil {
 			api.Method(http.MethodDelete, "/payment/subscription", r.PaymentCancelSub)
+		}
+		if r.PaymentAppleRedeem != nil {
+			api.Method(http.MethodPost, "/payment/apple/redeem", r.PaymentAppleRedeem)
 		}
 	})
 

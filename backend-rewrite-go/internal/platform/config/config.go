@@ -138,6 +138,17 @@ type Config struct {
 	VietQRAccountNumber       string
 	VietQRAccountName         string
 
+	// AppleBundleID + AppleEnvironment configure the StoreKit JWS verifier
+	// (applestore.NewVerifier) — the bundle id every transaction's `bundleId`
+	// claim must match, and the ASSN `environment` claim to require
+	// ("Production" | "Sandbox"; empty skips the environment check, e.g. dev
+	// accepting both). Env-ONLY like ApplePayMerchantID above: the verifier is
+	// built once at startup (no app_settings column, no live DB read per
+	// request) because rotating bundle id / environment is a deploy, not an
+	// admin-portal toggle.
+	AppleBundleID    string
+	AppleEnvironment string
+
 	// GoBackendRampPercent is the percentage of users bucketed onto the
 	// Go backend, surfaced via /auth/me flags.use_go_backend. Mirrors the
 	// Node GO_BACKEND_RAMP_PERCENT env var. Default 0 (no ramp).
@@ -224,6 +235,8 @@ func Load() (*Config, error) {
 		VietQRBankID:              os.Getenv("VIETQR_BANK_ID"),
 		VietQRAccountNumber:       os.Getenv("VIETQR_ACCOUNT_NUMBER"),
 		VietQRAccountName:         os.Getenv("VIETQR_ACCOUNT_NAME"),
+		AppleBundleID:             os.Getenv("APPLE_BUNDLE_ID"),
+		AppleEnvironment:          os.Getenv("APPLE_ENVIRONMENT"),
 		GoBackendRampPercent:      envInt("GO_BACKEND_RAMP_PERCENT", 0),
 		BugReportsDir:             envOr("BUG_REPORTS_DIR", "/var/lib/draftright/bug-reports"),
 		ResendWebhookSecret:       os.Getenv("RESEND_WEBHOOK_SECRET"),

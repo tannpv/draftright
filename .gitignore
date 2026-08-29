@@ -9,6 +9,11 @@
 .env.*.local
 *.pem
 *.key
+# Exception: Apple Root CA G3 is a PUBLIC certificate
+# (https://www.apple.com/certificateauthority/), embedded via go:embed for
+# StoreKit JWS chain verification (#Apple IAP). The *.pem blanket-ignore above
+# guards private keys/certs; this file carries no secret material.
+!backend-rewrite-go/internal/payment/strategy/applestore/apple_root_ca_g3.pem
 
 # Claude Code & IDE state
 # Ignore .claude CONTENTS, not the directory itself — git cannot re-include

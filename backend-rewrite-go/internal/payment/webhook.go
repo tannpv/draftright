@@ -38,6 +38,12 @@ func (r WebhookResult) MarshalJSON() ([]byte, error) {
 // HandleWebhook verifies a provider webhook then dispatches the resulting action
 // to the subscription writer / payment repo / emailer. Ports
 // PaymentService.handleWebhook + completePayment + activateSubscription.
+// Gated on the storefront's EnabledMethods — the checkout-facing providers
+// (Stripe, VietQR, ...) only fire notifications for methods a customer could
+// actually have checked out with. Apple IAP is redemption-only and deliberately
+// absent from that list; its notifications go through the ungated
+// HandleProviderNotification below, which shares everything past strategy
+// resolution with this method (verifyWebhookAction + applyWebhookAction).
 func (s *Service) HandleWebhook(ctx context.Context, method string, payload []byte, headers http.Header) (WebhookResult, error) {
 	enabled, err := s.EnabledMethods(ctx)
 	if err != nil {
@@ -46,19 +52,68 @@ func (s *Service) HandleWebhook(ctx context.Context, method string, payload []by
 	if !contains(enabled, method) {
 		return WebhookResult{}, notFound("Payment method '" + method + "' is not enabled.")
 	}
+	strat, err := s.resolveStrategy(method)
+	if err != nil {
+		return WebhookResult{}, err
+	}
+	action, err := verifyWebhookAction(ctx, strat, payload, headers)
+	if err != nil {
+		return WebhookResult{}, err
+	}
+	return s.applyWebhookAction(ctx, method, action)
+}
+
+// HandleProviderNotification runs a provider webhook WITHOUT the storefront
+// EnabledMethods gate — for webhook-only methods (Apple IAP) that are never
+// offered for checkout (absent from registeredMethods) but still receive
+// server-to-server notifications. It resolves the strategy directly from the
+// registry; everything after (signature verification + action dispatch) is
+// the SAME code HandleWebhook runs, via verifyWebhookAction + applyWebhookAction
+// — one grant/revoke implementation, no gate-path fork (Rule #1).
+func (s *Service) HandleProviderNotification(ctx context.Context, method string, payload []byte, headers http.Header) (WebhookResult, error) {
+	strat, err := s.resolveStrategy(method)
+	if err != nil {
+		return WebhookResult{}, err
+	}
+	action, err := verifyWebhookAction(ctx, strat, payload, headers)
+	if err != nil {
+		return WebhookResult{}, err
+	}
+	return s.applyWebhookAction(ctx, method, action)
+}
+
+// resolveStrategy looks up a provider strategy by method key, converting a
+// registry miss into the same *DomainError HandleWebhook has always returned
+// for an unsupported method. Shared by both entry points above.
+func (s *Service) resolveStrategy(method string) (strategy.Strategy, error) {
 	strat, ok := s.strategies[method]
 	if !ok {
-		return WebhookResult{}, badRequest("Unsupported payment method: " + method)
+		return nil, badRequest("Unsupported payment method: " + method)
 	}
+	return strat, nil
+}
+
+// verifyWebhookAction runs a strategy's VerifyWebhook and converts a
+// *strategy.WebhookError into the Service's *DomainError. Shared by
+// HandleWebhook and HandleProviderNotification so the conversion has one
+// source of truth.
+func verifyWebhookAction(ctx context.Context, strat strategy.Strategy, payload []byte, headers http.Header) (strategy.WebhookAction, error) {
 	action, err := strat.VerifyWebhook(ctx, payload, headers)
 	if err != nil {
 		var we *strategy.WebhookError
 		if errors.As(err, &we) {
-			return WebhookResult{}, &DomainError{Status: we.Status, Message: we.Message}
+			return strategy.WebhookAction{}, &DomainError{Status: we.Status, Message: we.Message}
 		}
-		return WebhookResult{}, err
+		return strategy.WebhookAction{}, err
 	}
+	return action, nil
+}
 
+// applyWebhookAction dispatches a verified webhook action to the
+// subscription writer / payment repo / emailer. Extracted so both
+// HandleWebhook (enabled-gated) and HandleProviderNotification (ungated,
+// webhook-only methods) share exactly one grant/extend/revoke implementation.
+func (s *Service) applyWebhookAction(ctx context.Context, method string, action strategy.WebhookAction) (WebhookResult, error) {
 	switch action.Type {
 	case strategy.ActionPaymentCompleted:
 		if action.StripeCustomerID != "" {

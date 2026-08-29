@@ -11,6 +11,7 @@ package main
 
 import (
 	"context"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -44,6 +45,7 @@ import (
 	inboxpkg "github.com/tannpv/draftright-rewrite/internal/inbox"
 	paymentpkg "github.com/tannpv/draftright-rewrite/internal/payment"
 	paymentstrategy "github.com/tannpv/draftright-rewrite/internal/payment/strategy"
+	"github.com/tannpv/draftright-rewrite/internal/payment/strategy/applestore"
 	"github.com/tannpv/draftright-rewrite/internal/payment/strategy/lemonsqueezy"
 	"github.com/tannpv/draftright-rewrite/internal/payment/strategy/paypal"
 	"github.com/tannpv/draftright-rewrite/internal/payment/strategy/stripe"
@@ -181,6 +183,7 @@ func main() {
 		PaymentCheckout:    core.paymentCheckout,
 		PaymentPortal:      core.paymentPortal,
 		PaymentCancelSub:   core.paymentCancelSub,
+		PaymentAppleRedeem: core.paymentAppleRedeem,
 
 		PaymentWebhookStripe:       core.paymentWebhookStripe,
 		PaymentWebhookVietQR:       core.paymentWebhookVietQR,
@@ -188,6 +191,7 @@ func main() {
 		PaymentWebhookSepay:        core.paymentWebhookSepay,
 		PaymentWebhookLemonSqueezy: core.paymentWebhookLemonSqueezy,
 		PaymentWebhookPayPal:       core.paymentWebhookPayPal,
+		PaymentWebhookApple:        core.paymentWebhookApple,
 		MintExtToken:               core.mintExtToken,
 		ListExtTokens:              core.listExtTokens,
 		RevokeExtToken:             core.revokeExtToken,
@@ -704,6 +708,15 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 				Mode:         mode,
 			}, nil
 		}, cfg.AppName, cfg.WebsiteURL)
+		// Apple IAP: one Verifier backs both the redeem seam (client-submitted
+		// transaction JWS, RedeemAppleTransaction) and the webhook strategy
+		// (ASSN V2 notifications) — one chain-of-trust + bundle/environment
+		// check, not two independently-configured copies. Registered in the
+		// strategy map (so HandleProviderNotification can resolve it) but
+		// deliberately absent from registeredMethods below — it is
+		// redemption-only, never a checkout method a storefront offers.
+		appleVerifier := applestore.NewVerifier(loadAppleRootCAs(), cfg.AppleBundleID, cfg.AppleEnvironment)
+		appleStrat := applestore.New(appleVerifier)
 		strategies := map[string]paymentstrategy.Strategy{
 			string(paymentpkg.MethodStripe):       stripeStrat,
 			string(paymentpkg.MethodVietQR):       vietqrStrat,
@@ -712,6 +725,7 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 			string(paymentpkg.MethodPayPal):       paypalStrat,
 			string(paymentpkg.MethodApplePay):     stripeStrat,
 			string(paymentpkg.MethodGooglePay):    stripeStrat,
+			string(paymentpkg.MethodAppleIAP):     appleStrat,
 		}
 		paymentSvc := paymentpkg.NewService(
 			paymentRepo, paymentSettings, cfg.PaymentEnabledMethods,
@@ -732,6 +746,12 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 			paymentpkg.NewMailWebhookEmailer(emailSvc), // WebhookEmailer
 			paymentSettings, // VariantResolver
 		)
+		// Apple IAP redeem seam: RedeemAppleTransaction calls this function
+		// value instead of importing applestore/crypto/x509 itself — same
+		// Verifier the webhook strategy above uses, so a client-submitted
+		// transaction and a server notification are checked against the same
+		// root/bundle/environment configuration.
+		paymentSvc.WithAppleVerify(appleVerifier.Verify)
 		paymentHandler := paymentpkg.NewHandler(paymentSvc)
 		core.paymentMethods = http.HandlerFunc(paymentHandler.Methods)
 		core.paymentStatus = http.HandlerFunc(paymentHandler.Status)
@@ -739,12 +759,14 @@ func composeDeps(ctx context.Context, cfg *config.Config, log *slog.Logger, m do
 		core.paymentCheckout = http.HandlerFunc(paymentHandler.Checkout)
 		core.paymentPortal = http.HandlerFunc(paymentHandler.Portal)
 		core.paymentCancelSub = http.HandlerFunc(paymentHandler.CancelSubscription)
+		core.paymentAppleRedeem = http.HandlerFunc(paymentHandler.AppleRedeem)
 		core.paymentWebhookStripe = http.HandlerFunc(paymentHandler.StripeWebhook)
 		core.paymentWebhookVietQR = http.HandlerFunc(paymentHandler.VietQRWebhook)
 		core.paymentWebhookCasso = http.HandlerFunc(paymentHandler.CassoWebhook)
 		core.paymentWebhookSepay = http.HandlerFunc(paymentHandler.SepayWebhook)
 		core.paymentWebhookLemonSqueezy = http.HandlerFunc(paymentHandler.LemonSqueezyWebhook)
 		core.paymentWebhookPayPal = http.HandlerFunc(paymentHandler.PayPalWebhook)
+		core.paymentWebhookApple = http.HandlerFunc(paymentHandler.AppleWebhook)
 
 		// Daily subscription-expiry cron (ports NestJS @Cron("0 09 * * *")).
 		// Reuses the same subReader (it satisfies subpkg.CronRepo via
@@ -924,9 +946,10 @@ type coreHandlers struct {
 	paymentStatus  http.Handler // GET /payment/status/{ref} (public)
 	paymentHistory http.Handler // GET /payment/history (auth)
 
-	paymentCheckout  http.Handler // POST /payment/checkout      (auth)
-	paymentPortal    http.Handler // GET /payment/portal         (auth)
-	paymentCancelSub http.Handler // DELETE /payment/subscription (auth)
+	paymentCheckout    http.Handler // POST /payment/checkout      (auth)
+	paymentPortal      http.Handler // GET /payment/portal         (auth)
+	paymentCancelSub   http.Handler // DELETE /payment/subscription (auth)
+	paymentAppleRedeem http.Handler // POST /payment/apple/redeem  (auth)
 
 	// Payment webhooks (Phase 3c; set when pool != nil; all public).
 	paymentWebhookStripe       http.Handler // POST /payment/webhook/stripe
@@ -935,6 +958,7 @@ type coreHandlers struct {
 	paymentWebhookSepay        http.Handler // POST /payment/webhook/sepay
 	paymentWebhookLemonSqueezy http.Handler // POST /payment/webhook/lemonsqueezy
 	paymentWebhookPayPal       http.Handler // POST /payment/webhook/paypal
+	paymentWebhookApple        http.Handler // POST /payment/webhook/apple
 
 	// Extension-token handlers (set when pool != nil; all JWT-gated).
 	mintExtToken   http.Handler // POST   /auth/extension-tokens
@@ -1166,6 +1190,20 @@ func (r stripeSecretResolver) StripeSecretKey(ctx context.Context) (string, erro
 		return "", err
 	}
 	return paymentstrategy.ResolveCredential(creds.StripeSecretKey, r.envKey), nil
+}
+
+// loadAppleRootCAs returns the cert pool applestore.Verifier chains StoreKit
+// JWS x5c headers against. The PEM is compiled into the applestore package
+// (applestore.DefaultRoots, //go:embed) — a parse failure here means the
+// embedded file itself is corrupt, a build-time bug rather than a runtime
+// condition, so this fails loudly instead of silently booting with Apple IAP
+// verification broken.
+func loadAppleRootCAs() *x509.CertPool {
+	roots, err := applestore.DefaultRoots()
+	if err != nil {
+		panic("apple root CA: " + err.Error())
+	}
+	return roots
 }
 
 // subCancelAdapter narrows subscription.WebhookWriter.CancelByStoreRef
