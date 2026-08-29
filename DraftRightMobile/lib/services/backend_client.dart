@@ -361,6 +361,16 @@ class BackendClient {
     return url;
   }
 
+  /// POST /payment/apple/redeem — verify + grant Pro from a StoreKit
+  /// signed transaction. 200 on grant; throws [ApiException] otherwise.
+  Future<void> redeemAppleTransaction(String signedTransaction) async {
+    await _authed((t) => _api.postJson(
+          '/payment/apple/redeem',
+          body: {'signedTransaction': signedTransaction},
+          token: t,
+        ));
+  }
+
   /// Cancel the user's currently-active subscription via the backend
   /// (which calls LS / Stripe APIs directly).  Returns the date Pro
   /// access ends — the user keeps access through that date.
