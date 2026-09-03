@@ -82,6 +82,15 @@ jobs:
       - name: Resolve dependencies
         working-directory: DraftRightMobile
         run: flutter pub get
+      # A build the runner agent lost mid-flight leaves its gradle/kotlin
+      # daemons behind; one such zombie pinned the box's CPU and starved two
+      # consecutive runs. Report + reap before building. Accepted trade-off:
+      # this would also kill a daemon belonging to a concurrently running
+      # play-deploy AAB build on the same box (rare — retrigger it if so).
+      - name: Reap stale gradle daemons
+        run: |
+          pgrep -af 'GradleDaemon|KotlinCompileDaemon' || echo "none found"
+          pkill -9 -f 'GradleDaemon|KotlinCompileDaemon' || true
       - name: Kotlin unit tests
         working-directory: DraftRightMobile/android
         env:
