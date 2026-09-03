@@ -25,6 +25,10 @@ final class TelexCorpusTests: XCTestCase {
             ("ow", "ơ"), ("uw", "ư"), ("aw", "ă"),
             ("as", "á"), ("af", "à"), ("ar", "ả"), ("ax", "ã"), ("aj", "ạ"),
             ("hoaf", "hòa"),
+            // Open diphthongs oa/oe/uy take the tone on the FIRST vowel
+            // (modern style: hòa/khỏe/thúy, not hoà/khoẻ/thuý) — #207.
+            ("khoer", "khỏe"),
+            ("thuys", "thúy"),
             ("vietj", "việt"),
             ("tieengs", "tiếng"),
             ("nguyeenx", "nguyễn"),
