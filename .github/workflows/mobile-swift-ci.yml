@@ -1,0 +1,41 @@
+# Runs the DraftRightKeyboardCore Swift test suite (XCTest, ~280 tests) on the
+# self-hosted Mac runner (tannguyen-mac, labels: macos/arm64/draftright-mac).
+# GitHub-hosted runners are billing-blocked and the Contabo runner is Linux, so
+# this is the only place Swift compiles in CI — before this workflow, Swift had
+# no CI gate at all (the #209 pbxproj target-drift bug shipped through that gap).
+#
+# Scope: the SPM core package only. The DraftRightKeyboard extension target
+# needs the full Flutter/CocoaPods workspace and stays a local xcodebuild step.
+#
+# NOT a required check: path-filtered workflows as required checks block PRs
+# that don't touch the paths (see maintainer memory
+# feedback_ci_required_checks_path_filter) — add a skip-workflow first if this
+# ever becomes required.
+name: mobile-swift-ci
+
+on:
+  pull_request:
+    paths:
+      - 'DraftRightMobile/ios/DraftRightKeyboardCore/**'
+      - '.github/workflows/mobile-swift-ci.yml'
+  push:
+    branches: [develop, main]
+    paths:
+      - 'DraftRightMobile/ios/DraftRightKeyboardCore/**'
+      - '.github/workflows/mobile-swift-ci.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: mobile-swift-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  swift-tests:
+    runs-on: [self-hosted, macos, arm64, draftright-mac]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Swift core tests
+        working-directory: DraftRightMobile/ios/DraftRightKeyboardCore
+        run: swift test
