@@ -53,6 +53,13 @@ public protocol LanguagePack {
     /// reading-conversion input (Japanese kana→kanji, Chinese pinyin→hanzi),
     /// the standard JP/ZH IME behavior. Mirror of Kotlin `convertsOnSpace`.
     var convertsOnSpace: Bool { get }
+
+    /// Whether space auto-corrects a one-edit typo in the finished word (#207).
+    /// Opt-in per pack rather than per language name: it only pays off with a
+    /// frequency dictionary big enough to tell a typo from a rare word, so a
+    /// pack turns it on when it ships one. Mirror of Kotlin
+    /// `autoCorrectEnabled`.
+    var autoCorrectEnabled: Bool { get }
 }
 
 public extension LanguagePack {
@@ -63,4 +70,6 @@ public extension LanguagePack {
     func makeCandidateEngine() -> CandidateEngine? { nil }
     /// Default: space is a literal space (Latin, Telex, Hangul). JP/ZH override.
     var convertsOnSpace: Bool { false }
+    /// Default: never rewrite what the user typed. VI overrides.
+    var autoCorrectEnabled: Bool { false }
 }

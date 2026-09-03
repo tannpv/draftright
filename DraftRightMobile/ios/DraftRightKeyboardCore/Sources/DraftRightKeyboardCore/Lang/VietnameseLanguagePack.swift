@@ -23,6 +23,9 @@ public struct VietnameseLanguagePack: LanguagePack {
     /// Pack id prefix matching the backend manifest's wordlistPack URL.
     private static let wordlistPackPrefix = "draftright-wordlist-vi"
 
+    /// On: the shipped ~8.5k frequency list can tell a typo from a rare word.
+    public var autoCorrectEnabled: Bool { true }
+
     public func makeComposer() -> Composer? { TelexComposer() }
 
     /// Trigram completions sourced from a downloaded wordlist pack when

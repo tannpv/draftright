@@ -38,6 +38,14 @@ interface LanguagePack {
      */
     val convertsOnSpace: Boolean get() = false
 
+    /**
+     * Whether space auto-corrects a one-edit typo in the finished word (#207).
+     * Opt-in per pack rather than per language name: it only pays off with a
+     * frequency dictionary big enough to tell a typo from a rare word, so a
+     * pack turns it on when it ships one. Vietnamese does; the rest don't yet.
+     */
+    val autoCorrectEnabled: Boolean get() = false
+
     /** Default: no composition (Latin packs type directly). JP/VI override. */
     fun composer(): Composer = PassthroughComposer()
 
