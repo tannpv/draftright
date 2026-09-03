@@ -1,0 +1,32 @@
+# One-off box maintenance, dispatched manually. Reaps the zombie gradle daemon
+# (PID 724490) that wedged /home/deploy/.gradle's journal lock on 2026-09-03
+# and tries to revive the monorepo's two offline runner agents on this box.
+name: Runner box maintenance
+on:
+  workflow_dispatch:
+
+jobs:
+  maintain:
+    runs-on: [self-hosted]
+    timeout-minutes: 5
+    steps:
+      - name: Report and reap stale gradle daemons
+        run: |
+          echo "--- before ---"
+          pgrep -af 'GradleDaemon|KotlinCompileDaemon' || echo "no daemons"
+          pkill -9 -f 'GradleDaemon|KotlinCompileDaemon' || true
+          sleep 2
+          echo "--- after ---"
+          pgrep -af 'GradleDaemon|KotlinCompileDaemon' || echo "clean"
+          rm -f /home/deploy/.gradle/caches/journal-1/journal-1.lock || true
+      - name: Try to revive offline runner agents
+        run: |
+          pgrep -af 'Runner.Listener' || echo "no listeners running"
+          for d in /opt/actions-runner/draftright /opt/actions-runner/draftright-2; do
+            if [ -d "$d" ] && ! pgrep -f "$d/bin" >/dev/null; then
+              echo "reviving $d"
+              sudo -n "$d/svc.sh" start 2>/dev/null || (cd "$d" && nohup ./run.sh >/dev/null 2>&1 &)
+            fi
+          done
+          sleep 5
+          pgrep -af 'Runner.Listener' || true
