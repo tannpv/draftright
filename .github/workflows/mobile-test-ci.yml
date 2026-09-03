@@ -60,7 +60,10 @@ jobs:
   android-unit-tests:
     name: android unit tests
     runs-on: [self-hosted, linux, x64, draftright]
-    timeout-minutes: 25
+    # Serialized after the Dart job: two heavy jobs in parallel starved the
+    # Contabo box until the runner agent lost its server connection.
+    needs: flutter-test
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
@@ -81,4 +84,7 @@ jobs:
         run: flutter pub get
       - name: Kotlin unit tests
         working-directory: DraftRightMobile/android
-        run: ./gradlew :app:testDebugUnitTest
+        env:
+          # Bounded so gradle can't starve the shared runner box (see `needs`).
+          GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx2048m -Dorg.gradle.daemon=false
+        run: ./gradlew :app:testDebugUnitTest --max-workers=2
