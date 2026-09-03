@@ -1,9 +1,7 @@
 package com.draftright.keyboard.ime
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -43,13 +41,4 @@ class AutoCorrectUndoTest {
         assertEquals("anb", undo.consume())
     }
 
-    @Test
-    fun isArmedTracksTheOneShotState() {
-        val undo = AutoCorrectUndo()
-        assertFalse(undo.isArmed)
-        undo.arm(original = "khôg", corrected = "không")
-        assertTrue(undo.isArmed)
-        undo.consume()
-        assertFalse(undo.isArmed)
-    }
 }

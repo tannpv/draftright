@@ -15,9 +15,6 @@ public final class AutoCorrectUndo {
 
     public init() {}
 
-    /// Whether the next backspace would revert a correction.
-    public var isArmed: Bool { original != nil }
-
     /// Remember that `original` was committed as `corrected`.
     public func arm(original: String, corrected: String) {
         self.original = original

@@ -32,12 +32,4 @@ final class AutoCorrectUndoTests: XCTestCase {
         XCTAssertEqual(undo.consume(), "anb")
     }
 
-    func testIsArmedTracksTheOneShotState() {
-        let undo = AutoCorrectUndo()
-        XCTAssertFalse(undo.isArmed)
-        undo.arm(original: "khôg", corrected: "không")
-        XCTAssertTrue(undo.isArmed)
-        _ = undo.consume()
-        XCTAssertFalse(undo.isArmed)
-    }
 }
