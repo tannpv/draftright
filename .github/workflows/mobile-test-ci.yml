@@ -1,9 +1,10 @@
-name: Mobile Dart tests
+name: Mobile tests
 
 # The Flutter app ships 100+ Dart unit/widget tests under DraftRightMobile/test/,
-# but until now nothing ran them — a regression in lib/ could land unnoticed
-# (RULE #1: a test suite that no machine enforces is dead weight). This gate runs
-# `flutter analyze` + `flutter test` on every change to the Dart app.
+# and the Android keyboard ships JUnit suites under android/app/src/test/ —
+# until now no machine ran either (RULE #1: a test suite that no machine
+# enforces is dead weight). This gate runs `flutter analyze` + `flutter test`
+# on Dart changes and `:app:testDebugUnitTest` on Kotlin changes.
 #
 # Runs on the self-hosted Contabo runner because GitHub-hosted minutes are
 # billing-blocked; Flutter is provisioned per-run by flutter-action (same version
@@ -19,16 +20,25 @@ on:
       - 'DraftRightMobile/test/**'
       - 'DraftRightMobile/pubspec.yaml'
       - 'DraftRightMobile/pubspec.lock'
+      - 'DraftRightMobile/android/app/src/**'
+      - 'DraftRightMobile/android/app/build.gradle.kts'
+      - 'DraftRightMobile/android/gradle/**'
+      - 'DraftRightMobile/android/gradlew'
       - '.github/workflows/mobile-test-ci.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
+  # Both jobs run on the Mac runner while the Contabo box is down (both its
+  # runner agents went offline 2026-09-03 after a starved build; box needs a
+  # console-side restart). Move back to [self-hosted, linux, x64, draftright]
+  # once it's revived, so the Mac stays free for Swift jobs.
   flutter-test:
     name: flutter analyze + test
-    runs-on: [self-hosted, linux, x64, draftright]
-    timeout-minutes: 20
+    runs-on: [self-hosted, macos, arm64, draftright-mac]
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: DraftRightMobile
@@ -46,3 +56,60 @@ jobs:
         run: flutter analyze --no-fatal-infos
       - name: Unit + widget tests
         run: flutter test
+
+  # Kotlin keyboard/IME JUnit suites (AutoCorrector, composers, parity vectors…).
+  # Scoped to :app — the bare task would fan out to every Flutter plugin
+  # subproject and fail on the ones without tests (see DraftRightMobile/CLAUDE.md
+  # "Known Patterns"). Same runner as play-deploy, so the Android SDK is present.
+  android-unit-tests:
+    name: android unit tests
+    runs-on: [self-hosted, macos, arm64, draftright-mac]
+    # Serialized after the Dart job: two heavy jobs in parallel starved the
+    # Contabo box until the runner agent lost its server connection.
+    needs: flutter-test
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      # AGP needs ANDROID_HOME even for JVM-only unit tests, and it also
+      # auto-installs the pinned NDK on first use (that download corrupted in
+      # setup-android's fresh SDK dir). The Mac runner is the maintainer's
+      # machine — its ~/Library/Android/sdk already carries everything incl.
+      # NDK 28.2. When this job moves back to the Linux runner, restore
+      # `- uses: android-actions/setup-android@v3` in place of this env.
+      - name: Use the machine's Android SDK
+        run: |
+          echo "ANDROID_HOME=$HOME/Library/Android/sdk" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$HOME/Library/Android/sdk" >> "$GITHUB_ENV"
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.41.4
+          cache: true
+      - name: Resolve dependencies
+        working-directory: DraftRightMobile
+        run: flutter pub get
+      # A build the runner agent lost mid-flight leaves its gradle/kotlin
+      # daemons behind; one such zombie pinned the box's CPU and starved two
+      # consecutive runs. Report + reap before building. Accepted trade-off:
+      # this would also kill a daemon belonging to a concurrently running
+      # play-deploy AAB build on the same box (rare — retrigger it if so).
+      - name: Reap stale gradle daemons
+        run: |
+          pgrep -af 'GradleDaemon|KotlinCompileDaemon' || echo "none found"
+          pkill -9 -f 'GradleDaemon|KotlinCompileDaemon' || true
+      - name: Kotlin unit tests
+        working-directory: DraftRightMobile/android
+        env:
+          # Bounded so gradle can't starve the shared runner box (see `needs`).
+          GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx2048m -Dorg.gradle.daemon=false
+          # Per-workspace gradle home: the box runs two runner slots, and the
+          # default shared ~/.gradle journal lock wedged permanently when a
+          # starved build's daemon died holding it. The workspace persists on a
+          # self-hosted runner, so the cache still survives across runs.
+          GRADLE_USER_HOME: ${{ github.workspace }}/.gradle-home
+        run: ./gradlew :app:testDebugUnitTest --max-workers=2

@@ -35,6 +35,10 @@ class TelexCorpusTest {
         "as" to "á", "af" to "à", "ar" to "ả", "ax" to "ã", "aj" to "ạ",
         // diphthong promotion + tone
         "hoaf" to "hòa",
+        // Open diphthongs oa/oe/uy take the tone on the FIRST vowel
+        // (modern style: hòa/khỏe/thúy, not hoà/khoẻ/thuý) — #207.
+        "khoer" to "khỏe",
+        "thuys" to "thúy",
         "vietj" to "việt",
         "tieengs" to "tiếng",
         "nguyeenx" to "nguyễn",

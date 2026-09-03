@@ -43,6 +43,9 @@ class KeyboardViewController: UIInputViewController {
     private var candidateEngine: CandidateEngine?
     private let candidateLimit = 7
 
+    /// Pending auto-correction the next backspace would revert (#207).
+    private let autoCorrectUndo = AutoCorrectUndo()
+
     private var totalHeight: CGFloat {
         let barHeight = (candidateBar.isHidden ? 0 : CandidateBarView.barHeight)
         return barHeight + KeyboardDimensions.toolbarHeight + keyboard.totalHeight
@@ -108,6 +111,14 @@ class KeyboardViewController: UIInputViewController {
                 }
             }
         }
+        // Any edit or cursor move after an auto-correction makes the one-shot
+        // undo stale (#207). The revert re-checks the field anyway; disarming
+        // here closes the window where a *later* identical word would match
+        // that check by coincidence and get "reverted" to the old typo.
+        if autoCorrectUndo.corrected != nil,
+           !autoCorrectUndo.isLive(beforeCursor: textDocumentProxy.documentContextBeforeInput) {
+            autoCorrectUndo.disarm()
+        }
         // A field switch while the keyboard stays up surfaces here (not in
         // viewWillAppear); re-evaluate the digits layer. Guarded on a
         // keyboardType change, so ordinary keystrokes are a no-op (#190).
@@ -133,6 +144,9 @@ class KeyboardViewController: UIInputViewController {
     }
 
     private func rebuildController() {
+        // A rebuild means a new session or language switch — a pending
+        // auto-correct undo must not survive into it (#207).
+        autoCorrectUndo.disarm()
         controller = KeyboardController(
             registry: registry,
             enabledIds: settings.enabledLanguageIds,
@@ -525,6 +539,8 @@ extension KeyboardViewController: KeyboardActionDelegate {
 
     func keyboardDidBackspace() {
         feedback.fire(.delete)
+        // Undo a just-applied auto-correction rather than deleting a character.
+        if revertAutoCorrect() { return }
         dispatchBackspace(controller.onBackspace())
         refreshCandidates()
     }
@@ -541,6 +557,10 @@ extension KeyboardViewController: KeyboardActionDelegate {
 
     func keyboardDidSpace() {
         feedback.fire(.space)
+        // Space is where a finished word can still be fixed (#207): for packs
+        // that opt in, a one-edit typo is replaced by the intended word and the
+        // next backspace puts back what was typed.
+        if controller.current.autoCorrectEnabled, autoCorrectOnSpace() { return }
         // Route space through the composer so a pending Telex composition
         // commits FIRST, then space appends. Without this, a direct
         // insertText(" ") replaces the marked region (e.g. "viet")
@@ -594,6 +614,61 @@ extension KeyboardViewController: KeyboardActionDelegate {
         textDocumentProxy.setMarkedText(
             updated, selectedRange: NSRange(location: updated.utf16.count, length: 0))
         refreshCandidates()
+    }
+
+    // MARK: - Auto-correct on space (#207)
+
+    /// Replace the just-finished word with its correction and append the space.
+    /// Returns true when it consumed the space, false when there was nothing to
+    /// correct so the caller falls through to a normal space.
+    ///
+    /// The decision is the engine's (`CandidateEngine.autoCorrect`) — this only
+    /// performs the edit: the marked region still holds the typed word, so
+    /// writing the correction over it replaces exactly that text. Mirrors
+    /// Android `DraftRightIME.autoCorrectOnSpace`.
+    private func autoCorrectOnSpace() -> Bool {
+        // Field divergence (the app clearing text behind our back) is handled
+        // before this point: textDidChange resets the composer whenever the
+        // document no longer ends with the composing buffer, so a stale word
+        // can't reach the correction. Android needs an explicit guard here
+        // (`dropStaleComposerIfFieldDiverged`) because some apps clear their
+        // field without any callback at all (#71).
+        let typed = controller?.composer?.currentComposingText() ?? ""
+        guard !typed.isEmpty, let corrected = candidateEngine?.autoCorrect(typed) else { return false }
+        let proxy = UIKitTextProxy(textDocumentProxy)
+        proxy.setComposing(corrected)
+        proxy.clearComposing()
+        controller?.composer?.reset()
+        proxy.insert(" ")
+        autoCorrectUndo.arm(original: typed, corrected: corrected)
+        refreshCandidates()
+        return true
+    }
+
+    /// Backspace immediately after an auto-correction puts the typed word back
+    /// instead of deleting a character (#207) — the correction is only
+    /// acceptable because reverting it costs one key. Returns true when it
+    /// consumed the backspace.
+    ///
+    /// The field itself decides whether the undo is still live: it fires only
+    /// while the text before the cursor is exactly the correction we wrote plus
+    /// its space. That beats disarming from every other key handler — one
+    /// forgotten call site there would revert a word the user had moved past.
+    /// Mirrors Android `DraftRightIME.revertAutoCorrect`.
+    private func revertAutoCorrect() -> Bool {
+        guard let corrected = autoCorrectUndo.corrected else { return false }
+        let written = corrected + " "
+        guard autoCorrectUndo.isLive(beforeCursor: textDocumentProxy.documentContextBeforeInput) else {
+            autoCorrectUndo.disarm()
+            return false
+        }
+        guard let typed = autoCorrectUndo.consume() else { return false }
+        let proxy = UIKitTextProxy(textDocumentProxy)
+        // Delete the correction plus the space this same handler appended.
+        for _ in 0..<written.count { proxy.deleteBackward() }
+        proxy.insert(typed + " ")
+        refreshCandidates()
+        return true
     }
 
     // MARK: - KeystrokeOutcome dispatch

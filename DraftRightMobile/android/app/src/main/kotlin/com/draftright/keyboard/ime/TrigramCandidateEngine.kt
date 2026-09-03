@@ -26,6 +26,8 @@ package com.draftright.keyboard.ime
  */
 class TrigramCandidateEngine(private val wordList: LanguageWordList) : CandidateEngine {
 
+    override fun autoCorrect(token: String): String? = AutoCorrector.correct(token, wordList)
+
     override fun suggest(
         composing: String,
         previousTokens: List<String>,

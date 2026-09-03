@@ -34,6 +34,10 @@ public final class TrigramCandidateEngine: CandidateEngine {
         self.wordList = wordList
     }
 
+    public func autoCorrect(_ token: String) -> String? {
+        AutoCorrector.correct(token, wordList)
+    }
+
     public func suggest(composing: String, previousTokens: [String], limit: Int) -> [Candidate] {
         guard limit > 0 else { return [] }
         if composing.isEmpty {
