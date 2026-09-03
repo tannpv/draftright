@@ -1,9 +1,10 @@
-name: Mobile Dart tests
+name: Mobile tests
 
 # The Flutter app ships 100+ Dart unit/widget tests under DraftRightMobile/test/,
-# but until now nothing ran them — a regression in lib/ could land unnoticed
-# (RULE #1: a test suite that no machine enforces is dead weight). This gate runs
-# `flutter analyze` + `flutter test` on every change to the Dart app.
+# and the Android keyboard ships JUnit suites under android/app/src/test/ —
+# until now no machine ran either (RULE #1: a test suite that no machine
+# enforces is dead weight). This gate runs `flutter analyze` + `flutter test`
+# on Dart changes and `:app:testDebugUnitTest` on Kotlin changes.
 #
 # Runs on the self-hosted Contabo runner because GitHub-hosted minutes are
 # billing-blocked; Flutter is provisioned per-run by flutter-action (same version
@@ -19,6 +20,8 @@ on:
       - 'DraftRightMobile/test/**'
       - 'DraftRightMobile/pubspec.yaml'
       - 'DraftRightMobile/pubspec.lock'
+      - 'DraftRightMobile/android/app/src/**'
+      - 'DraftRightMobile/android/app/build.gradle.kts'
       - '.github/workflows/mobile-test-ci.yml'
 
 permissions:
@@ -46,3 +49,30 @@ jobs:
         run: flutter analyze --no-fatal-infos
       - name: Unit + widget tests
         run: flutter test
+
+  # Kotlin keyboard/IME JUnit suites (AutoCorrector, composers, parity vectors…).
+  # Scoped to :app — the bare task would fan out to every Flutter plugin
+  # subproject and fail on the ones without tests (see DraftRightMobile/CLAUDE.md
+  # "Known Patterns"). Same runner as play-deploy, so the Android SDK is present.
+  android-unit-tests:
+    name: android unit tests
+    runs-on: [self-hosted, linux, x64, draftright]
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.41.4
+          cache: true
+      - name: Resolve dependencies
+        working-directory: DraftRightMobile
+        run: flutter pub get
+      - name: Kotlin unit tests
+        working-directory: DraftRightMobile/android
+        run: ./gradlew :app:testDebugUnitTest
