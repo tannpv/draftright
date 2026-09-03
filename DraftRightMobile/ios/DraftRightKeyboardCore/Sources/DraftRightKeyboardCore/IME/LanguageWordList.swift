@@ -28,11 +28,20 @@ public protocol LanguageWordList {
     /// its own index rather than scanning 50k rows, so it opts in.
     func fuzzyMatches(_ term: String, maxEdits: Int, limit: Int) -> [(word: String, freq: Int)]
 
+    /// Frequency of `word` as an exact dictionary entry, `0` when absent — i.e.
+    /// "is this a real word, and how common is it", the question auto-correct
+    /// (#207) asks before deciding a token is a typo. Case-insensitive, like
+    /// `prefixMatches`/`fuzzyMatches`. Mirror of Android
+    /// `LanguageWordList.frequencyOf`. Default `0` so a store without an exact
+    /// index (mmap) stays valid until it overrides.
+    func frequencyOf(_ word: String) -> Int
+
     func close()
 }
 
 public extension LanguageWordList {
     func fuzzyMatches(_ term: String, maxEdits: Int, limit: Int) -> [(word: String, freq: Int)] { [] }
+    func frequencyOf(_ word: String) -> Int { 0 }
     func close() {}
 }
 
@@ -41,6 +50,10 @@ public extension LanguageWordList {
 public final class InMemoryWordList: LanguageWordList {
     private let words: [(word: String, freq: Int)]
     private let lowerBigrams: [String: [String: Int]]
+    /// Exact-lookup index over the same words, keyed lowercase. Duplicate
+    /// spellings keep the highest frequency so a low-frequency dupe can't hide
+    /// a common word from auto-correct. Mirrors Android `freqByWord`.
+    private let freqByWord: [String: Int]
 
     /// - Parameters:
     ///   - words:   Word/frequency pairs. Sorted by descending frequency
@@ -55,6 +68,13 @@ public final class InMemoryWordList: LanguageWordList {
         lc.reserveCapacity(bigrams.count)
         for (k, v) in bigrams { lc[k.lowercased()] = v }
         self.lowerBigrams = lc
+        var freqs: [String: Int] = [:]
+        freqs.reserveCapacity(words.count)
+        for entry in words {
+            let key = entry.word.lowercased()
+            freqs[key] = Swift.max(freqs[key] ?? 0, entry.freq)
+        }
+        self.freqByWord = freqs
     }
 
     public func prefixMatches(_ prefix: String, limit: Int) -> [(word: String, freq: Int)] {
@@ -73,6 +93,10 @@ public final class InMemoryWordList: LanguageWordList {
 
     public func successors(_ token: String) -> [String: Int] {
         lowerBigrams[token.lowercased()] ?? [:]
+    }
+
+    public func frequencyOf(_ word: String) -> Int {
+        freqByWord[word.lowercased()] ?? 0
     }
 
     /// Full scan for words within `maxEdits` of `term`, ranked by (distance asc,

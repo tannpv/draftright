@@ -42,6 +42,13 @@ public protocol CandidateEngine {
     ///            engines can return fewer.
     func suggest(composing: String, previousTokens: [String], limit: Int) -> [Candidate]
 
+    /// Correction for a token the user just finished, or nil to leave it as
+    /// typed (#207). Asked here rather than from the keyboard directly so the
+    /// decision reads the dictionary the engine already holds — a second copy
+    /// loaded beside it would double the memory and could disagree.
+    /// Mirror of Kotlin `CandidateEngine.autoCorrect`.
+    func autoCorrect(_ token: String) -> String?
+
     /// Free any data the engine memory-mapped or cached. Called when the
     /// IME service is shutting down or the user disables this language.
     func close()
@@ -53,5 +60,8 @@ public extension CandidateEngine {
     func suggest(composing: String, previousTokens: [String] = []) -> [Candidate] {
         suggest(composing: composing, previousTokens: previousTokens, limit: 7)
     }
+    /// Default: an engine without a frequency dictionary (CJK reading
+    /// conversion) has nothing to judge a typo against.
+    func autoCorrect(_ token: String) -> String? { nil }
     func close() {}
 }

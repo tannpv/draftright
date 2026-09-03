@@ -23,6 +23,9 @@ object VietnameseLanguagePack : LanguagePack {
 
     override val sttLocale: String? = "vi-VN"
 
+    /** On: the shipped ~8.5k frequency list can tell a typo from a rare word. */
+    override val autoCorrectEnabled: Boolean = true
+
     override fun composer(): Composer = TelexComposer()
 
     /**

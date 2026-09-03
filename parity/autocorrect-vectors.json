@@ -1,0 +1,71 @@
+{
+  "_comment": "RULE #1 golden-vector parity guard for auto-correct-on-space (#207). The Kotlin (AutoCorrectorVectorsTest) and Swift (AutoCorrectorVectorsTests) decision functions assert against these same cases, so the two ports cannot drift. `dict` is [word, frequency] pairs; `expect` is the word to commit instead of `token`, or null to leave it as typed. Hand-edited on purpose — these are the behaviours we promise, not generated output.",
+  "cases": [
+    {
+      "name": "one-edit typo corrected to the common neighbour",
+      "dict": [["không", 668048], ["khô", 4000]],
+      "token": "khôg",
+      "expect": "không"
+    },
+    {
+      "name": "real word is never touched",
+      "dict": [["anh", 469245]],
+      "token": "anh",
+      "expect": null
+    },
+    {
+      "name": "no neighbour within one edit",
+      "dict": [["không", 668048]],
+      "token": "zzzz",
+      "expect": null
+    },
+    {
+      "name": "empty token",
+      "dict": [["ta", 342219], ["tôi", 711535]],
+      "token": "",
+      "expect": null
+    },
+    {
+      "name": "non-letter characters block correction",
+      "dict": [["không", 668048]],
+      "token": "khô1",
+      "expect": null
+    },
+    {
+      "name": "candidate below the confidence floor",
+      "dict": [["khô", 499]],
+      "token": "khù",
+      "expect": null
+    },
+    {
+      "name": "two comparable rivals are ambiguous",
+      "dict": [["ta", 342219], ["tô", 300000]],
+      "token": "tá",
+      "expect": null
+    },
+    {
+      "name": "leading capital carried over",
+      "dict": [["không", 668048], ["khô", 4000]],
+      "token": "Khôg",
+      "expect": "Không"
+    },
+    {
+      "name": "all caps left alone",
+      "dict": [["không", 668048]],
+      "token": "KHÔG",
+      "expect": null
+    },
+    {
+      "name": "mixed case left alone",
+      "dict": [["không", 668048]],
+      "token": "kHôg",
+      "expect": null
+    },
+    {
+      "name": "known word in another casing is still a real word",
+      "dict": [["Saigon", 20000]],
+      "token": "saigon",
+      "expect": null
+    }
+  ]
+}
