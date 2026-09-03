@@ -26,9 +26,9 @@ public struct VietnameseLanguagePack: LanguagePack {
     public func makeComposer() -> Composer? { TelexComposer() }
 
     /// Trigram completions sourced from a downloaded wordlist pack when
-    /// installed, otherwise the in-bundle bootstrap list. Engine is cheap
-    /// to construct (shares the static `wordList`); the IME caller may
-    /// still cache the result for the session.
+    /// installed, otherwise the in-bundle list (generated ~8.5k unigrams +
+    /// curated bigrams). Engine is cheap to construct (shares the static
+    /// `wordList`); the IME caller may still cache the result for the session.
     public func makeCandidateEngine() -> CandidateEngine? {
         let wordList = WordListPackResolver.loadOrFallback(
             appGroupContainer: Self.appGroupContainer,
