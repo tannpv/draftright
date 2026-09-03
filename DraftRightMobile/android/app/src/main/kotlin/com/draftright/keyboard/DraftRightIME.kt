@@ -45,6 +45,9 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
     /** Pending JP/ZH conversion cursor — space cycles candidates (#207). */
     private val cycle = com.draftright.keyboard.ime.ConversionCycle()
 
+    /** Pending auto-correction the next backspace would revert (#207). */
+    private val autoCorrectUndo = com.draftright.keyboard.ime.AutoCorrectUndo()
+
     /**
      * Maximum candidates rendered at once. The bar scrolls horizontally so
      * a higher cap is fine, but the trigram engine's top picks dominate —
@@ -371,6 +374,8 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
 
     override fun onBackspace() {
         val ic = currentInputConnection ?: return
+        // Undo a just-applied auto-correction rather than deleting a character.
+        if (revertAutoCorrect(ic)) return
         // Backspace on a pending JP/ZH conversion cancels it back to the reading
         // (the composer still holds the kana/pinyin), rather than deleting a char.
         if (cycle.isActive) {
@@ -467,6 +472,11 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
         // the kanji/hanzi takes the reading's place; no trailing space (CJK text
         // has none). With no reading (empty buffer) space falls through to normal.
         if (c.current.convertsOnSpace && convertReadingOnSpace(ic)) return
+
+        // Space is where a finished word can still be fixed (#207): for packs
+        // that opt in, a one-edit typo is replaced by the intended word and the
+        // next backspace puts back what was typed.
+        if (c.current.autoCorrectEnabled && autoCorrectOnSpace(ic, c)) return
 
         dropStaleComposerIfFieldDiverged(ic)
         when (val outcome = c.onKey(' ')) {
@@ -735,6 +745,59 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
      * starts fresh, append a trailing space (matches Samsung/Gboard UX), and
      * clear the bar so we don't show stale suggestions.
      */
+    /**
+     * Auto-correct-on-space (#207): replace the just-finished word with its
+     * correction and append the space. Returns true when it consumed the space,
+     * false when there was nothing to correct so the caller falls through to a
+     * normal space.
+     *
+     * The decision is the engine's ([CandidateEngine.autoCorrect]) — this only
+     * performs the edit: the composing region still holds the typed word, so
+     * committing the correction over it replaces exactly that text, and the
+     * undo remembers what to restore.
+     */
+    private fun autoCorrectOnSpace(
+        ic: android.view.inputmethod.InputConnection,
+        c: KeyboardController,
+    ): Boolean {
+        val typed = c.composer?.currentComposingText().orEmpty()
+        if (typed.isEmpty()) return false
+        val corrected = c.current.candidateEngine()?.autoCorrect(typed) ?: return false
+        ic.setComposingText(corrected, 1)
+        ic.finishComposingText()
+        c.composer?.reset()
+        ic.commitText(" ", 1)
+        autoCorrectUndo.arm(original = typed, corrected = corrected)
+        refreshCandidates()
+        return true
+    }
+
+    /**
+     * Backspace immediately after an auto-correction puts the typed word back
+     * instead of deleting a character (#207) — the correction is only
+     * acceptable because reverting it costs one key. Returns true when it
+     * consumed the backspace.
+     *
+     * The field itself decides whether the undo is still live: it fires only
+     * while the text before the cursor is exactly the correction we wrote plus
+     * its space. That beats disarming from every other key handler — one
+     * forgotten call site there would revert a word the user had moved past.
+     */
+    private fun revertAutoCorrect(ic: android.view.inputmethod.InputConnection): Boolean {
+        val corrected = autoCorrectUndo.corrected ?: return false
+        val written = "$corrected "
+        if (ic.getTextBeforeCursor(written.length, 0)?.toString() != written) {
+            autoCorrectUndo.disarm()
+            return false
+        }
+        val typed = autoCorrectUndo.consume() ?: return false
+        // Delete the correction plus the space this same handler appended.
+        ic.deleteSurroundingText(written.length, 0)
+        ic.commitText("$typed ", 1)
+        refreshCandidates()
+        return true
+    }
+
     /**
      * JP/ZH space-to-convert: commit the top candidate for the current reading
      * (kana→kanji, pinyin→hanzi). Returns true when it consumed the space (a

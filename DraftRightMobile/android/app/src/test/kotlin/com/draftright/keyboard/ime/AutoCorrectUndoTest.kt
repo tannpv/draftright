@@ -1,0 +1,55 @@
+package com.draftright.keyboard.ime
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+/**
+ * One-shot undo armed by an auto-correction (#207): the backspace immediately
+ * after a correction puts the typed word back instead of deleting a character.
+ * Mirror of Swift `AutoCorrectUndoTests`.
+ */
+class AutoCorrectUndoTest {
+
+    @Test
+    fun backspaceAfterCorrectionRevertsOnce() {
+        val undo = AutoCorrectUndo()
+        undo.arm(original = "khôg", corrected = "không")
+        assertEquals("không", undo.corrected)
+        assertEquals("khôg", undo.consume())
+        assertNull("undo is one-shot", undo.consume())
+    }
+
+    @Test
+    fun nothingToConsumeBeforeAnyCorrection() {
+        assertNull(AutoCorrectUndo().consume())
+    }
+
+    @Test
+    fun disarmDropsThePendingUndo() {
+        val undo = AutoCorrectUndo()
+        undo.arm(original = "khôg", corrected = "không")
+        undo.disarm()
+        assertNull(undo.consume())
+    }
+
+    @Test
+    fun armingAgainReplacesThePendingUndo() {
+        val undo = AutoCorrectUndo()
+        undo.arm(original = "khôg", corrected = "không")
+        undo.arm(original = "anb", corrected = "anh")
+        assertEquals("anb", undo.consume())
+    }
+
+    @Test
+    fun isArmedTracksTheOneShotState() {
+        val undo = AutoCorrectUndo()
+        assertFalse(undo.isArmed)
+        undo.arm(original = "khôg", corrected = "không")
+        assertTrue(undo.isArmed)
+        undo.consume()
+        assertFalse(undo.isArmed)
+    }
+}

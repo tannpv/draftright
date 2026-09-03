@@ -46,6 +46,17 @@ interface CandidateEngine {
     ): List<Candidate>
 
     /**
+     * Correction for a token the user just finished, or null to leave it as
+     * typed (#207). Asked here rather than from the IME directly so the
+     * decision reads the dictionary the engine already holds — a second copy
+     * loaded beside it would double the memory and could disagree.
+     *
+     * Default null: an engine without a frequency dictionary (CJK reading
+     * conversion) has nothing to judge a typo against.
+     */
+    fun autoCorrect(token: String): String? = null
+
+    /**
      * Free any data the engine memory-mapped or cached. Called when the IME
      * service is shutting down or the user disables this language.
      */
