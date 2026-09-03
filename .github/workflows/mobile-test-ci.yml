@@ -69,6 +69,9 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      # Provides ANDROID_HOME — the Android Gradle Plugin refuses to configure
+      # without an SDK even for JVM-only unit tests. Same action play-deploy uses.
+      - uses: android-actions/setup-android@v3
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: 3.41.4
