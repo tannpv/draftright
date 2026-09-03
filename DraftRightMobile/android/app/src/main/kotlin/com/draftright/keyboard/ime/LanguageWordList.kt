@@ -36,6 +36,15 @@ interface LanguageWordList {
      */
     fun fuzzyMatches(term: String, maxEdits: Int, limit: Int): List<Pair<String, Int>> = emptyList()
 
+    /**
+     * Frequency of [word] as an exact dictionary entry, `0` when absent — i.e.
+     * "is this a real word, and how common is it", the question auto-correct
+     * (#207) asks before deciding a token is a typo. Case-insensitive, like
+     * [prefixMatches] and [fuzzyMatches]. Default `0` so a store without an
+     * exact index (mmap) stays valid until it overrides.
+     */
+    fun frequencyOf(word: String): Int = 0
+
     fun close() {}
 }
 
@@ -70,8 +79,19 @@ class InMemoryWordList(
         return out
     }
 
+    /**
+     * Exact-lookup index over the same words, keyed lowercase. Duplicate
+     * spellings keep the highest frequency so a low-frequency dupe can't hide
+     * a common word from auto-correct.
+     */
+    private val freqByWord: Map<String, Int> =
+        words.groupingBy { (word, _) -> word.lowercase() }
+            .fold(0) { acc, (_, freq) -> maxOf(acc, freq) }
+
     override fun successors(token: String): Map<String, Int> =
         lcBigrams[token.lowercase()] ?: emptyMap()
+
+    override fun frequencyOf(word: String): Int = freqByWord[word.lowercase()] ?: 0
 
     /**
      * Full scan for words within [maxEdits] of [term], ranked by (distance asc,
