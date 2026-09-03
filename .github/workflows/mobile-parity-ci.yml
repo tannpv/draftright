@@ -18,6 +18,8 @@ on:
     paths:
       - 'DraftRightMobile/android/app/src/main/res/raw/wordlist_vi_bigrams.tsv'
       - 'DraftRightMobile/ios/DraftRightKeyboardCore/Sources/DraftRightKeyboardCore/IME/VietnameseBootstrapWordList.swift'
+      - 'DraftRightMobile/android/app/src/main/res/raw/wordlist_vi.tsv'
+      - 'DraftRightMobile/ios/DraftRightKeyboardCore/Sources/DraftRightKeyboardCore/IME/VietnameseWordList.swift'
       - 'DraftRightMobile/android/app/src/main/kotlin/com/draftright/keyboard/ime/PinyinSyllables.kt'
       - 'DraftRightMobile/ios/DraftRightKeyboardCore/Sources/DraftRightKeyboardCore/IME/PinyinSyllables.swift'
       - 'DraftRightMobile/android/app/src/main/kotlin/com/draftright/keyboard/ime/FlickLayout.kt'
@@ -27,6 +29,7 @@ on:
       - 'DraftRightMobile/android/app/src/main/kotlin/com/draftright/keyboard/ime/Katakana.kt'
       - 'DraftRightMobile/ios/DraftRightKeyboardCore/Sources/DraftRightKeyboardCore/IME/Katakana.swift'
       - 'scripts/check-vi-bigram-parity.py'
+      - 'scripts/check-vi-wordlist-parity.py'
       - 'scripts/check-pinyin-syllables-parity.py'
       - 'scripts/check-flick-layout-parity.py'
       - 'scripts/check-kana-modifier-parity.py'
@@ -58,6 +61,8 @@ jobs:
           persist-credentials: false
       - name: Assert the two bigram copies agree
         run: python3 scripts/check-vi-bigram-parity.py
+      - name: Assert the two VI unigram dictionaries agree
+        run: python3 scripts/check-vi-wordlist-parity.py
       - name: Assert the two pinyin syllable sets agree
         run: python3 scripts/check-pinyin-syllables-parity.py
       - name: Assert the two flick kana maps agree
