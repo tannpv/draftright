@@ -74,4 +74,7 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.mockito:mockito-core:5.7.0")
     testImplementation("org.mockito.kotlin:mockito-kotlin:5.2.1")
+    // Real org.json for JVM unit tests — the android.jar one is a stub that
+    // throws. Needed to read the shared parity/*.json golden vectors.
+    testImplementation("org.json:json:20240303")
 }
