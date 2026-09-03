@@ -15,6 +15,7 @@ on:
           - open
           - production_draft
           - production_rollout_10
+          - promote_internal_production_10
 
 jobs:
   deploy:
@@ -86,6 +87,9 @@ jobs:
         run: flutter pub get
 
       - name: Build release AAB
+        # Promote lanes move an existing Play release between tracks — nothing
+        # to build or upload.
+        if: ${{ !startsWith(github.event.inputs.track, 'promote_') }}
         run: flutter build appbundle --release
 
       - name: Export AAB artifact (for manual console upload)
