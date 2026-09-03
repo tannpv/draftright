@@ -87,4 +87,9 @@ jobs:
         env:
           # Bounded so gradle can't starve the shared runner box (see `needs`).
           GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx2048m -Dorg.gradle.daemon=false
+          # Per-workspace gradle home: the box runs two runner slots, and the
+          # default shared ~/.gradle journal lock wedged permanently when a
+          # starved build's daemon died holding it. The workspace persists on a
+          # self-hosted runner, so the cache still survives across runs.
+          GRADLE_USER_HOME: ${{ github.workspace }}/.gradle-home
         run: ./gradlew :app:testDebugUnitTest --max-workers=2
