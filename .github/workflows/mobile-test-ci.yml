@@ -57,16 +57,15 @@ jobs:
   # Scoped to :app — the bare task would fan out to every Flutter plugin
   # subproject and fail on the ones without tests (see DraftRightMobile/CLAUDE.md
   # "Known Patterns"). Same runner as play-deploy, so the Android SDK is present.
+  # PERMANENTLY on the Mac runner: the Contabo box killed its runner agent on
+  # every attempt at this gradle+Kotlin compile (3 crashes on 2026-09-03, even
+  # serialized with capped heap/workers), while the Mac ran it green. The box
+  # stays fine for the lighter Dart job above, parity guards, and play-deploy.
+  # Different boxes now, so no `needs:` serialization.
   android-unit-tests:
     name: android unit tests
-    runs-on: [self-hosted, linux, x64, draftright]
-    # Serialized after the Dart job: two heavy jobs in parallel starved the
-    # Contabo box until the runner agent lost its server connection.
-    needs: flutter-test
-    # First run on a fresh runner workspace downloads the gradle dist + all
-    # deps + the pinned NDK into the isolated GRADLE_USER_HOME — over 30m on
-    # the Contabo box. Warm runs finish in ~10m.
-    timeout-minutes: 50
+    runs-on: [self-hosted, macos, arm64, draftright-mac]
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
         with:
@@ -75,9 +74,13 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      # AGP needs ANDROID_HOME even for JVM-only unit tests. Same action
-      # play-deploy uses on this box, so the SDK dir is warm.
-      - uses: android-actions/setup-android@v3
+      # AGP needs ANDROID_HOME even for JVM-only unit tests. The Mac's own
+      # SDK carries everything incl. the pinned NDK 28.2 (setup-android's
+      # fresh-dir NDK auto-install corrupted when tried).
+      - name: Use the machine's Android SDK
+        run: |
+          echo "ANDROID_HOME=$HOME/Library/Android/sdk" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$HOME/Library/Android/sdk" >> "$GITHUB_ENV"
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: 3.41.4
