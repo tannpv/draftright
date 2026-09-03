@@ -31,9 +31,13 @@ permissions:
   contents: read
 
 jobs:
+  # Both jobs run on the Mac runner while the Contabo box is down (both its
+  # runner agents went offline 2026-09-03 after a starved build; box needs a
+  # console-side restart). Move back to [self-hosted, linux, x64, draftright]
+  # once it's revived, so the Mac stays free for Swift jobs.
   flutter-test:
     name: flutter analyze + test
-    runs-on: [self-hosted, linux, x64, draftright]
+    runs-on: [self-hosted, macos, arm64, draftright-mac]
     timeout-minutes: 20
     defaults:
       run:
@@ -59,7 +63,7 @@ jobs:
   # "Known Patterns"). Same runner as play-deploy, so the Android SDK is present.
   android-unit-tests:
     name: android unit tests
-    runs-on: [self-hosted, linux, x64, draftright]
+    runs-on: [self-hosted, macos, arm64, draftright-mac]
     # Serialized after the Dart job: two heavy jobs in parallel starved the
     # Contabo box until the runner agent lost its server connection.
     needs: flutter-test
