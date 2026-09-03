@@ -98,7 +98,10 @@ katakana constants. Add one whenever you add cross-language keyboard data.
 flick) — board ≠ runtime. Candidate-engine-only changes are lower risk. Enable a
 language in app Settings → Keyboard languages; cycle the globe key to it.
 
-**CI note:** GitHub-hosted Actions is billing-blocked — mobile/Windows builds run
-on self-hosted Contabo (Linux) + a Win11 desktop (Windows, pending). Play deploy's
-real upload keystore lives ONLY in the standalone repo's CI secret. See the
-maintainer's memory `reference_contabo_selfhosted_runner`.
+**CI note:** GitHub-hosted Actions is billing-blocked — everything runs on
+self-hosted runners: Contabo (Linux — parity guards, Flutter tests), the
+maintainer's Mac `tannguyen-mac` (macOS — `swift test` for DraftRightKeyboardCore
+via `mobile-swift-ci.yml`; a job queued while the Mac sleeps just waits), and a
+Win11 desktop (Windows, pending). Play deploy's real upload keystore lives ONLY
+in the standalone repo's CI secret. See the maintainer's memories
+`reference_contabo_selfhosted_runner` + `reference_mac_selfhosted_swift_runner`.
