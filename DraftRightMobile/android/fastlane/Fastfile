@@ -126,4 +126,23 @@ platform :android do
     )
     UI.success("Started 10% staged rollout of #{AAB_PATH} on Production.")
   end
+
+  desc "Promote the release already on the internal track to Production at " \
+       "10% rollout — no rebuild, no re-upload. This is the path when the " \
+       "version code is already on Play (uploading it again is rejected: " \
+       "'Version code N has already been used')."
+  lane :promote_internal_production_10 do
+    upload_to_play_store(
+      track: "internal",
+      track_promote_to: "production",
+      track_promote_release_status: "inProgress",
+      rollout: "0.1",
+      skip_upload_aab: true,
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+      skip_upload_changelogs: true,
+    )
+    UI.success("Promoted the internal release to Production at 10% rollout.")
+  end
 end
