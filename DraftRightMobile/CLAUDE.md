@@ -100,9 +100,20 @@ flick) — board ≠ runtime. Candidate-engine-only changes are lower risk. Enab
 language in app Settings → Keyboard languages; cycle the globe key to it.
 
 **CI note:** GitHub-hosted Actions is billing-blocked — everything runs on
-self-hosted runners: Contabo (Linux — parity guards, Flutter tests), the
-maintainer's Mac `tannguyen-mac` (macOS — `swift test` for DraftRightKeyboardCore
-via `mobile-swift-ci.yml`; a job queued while the Mac sleeps just waits), and a
-Win11 desktop (Windows, pending). Play deploy's real upload keystore lives ONLY
-in the standalone repo's CI secret. See the maintainer's memories
+self-hosted runners, split by what each box can survive (settled 2026-09-04):
+- **Mac `tannguyen-mac`**: Swift core tests (`mobile-swift-ci.yml`) + Android
+  Kotlin unit tests (`mobile-test-ci.yml` android job). The Contabo box crashed
+  its runner agent on every attempt at the gradle+Kotlin compile — don't move
+  that job back. A job queued while the Mac sleeps just waits.
+- **Contabo (Linux)**: Dart `flutter analyze + test`, parity guards
+  (`mobile-parity-ci.yml`), and the mirror repo's `play-deploy.yml`. If its
+  agents go offline, dispatch `runner-maintenance.yml` (in this dir's
+  `.github/workflows/`, synced to the mirror) — reaps zombie gradle daemons and
+  restarts the agents.
+- Win11 desktop (Windows) pending.
+
+Play deploy's real upload keystore lives ONLY in the standalone repo's CI
+secret. **Play production is policy-gated** (12 testers × 14 days) — see
+`docs/superpowers/plans/2026-09-04-play-production-launch.md` before touching
+production lanes. See also the maintainer's memories
 `reference_contabo_selfhosted_runner` + `reference_mac_selfhosted_swift_runner`.
