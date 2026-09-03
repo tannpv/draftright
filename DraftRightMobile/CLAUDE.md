@@ -91,8 +91,9 @@ each other 1:1. The seam:
 **Cross-language data parity (RULE #1):** Kotlin & Swift can't share source, so
 duplicated linguistic data each gets a `scripts/check-*-parity.py` guard wired into
 `.github/workflows/mobile-parity-ci.yml` (Contabo self-hosted `draftright` runner).
-5 guards today: VI bigrams, pinyin syllables, flick kana map, kana modifier cycles,
-katakana constants. Add one whenever you add cross-language keyboard data.
+7 guards today: VI bigrams, VI wordlist, pinyin syllables, flick kana map,
+kana modifier cycles, katakana constants, auto-correct thresholds. Add one
+whenever you add cross-language keyboard data.
 
 **On-device verify before merging IME-flow changes** (space-convert, cycling,
 flick) — board ≠ runtime. Candidate-engine-only changes are lower risk. Enable a

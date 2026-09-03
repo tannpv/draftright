@@ -29,6 +29,10 @@ object AutoCorrector {
     /** The winner must be this many times more frequent than the runner-up. */
     const val MIN_CONFIDENCE_MARGIN = 4
 
+    /** Candidates fetched per decision: the winner plus the one runner-up the
+     * margin check compares it against. */
+    const val CANDIDATE_POOL = 2
+
     /**
      * The corrected word for [token], or `null` to leave it as typed.
      * Casing of [token] is preserved: a leading capital carries over to the
@@ -42,7 +46,7 @@ object AutoCorrector {
         if (token != lower && !capitalized) return null
 
         if (words.frequencyOf(lower) > 0) return null // already a real word
-        val candidates = words.fuzzyMatches(lower, MAX_EDITS, limit = 2)
+        val candidates = words.fuzzyMatches(lower, MAX_EDITS, limit = CANDIDATE_POOL)
         val (word, freq) = candidates.firstOrNull() ?: return null
         if (freq < MIN_CONFIDENCE_FREQ) return null
         val runnerUp = candidates.getOrNull(1)?.second ?: 0

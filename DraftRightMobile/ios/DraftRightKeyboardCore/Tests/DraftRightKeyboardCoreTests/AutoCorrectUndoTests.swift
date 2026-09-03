@@ -32,4 +32,15 @@ final class AutoCorrectUndoTests: XCTestCase {
         XCTAssertEqual(undo.consume(), "anb")
     }
 
+    func testIsLiveOnlyWhileFieldEndsWithCorrectionPlusSpace() {
+        let undo = AutoCorrectUndo()
+        XCTAssertFalse(undo.isLive(beforeCursor: "không "), "not armed")
+        undo.arm(original: "khôg", corrected: "không")
+        XCTAssertTrue(undo.isLive(beforeCursor: "không "))
+        XCTAssertTrue(undo.isLive(beforeCursor: "chào không "), "suffix match is enough")
+        XCTAssertFalse(undo.isLive(beforeCursor: "không"), "space not yet appended")
+        XCTAssertFalse(undo.isLive(beforeCursor: "không x"), "user typed past it")
+        XCTAssertFalse(undo.isLive(beforeCursor: nil), "field unreadable")
+    }
+
 }

@@ -111,6 +111,14 @@ class KeyboardViewController: UIInputViewController {
                 }
             }
         }
+        // Any edit or cursor move after an auto-correction makes the one-shot
+        // undo stale (#207). The revert re-checks the field anyway; disarming
+        // here closes the window where a *later* identical word would match
+        // that check by coincidence and get "reverted" to the old typo.
+        if autoCorrectUndo.corrected != nil,
+           !autoCorrectUndo.isLive(beforeCursor: textDocumentProxy.documentContextBeforeInput) {
+            autoCorrectUndo.disarm()
+        }
         // A field switch while the keyboard stays up surfaces here (not in
         // viewWillAppear); re-evaluate the digits layer. Guarded on a
         // keyboardType change, so ordinary keystrokes are a no-op (#190).
@@ -136,6 +144,9 @@ class KeyboardViewController: UIInputViewController {
     }
 
     private func rebuildController() {
+        // A rebuild means a new session or language switch — a pending
+        // auto-correct undo must not survive into it (#207).
+        autoCorrectUndo.disarm()
         controller = KeyboardController(
             registry: registry,
             enabledIds: settings.enabledLanguageIds,
@@ -616,6 +627,12 @@ extension KeyboardViewController: KeyboardActionDelegate {
     /// writing the correction over it replaces exactly that text. Mirrors
     /// Android `DraftRightIME.autoCorrectOnSpace`.
     private func autoCorrectOnSpace() -> Bool {
+        // Field divergence (the app clearing text behind our back) is handled
+        // before this point: textDidChange resets the composer whenever the
+        // document no longer ends with the composing buffer, so a stale word
+        // can't reach the correction. Android needs an explicit guard here
+        // (`dropStaleComposerIfFieldDiverged`) because some apps clear their
+        // field without any callback at all (#71).
         let typed = controller?.composer?.currentComposingText() ?? ""
         guard !typed.isEmpty, let corrected = candidateEngine?.autoCorrect(typed) else { return false }
         let proxy = UIKitTextProxy(textDocumentProxy)
@@ -641,7 +658,7 @@ extension KeyboardViewController: KeyboardActionDelegate {
     private func revertAutoCorrect() -> Bool {
         guard let corrected = autoCorrectUndo.corrected else { return false }
         let written = corrected + " "
-        guard textDocumentProxy.documentContextBeforeInput?.hasSuffix(written) == true else {
+        guard autoCorrectUndo.isLive(beforeCursor: textDocumentProxy.documentContextBeforeInput) else {
             autoCorrectUndo.disarm()
             return false
         }

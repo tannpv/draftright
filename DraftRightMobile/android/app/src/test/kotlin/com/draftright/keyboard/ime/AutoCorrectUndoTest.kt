@@ -1,7 +1,9 @@
 package com.draftright.keyboard.ime
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -41,4 +43,15 @@ class AutoCorrectUndoTest {
         assertEquals("anb", undo.consume())
     }
 
+    @Test
+    fun isLiveOnlyWhileFieldEndsWithCorrectionPlusSpace() {
+        val undo = AutoCorrectUndo()
+        assertFalse("not armed", undo.isLive("không "))
+        undo.arm(original = "khôg", corrected = "không")
+        assertTrue(undo.isLive("không "))
+        assertTrue("suffix match is enough", undo.isLive("chào không "))
+        assertFalse("space not yet appended", undo.isLive("không"))
+        assertFalse("user typed past it", undo.isLive("không x"))
+        assertFalse("field unreadable", undo.isLive(null))
+    }
 }

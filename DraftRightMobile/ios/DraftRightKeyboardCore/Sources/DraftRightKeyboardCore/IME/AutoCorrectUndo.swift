@@ -21,6 +21,15 @@ public final class AutoCorrectUndo {
         self.corrected = corrected
     }
 
+    /// Whether the undo is still live: `beforeCursor` (the field text in front
+    /// of the cursor) still ends with the correction plus the space the
+    /// correcting keystroke appended. One place owns this rule so the revert
+    /// path and every disarm chokepoint can't drift apart.
+    public func isLive(beforeCursor: String?) -> Bool {
+        guard let corrected else { return false }
+        return beforeCursor?.hasSuffix(corrected + " ") == true
+    }
+
     /// The word to restore, disarming in the same step, or `nil` when nothing
     /// is armed (so the caller falls through to a normal backspace).
     public func consume() -> String? {

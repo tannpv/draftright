@@ -22,6 +22,7 @@ CONSTANTS = {
     "max edits": ("MAX_EDITS", "maxEdits"),
     "min confidence freq": ("MIN_CONFIDENCE_FREQ", "minConfidenceFreq"),
     "min confidence margin": ("MIN_CONFIDENCE_MARGIN", "minConfidenceMargin"),
+    "candidate pool": ("CANDIDATE_POOL", "candidatePool"),
 }
 
 

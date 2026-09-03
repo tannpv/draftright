@@ -215,7 +215,7 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
         // empty composer so a stale Telex buffer from the previous field can
         // never seed this one. `restarting` (same field re-init, e.g. rotation)
         // is left alone to avoid disrupting an in-progress composition.
-        if (!restarting) { controller?.composer?.reset(); cycle.reset() }
+        if (!restarting) { controller?.composer?.reset(); cycle.reset(); autoCorrectUndo.disarm() }
     }
 
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
@@ -256,6 +256,14 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
             cycle.reset()
             refreshCandidates()
         }
+        // Any edit or cursor move after an auto-correction makes the one-shot
+        // undo stale (#207). The revert re-checks the field anyway; disarming
+        // here closes the window where a *later* identical word would match
+        // that check by coincidence and get "reverted" to the old typo.
+        autoCorrectUndo.corrected?.let { corrected ->
+            val before = currentInputConnection?.getTextBeforeCursor(corrected.length + 1, 0)
+            if (!autoCorrectUndo.isLive(before)) autoCorrectUndo.disarm()
+        }
         // The cursor moved (a letter committed, Enter, or a manual tap). Re-read
         // the platform caps mode so shift tracks sentence boundaries.
         updateAutoCaps()
@@ -284,6 +292,9 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
         currentInputConnection?.finishComposingText()
         controller?.composer?.reset()
         cycle.reset()
+        // The undo must not survive into another field: its text check could
+        // coincidentally match there and revert a word never corrected (#207).
+        autoCorrectUndo.disarm()
         // A live voice session must die with the input session it started in —
         // otherwise the mic keeps listening after the field/app switch (hot
         // mic) and its eventual transcript would commit into whatever field
@@ -760,13 +771,22 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
         ic: android.view.inputmethod.InputConnection,
         c: KeyboardController,
     ): Boolean {
+        // #71-class guard first: the composer's word must still be in front of
+        // the cursor. An app that silently cleared its field (Zalo send) would
+        // otherwise get the stale word "corrected" into the wrong text.
+        dropStaleComposerIfFieldDiverged(ic)
         val typed = c.composer?.currentComposingText().orEmpty()
         if (typed.isEmpty()) return false
         val corrected = c.current.candidateEngine()?.autoCorrect(typed) ?: return false
+        // One batch: the app reports only the final "corrected + space" state,
+        // so onUpdateSelection's staleness disarm never observes the
+        // intermediate states of the edit it is meant to protect.
+        ic.beginBatchEdit()
         ic.setComposingText(corrected, 1)
         ic.finishComposingText()
-        c.composer?.reset()
         ic.commitText(" ", 1)
+        ic.endBatchEdit()
+        c.composer?.reset()
         autoCorrectUndo.arm(original = typed, corrected = corrected)
         refreshCandidates()
         return true
@@ -778,22 +798,24 @@ class DraftRightIME : InputMethodService(), KeyboardActionListener {
      * acceptable because reverting it costs one key. Returns true when it
      * consumed the backspace.
      *
-     * The field itself decides whether the undo is still live: it fires only
-     * while the text before the cursor is exactly the correction we wrote plus
-     * its space. That beats disarming from every other key handler — one
-     * forgotten call site there would revert a word the user had moved past.
+     * The field itself decides whether the undo is still live
+     * ([AutoCorrectUndo.isLive]): it fires only while the text before the
+     * cursor is exactly the correction we wrote plus its space, and
+     * onUpdateSelection disarms as soon as anything else edits the field.
      */
     private fun revertAutoCorrect(ic: android.view.inputmethod.InputConnection): Boolean {
         val corrected = autoCorrectUndo.corrected ?: return false
         val written = "$corrected "
-        if (ic.getTextBeforeCursor(written.length, 0)?.toString() != written) {
+        if (!autoCorrectUndo.isLive(ic.getTextBeforeCursor(written.length, 0))) {
             autoCorrectUndo.disarm()
             return false
         }
         val typed = autoCorrectUndo.consume() ?: return false
         // Delete the correction plus the space this same handler appended.
+        ic.beginBatchEdit()
         ic.deleteSurroundingText(written.length, 0)
         ic.commitText("$typed ", 1)
+        ic.endBatchEdit()
         refreshCandidates()
         return true
     }

@@ -23,6 +23,17 @@ class AutoCorrectUndo {
     }
 
     /**
+     * Whether the undo is still live: [beforeCursor] (the field text in front
+     * of the cursor) still ends with the correction plus the space the
+     * correcting keystroke appended. One place owns this rule so the revert
+     * path and every disarm chokepoint can't drift apart.
+     */
+    fun isLive(beforeCursor: CharSequence?): Boolean {
+        val corrected = corrected ?: return false
+        return beforeCursor?.toString()?.endsWith("$corrected ") == true
+    }
+
+    /**
      * The word to restore, disarming in the same step, or `null` when nothing
      * is armed (so the caller falls through to a normal backspace).
      */

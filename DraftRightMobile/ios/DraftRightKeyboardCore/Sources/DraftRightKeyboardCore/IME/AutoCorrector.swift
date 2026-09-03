@@ -28,6 +28,10 @@ public enum AutoCorrector {
     /// The winner must be this many times more frequent than the runner-up.
     public static let minConfidenceMargin = 4
 
+    /// Candidates fetched per decision: the winner plus the one runner-up the
+    /// margin check compares it against.
+    public static let candidatePool = 2
+
     /// The corrected word for `token`, or `nil` to leave it as typed.
     /// Casing of `token` is preserved: a leading capital carries over to the
     /// correction, and anything less regular (ALL CAPS, mIxEd) is left alone
@@ -39,7 +43,7 @@ public enum AutoCorrector {
         if token != lower && !capitalized { return nil }
 
         if words.frequencyOf(lower) > 0 { return nil } // already a real word
-        let candidates = words.fuzzyMatches(lower, maxEdits: maxEdits, limit: 2)
+        let candidates = words.fuzzyMatches(lower, maxEdits: maxEdits, limit: candidatePool)
         guard let top = candidates.first else { return nil }
         if top.freq < minConfidenceFreq { return nil }
         let runnerUp = candidates.count > 1 ? candidates[1].freq : 0
