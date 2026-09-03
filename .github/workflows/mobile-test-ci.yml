@@ -22,7 +22,10 @@ on:
       - 'DraftRightMobile/pubspec.lock'
       - 'DraftRightMobile/android/app/src/**'
       - 'DraftRightMobile/android/app/build.gradle.kts'
+      - 'DraftRightMobile/android/gradle/**'
+      - 'DraftRightMobile/android/gradlew'
       - '.github/workflows/mobile-test-ci.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
