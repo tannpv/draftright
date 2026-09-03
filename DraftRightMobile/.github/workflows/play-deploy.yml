@@ -15,7 +15,7 @@ on:
           - open
           - production_draft
           - production_rollout_10
-          - promote_internal_production_10
+          - promote_internal_production_draft
 
 jobs:
   deploy:
