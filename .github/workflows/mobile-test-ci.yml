@@ -63,7 +63,10 @@ jobs:
     # Serialized after the Dart job: two heavy jobs in parallel starved the
     # Contabo box until the runner agent lost its server connection.
     needs: flutter-test
-    timeout-minutes: 30
+    # First run on a fresh runner workspace downloads the gradle dist + all
+    # deps + the pinned NDK into the isolated GRADLE_USER_HOME — over 30m on
+    # the Contabo box. Warm runs finish in ~10m.
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
         with:
