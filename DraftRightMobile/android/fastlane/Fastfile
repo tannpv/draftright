@@ -25,7 +25,10 @@ default_platform(:android)
 AAB_PATH = File.expand_path("../../build/app/outputs/bundle/release/app-release.aab", __dir__)
 
 platform :android do
-  before_all do
+  before_all do |lane|
+    # Promote lanes move an existing Play release between tracks — there is
+    # no AAB to check (CI skips the build step for them too).
+    next if lane.to_s.start_with?("promote_")
     unless File.exist?(AAB_PATH)
       UI.user_error!(
         "AAB not found at #{AAB_PATH}. Build it first with " \
