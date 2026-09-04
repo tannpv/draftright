@@ -14,7 +14,10 @@ export PATH="$HOME/flutter/bin:$PATH"
 
 flutter precache --ios
 
-cd "$CI_PRIMARY_REPOSITORY_PATH/DraftRightMobile"
+# Xcode Cloud clones the MIRROR repo (tannpv/draftrightmobile), whose root IS
+# the Flutter project; in the monorepo the project sits under DraftRightMobile/.
+cd "$CI_PRIMARY_REPOSITORY_PATH"
+[ -d DraftRightMobile ] && cd DraftRightMobile
 flutter pub get
 
 cd ios
