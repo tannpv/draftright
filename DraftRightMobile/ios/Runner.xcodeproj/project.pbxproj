@@ -20,6 +20,7 @@
 		2066BD4DC241D0D897DC3500 /* KeyboardViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48B352C2112BE551474B2FE8 /* KeyboardViewController.swift */; };
 		222B81F3122A0F9215D39C5F /* BrandColor.swift in Sources */ = {isa = PBXBuildFile; fileRef = E057ECD64116FCFDDA971A7D /* BrandColor.swift */; };
 		23DEC5AFDEF253BACF320892 /* Pods_RunnerTests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FBE725CAFCBD2E5DCC9355BE /* Pods_RunnerTests.framework */; };
+		2BFDA059B2EAA98D6D9AE383 /* DraftRightKeyboard.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B0BF922207681BC7EB3F90F3 /* DraftRightKeyboard.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		2D4483D597249DF478197B20 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 40CA77BC8C1023B5F3AE2D36 /* Foundation.framework */; };
 		331C808B294A63AB00263BE5 /* RunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 331C807B294A618700263BE5 /* RunnerTests.swift */; };
 		3A8C268D725ABBF6AE3C847B /* ActionViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6835ACA844AC398E7A5362B4 /* ActionViewController.swift */; };
@@ -30,6 +31,7 @@
 		74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
 		7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */; };
 		7CFFC95F43CBADA3CC43CC3B /* DiffSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFD7354A43EFA54973F52B7C /* DiffSheetView.swift */; };
+		7EEACFB5771D000A990EDC43 /* DraftRightAction.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C8FD78324E2BE26FAABDCBA0 /* DraftRightAction.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		818A39620E54FA8E9FF266B4 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 40CA77BC8C1023B5F3AE2D36 /* Foundation.framework */; };
 		89ED1288BB6BE77ED07683B7 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 40CA77BC8C1023B5F3AE2D36 /* Foundation.framework */; };
 		940B53422D3E3830A0DC7886 /* Tone.swift in Sources */ = {isa = PBXBuildFile; fileRef = 102EE7DE0735023A9D90AF01 /* Tone.swift */; };
@@ -43,12 +45,20 @@
 		D100C7C91D2A1D92239CA30E /* BackendClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B4DE00CF78D3D3F4EEF5388 /* BackendClient.swift */; };
 		E79691A3E38A8CDA1FA32B59 /* TelexTypingUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AF882533116FB9CD3360FE1 /* TelexTypingUITests.swift */; };
 		E91EC3FF0E2C0F32F148BD58 /* Tone.swift in Sources */ = {isa = PBXBuildFile; fileRef = 102EE7DE0735023A9D90AF01 /* Tone.swift */; };
+		EF9CACB8805390CAAD10F260 /* DraftRightKeyboardCore in Frameworks */ = {isa = PBXBuildFile; productRef = 4FF7367AB4428F9C91F3DF8B /* DraftRightKeyboardCore */; };
 		EFC01AE1AD943E39E2FFD346 /* DraftRightKeyboardCore in Frameworks */ = {isa = PBXBuildFile; productRef = B3960B39CF8EDD32C93D5585 /* DraftRightKeyboardCore */; };
 		F2ED85BC7C74F0FF15C3FACB /* CandidateBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C1FD7933E61D9B1B5C7456F /* CandidateBarView.swift */; };
 		FA1B2C3D4E5F6A7B8C9D0E1F /* QwertyKeyboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1B2C3D4E5F6A7B8C9D0E10 /* QwertyKeyboardView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		0AAC51C503E449C7DDA7C2D4 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 97C146E61CF9000F007C117D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F5AD4D6A1B99F37BA906AD78;
+			remoteInfo = DraftRightKeyboard;
+		};
 		331C8085294A63A400263BE5 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 97C146E61CF9000F007C117D /* Project object */;
@@ -63,6 +73,13 @@
 			remoteGlobalIDString = C2C323F775DB18D253270E41;
 			remoteInfo = KBTestHost;
 		};
+		8C554A3D511632D3E015627F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 97C146E61CF9000F007C117D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C9E25FD9759EBA304AE3CBC5;
+			remoteInfo = DraftRightAction;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -74,6 +91,18 @@
 			files = (
 			);
 			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C3255DF925A7EF5EB22D5730 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				2BFDA059B2EAA98D6D9AE383 /* DraftRightKeyboard.appex in Embed Foundation Extensions */,
+				7EEACFB5771D000A990EDC43 /* DraftRightAction.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
@@ -163,6 +192,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				818A39620E54FA8E9FF266B4 /* Foundation.framework in Frameworks */,
+				EF9CACB8805390CAAD10F260 /* DraftRightKeyboardCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -400,7 +430,7 @@
 				97C146EB1CF9000F007C117D /* Frameworks */,
 				97C146EC1CF9000F007C117D /* Resources */,
 				9705A1C41CF9048500538489 /* Embed Frameworks */,
-				7CA1773F3C9A5662F553AE45 /* Embed Extensions */,
+				C3255DF925A7EF5EB22D5730 /* Embed Foundation Extensions */,
 				3B06AD1E1E4923F5004D2608 /* Thin Binary */,
 				9E5B41534A9039FE53FE1747 /* [CP] Embed Pods Frameworks */,
 				941E73F15CD0BBCB775E511F /* [CP] Copy Pods Resources */,
@@ -408,6 +438,8 @@
 			buildRules = (
 			);
 			dependencies = (
+				F869DCFBEE9443FB0DACCC39 /* PBXTargetDependency */,
+				A5650DF2025440C707FE825F /* PBXTargetDependency */,
 			);
 			name = Runner;
 			productName = Runner;
@@ -444,6 +476,9 @@
 			dependencies = (
 			);
 			name = DraftRightAction;
+			packageProductDependencies = (
+				4FF7367AB4428F9C91F3DF8B /* DraftRightKeyboardCore */,
+			);
 			productName = DraftRightAction;
 			productReference = C8FD78324E2BE26FAABDCBA0 /* DraftRightAction.appex */;
 			productType = "com.apple.product-type.app-extension";
@@ -605,24 +640,6 @@
 			shellPath = /bin/sh;
 			shellScript = "/bin/sh \"$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh\" embed_and_thin";
 		};
-		7CA1773F3C9A5662F553AE45 /* Embed Extensions */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-			);
-			name = "Embed Extensions";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "echo \"=== Embed Extensions ===\"\n\nEXT_BUILD_DIR=\"${PROJECT_DIR}/build/keyboard_ext\"\nDEST=\"${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}.app/PlugIns\"\nmkdir -p \"${DEST}\"\n\n# Build extensions inheriting the parent build's signing env so DEVELOPMENT_TEAM\n# (free provisioning Personal Team) propagates. The previous version used\n# `env -i ... CODE_SIGN_IDENTITY=\"-\"` which forced ad-hoc signing — extensions\n# silently failed to build for personal-team devices, leaving PlugIns/ empty.\nbuild_and_embed() {\n  local TARGET=$1\n  echo \"--- Building ${TARGET} (team=${DEVELOPMENT_TEAM:-unset}) ---\"\n  xcodebuild build \\\n    -project \"${PROJECT_FILE_PATH}\" \\\n    -target \"${TARGET}\" \\\n    -configuration \"${CONFIGURATION}\" \\\n    -sdk \"${SDK_NAME}\" \\\n    -allowProvisioningUpdates \\\n    SYMROOT=\"${EXT_BUILD_DIR}\" \\\n    DEVELOPMENT_TEAM=\"${DEVELOPMENT_TEAM}\" \\\n    CODE_SIGN_STYLE=Automatic \\\n    2>&1 | tail -10\n\n  APPEX_PATH=\"${EXT_BUILD_DIR}/${CONFIGURATION}${EFFECTIVE_PLATFORM_NAME}/${TARGET}.appex\"\n  BINARY=\"${APPEX_PATH}/${TARGET}\"\n  if [ -f \"${BINARY}\" ]; then\n    rm -rf \"${DEST}/${TARGET}.appex\"\n    cp -R \"${APPEX_PATH}\" \"${DEST}/\"\n    echo \"SUCCESS: Embedded ${TARGET}.appex\"\n  else\n    echo \"ERROR: ${TARGET} binary not found at ${BINARY}\"\n    ls -la \"${EXT_BUILD_DIR}\" 2>/dev/null\n  fi\n}\n\nbuild_and_embed DraftRightKeyboard\nbuild_and_embed DraftRightAction\n";
-		};
 		941E73F15CD0BBCB775E511F /* [CP] Copy Pods Resources */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
@@ -775,11 +792,23 @@
 			target = 97C146ED1CF9000F007C117D /* Runner */;
 			targetProxy = 331C8085294A63A400263BE5 /* PBXContainerItemProxy */;
 		};
+		A5650DF2025440C707FE825F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = DraftRightAction;
+			target = C9E25FD9759EBA304AE3CBC5 /* DraftRightAction */;
+			targetProxy = 8C554A3D511632D3E015627F /* PBXContainerItemProxy */;
+		};
 		B1B96EDC5C2BFAEF0F0D4A47 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			name = KBTestHost;
 			target = C2C323F775DB18D253270E41 /* KBTestHost */;
 			targetProxy = 5EF72F736DC78B21206D53A4 /* PBXContainerItemProxy */;
+		};
+		F869DCFBEE9443FB0DACCC39 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = DraftRightKeyboard;
+			target = F5AD4D6A1B99F37BA906AD78 /* DraftRightKeyboard */;
+			targetProxy = 0AAC51C503E449C7DDA7C2D4 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -1472,6 +1501,11 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		4FF7367AB4428F9C91F3DF8B /* DraftRightKeyboardCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C21347752FBC4B99000B810F /* XCLocalSwiftPackageReference "DraftRightKeyboardCore" */;
+			productName = DraftRightKeyboardCore;
+		};
 		B3960B39CF8EDD32C93D5585 /* DraftRightKeyboardCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = C21347752FBC4B99000B810F /* XCLocalSwiftPackageReference "DraftRightKeyboardCore" */;
