@@ -31,13 +31,9 @@ permissions:
   contents: read
 
 jobs:
-  # Both jobs run on the Mac runner while the Contabo box is down (both its
-  # runner agents went offline 2026-09-03 after a starved build; box needs a
-  # console-side restart). Move back to [self-hosted, linux, x64, draftright]
-  # once it's revived, so the Mac stays free for Swift jobs.
   flutter-test:
     name: flutter analyze + test
-    runs-on: [self-hosted, macos, arm64, draftright-mac]
+    runs-on: [self-hosted, linux, x64, draftright]
     timeout-minutes: 30
     defaults:
       run:
@@ -61,13 +57,15 @@ jobs:
   # Scoped to :app — the bare task would fan out to every Flutter plugin
   # subproject and fail on the ones without tests (see DraftRightMobile/CLAUDE.md
   # "Known Patterns"). Same runner as play-deploy, so the Android SDK is present.
+  # PERMANENTLY on the Mac runner: the Contabo box killed its runner agent on
+  # every attempt at this gradle+Kotlin compile (3 crashes on 2026-09-03, even
+  # serialized with capped heap/workers), while the Mac ran it green. The box
+  # stays fine for the lighter Dart job above, parity guards, and play-deploy.
+  # Different boxes now, so no `needs:` serialization.
   android-unit-tests:
     name: android unit tests
     runs-on: [self-hosted, macos, arm64, draftright-mac]
-    # Serialized after the Dart job: two heavy jobs in parallel starved the
-    # Contabo box until the runner agent lost its server connection.
-    needs: flutter-test
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
         with:
@@ -76,12 +74,9 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      # AGP needs ANDROID_HOME even for JVM-only unit tests, and it also
-      # auto-installs the pinned NDK on first use (that download corrupted in
-      # setup-android's fresh SDK dir). The Mac runner is the maintainer's
-      # machine — its ~/Library/Android/sdk already carries everything incl.
-      # NDK 28.2. When this job moves back to the Linux runner, restore
-      # `- uses: android-actions/setup-android@v3` in place of this env.
+      # AGP needs ANDROID_HOME even for JVM-only unit tests. The Mac's own
+      # SDK carries everything incl. the pinned NDK 28.2 (setup-android's
+      # fresh-dir NDK auto-install corrupted when tried).
       - name: Use the machine's Android SDK
         run: |
           echo "ANDROID_HOME=$HOME/Library/Android/sdk" >> "$GITHUB_ENV"
