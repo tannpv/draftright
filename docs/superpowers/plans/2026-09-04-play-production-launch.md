@@ -24,7 +24,7 @@ console click bypasses it. Do not burn time re-diagnosing.
 
 | Piece | State |
 |---|---|
-| Build 79 (2.4.16, VI auto-correct #207) | Play **internal** (live) + TestFlight (live) |
+| Build 79 (2.4.16, VI auto-correct #207) | Play **internal** (live); TestFlight has 2.4.16 as build **79** (fastlane) and build **8** (Xcode Cloud — the canonical iOS pipeline since 2026-09-04) |
 | Closed testing – Alpha | Build 79 **submitted for Google review** 2026-09-03 (managed publishing; typical ≤ 7 days; auto-publishes to testers on approval) |
 | Promote lane | `promote_internal_production_draft` in `DraftRightMobile/android/fastlane/Fastfile`, dispatchable via `play-deploy.yml` — ready for after approval |
 | develop / main | In sync, all #207 + CI work merged |
