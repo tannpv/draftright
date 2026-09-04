@@ -31,6 +31,9 @@ on:
       - 'scripts/check-vi-bigram-parity.py'
       - 'scripts/check-vi-wordlist-parity.py'
       - 'scripts/check-autocorrect-consts-parity.py'
+      - 'scripts/check-flutter-version-parity.py'
+      - 'DraftRightMobile/ios/ci_scripts/ci_post_clone.sh'
+      - 'DraftRightMobile/.github/workflows/play-deploy.yml'
       - 'DraftRightMobile/android/app/src/main/kotlin/com/draftright/keyboard/ime/AutoCorrector.kt'
       - 'DraftRightMobile/ios/DraftRightKeyboardCore/Sources/DraftRightKeyboardCore/IME/AutoCorrector.swift'
       - 'scripts/check-pinyin-syllables-parity.py'
@@ -68,6 +71,8 @@ jobs:
         run: python3 scripts/check-vi-wordlist-parity.py
       - name: Assert the auto-correct thresholds agree
         run: python3 scripts/check-autocorrect-consts-parity.py
+      - name: Flutter version parity
+        run: python3 scripts/check-flutter-version-parity.py
       - name: Assert the two pinyin syllable sets agree
         run: python3 scripts/check-pinyin-syllables-parity.py
       - name: Assert the two flick kana maps agree
