@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Deploy the marketing website to prod.
 #
-# CRITICAL: must NOT delete /var/www/draftright/downloads/ — those binary
+# CRITICAL: must NOT delete /srv/draftright/downloads/ — those binary
 # artifacts (DraftRight-Android-X.Y.Z.apk, .dmg, .exe, .tar.gz) live alongside
 # the static site but are not built by `npm run build`. The 2026-05-01 deploy
 # wiped them by accident; --exclude=downloads guards against that. A second
@@ -13,19 +13,19 @@
 set -euo pipefail
 
 REMOTE_HOST="draftright"
-REMOTE_PATH="/var/www/draftright"
+REMOTE_PATH="/srv/draftright"
 DOWNLOADS_PATH="$REMOTE_PATH/downloads"
 # Known-good sentinel binary that must keep serving a real DMG after deploy.
 # Update this when the macOS line moves; the file just needs to exist in
-# /var/www/draftright/downloads/ so the post-check has something to verify.
-SENTINEL_URL="https://draftright.info/downloads/DraftRight-macOS-2.3.21.dmg"
+# /srv/draftright/downloads/ so the post-check has something to verify.
+SENTINEL_URL="https://draftright.info/downloads/DraftRight-2.3.65.dmg"
 
 cd "$(dirname "$0")/../website"
 
-echo "==> Pre-check: downloads/ on droplet"
+echo "==> Pre-check: downloads/ on the Contabo host"
 DOWNLOADS_COUNT=$(ssh "$REMOTE_HOST" "ls $DOWNLOADS_PATH 2>/dev/null | wc -l" || echo "0")
 if [ "$DOWNLOADS_COUNT" -lt 1 ]; then
-  echo "❌ ABORTED — $DOWNLOADS_PATH is empty or missing on droplet." >&2
+  echo "❌ ABORTED — $DOWNLOADS_PATH is empty or missing on the Contabo host." >&2
   echo "   Restore from backup before deploying:" >&2
   echo "   ssh $REMOTE_HOST 'sudo ls /var/www | grep draftright.bak'" >&2
   echo "   ssh $REMOTE_HOST 'sudo cp -r /var/www/draftright.bak.YYYYMMDD-*/downloads $DOWNLOADS_PATH'" >&2
@@ -47,7 +47,7 @@ echo "==> Post-check: downloads/ still populated"
 POST_COUNT=$(ssh "$REMOTE_HOST" "ls $DOWNLOADS_PATH 2>/dev/null | wc -l" || echo "0")
 if [ "$POST_COUNT" -lt "$DOWNLOADS_COUNT" ]; then
   echo "❌ DOWNLOADS WIPE DETECTED — was $DOWNLOADS_COUNT, now $POST_COUNT" >&2
-  echo "   Restore IMMEDIATELY from /var/www/draftright.bak.* on droplet." >&2
+  echo "   Restore IMMEDIATELY from /var/www/draftright.bak.* on the Contabo host." >&2
   exit 1
 fi
 echo "    downloads/ retained $POST_COUNT entries — OK"
