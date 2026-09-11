@@ -168,7 +168,7 @@ public final class TelexComposer: Composer {
         // the key therefore always APPLIES — idempotently when the vowel is
         // already marked ("iecs" + e → iếc).
         let chars = Array(buf)
-        guard let idx = findModifierTargetInVowelCluster(chars, low, replacement) else { return nil }
+        guard let idx = findModifierTargetInVowelCluster(chars, low) else { return nil }
         let target = chars[idx]
         if qualityRoot(target) == low {
             let upper = incoming.isUppercase || target.isUppercase
@@ -196,16 +196,17 @@ public final class TelexComposer: Composer {
         return nil
     }
 
-    /// Index of the char in the trailing vowel cluster that [low] (or its marked
-    /// form [replacement], for cancel-by-retype) should act on, or nil if the
-    /// cluster holds neither. Mirrors Android's findModifierTargetInVowelCluster.
+    /// Index of the char in the trailing vowel cluster that [low] should act on,
+    /// or nil if the cluster holds none. Matching is by quality root, so an
+    /// already-marked vowel is a target too (ơ is a target for 'o').
+    /// Mirrors Android's findModifierTargetInVowelCluster.
     ///
-    /// Scans right-to-left from the cluster's end so the RIGHTMOST match wins —
-    /// "oo" + o must cancel the second o, not the first. Only the final cluster
-    /// is considered, and only through at most maxTrailingCons consonants, so a
-    /// modifier can never reach back into the previous syllable.
+    /// Scans right-to-left from the cluster's end so the RIGHTMOST match wins.
+    /// Only the final cluster is considered, and only through at most
+    /// maxTrailingCons consonants, so a modifier can never reach back into the
+    /// previous syllable.
     private static func findModifierTargetInVowelCluster(
-        _ chars: [Character], _ low: Character, _ replacement: Character
+        _ chars: [Character], _ low: Character
     ) -> Int? {
         guard let last = findLastVowelThroughConsonants(chars) else { return nil }
         // Walk left while still inside the same vowel run.
@@ -217,10 +218,7 @@ public final class TelexComposer: Composer {
         }
         var idx = last
         while idx >= firstOfCluster {
-            let c = chars[idx]
-            let isApplyTarget = qualityRoot(c) == low
-            let isCancelTarget = Character(c.lowercased()) == replacement
-            if (isApplyTarget || isCancelTarget) && canReachBack(chars, idx) { return idx }
+            if qualityRoot(chars[idx]) == low && canReachBack(chars, idx) { return idx }
             idx -= 1
         }
         return nil

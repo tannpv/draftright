@@ -166,7 +166,7 @@ class TelexComposer : Composer {
             // the key as a cancel would undo a mark the user never typed. Deep
             // in the cluster the key therefore always APPLIES — idempotently
             // when the vowel is already marked ("iecs" + e → iếc).
-            val targetIdx = findModifierTargetInVowelCluster(buffer, low, replacement)
+            val targetIdx = findModifierTargetInVowelCluster(buffer, low)
             if (targetIdx != null) {
                 val targetChar = buffer[targetIdx]
                 if (qualityRoot(targetChar) == low) {
@@ -192,20 +192,18 @@ class TelexComposer : Composer {
          * syllable's trailing consonants (e.g. "nguyen" + e, "truong" + w).
          */
         /**
-         * Index of the char in the trailing vowel cluster that [low] (or its
-         * marked form [replacement], for cancel-by-retype) should act on, or
-         * null if the cluster holds neither.
+         * Index of the char in the trailing vowel cluster that [low] should act
+         * on, or null if the cluster holds none. Matching is by quality root,
+         * so an already-marked vowel is a target too (ơ is a target for 'o').
          *
          * Scans right-to-left from the cluster's end so the RIGHTMOST match
-         * wins — "oo" + o must cancel the second o, not the first. Only the
-         * final cluster is considered, and only through at most
+         * wins. Only the final cluster is considered, and only through at most
          * [MAX_TRAILING_CONS] consonants, so a modifier can never reach back
          * into the previous syllable.
          */
         private fun findModifierTargetInVowelCluster(
             buffer: String,
             low: Char,
-            replacement: Char,
         ): Int? {
             val last = findLastVowelThroughConsonants(buffer) ?: return null
             // Walk left while still inside the same vowel run.
@@ -216,11 +214,7 @@ class TelexComposer : Composer {
                 i--
             }
             for (idx in last downTo firstOfCluster) {
-                val c = buffer[idx]
-                val cLow = c.lowercaseChar()
-                val isApplyTarget = qualityRoot(c) == low
-                val isCancelTarget = cLow == replacement
-                if ((isApplyTarget || isCancelTarget) && canReachBack(buffer, idx)) return idx
+                if (qualityRoot(buffer[idx]) == low && canReachBack(buffer, idx)) return idx
             }
             return null
         }

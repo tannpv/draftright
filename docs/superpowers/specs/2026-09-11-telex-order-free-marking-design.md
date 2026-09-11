@@ -135,6 +135,43 @@ Tap-testing samples; the composer is pure logic, so we prove **all** cases:
   `parity/telex-order-vectors.json` guard in `mobile-parity-ci.yml`. A
   divergence in either mirror fails CI; no reviewer-memory enforcement.
 
+## Appendix — implementation results (2026-09-11)
+
+**Shipped shape.** The chokepoint is `liftTone(buffer) -> (bare, toneKey)`:
+the `w` branch and the circumflex branch both lift the tone, run the existing
+quality logic on the bare buffer, and re-place the tone through `applyTone`,
+so placement is always recomputed. Quality matching is by ROOT (via the
+existing `UNMARK` map) so marks replace each other (`ô`+w → `ơ`). Remote đ
+lives in the `d` branch. Same code, same order, in both ports.
+
+**Matrix.** 20.5k syllables × their orderings = **43,791 cases**, zero
+divergences on both platforms (`TelexExhaustiveTest` / `TelexExhaustiveTests`,
+which run the generator themselves). `--check-wordlist` passes: every wordlist
+row at or above the documented frequency floor is generated.
+
+**Divergence classes the matrix found** (all fixed in both ports):
+
+1. *Horn hit the offglide.* `oi`+w left the w literal, `uu`+w gave `uư`. The
+   single horn/breve now resolves the nucleus of the trailing cluster,
+   skipping offglides and the qu/gi onset glide (`hornTargetIndex`).
+2. *Deep circumflex cancelled instead of applying.* After tone auto-promotion
+   (`iecs` → iếc) the `e` key was read as cancel-by-retype and undid a mark
+   the user never typed. Cancel is now adjacent-only; deep matches apply
+   idempotently. Every pre-existing cancel test types its mark last, so this
+   narrowing regresses nothing.
+3. *qu/gi glide skip lived only in `applyTone`*, so the horn path produced
+   `qừo` for `quow`. Extracted to a shared `skipOnsetGlide`.
+
+**Deliberate non-parity notes.**
+
+- **`uơ` (huơ, thuở) is unreachable.** Its keystrokes are `uo`+w, which Telex
+  already spends on `ươ`. The generator documents and skips it; after a `qu`
+  onset the nucleus is a plain `ơ` (quơ, quở), which is generated and passes.
+- **Tone placement stays modern.** The corpus still carries pre-1980s
+  placements (hoà, khoẻ, thuỷ); we produce hòa/khỏe/thủy, matching Samsung.
+  `--check-wordlist` accepts the old spelling as covered when we generate the
+  same letters with the same tone on the modern vowel.
+
 ## Out of scope
 
 - Word prediction/suggestion changes (bar already shipped in #207).
