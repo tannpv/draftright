@@ -132,8 +132,6 @@ def is_valid(onset: str, nucleus: str, coda: str, tone: str) -> bool:
         return False
     if coda in STOP_CODAS and tone not in ("s", "j"):
         return False
-    if not coda and not tone and nucleus in ("ă", "â"):
-        return False
 
     first_vowel = nucleus[0]
     if onset in FRONT_ONLY_ONSETS and first_vowel not in FRONT_VOWELS:

@@ -44,6 +44,9 @@ final class TelexExhaustiveTests: XCTestCase {
             return nil                                   // no python3 on this box
         }
         process.waitUntilExit()
+        // 127 is env's "command not found" — same missing-python3 case the
+        // throw above covers when /usr/bin/env itself is absent.
+        if process.terminationStatus == 127 { return nil }
         guard process.terminationStatus == 0 else {
             XCTFail("generator exited \(process.terminationStatus)")
             return []
