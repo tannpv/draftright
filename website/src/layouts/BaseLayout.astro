@@ -74,5 +74,32 @@ const { title, description } = Astro.props;
       </div>
     </footer>
     <ReportBugDialog client:idle />
+
+    <!--
+      The support assistant. It answers from DraftRight's own published help
+      documents and says so with a citation; when they do not cover a question
+      it refuses rather than guessing.
+
+      `data-key` is a **public** key, and is meant to be here in the page source
+      — the same way a Stripe publishable key is. What protects it is the origin
+      allowlist on the bot: the assistant only loads on domains DraftRight has
+      registered, so copying this snippet onto another site produces nothing.
+
+      Deferred, and it loads its UI inside an iframe, so it cannot block the page
+      or inherit this site's CSS.
+
+      **No `integrity` attribute, deliberately.** Subresource Integrity pins a
+      hash of the file, and this loader is meant to change — every widget release
+      would silently stop the assistant from loading on this site, with no error
+      anybody would notice. That is the usual trade for a hosted widget (Stripe,
+      Intercom and Crisp all ship without SRI for the same reason). What it costs
+      is honest: whoever controls widget.bacnam.co can run script on this page,
+      so that host is part of this site's trust boundary.
+    -->
+    <script
+      src="https://widget.bacnam.co/widget.js"
+      data-key="pk_BEvVtZCjkazDAeQZKz_eVxuGODdWbNiF"
+      defer
+    ></script>
   </body>
 </html>
