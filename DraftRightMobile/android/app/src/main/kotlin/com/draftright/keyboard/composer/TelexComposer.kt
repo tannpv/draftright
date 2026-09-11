@@ -94,6 +94,20 @@ class TelexComposer : Composer {
                 if (last.lowercaseChar() == 'd') {
                     return buffer.dropLast(1) + caseMap('đ', incoming.isUpperCase() || last.isUpperCase())
                 }
+
+                // Remote đ (order-free marking): a trailing d on a d-initial
+                // word converts the INITIAL to đ — unambiguous because no
+                // Vietnamese syllable ends in d. A second remote d reverts,
+                // mirroring the adjacent dd cancel.
+                val first = buffer.first()
+                val restHasD = buffer.drop(1).any { qualityRoot(it) == 'd' }
+                val hasVowel = buffer.any { TelexState.isVowelLike(it) || UNTONE.containsKey(it.lowercaseChar()) }
+                if (first.lowercaseChar() == 'd' && hasVowel && !restHasD) {
+                    return caseMap('đ', first.isUpperCase()) + buffer.substring(1)
+                }
+                if (first.lowercaseChar() == 'đ' && buffer.length > 1 && !restHasD) {
+                    return caseMap('d', first.isUpperCase()) + buffer.substring(1) + incoming
+                }
                 return null
             }
 
