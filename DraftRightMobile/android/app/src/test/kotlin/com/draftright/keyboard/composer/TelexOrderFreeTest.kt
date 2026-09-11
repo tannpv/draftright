@@ -1,6 +1,5 @@
 package com.draftright.keyboard.composer
 
-import com.draftright.keyboard.ComposeResult
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -12,18 +11,7 @@ import org.junit.Test
  */
 class TelexOrderFreeTest {
 
-    private fun type(keys: String): String {
-        val c = TelexComposer()
-        var out = ""
-        for (k in keys) {
-            when (val r = c.onKey(k)) {
-                is ComposeResult.Composing -> out = r.text
-                is ComposeResult.Commit -> out = r.text
-                else -> {}
-            }
-        }
-        return out
-    }
+    private fun type(keys: String): String = TelexTyping.type(keys)
 
     // --- Mechanic 1: quality modifier AFTER tone (tone-transparent) ---
     @Test fun toneThenHorn() {

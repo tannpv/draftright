@@ -7,15 +7,7 @@ import XCTest
 /// derived from the same rule. Mirror of Kotlin TelexOrderFreeTest.
 final class TelexOrderFreeTests: XCTestCase {
 
-    private func type(_ keys: String) -> String {
-        let c = TelexComposer()
-        var last: ComposeResult = .passThrough
-        for k in keys { last = c.onKey(k) }
-        switch last {
-        case .composing(let s), .commit(let s): return s
-        default: return c.currentComposingText()
-        }
-    }
+    private func type(_ keys: String) -> String { TelexTyping.type(keys) }
 
     // --- Mechanic 1: quality modifier AFTER tone (tone-transparent) ---
     func testToneThenHorn() {
