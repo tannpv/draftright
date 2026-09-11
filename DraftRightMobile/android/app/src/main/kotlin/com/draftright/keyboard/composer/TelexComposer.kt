@@ -61,13 +61,28 @@ class TelexComposer : Composer {
             // char (plain, special-marked, or already toned).
             if (low in TONE_MARKS && bufferHasTonableVowel(buffer)) {
                 tryCancelTone(buffer, low, incoming)?.let { return it }
-                return applyTone(buffer, low)
+                // Retyping a DIFFERENT tone than the one already on the
+                // buffer is an override, not a cancel (tryCancelTone only
+                // fires on an exact retype). Lift the old tone first —
+                // findLastVowelCluster only recognises untoned vowels, so
+                // applyTone on an already-toned buffer would otherwise find
+                // no cluster and silently no-op, stranding the old tone
+                // (surfaced by order-free sequences like "cansja" → cận,
+                // where 's' then 'j' land on the same vowel).
+                val (bare, _) = liftTone(buffer)
+                return applyTone(bare, low)
             }
 
             // 'w' has multiple meanings depending on the preceding chars.
             if (low == 'w') {
-                tryCancelHornBreve(buffer, incoming)?.let { return it }
-                return applyHornOrBreve(buffer, incoming.isUpperCase())
+                // Order-free marking: lift the tone, run the existing horn/
+                // breve logic on the bare buffer, re-place the tone. Placement
+                // is recomputed by applyTone, so "tuỏng"+w lands as tưởng.
+                val (bare, tone) = liftTone(buffer)
+                val applied = tryCancelHornBreve(bare, incoming)
+                    ?: applyHornOrBreve(bare, incoming.isUpperCase())
+                    ?: return null
+                return if (tone == null) applied else applyTone(applied, tone)
             }
 
             // dd → đ, or cancel đ back to d + literal d.
@@ -82,18 +97,35 @@ class TelexComposer : Composer {
                 return null
             }
 
-            // Double-vowel circumflex: aa/oo/ee. Re-type cancels back to base + literal.
+            // Double-vowel circumflex: aa/oo/ee — tone-lifted and root-matched
+            // like 'w' above so it commutes with tones and replaces horns.
             val replacement = when (low) {
-                'a' -> 'â'
-                'o' -> 'ô'
-                'e' -> 'ê'
+                'a' -> 'â'; 'o' -> 'ô'; 'e' -> 'ê'
                 else -> return null
             }
+            val (bare, tone) = liftTone(buffer)
+            val applied = applyCircumflexOrCancel(bare, low, replacement, incoming) ?: return null
+            return if (tone == null) applied else applyTone(applied, tone)
+        }
+
+        /**
+         * Double-vowel circumflex (aa/oo/ee) apply-or-cancel on a bare
+         * (tone-lifted) buffer. APPLY matches by quality ROOT so a horn/breve
+         * vowel is replaced rather than skipped (ơ + o → ô); CANCEL stays
+         * EXACT so only a real circumflex reverts to base + literal (ô + o →
+         * o + o, not any quality-marked vowel).
+         */
+        private fun applyCircumflexOrCancel(
+            buffer: String,
+            low: Char,
+            replacement: Char,
+            incoming: Char,
+        ): String? {
             val last = buffer.last()
             if (last.lowercaseChar() == replacement) {
                 return buffer.dropLast(1) + caseMap(low, last.isUpperCase()) + incoming
             }
-            if (last.lowercaseChar() == low) {
+            if (qualityRoot(last) == low) {
                 return buffer.dropLast(1) + caseMap(replacement, incoming.isUpperCase() || last.isUpperCase())
             }
 
@@ -123,7 +155,7 @@ class TelexComposer : Composer {
                         buffer.substring(targetIdx + 1) +
                         incoming
                 }
-                if (targetLow == low) {
+                if (qualityRoot(targetChar) == low) {
                     return buffer.substring(0, targetIdx) +
                         caseMap(replacement, incoming.isUpperCase() || targetChar.isUpperCase()) +
                         buffer.substring(targetIdx + 1)
@@ -170,8 +202,11 @@ class TelexComposer : Composer {
                 i--
             }
             for (idx in last downTo firstOfCluster) {
-                val c = buffer[idx].lowercaseChar()
-                if ((c == low || c == replacement) && canReachBack(buffer, idx)) return idx
+                val c = buffer[idx]
+                val cLow = c.lowercaseChar()
+                val isApplyTarget = qualityRoot(c) == low
+                val isCancelTarget = cLow == replacement
+                if ((isApplyTarget || isCancelTarget) && canReachBack(buffer, idx)) return idx
             }
             return null
         }
@@ -267,17 +302,25 @@ class TelexComposer : Composer {
                     // Skip the 'u' of a 'qu' onset — it is a glide, not the 'u'
                     // of a "uo"→"ươ" cluster (quo+w → quơ, not qươ).
                     if (i >= 1 && buffer[i - 1].lowercaseChar() == 'q') continue
-                    if (buffer[i].lowercaseChar() == 'u' && buffer[i + 1].lowercaseChar() == 'o') {
+                    if (qualityRoot(buffer[i]) == 'u' && qualityRoot(buffer[i + 1]) == 'o') {
                         val u2 = caseMap('ư', buffer[i].isUpperCase() || wIsUpper)
                         val o2 = caseMap('ơ', buffer[i + 1].isUpperCase() || wIsUpper)
                         return buffer.substring(0, i) + u2 + o2 + buffer.substring(i + 2)
+                    }
+                    // A "ua" pair horns only the 'u' — "uă" is not a valid
+                    // Vietnamese nucleus (unlike "uo"→"ươ" above, which
+                    // replaces both), so tone-lifted "mua"+w must land on
+                    // the u to produce "mưa", not the trailing a.
+                    if (qualityRoot(buffer[i]) == 'u' && qualityRoot(buffer[i + 1]) == 'a') {
+                        val u2 = caseMap('ư', buffer[i].isUpperCase() || wIsUpper)
+                        return buffer.substring(0, i) + u2 + buffer.substring(i + 1)
                     }
                 }
             }
 
             // Single horn/breve on the immediate last vowel: a→ă, o→ơ, u→ư.
             val last = buffer.last()
-            val singleReplacement = when (last.lowercaseChar()) {
+            val singleReplacement = when (qualityRoot(last)) {
                 'a' -> 'ă'
                 'o' -> 'ơ'
                 'u' -> 'ư'
@@ -291,7 +334,7 @@ class TelexComposer : Composer {
             // the syllable's coda for the single-vowel case.
             val vowelIdx = findLastVowelThroughConsonants(buffer) ?: return null
             val vowelChar = buffer[vowelIdx]
-            val lookbackReplacement = when (vowelChar.lowercaseChar()) {
+            val lookbackReplacement = when (qualityRoot(vowelChar)) {
                 'a' -> 'ă'
                 'o' -> 'ơ'
                 'u' -> 'ư'
@@ -464,6 +507,9 @@ class TelexComposer : Composer {
 
         private fun caseMap(c: Char, upper: Boolean): Char =
             if (upper) c.uppercaseChar() else c
+
+        /** Quality-mark-insensitive root: ô/ơ→o, â/ă→a, ê→e, ư→u, đ→d. */
+        private fun qualityRoot(c: Char): Char = UNMARK[c.lowercaseChar()] ?: c.lowercaseChar()
 
         private val TONE_MARKS = setOf('s', 'f', 'r', 'x', 'j')
         private val TONE_INDEX = mapOf('s' to 0, 'f' to 1, 'r' to 2, 'x' to 3, 'j' to 4)
