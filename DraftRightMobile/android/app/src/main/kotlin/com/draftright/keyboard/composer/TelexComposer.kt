@@ -490,6 +490,35 @@ class TelexComposer : Composer {
             }
         }
 
+        /**
+         * Tone KEY (s/f/r/x/j) for each toned char — derived from
+         * TONE_ROWS_LOWER + TONE_INDEX so it can never drift from them.
+         */
+        private val TONE_KEY_OF: Map<Char, Char> = buildMap {
+            val keyByIdx = TONE_INDEX.entries.associate { (k, v) -> v to k }
+            for (row in TONE_ROWS_LOWER.values) {
+                for (idx in row.indices) put(row[idx], keyByIdx.getValue(idx))
+            }
+        }
+
+        /**
+         * [buffer] with its tone removed + the tone key that was on it, or
+         * null when untoned. Order-free marking (spec 2026-09-11): quality
+         * modifiers run on the bare buffer and the tone is re-placed by
+         * applyTone afterwards, so placement is always recomputed.
+         */
+        internal fun liftTone(buffer: String): Pair<String, Char?> {
+            for (i in buffer.indices.reversed()) {
+                val c = buffer[i]
+                val key = TONE_KEY_OF[c.lowercaseChar()] ?: continue
+                val root = UNTONE.getValue(c.lowercaseChar())
+                val lifted = buffer.substring(0, i) +
+                    caseMap(root, c.isUpperCase()) + buffer.substring(i + 1)
+                return lifted to key
+            }
+            return buffer to null
+        }
+
         // Mark removal: special vowels and đ → bare ASCII root.
         private val UNMARK = mapOf(
             'ă' to 'a', 'â' to 'a',

@@ -78,4 +78,12 @@ class TelexOrderFreeTest {
         assertEquals("nguyễn", type("nguyeenx"))
         assertEquals("rượu", type("ruwowuj"))
     }
+
+    // --- liftTone: tone removal for order-free marking ---
+    @Test fun liftToneStripsAndReports() {
+        assertEquals("tuong" to 'r', TelexComposer.liftTone("tuỏng"))
+        assertEquals("tương" to 'r', TelexComposer.liftTone("tưởng"))  // quality marks stay
+        assertEquals("duoc" to null, TelexComposer.liftTone("duoc"))
+        assertEquals("Hoa" to 'f', TelexComposer.liftTone("Hòa"))      // case preserved
+    }
 }
