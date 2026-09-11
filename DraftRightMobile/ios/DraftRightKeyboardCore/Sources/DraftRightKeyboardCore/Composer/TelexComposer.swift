@@ -56,18 +56,32 @@ public final class TelexComposer: Composer {
         // vowels. Retyping the same tone cancels it (Samsung Telex behavior).
         if TelexState.isToneMark(low) && bufferHasTonableVowel(buf) {
             if let canceled = tryCancelTone(buf, low, incoming) { return canceled }
-            return applyTone(buf, low)
+            // Retyping a DIFFERENT tone than the one already on the buffer is
+            // an override, not a cancel (tryCancelTone only fires on an exact
+            // retype). Lift the old tone first — findLastVowelCluster only
+            // recognises untoned vowels, so applyTone on an already-toned
+            // buffer would otherwise find no cluster and silently no-op,
+            // stranding the old tone (surfaced by order-free sequences like
+            // "cansja" → cận, where 's' then 'j' land on the same vowel).
+            let (bare, _) = liftTone(buf)
+            return applyTone(bare, low)
         }
 
         // 'w' has multiple meanings depending on the preceding chars.
         if low == "w" {
-            if let canceled = tryCancelHornBreve(buf, incoming) { return canceled }
-            return applyHornOrBreve(buf, wIsUpper: incoming.isUppercase)
+            // Order-free marking: lift the tone, run the existing horn/breve
+            // logic on the bare buffer, re-place the tone. Placement is
+            // recomputed by applyTone, so "tuỏng"+w lands as tưởng.
+            let (bare, tone) = liftTone(buf)
+            guard let applied = tryCancelHornBreve(bare, incoming)
+                ?? applyHornOrBreve(bare, wIsUpper: incoming.isUppercase) else { return nil }
+            guard let tone = tone else { return applied }
+            return applyTone(applied, tone)
         }
 
         // dd → đ, or cancel đ back to d + literal d.
         if low == "d" {
-            guard let last = buf.last else { return nil }
+            guard let last = buf.last, let first = buf.first else { return nil }
             let lastLow = Character(last.lowercased())
             if lastLow == "đ" {
                 let mapped: Character = last.isUppercase ? "D" : "d"
@@ -78,10 +92,29 @@ public final class TelexComposer: Composer {
                 let replacement: Character = upper ? "Đ" : "đ"
                 return String(buf.dropLast()) + String(replacement)
             }
+
+            // Remote đ (order-free marking): a trailing d on a d-initial word
+            // converts the INITIAL to đ — unambiguous because no Vietnamese
+            // syllable ends in d. A second remote d reverts, mirroring the
+            // adjacent dd cancel.
+            let firstLow = Character(first.lowercased())
+            let restHasD = buf.dropFirst().contains { qualityRoot($0) == "d" }
+            let hasVowel = buf.contains {
+                TelexState.isVowelLike($0) || unTone[Character($0.lowercased())] != nil
+            }
+            if firstLow == "d" && hasVowel && !restHasD {
+                let mapped: Character = first.isUppercase ? "Đ" : "đ"
+                return String(mapped) + String(buf.dropFirst())
+            }
+            if firstLow == "đ" && buf.count > 1 && !restHasD {
+                let mapped: Character = first.isUppercase ? "D" : "d"
+                return String(mapped) + String(buf.dropFirst()) + String(incoming)
+            }
             return nil
         }
 
-        // Double-vowel circumflex: aa/oo/ee. Retype cancels back to base + literal.
+        // Double-vowel circumflex: aa/oo/ee — tone-lifted and root-matched like
+        // 'w' above so it commutes with tones and replaces horns.
         let replacement: Character
         switch low {
         case "a": replacement = "â"
@@ -89,6 +122,20 @@ public final class TelexComposer: Composer {
         case "e": replacement = "ê"
         default: return nil
         }
+        let (bareBuf, liftedTone) = liftTone(buf)
+        guard let applied = applyCircumflexOrCancel(bareBuf, low, replacement, incoming) else { return nil }
+        guard let liftedTone = liftedTone else { return applied }
+        return applyTone(applied, liftedTone)
+    }
+
+    /// Double-vowel circumflex (aa/oo/ee) apply-or-cancel on a bare
+    /// (tone-lifted) buffer. APPLY matches by quality ROOT so a horn/breve
+    /// vowel is replaced rather than skipped (ơ + o → ô); CANCEL stays EXACT so
+    /// only a real circumflex reverts to base + literal (ô + o → o + o, not any
+    /// quality-marked vowel).
+    private static func applyCircumflexOrCancel(
+        _ buf: String, _ low: Character, _ replacement: Character, _ incoming: Character
+    ) -> String? {
         guard let last = buf.last else { return nil }
         let lastLow = Character(last.lowercased())
         // Immediate: last char is the marked vowel → retype cancels to base + literal.
@@ -96,8 +143,8 @@ public final class TelexComposer: Composer {
             let mapped: Character = last.isUppercase ? Character(low.uppercased()) : low
             return String(buf.dropLast()) + String(mapped) + String(incoming)
         }
-        // Immediate: last char is the plain vowel → apply circumflex.
-        if lastLow == low {
+        // Immediate: last char shares the target's quality root → apply circumflex.
+        if qualityRoot(last) == low {
             let upper = incoming.isUppercase || last.isUppercase
             let mapped: Character = upper ? Character(replacement.uppercased()) : replacement
             return String(buf.dropLast()) + String(mapped)
@@ -113,17 +160,17 @@ public final class TelexComposer: Composer {
         // "dậy"). Vowel-final syllables (dậy, mấy, cây, này, mới, người) are a
         // large slice of everyday Vietnamese, so the old behaviour read as the
         // keyboard being unreliable rather than as a rule.
+        //
+        // Cancel-by-retype is deliberately NOT offered here: away from the end
+        // of the buffer the mark may have been placed by tone auto-promotion
+        // rather than by a keystroke ("iecs" → iếc), so reading the key as a
+        // cancel would undo a mark the user never typed. Deep in the cluster
+        // the key therefore always APPLIES — idempotently when the vowel is
+        // already marked ("iecs" + e → iếc).
         let chars = Array(buf)
-        guard let idx = findModifierTargetInVowelCluster(chars, low, replacement) else { return nil }
+        guard let idx = findModifierTargetInVowelCluster(chars, low) else { return nil }
         let target = chars[idx]
-        let targetLow = Character(target.lowercased())
-        if targetLow == replacement {
-            let mapped: Character = target.isUppercase ? Character(low.uppercased()) : low
-            var nc = chars
-            nc[idx] = mapped
-            return String(nc) + String(incoming)
-        }
-        if targetLow == low {
+        if qualityRoot(target) == low {
             let upper = incoming.isUppercase || target.isUppercase
             let mapped: Character = upper ? Character(replacement.uppercased()) : replacement
             var nc = chars
@@ -149,16 +196,17 @@ public final class TelexComposer: Composer {
         return nil
     }
 
-    /// Index of the char in the trailing vowel cluster that [low] (or its marked
-    /// form [replacement], for cancel-by-retype) should act on, or nil if the
-    /// cluster holds neither. Mirrors Android's findModifierTargetInVowelCluster.
+    /// Index of the char in the trailing vowel cluster that [low] should act on,
+    /// or nil if the cluster holds none. Matching is by quality root, so an
+    /// already-marked vowel is a target too (ơ is a target for 'o').
+    /// Mirrors Android's findModifierTargetInVowelCluster.
     ///
-    /// Scans right-to-left from the cluster's end so the RIGHTMOST match wins —
-    /// "oo" + o must cancel the second o, not the first. Only the final cluster
-    /// is considered, and only through at most maxTrailingCons consonants, so a
-    /// modifier can never reach back into the previous syllable.
+    /// Scans right-to-left from the cluster's end so the RIGHTMOST match wins.
+    /// Only the final cluster is considered, and only through at most
+    /// maxTrailingCons consonants, so a modifier can never reach back into the
+    /// previous syllable.
     private static func findModifierTargetInVowelCluster(
-        _ chars: [Character], _ low: Character, _ replacement: Character
+        _ chars: [Character], _ low: Character
     ) -> Int? {
         guard let last = findLastVowelThroughConsonants(chars) else { return nil }
         // Walk left while still inside the same vowel run.
@@ -170,8 +218,7 @@ public final class TelexComposer: Composer {
         }
         var idx = last
         while idx >= firstOfCluster {
-            let c = Character(chars[idx].lowercased())
-            if (c == low || c == replacement) && canReachBack(chars, idx) { return idx }
+            if qualityRoot(chars[idx]) == low && canReachBack(chars, idx) { return idx }
             idx -= 1
         }
         return nil
@@ -262,7 +309,7 @@ public final class TelexComposer: Composer {
                 // Skip the 'u' of a 'qu' onset — it is a glide, not the 'u' of a
                 // "uo"→"ươ" cluster (quo+w → quơ, not qươ).
                 if i >= 1 && Character(chars[i - 1].lowercased()) == "q" { i += 1; continue }
-                if Character(chars[i].lowercased()) == "u" && Character(chars[i + 1].lowercased()) == "o" {
+                if qualityRoot(chars[i]) == "u" && qualityRoot(chars[i + 1]) == "o" {
                     let u2: Character = (chars[i].isUppercase || wIsUpper) ? "Ư" : "ư"
                     let o2: Character = (chars[i + 1].isUppercase || wIsUpper) ? "Ơ" : "ơ"
                     var nc = chars
@@ -270,40 +317,66 @@ public final class TelexComposer: Composer {
                     nc[i + 1] = o2
                     return String(nc)
                 }
+                // A "ua" pair horns only the 'u' — "uă" is not a valid
+                // Vietnamese nucleus (unlike "uo"→"ươ" above, which replaces
+                // both), so tone-lifted "mua"+w must land on the u to produce
+                // "mưa", not the trailing a.
+                if qualityRoot(chars[i]) == "u" && qualityRoot(chars[i + 1]) == "a" {
+                    let u2: Character = (chars[i].isUppercase || wIsUpper) ? "Ư" : "ư"
+                    var nc = chars
+                    nc[i] = u2
+                    return String(nc)
+                }
                 i += 1
             }
         }
-        guard let last = buf.last else { return nil }
+
+        // Single horn/breve: a→ă, o→ơ, u→ư on the nucleus vowel.
+        guard let vowelIdx = hornTargetIndex(chars) else { return nil }
+        let vowelChar = chars[vowelIdx]
         let replacement: Character
-        switch Character(last.lowercased()) {
+        switch qualityRoot(vowelChar) {
         case "a": replacement = "ă"
         case "o": replacement = "ơ"
         case "u": replacement = "ư"
         default: return nil
         }
-        let mapped: Character = (last.isUppercase || wIsUpper) ? Character(replacement.uppercased()) : replacement
-        return String(buf.dropLast()) + String(mapped)
+        let mapped: Character = (vowelChar.isUppercase || wIsUpper)
+            ? Character(replacement.uppercased()) : replacement
+        var nc = chars
+        nc[vowelIdx] = mapped
+        return String(nc)
+    }
+
+    /// Index of the vowel a single horn/breve should land on: the NUCLEUS of
+    /// the trailing vowel cluster, reached over the coda and over an offglide.
+    ///
+    /// The offglide skip is what makes the horn order-free: "oi"+w is ơi and
+    /// "uu"+w is ưu, not "oiw"/"uư" — the trailing i/u is a coda, not the vowel
+    /// being marked. It only applies to a vowel that FOLLOWS another one, so a
+    /// cluster-initial i/u/o/y (u+w → ư) still takes the mark itself.
+    private static func hornTargetIndex(_ chars: [Character]) -> Int? {
+        guard let last = findLastVowelThroughConsonants(chars) else { return nil }
+        var clusterStart = last
+        var i = last
+        while i >= 0 && TelexState.isVowelLike(chars[i]) {
+            clusterStart = i
+            i -= 1
+        }
+        clusterStart = skipOnsetGlide(chars, clusterStart, last)
+        var idx = last
+        while idx > clusterStart {
+            if !TelexState.isGlideCoda(chars[idx]) { return idx }
+            idx -= 1
+        }
+        return clusterStart
     }
 
     static func applyTone(_ buf: String, _ toneChar: Character) -> String {
         let chars = Array(buf)
         guard let cluster = findLastVowelCluster(chars) else { return buf }
-        var start = cluster.start
         let end = cluster.end
-        // qu/gi onset glide: the 'u' after 'q' (or 'i' after 'g') is a glide, not
-        // part of the tone-bearing nucleus, WHEN another vowel follows. Skip it so
-        // the tone — and the diphthong promotion below — target the real nucleus:
-        // quá not qúa, giá not gía, quón not quốn. 'gi' is an onset only when the
-        // 'g' is standalone (NOT the 'g' in 'ng'/'ngh' — ngià keeps tone on i).
-        if start >= 1 && start < end {
-            let prev = Character(chars[start - 1].lowercased())
-            let glide = Character(chars[start].lowercased())
-            let giOnset = prev == "g" && glide == "i" &&
-                (start < 2 || Character(chars[start - 2].lowercased()) != "n")
-            if (prev == "q" && glide == "u") || giOnset {
-                start += 1
-            }
-        }
+        let start = skipOnsetGlide(chars, cluster.start, end)
         let clusterLen = end - start + 1
         let hasTrailingConsonant = end < chars.count - 1
 
@@ -350,6 +423,23 @@ public final class TelexComposer: Composer {
 
         let targetIdx = pickToneVowelIndex(chars, start, end, hasTrailingConsonant)
         return applyToneAt(chars, targetIdx, toneChar)
+    }
+
+    /// [start] advanced past a qu/gi onset glide.
+    ///
+    /// The 'u' after 'q' (or 'i' after a standalone 'g') is part of the onset,
+    /// not of the tone- or horn-bearing nucleus, WHEN another vowel follows:
+    /// quá not qúa, giá not gía, quờ not qừo. 'gi' is an onset only when the
+    /// 'g' stands alone — NOT the 'g' inside 'ng'/'ngh' (ngià keeps its tone on
+    /// the i). When the glide is the only vowel (gì, qu-) it IS the nucleus and
+    /// is left alone.
+    private static func skipOnsetGlide(_ chars: [Character], _ start: Int, _ endInclusive: Int) -> Int {
+        guard start >= 1, start < endInclusive else { return start }
+        let prev = Character(chars[start - 1].lowercased())
+        let glide = Character(chars[start].lowercased())
+        let giOnset = prev == "g" && glide == "i" &&
+            (start < 2 || Character(chars[start - 2].lowercased()) != "n")
+        return ((prev == "q" && glide == "u") || giOnset) ? start + 1 : start
     }
 
     private struct ClusterRange { let start: Int; let end: Int }
@@ -473,4 +563,39 @@ public final class TelexComposer: Composer {
         "ư": "u",
         "đ": "d",
     ]
+
+    /// Quality-mark-insensitive root: ô/ơ→o, â/ă→a, ê→e, ư→u, đ→d.
+    private static func qualityRoot(_ c: Character) -> Character {
+        let lower = Character(c.lowercased())
+        return unMark[lower] ?? lower
+    }
+
+    /// Tone KEY (s/f/r/x/j) for each toned char — derived from toneRowsLower +
+    /// toneIndex so it can never drift from them.
+    private static let toneKeyOf: [Character: Character] = {
+        var keyByIdx: [Int: Character] = [:]
+        for (key, idx) in toneIndex { keyByIdx[idx] = key }
+        var dict: [Character: Character] = [:]
+        for row in toneRowsLower.values {
+            for (idx, toned) in row.enumerated() { dict[toned] = keyByIdx[idx]! }
+        }
+        return dict
+    }()
+
+    /// [buffer] with its tone removed + the tone key that was on it, or nil when
+    /// untoned. Order-free marking (spec 2026-09-11): quality modifiers run on
+    /// the bare buffer and the tone is re-placed by applyTone afterwards, so
+    /// placement is always recomputed.
+    static func liftTone(_ buffer: String) -> (String, Character?) {
+        let chars = Array(buffer)
+        for i in stride(from: chars.count - 1, through: 0, by: -1) {
+            let c = chars[i]
+            let lower = Character(c.lowercased())
+            guard let key = toneKeyOf[lower], let root = unTone[lower] else { continue }
+            var nc = chars
+            nc[i] = c.isUppercase ? Character(root.uppercased()) : root
+            return (String(nc), key)
+        }
+        return (buffer, nil)
+    }
 }

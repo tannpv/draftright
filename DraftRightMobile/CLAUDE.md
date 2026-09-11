@@ -117,3 +117,27 @@ secret. **Play production is policy-gated** (12 testers × 14 days) — see
 `docs/superpowers/plans/2026-09-04-play-production-launch.md` before touching
 production lanes. See also the maintainer's memories
 `reference_contabo_selfhosted_runner` + `reference_mac_selfhosted_swift_runner`.
+
+## iOS release flow (Xcode Cloud — canonical since 2026-09-04)
+
+TestFlight builds run on **Xcode Cloud**, not a local Mac:
+1. Sync the mirror: subtree split + force-push `draftrightmobile main`
+   (Xcode Cloud builds the MIRROR, not the monorepo).
+2. Trigger the "TestFlight Internal" workflow — manual-start by design so
+   mirror syncs don't burn the free 25 h/month compute quota. Via App Store
+   Connect API: `POST /v1/ciBuildRuns` (workflow + gitReference ids in the
+   maintainer's memory `feedback_xcode_cloud_default_workflow`), or the Xcode
+   Cloud tab in App Store Connect.
+3. `ios/ci_scripts/ci_post_clone.sh` provisions the pinned Flutter toolchain
+   (guarded by `scripts/check-flutter-version-parity.py`); the archive
+   auto-uploads to TestFlight internal.
+
+Notes:
+- Extensions embed via **native target dependencies + the "Embed Foundation
+  Extensions" copy phase** (must sit right after "Embed Frameworks" — after the
+  Pods script phases it forms a build cycle). Never reintroduce a
+  nested-xcodebuild embed script: it dies "No Accounts" on any CI.
+- iOS CFBundleVersion = Xcode Cloud's run counter (8, 9, …) and intentionally
+  diverges from Android's pubspec versionCode.
+- Local fallback: `cd ios && fastlane beta` (needs
+  `/opt/homebrew/lib/ruby/gems/4.0.0/bin` on PATH).
