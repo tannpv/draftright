@@ -159,16 +159,16 @@ class TelexComposer : Composer {
             // Vowel-final syllables are a large slice of everyday Vietnamese
             // (dậy, mấy, cây, này, mới, tuổi, người), so the old behaviour read
             // as the keyboard being unreliable rather than as a rule.
+            //
+            // Cancel-by-retype is deliberately NOT offered here: away from the
+            // end of the buffer the mark may have been placed by tone auto-
+            // promotion rather than by a keystroke ("iecs" → iếc), so reading
+            // the key as a cancel would undo a mark the user never typed. Deep
+            // in the cluster the key therefore always APPLIES — idempotently
+            // when the vowel is already marked ("iecs" + e → iếc).
             val targetIdx = findModifierTargetInVowelCluster(buffer, low, replacement)
             if (targetIdx != null) {
                 val targetChar = buffer[targetIdx]
-                val targetLow = targetChar.lowercaseChar()
-                if (targetLow == replacement) {
-                    return buffer.substring(0, targetIdx) +
-                        caseMap(low, targetChar.isUpperCase()) +
-                        buffer.substring(targetIdx + 1) +
-                        incoming
-                }
                 if (qualityRoot(targetChar) == low) {
                     return buffer.substring(0, targetIdx) +
                         caseMap(replacement, incoming.isUpperCase() || targetChar.isUpperCase()) +
@@ -332,54 +332,70 @@ class TelexComposer : Composer {
                 }
             }
 
-            // Single horn/breve on the immediate last vowel: a→ă, o→ơ, u→ư.
-            val last = buffer.last()
-            val singleReplacement = when (qualityRoot(last)) {
-                'a' -> 'ă'
-                'o' -> 'ơ'
-                'u' -> 'ư'
-                else -> null
-            }
-            if (singleReplacement != null) {
-                return buffer.dropLast(1) + caseMap(singleReplacement, last.isUpperCase() || wIsUpper)
-            }
-
-            // Lookback through trailing consonants — lets users type 'w' after
-            // the syllable's coda for the single-vowel case.
-            val vowelIdx = findLastVowelThroughConsonants(buffer) ?: return null
+            // Single horn/breve: a→ă, o→ơ, u→ư on the nucleus vowel.
+            val vowelIdx = hornTargetIndex(buffer) ?: return null
             val vowelChar = buffer[vowelIdx]
-            val lookbackReplacement = when (qualityRoot(vowelChar)) {
+            val replacement = when (qualityRoot(vowelChar)) {
                 'a' -> 'ă'
                 'o' -> 'ơ'
                 'u' -> 'ư'
                 else -> return null
             }
             return buffer.substring(0, vowelIdx) +
-                caseMap(lookbackReplacement, vowelChar.isUpperCase() || wIsUpper) +
+                caseMap(replacement, vowelChar.isUpperCase() || wIsUpper) +
                 buffer.substring(vowelIdx + 1)
+        }
+
+        /**
+         * Index of the vowel a single horn/breve should land on: the NUCLEUS of
+         * the trailing vowel cluster, reached over the coda and over an
+         * offglide.
+         *
+         * The offglide skip is what makes the horn order-free: "oi"+w is ơi and
+         * "uu"+w is ưu, not "oiw"/"uư" — the trailing i/u is a coda, not the
+         * vowel being marked. It only applies to a vowel that FOLLOWS another
+         * one, so a cluster-initial i/u/o/y (u+w → ư) still takes the mark.
+         */
+        private fun hornTargetIndex(buffer: String): Int? {
+            val last = findLastVowelThroughConsonants(buffer) ?: return null
+            var clusterStart = last
+            var i = last
+            while (i >= 0 && TelexState.isVowelLike(buffer[i])) {
+                clusterStart = i
+                i--
+            }
+            clusterStart = skipOnsetGlide(buffer, clusterStart, last)
+            var idx = last
+            while (idx > clusterStart) {
+                if (!TelexState.isGlideCoda(buffer[idx])) return idx
+                idx--
+            }
+            return clusterStart
+        }
+
+        /**
+         * [start] advanced past a qu/gi onset glide.
+         *
+         * The 'u' after 'q' (or 'i' after a standalone 'g') is part of the
+         * onset, not of the tone- or horn-bearing nucleus, WHEN another vowel
+         * follows: quá not qúa, giá not gía, quờ not qừo. 'gi' is an onset only
+         * when the 'g' stands alone — NOT the 'g' inside 'ng'/'ngh' (ngià keeps
+         * its tone on the i). When the glide is the only vowel (gì, qu-) it IS
+         * the nucleus and is left alone.
+         */
+        private fun skipOnsetGlide(buffer: String, start: Int, endInclusive: Int): Int {
+            if (start !in 1 until endInclusive) return start
+            val prev = buffer[start - 1].lowercaseChar()
+            val glide = buffer[start].lowercaseChar()
+            val giOnset = prev == 'g' && glide == 'i' &&
+                (start < 2 || buffer[start - 2].lowercaseChar() != 'n')
+            return if ((prev == 'q' && glide == 'u') || giOnset) start + 1 else start
         }
 
         private fun applyTone(buffer: String, toneChar: Char): String {
             val cluster = findLastVowelCluster(buffer) ?: return buffer
-            var start = cluster.first
             val endInclusive = cluster.last
-            // qu/gi onset glide: the 'u' after 'q' (or 'i' after 'g') is a glide,
-            // not part of the tone-bearing nucleus, WHEN another vowel follows.
-            // Skip it so the tone — and the diphthong promotion below — target
-            // the real nucleus: quá not qúa, giá not gía, quón not quốn. When the
-            // glide is the only vowel (gì, qu-) start == endInclusive and it is
-            // left alone (that vowel IS the nucleus).
-            if (start in 1 until endInclusive) {
-                val prev = buffer[start - 1].lowercaseChar()
-                val glide = buffer[start].lowercaseChar()
-                // 'gi' is an onset only when the 'g' is standalone — NOT the
-                // 'g' inside 'ng'/'ngh' (ngià keeps its tone on i, not gi-onset).
-                val giOnset = prev == 'g' && glide == 'i' &&
-                    (start < 2 || buffer[start - 2].lowercaseChar() != 'n')
-                if ((prev == 'q' && glide == 'u') || giOnset) {
-                    start += 1
-                }
-            }
+            val start = skipOnsetGlide(buffer, cluster.first, endInclusive)
             val clusterLen = endInclusive - start + 1
             val hasTrailingConsonant = endInclusive < buffer.length - 1
 

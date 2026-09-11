@@ -58,7 +58,11 @@ NUCLEI = {
     "ưa": ("ua", ["w"], OPEN), "ươ": ("uo", ["w"], CLOSED), "ưu": ("uu", ["w"], OPEN),
     "ưi": ("ui", ["w"], OPEN),            # gửi, ngửi, chửi
     "uây": ("uay", ["a"], OPEN),          # khuấy, quây
-    "uê": ("ue", ["e"], ANY), "uơ": ("uo", ["w"], OPEN),
+    "uê": ("ue", ["e"], ANY),
+    # NOT generated: "uơ" (huơ, thuở). Its keystrokes are "uo"+w, which Telex
+    # already spends on "ươ" — no keystroke reaches it, so it has no expected
+    # output to assert. After a qu onset the nucleus is a plain "ơ" (quơ, quở),
+    # which IS generated and passes.
     "iêu": ("ieu", ["e"], OPEN), "yêu": ("yeu", ["e"], OPEN),
     "oai": ("oai", [], OPEN), "oay": ("oay", [], OPEN),
     "oeo": ("oeo", [], OPEN), "oao": ("oao", [], OPEN),

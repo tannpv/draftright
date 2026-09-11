@@ -160,16 +160,16 @@ public final class TelexComposer: Composer {
         // "dậy"). Vowel-final syllables (dậy, mấy, cây, này, mới, người) are a
         // large slice of everyday Vietnamese, so the old behaviour read as the
         // keyboard being unreliable rather than as a rule.
+        //
+        // Cancel-by-retype is deliberately NOT offered here: away from the end
+        // of the buffer the mark may have been placed by tone auto-promotion
+        // rather than by a keystroke ("iecs" → iếc), so reading the key as a
+        // cancel would undo a mark the user never typed. Deep in the cluster
+        // the key therefore always APPLIES — idempotently when the vowel is
+        // already marked ("iecs" + e → iếc).
         let chars = Array(buf)
         guard let idx = findModifierTargetInVowelCluster(chars, low, replacement) else { return nil }
         let target = chars[idx]
-        let targetLow = Character(target.lowercased())
-        if targetLow == replacement {
-            let mapped: Character = target.isUppercase ? Character(low.uppercased()) : low
-            var nc = chars
-            nc[idx] = mapped
-            return String(nc) + String(incoming)
-        }
         if qualityRoot(target) == low {
             let upper = incoming.isUppercase || target.isUppercase
             let mapped: Character = upper ? Character(replacement.uppercased()) : replacement
@@ -333,57 +333,52 @@ public final class TelexComposer: Composer {
             }
         }
 
-        // Single horn/breve on the immediate last vowel: a→ă, o→ơ, u→ư.
-        guard let last = buf.last else { return nil }
-        let singleReplacement: Character?
-        switch qualityRoot(last) {
-        case "a": singleReplacement = "ă"
-        case "o": singleReplacement = "ơ"
-        case "u": singleReplacement = "ư"
-        default: singleReplacement = nil
-        }
-        if let replacement = singleReplacement {
-            let mapped: Character = (last.isUppercase || wIsUpper) ? Character(replacement.uppercased()) : replacement
-            return String(buf.dropLast()) + String(mapped)
-        }
-
-        // Lookback through trailing consonants — lets users type 'w' after the
-        // syllable's coda for the single-vowel case.
-        guard let vowelIdx = findLastVowelThroughConsonants(chars) else { return nil }
+        // Single horn/breve: a→ă, o→ơ, u→ư on the nucleus vowel.
+        guard let vowelIdx = hornTargetIndex(chars) else { return nil }
         let vowelChar = chars[vowelIdx]
-        let lookbackReplacement: Character
+        let replacement: Character
         switch qualityRoot(vowelChar) {
-        case "a": lookbackReplacement = "ă"
-        case "o": lookbackReplacement = "ơ"
-        case "u": lookbackReplacement = "ư"
+        case "a": replacement = "ă"
+        case "o": replacement = "ơ"
+        case "u": replacement = "ư"
         default: return nil
         }
         let mapped: Character = (vowelChar.isUppercase || wIsUpper)
-            ? Character(lookbackReplacement.uppercased()) : lookbackReplacement
+            ? Character(replacement.uppercased()) : replacement
         var nc = chars
         nc[vowelIdx] = mapped
         return String(nc)
     }
 
+    /// Index of the vowel a single horn/breve should land on: the NUCLEUS of
+    /// the trailing vowel cluster, reached over the coda and over an offglide.
+    ///
+    /// The offglide skip is what makes the horn order-free: "oi"+w is ơi and
+    /// "uu"+w is ưu, not "oiw"/"uư" — the trailing i/u is a coda, not the vowel
+    /// being marked. It only applies to a vowel that FOLLOWS another one, so a
+    /// cluster-initial i/u/o/y (u+w → ư) still takes the mark itself.
+    private static func hornTargetIndex(_ chars: [Character]) -> Int? {
+        guard let last = findLastVowelThroughConsonants(chars) else { return nil }
+        var clusterStart = last
+        var i = last
+        while i >= 0 && TelexState.isVowelLike(chars[i]) {
+            clusterStart = i
+            i -= 1
+        }
+        clusterStart = skipOnsetGlide(chars, clusterStart, last)
+        var idx = last
+        while idx > clusterStart {
+            if !TelexState.isGlideCoda(chars[idx]) { return idx }
+            idx -= 1
+        }
+        return clusterStart
+    }
+
     static func applyTone(_ buf: String, _ toneChar: Character) -> String {
         let chars = Array(buf)
         guard let cluster = findLastVowelCluster(chars) else { return buf }
-        var start = cluster.start
         let end = cluster.end
-        // qu/gi onset glide: the 'u' after 'q' (or 'i' after 'g') is a glide, not
-        // part of the tone-bearing nucleus, WHEN another vowel follows. Skip it so
-        // the tone — and the diphthong promotion below — target the real nucleus:
-        // quá not qúa, giá not gía, quón not quốn. 'gi' is an onset only when the
-        // 'g' is standalone (NOT the 'g' in 'ng'/'ngh' — ngià keeps tone on i).
-        if start >= 1 && start < end {
-            let prev = Character(chars[start - 1].lowercased())
-            let glide = Character(chars[start].lowercased())
-            let giOnset = prev == "g" && glide == "i" &&
-                (start < 2 || Character(chars[start - 2].lowercased()) != "n")
-            if (prev == "q" && glide == "u") || giOnset {
-                start += 1
-            }
-        }
+        let start = skipOnsetGlide(chars, cluster.start, end)
         let clusterLen = end - start + 1
         let hasTrailingConsonant = end < chars.count - 1
 
@@ -430,6 +425,23 @@ public final class TelexComposer: Composer {
 
         let targetIdx = pickToneVowelIndex(chars, start, end, hasTrailingConsonant)
         return applyToneAt(chars, targetIdx, toneChar)
+    }
+
+    /// [start] advanced past a qu/gi onset glide.
+    ///
+    /// The 'u' after 'q' (or 'i' after a standalone 'g') is part of the onset,
+    /// not of the tone- or horn-bearing nucleus, WHEN another vowel follows:
+    /// quá not qúa, giá not gía, quờ not qừo. 'gi' is an onset only when the
+    /// 'g' stands alone — NOT the 'g' inside 'ng'/'ngh' (ngià keeps its tone on
+    /// the i). When the glide is the only vowel (gì, qu-) it IS the nucleus and
+    /// is left alone.
+    private static func skipOnsetGlide(_ chars: [Character], _ start: Int, _ endInclusive: Int) -> Int {
+        guard start >= 1, start < endInclusive else { return start }
+        let prev = Character(chars[start - 1].lowercased())
+        let glide = Character(chars[start].lowercased())
+        let giOnset = prev == "g" && glide == "i" &&
+            (start < 2 || Character(chars[start - 2].lowercased()) != "n")
+        return ((prev == "q" && glide == "u") || giOnset) ? start + 1 : start
     }
 
     private struct ClusterRange { let start: Int; let end: Int }
