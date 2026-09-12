@@ -84,7 +84,18 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: 3.41.4
-          cache: true
+          cache: false
+          # NOT cached via actions/cache on this runner. GitHub's cache service
+          # is effectively unavailable for this account (hosted billing is
+          # blocked): the restore reports a hit, then times out after exactly
+          # 10 minutes and falls back to "Cache not found" —
+          #   08:24:14 Cache hit for: flutter-macos-stable-3.41.4-arm64-...
+          #   08:34:14 Cache not found for input keys: ... duration_ms=603651
+          # Two such steps (SDK + pub deps) ate the job's 40 min budget before
+          # the tests could run, which is why this gate was dead from
+          # 2026-09-04 to 2026-09-11. The Mac keeps the SDK in its own
+          # tool-cache and its ~/.pub-cache is warm (measured: pub get 13.7s
+          # warm, 19.7s with a cold cache), so there is nothing to restore.
       - name: Resolve dependencies
         working-directory: DraftRightMobile
         run: flutter pub get

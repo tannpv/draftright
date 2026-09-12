@@ -112,6 +112,24 @@ self-hosted runners, split by what each box can survive (settled 2026-09-04):
   restarts the agents.
 - Win11 desktop (Windows) pending.
 
+**Two cache traps that killed the Kotlin gate for a week (2026-09-04 → 09-11)** —
+both looked like "the runner's network is slow"; neither was:
+- **Never set a per-workspace `GRADLE_USER_HOME`** on the Mac. It hides the
+  gradle distribution already unpacked in `~/.gradle`, so every run re-downloads
+  `gradle-8.14-all.zip` (224 MB) and leaves a `.part` with no `.ok` marker.
+- **`subosito/flutter-action` runs with `cache: false` on the Mac job.** GitHub's
+  cache service is unavailable while hosted billing is blocked, and it fails
+  badly: it reports a cache hit, then times out after exactly 10 minutes
+  (`duration_ms=603651`) and falls back to "not found". Two such steps ate the
+  40-minute budget before `flutter pub get` could finish. The Linux job keeps
+  `cache: true`, where the restore genuinely works.
+
+Diagnose with step timings, not the job total, and measure the box before
+blaming the network — on that Mac `flutter pub get` is 13.7s warm and 19.7s with
+a completely cold `PUB_CACHE`. Verify a fix by reading
+`build/app/test-results/testDebugUnitTest/TEST-*.xml` for `tests=N skipped=0`;
+a job can go green having skipped everything.
+
 Play deploy's real upload keystore lives ONLY in the standalone repo's CI
 secret. **Play production is policy-gated** (12 testers × 14 days) — see
 `docs/superpowers/plans/2026-09-04-play-production-launch.md` before touching
