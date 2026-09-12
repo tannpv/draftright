@@ -1,5 +1,9 @@
 package com.draftright.draftright_mobile
 
+import android.content.Intent
+import android.provider.Settings
+import android.view.inputmethod.InputMethodManager
+import com.draftright.keyboard.KeyboardStatus
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -28,8 +32,36 @@ class MainActivity : FlutterFragmentActivity() {
                     // downloaded language packs are readable by the keyboard.
                     result.success(filesDir.absolutePath)
                 }
+                // #272: Android never auto-enables a newly installed input
+                // method, so after any fresh install our keyboard exists but is
+                // dead. The app has to be able to see that and offer the fix.
+                "keyboardStatus" -> result.success(keyboardStatus().name)
+                "openKeyboardSettings" -> {
+                    startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS))
+                    result.success(null)
+                }
+                "openKeyboardPicker" -> {
+                    inputMethodManager().showInputMethodPicker()
+                    result.success(null)
+                }
                 else -> result.notImplemented()
             }
         }
     }
+
+    private fun inputMethodManager() =
+        getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
+
+    /**
+     * Read the two system facts and let [KeyboardStatus] decide. The framework
+     * lookups live here so the decision itself stays pure and unit tested.
+     */
+    private fun keyboardStatus(): KeyboardStatus = KeyboardStatus.resolve(
+        enabledImeIds = inputMethodManager().enabledInputMethodList.map { it.id },
+        defaultImeId = Settings.Secure.getString(
+            contentResolver,
+            Settings.Secure.DEFAULT_INPUT_METHOD,
+        ),
+        ourPackage = packageName,
+    )
 }

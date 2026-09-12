@@ -12,6 +12,7 @@ import 'package:draftright_mobile/models/language_module.dart';
 import 'package:draftright_mobile/services/ime_manifest_client.dart';
 import 'package:draftright_mobile/services/ime_pack_service.dart';
 import 'package:draftright_mobile/widgets/language_packs_section.dart';
+import 'package:draftright_mobile/widgets/keyboard_enable_banner.dart';
 import 'package:draftright_mobile/models/tone.dart';
 
 /// Rewrite tones offered by the one-tap tone picker (keyboard ⚡ / voice
@@ -337,6 +338,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
 
               const SizedBox(height: 24),
+              // #272: shows only when our keyboard is off or unselected, so it
+              // sits silently above the language picker the rest of the time.
+              const KeyboardEnableBanner(),
               const Text('Keyboard languages',
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
               const Text(
