@@ -53,6 +53,9 @@ on:
       - 'DraftRightMobile/ios/DraftRightKeyboardCore/Sources/DraftRightKeyboardCore/Composer/TelexComposer.swift'
       - 'DraftRightMobile/tools/gen_telex_cases.py'
       - 'parity/telex-order-vectors.json'
+      - 'DraftRightMobile/android/app/src/main/kotlin/com/draftright/keyboard/KeyboardStatus.kt'
+      - 'DraftRightMobile/lib/services/keyboard_status_service.dart'
+      - 'scripts/check-keyboard-status-parity.py'
       - 'scripts/check-no-objective-c.py'
       - 'DraftRightMobile/pubspec.lock'
       - '.github/workflows/mobile-parity-ci.yml'
@@ -91,5 +94,7 @@ jobs:
         run: python3 scripts/check-numeric-layout-parity.py
       - name: Assert the voice hint strings agree
         run: python3 scripts/check-voice-hints-parity.py
+      - name: Assert the keyboard-status vocabulary agrees (#272)
+        run: python3 scripts/check-keyboard-status-parity.py
       - name: Assert objective_c stays out of the dep graph (#27 bootstrap crash)
         run: python3 scripts/check-no-objective-c.py
