@@ -1,9 +1,18 @@
 import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 
+import '../services/keyboard_status_service.dart';
+
 class OnboardingScreen extends StatefulWidget {
   final VoidCallback onComplete;
-  const OnboardingScreen({super.key, required this.onComplete});
+  const OnboardingScreen({
+    super.key,
+    required this.onComplete,
+    this.keyboardStatusService,
+  });
+
+  /// Injectable for tests; defaults to the real platform channel.
+  final KeyboardStatusService? keyboardStatusService;
 
   @override
   State<OnboardingScreen> createState() => _OnboardingScreenState();
@@ -239,6 +248,19 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             const SizedBox(height: 8),
             const Text('Full Access lets the keyboard reach the AI service.',
                 style: TextStyle(fontSize: 11, color: Colors.grey)),
+          ] else ...[
+            // Step 1 of the list above, as a button — the remaining steps still
+            // have to be followed by hand inside the system screen (#272).
+            const SizedBox(height: 12),
+            Center(
+              child: OutlinedButton.icon(
+                onPressed: () =>
+                    (widget.keyboardStatusService ?? KeyboardStatusService())
+                        .openKeyboardSettings(),
+                icon: const Icon(Icons.settings, size: 18),
+                label: const Text('Open keyboard settings'),
+              ),
+            ),
           ],
           const SizedBox(height: 12),
           const Center(
