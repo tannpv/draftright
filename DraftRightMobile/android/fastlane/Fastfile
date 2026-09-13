@@ -136,6 +136,25 @@ platform :android do
        "has already been used'). Draft status because promote + staged " \
        "rollout in one call fails Google's precondition check; start the " \
        "rollout from Play Console → Production → Releases."
+  # Promote, never re-upload: a version code already present on ANY track is
+  # rejected on upload, so moving the internal build to closed testing has to
+  # go through track_promote_to (2026-09-13, needed to give the 16 recruited
+  # testers a current build to opt into — the 12-tester x 14-day gate Google
+  # requires before production unlocks).
+  lane :promote_internal_closed do
+    upload_to_play_store(
+      track: "internal",
+      track_promote_to: "alpha",
+      track_promote_release_status: "completed",
+      skip_upload_aab: true,
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+      skip_upload_changelogs: true,
+    )
+    UI.success("Promoted the internal release to Closed Testing (alpha).")
+  end
+
   lane :promote_internal_production_draft do
     upload_to_play_store(
       track: "internal",
